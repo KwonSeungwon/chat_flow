@@ -1,0 +1,7 @@
+rootProject.name = 'chat-flow'
+
+include 'common'
+include 'chat-service'
+include 'ai-summary-service'
+include 'search-service'
+include 'gateway-service'
