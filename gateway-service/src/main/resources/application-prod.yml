@@ -1,0 +1,128 @@
+# Gateway Service - Production Environment
+server:
+  port: 8000
+  tomcat:
+    max-threads: 300
+    accept-count: 200
+
+spring:
+  profiles:
+    active: prod
+  
+  cloud:
+    gateway:
+      routes:
+        - id: chat-service
+          uri: ${CHAT_SERVICE_URL}
+          predicates:
+            - Path=/api/chat/**
+          filters:
+            - StripPrefix=2
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+        - id: ai-summary-service
+          uri: ${AI_SUMMARY_SERVICE_URL}
+          predicates:
+            - Path=/api/ai-summary/**
+          filters:
+            - StripPrefix=2
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        - id: search-service
+          uri: ${SEARCH_SERVICE_URL}
+          predicates:
+            - Path=/api/search/**
+          filters:
+            - StripPrefix=2
+            - name: Retry
+              args:
+                retries: 2
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        - id: websocket
+          uri: ${CHAT_SERVICE_WS_URL}
+          predicates:
+            - Path=/ws/**
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "https://*.chatflow.com"
+              - "https://chatflow.com"
+              - "https://*.tistory.com"
+            allowedMethods: 
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 200
+  
+  # Production Valkey Configuration
+  data:
+    redis:
+      host: ${VALKEY_HOST}
+      port: ${VALKEY_PORT:6379}
+      timeout: 5000ms
+      database: 0
+      password: ${VALKEY_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        sliding-window-size: 50
+        minimum-number-of-calls: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 10
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 3s
+  timelimiter:
+    instances:
+      default:
+        timeout-duration: 10s
+
+logging:
+  level:
+    org.springframework.cloud.gateway: WARN
+    com.chatflow: INFO
+    org.springframework.cloud.gateway.filter.ratelimit: INFO
+  pattern:
+    file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/chatflow/gateway-service.log
+    max-size: 100MB
+    max-history: 30

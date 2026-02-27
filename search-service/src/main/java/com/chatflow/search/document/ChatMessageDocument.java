@@ -26,10 +26,10 @@ public class ChatMessageDocument {
     @Field(type = FieldType.Keyword)
     private String userId;
     
-    @Field(type = FieldType.Text, analyzer = "korean")
+    @Field(type = FieldType.Text, analyzer = "korean_analyzer", searchAnalyzer = "korean_search_analyzer")
     private String username;
     
-    @Field(type = FieldType.Text, analyzer = "korean")
+    @Field(type = FieldType.Text, analyzer = "korean_analyzer", searchAnalyzer = "korean_search_analyzer")
     private String content;
     
     @Field(type = FieldType.Date)

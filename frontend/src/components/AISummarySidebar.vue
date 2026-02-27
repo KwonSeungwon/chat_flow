@@ -6,21 +6,27 @@
         AI 요약
       </h6>
     </div>
-    
+
     <div class="summary-content flex-grow-1 overflow-auto p-3">
       <div v-if="loading" class="text-center py-4">
         <div class="loading-spinner mx-auto mb-2"></div>
         <small class="text-muted">요약 생성 중...</small>
       </div>
-      
+
+      <div v-else-if="error" class="text-center py-4">
+        <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+        <p class="text-muted mt-3">요약을 불러올 수 없습니다.</p>
+        <button class="btn btn-sm btn-outline-info" @click="fetchSummaries">다시 시도</button>
+      </div>
+
       <div v-else-if="summaries.length === 0" class="text-center py-4">
         <i class="bi bi-chat-quote text-muted" style="font-size: 3rem;"></i>
         <p class="text-muted mt-3">아직 생성된 요약이 없습니다.</p>
       </div>
-      
+
       <div v-else>
-        <div 
-          v-for="(summary, index) in summaries" 
+        <div
+          v-for="(summary, index) in summaries"
           :key="index"
           class="summary-item mb-3"
         >
@@ -36,10 +42,10 @@
         </div>
       </div>
     </div>
-    
+
     <div class="sidebar-footer p-3 border-top">
-      <button 
-        class="btn btn-outline-info btn-sm w-100" 
+      <button
+        class="btn btn-outline-info btn-sm w-100"
         @click="requestSummary"
         :disabled="loading"
       >
@@ -64,6 +70,7 @@ const props = defineProps<Props>()
 
 const summaries = ref<ChatMessage[]>([])
 const loading = ref(false)
+const error = ref(false)
 
 const formatTime = (timestamp: string) => {
   return dayjs(timestamp).format('MM/DD HH:mm')
@@ -71,40 +78,30 @@ const formatTime = (timestamp: string) => {
 
 const requestSummary = async () => {
   loading.value = true
+  error.value = false
   try {
-    // AI 요약 요청 API 호출
     await axios.post('/api/ai-summary/request', {
       chatRoomId: props.roomId
     })
-    
-    // 요약 새로고침
-    await fetchSummaries()
-  } catch (error) {
-    console.error('AI 요약 요청 실패:', error)
-  } finally {
+    // 잠시 대기 후 요약 새로고침
+    setTimeout(() => fetchSummaries(), 2000)
+  } catch (e) {
+    console.error('AI 요약 요청 실패:', e)
+    error.value = true
     loading.value = false
   }
 }
 
 const fetchSummaries = async () => {
+  error.value = false
   try {
     const response = await axios.get(`/api/ai-summary/room/${props.roomId}`)
     summaries.value = response.data || []
-  } catch (error) {
-    console.error('요약 데이터 로드 실패:', error)
-    // 예시 데이터
-    summaries.value = [
-      {
-        id: '1',
-        chatRoomId: props.roomId,
-        userId: 'ai-system',
-        username: 'AI 요약봇',
-        content: '최근 대화에서는 프로젝트 계획과 기술 스택 선택에 대한 논의가 있었습니다. 특히 Vue3와 Spring Boot를 사용한 마이크로서비스 아키텍처에 대한 의견이 많았습니다.',
-        timestamp: new Date().toISOString(),
-        type: 'AI_SUMMARY' as any,
-        isAiGenerated: true
-      } as ChatMessage
-    ]
+  } catch (e) {
+    console.error('요약 데이터 로드 실패:', e)
+    summaries.value = []
+  } finally {
+    loading.value = false
   }
 }
 

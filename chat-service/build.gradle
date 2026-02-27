@@ -9,6 +9,7 @@ dependencies {
     implementation 'org.springframework.kafka:spring-kafka'
     
     runtimeOnly 'com.h2database:h2'
+    runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     
     compileOnly 'org.projectlombok:lombok'

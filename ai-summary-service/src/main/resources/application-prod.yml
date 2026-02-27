@@ -1,0 +1,105 @@
+# AI Summary Service - Production Environment
+server:
+  port: 8081
+  tomcat:
+    max-threads: 100
+    accept-count: 50
+
+spring:
+  profiles:
+    active: prod,spring-ai  # AI 프로바이더 전환: spring-ai 또는 langchain4j
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: ai-summary-service-prod-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 50
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      linger-ms: 10
+      compression-type: snappy
+
+  # Production Valkey Configuration
+  data:
+    redis:
+      host: ${VALKEY_HOST}
+      port: ${VALKEY_PORT:6379}
+      timeout: 5000ms
+      database: 0
+      password: ${VALKEY_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 15
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+
+  # Spring AI - Google Gemini 설정 (spring-ai 프로필 활성 시)
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
+        chat:
+          options:
+            model: gemini-2.0-flash
+            temperature: 0.2
+
+# LangChain4J - Google Gemini 설정 (langchain4j 프로필 활성 시)
+langchain4j:
+  google-ai-gemini:
+    chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.0-flash
+      temperature: 0.2
+
+# Circuit breaker for AI service
+resilience4j:
+  circuitbreaker:
+    instances:
+      gemini:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+  retry:
+    instances:
+      gemini:
+        max-attempts: 3
+        wait-duration: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.chatflow: INFO
+    org.springframework.ai: WARN
+    dev.langchain4j: WARN
+    org.apache.kafka: WARN
+  pattern:
+    file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/chatflow/ai-summary-service.log
+    max-size: 100MB
+    max-history: 30

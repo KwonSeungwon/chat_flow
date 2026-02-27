@@ -1,0 +1,110 @@
+{
+  "settings": {
+    "analysis": {
+      "tokenizer": {
+        "nori_user_dict": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed",
+          "user_dictionary_rules": [
+            "채팅",
+            "메시지",
+            "실시간",
+            "요약",
+            "검색"
+          ]
+        },
+        "ngram_tokenizer": {
+          "type": "ngram",
+          "min_gram": 1,
+          "max_gram": 3,
+          "token_chars": [
+            "letter",
+            "digit",
+            "punctuation"
+          ]
+        }
+      },
+      "filter": {
+        "korean_stop": {
+          "type": "stop",
+          "stopwords": ["이", "그", "저", "것", "들", "및", "등", "의", "에", "를", "을", "는", "은", "가", "이"]
+        },
+        "korean_synonym": {
+          "type": "synonym",
+          "synonyms": [
+            "채팅,대화,메시지",
+            "요약,정리,요약정리",
+            "검색,찾기,조회"
+          ]
+        }
+      },
+      "analyzer": {
+        "korean_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_user_dict",
+          "filter": [
+            "lowercase",
+            "korean_stop",
+            "korean_synonym"
+          ]
+        },
+        "korean_ngram_analyzer": {
+          "type": "custom",
+          "tokenizer": "ngram_tokenizer",
+          "filter": [
+            "lowercase"
+          ]
+        },
+        "korean_search_analyzer": {
+          "type": "custom",
+          "tokenizer": "nori_user_dict",
+          "filter": [
+            "lowercase",
+            "korean_stop"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "content": {
+        "type": "text",
+        "analyzer": "korean_analyzer",
+        "search_analyzer": "korean_search_analyzer",
+        "fields": {
+          "ngram": {
+            "type": "text",
+            "analyzer": "korean_ngram_analyzer"
+          },
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "title": {
+        "type": "text",
+        "analyzer": "korean_analyzer",
+        "search_analyzer": "korean_search_analyzer",
+        "fields": {
+          "ngram": {
+            "type": "text",
+            "analyzer": "korean_ngram_analyzer"
+          }
+        }
+      },
+      "username": {
+        "type": "keyword"
+      },
+      "room_id": {
+        "type": "keyword"
+      },
+      "timestamp": {
+        "type": "date"
+      },
+      "message_type": {
+        "type": "keyword"
+      }
+    }
+  }
+}

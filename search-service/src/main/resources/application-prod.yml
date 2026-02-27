@@ -1,0 +1,83 @@
+# Search Service - Production Environment
+server:
+  port: 8082
+  tomcat:
+    max-threads: 150
+    accept-count: 75
+
+spring:
+  profiles:
+    active: prod
+  
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS}
+    connection-timeout: 3s
+    socket-timeout: 120s
+    username: ${ELASTICSEARCH_USERNAME}
+    password: ${ELASTICSEARCH_PASSWORD}
+    # SSL configuration for production
+    ssl:
+      trust-store: ${ELASTICSEARCH_TRUSTSTORE_PATH:}
+      trust-store-password: ${ELASTICSEARCH_TRUSTSTORE_PASSWORD:}
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: search-service-prod-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+      session-timeout-ms: 30000
+    # Kafka SSL configuration for production
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+    ssl:
+      trust-store-location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      trust-store-password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      key-store-location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
+      key-store-password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+
+# Circuit breaker for Elasticsearch
+resilience4j:
+  circuitbreaker:
+    instances:
+      elasticsearch:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+  retry:
+    instances:
+      elasticsearch:
+        max-attempts: 3
+        wait-duration: 1s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.chatflow: INFO
+    org.springframework.data.elasticsearch: WARN
+    org.apache.kafka: WARN
+  pattern:
+    file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/chatflow/search-service.log
+    max-size: 100MB
+    max-history: 30

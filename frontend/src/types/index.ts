@@ -22,8 +22,11 @@ export interface ChatRoom {
   id: string
   name: string
   description?: string
-  participants: number
+  participantCount: number
   createdAt: string
+  color?: string
+  isPrivate?: boolean
+  allowInvites?: boolean
 }
 
 export interface SearchResult {

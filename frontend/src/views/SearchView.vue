@@ -10,7 +10,7 @@
                 <i class="bi bi-search me-2"></i>
                 메시지 검색
               </h2>
-              
+
               <div class="row">
                 <div class="col-md-8 col-lg-6">
                   <div class="input-group mb-3">
@@ -21,9 +21,9 @@
                       placeholder="검색어를 입력하세요..."
                       @keyup.enter="performSearch"
                     >
-                    <button 
-                      class="btn btn-primary" 
-                      type="button" 
+                    <button
+                      class="btn btn-primary"
+                      type="button"
                       @click="performSearch"
                       :disabled="loading || !searchQuery.trim()"
                     >
@@ -34,7 +34,7 @@
                   </div>
                 </div>
               </div>
-              
+
               <!-- 검색 필터 -->
               <div class="search-filters">
                 <div class="row">
@@ -47,60 +47,67 @@
                     </select>
                   </div>
                   <div class="col-md-3 mb-2">
-                    <input 
-                      v-model="selectedUser" 
-                      type="text" 
-                      class="form-control form-control-sm" 
+                    <input
+                      v-model="selectedUser"
+                      type="text"
+                      class="form-control form-control-sm"
                       placeholder="사용자명"
                     >
                   </div>
                   <div class="col-md-3 mb-2">
-                    <input 
-                      v-model="dateFrom" 
-                      type="date" 
+                    <input
+                      v-model="dateFrom"
+                      type="date"
                       class="form-control form-control-sm"
                     >
                   </div>
                   <div class="col-md-3 mb-2">
-                    <input 
-                      v-model="dateTo" 
-                      type="date" 
+                    <input
+                      v-model="dateTo"
+                      type="date"
                       class="form-control form-control-sm"
                     >
                   </div>
                 </div>
               </div>
             </div>
-            
+
             <!-- 검색 결과 -->
             <div class="search-results flex-grow-1 overflow-auto">
               <div v-if="loading" class="text-center py-5">
                 <div class="loading-spinner mx-auto mb-3"></div>
                 <p class="text-muted">검색 중...</p>
               </div>
-              
+
+              <div v-else-if="searchError" class="text-center py-5">
+                <i class="bi bi-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+                <h5 class="mt-3 text-muted">검색 중 오류가 발생했습니다</h5>
+                <p class="text-muted">잠시 후 다시 시도해주세요.</p>
+                <button class="btn btn-sm btn-outline-primary" @click="performSearch">다시 검색</button>
+              </div>
+
               <div v-else-if="searchResults.length === 0 && hasSearched" class="text-center py-5">
                 <i class="bi bi-search text-muted" style="font-size: 4rem;"></i>
                 <h5 class="mt-3 text-muted">검색 결과가 없습니다</h5>
                 <p class="text-muted">다른 검색어를 시도해보세요.</p>
               </div>
-              
+
               <div v-else-if="!hasSearched" class="text-center py-5">
                 <i class="bi bi-chat-quote text-muted" style="font-size: 4rem;"></i>
                 <h5 class="mt-3 text-muted">메시지를 검색해보세요</h5>
                 <p class="text-muted">대화 내용, 사용자명, 날짜 등으로 검색할 수 있습니다.</p>
               </div>
-              
+
               <div v-else>
                 <div class="search-result-header mb-3">
                   <small class="text-muted">
                     전체 {{ totalResults }}건 중 {{ searchResults.length }}건 표시
                   </small>
                 </div>
-                
+
                 <div class="search-result-list">
-                  <div 
-                    v-for="result in searchResults" 
+                  <div
+                    v-for="result in searchResults"
                     :key="result.id"
                     class="search-result-item card mb-3 fade-in"
                     @click="goToMessage(result)"
@@ -113,9 +120,9 @@
                         </div>
                         <small class="text-muted">{{ formatTime(result.timestamp) }}</small>
                       </div>
-                      
+
                       <p class="card-text" v-html="highlightSearchTerm(result.content)"></p>
-                      
+
                       <div v-if="result.isAiGenerated" class="mt-2">
                         <span class="badge bg-info">
                           <i class="bi bi-robot me-1"></i>
@@ -125,7 +132,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- 페이지네이션 -->
                 <div v-if="totalPages > 1" class="d-flex justify-content-center mt-4">
                   <nav>
@@ -135,8 +142,8 @@
                           이전
                         </a>
                       </li>
-                      <li 
-                        v-for="page in visiblePages" 
+                      <li
+                        v-for="page in visiblePages"
                         :key="page"
                         class="page-item"
                         :class="{ active: page === currentPage }"
@@ -163,11 +170,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import dayjs from 'dayjs'
-import type { SearchResult } from '@/types'
+
+interface SearchResultItem {
+  id: string
+  messageId: string
+  chatRoomId: string
+  userId: string
+  username: string
+  content: string
+  timestamp: string
+  messageType: string
+  isAiGenerated: boolean
+}
 
 const router = useRouter()
 
@@ -179,7 +197,8 @@ const dateTo = ref('')
 
 const loading = ref(false)
 const hasSearched = ref(false)
-const searchResults = ref<any[]>([])
+const searchError = ref(false)
+const searchResults = ref<SearchResultItem[]>([])
 const totalResults = ref(0)
 const currentPage = ref(0)
 const totalPages = ref(0)
@@ -189,81 +208,59 @@ const visiblePages = computed(() => {
   const pages = []
   const start = Math.max(0, currentPage.value - 2)
   const end = Math.min(totalPages.value, start + 5)
-  
+
   for (let i = start; i < end; i++) {
     pages.push(i)
   }
-  
+
   return pages
 })
 
 const performSearch = async () => {
   if (!searchQuery.value.trim()) return
-  
+
   loading.value = true
   hasSearched.value = true
+  searchError.value = false
   currentPage.value = 0
-  
+
   try {
-    let url = '/api/search/messages'
+    let url = '/api/search/korean'
     const params = new URLSearchParams({
       query: searchQuery.value,
       page: currentPage.value.toString(),
       size: pageSize.toString()
     })
-    
+
     if (selectedRoom.value) {
-      url = `/api/search/rooms/${selectedRoom.value}/messages`
+      params.append('roomId', selectedRoom.value)
     }
-    
+
     if (selectedUser.value) {
       params.append('username', selectedUser.value)
     }
-    
+
     if (dateFrom.value) {
       params.append('start', `${dateFrom.value}T00:00:00`)
     }
-    
+
     if (dateTo.value) {
       params.append('end', `${dateTo.value}T23:59:59`)
     }
-    
+
     const response = await axios.get(`${url}?${params}`)
     const data = response.data
-    
+
     searchResults.value = data.content || []
     totalResults.value = data.totalElements || 0
     totalPages.value = data.totalPages || 0
-    
+
   } catch (error) {
     console.error('검색 오류:', error)
-    // 예시 데이터
-    searchResults.value = [
-      {
-        id: '1',
-        messageId: 'msg1',
-        chatRoomId: 'general',
-        userId: 'user1',
-        username: '사용자1',
-        content: '안녕하세요! 오늘 프로젝트 회의가 언제인가요?',
-        timestamp: new Date().toISOString(),
-        messageType: 'CHAT',
-        isAiGenerated: false
-      },
-      {
-        id: '2',
-        messageId: 'msg2',
-        chatRoomId: 'tech',
-        userId: 'ai-system',
-        username: 'AI 요약봇',
-        content: '최근 대화를 요약하면 프로젝트 진행 방향과 기술 스택에 대한 논의가 주를 이루었습니다.',
-        timestamp: new Date().toISOString(),
-        messageType: 'AI_SUMMARY',
-        isAiGenerated: true
-      }
-    ]
-    totalResults.value = 2
-    totalPages.value = 1
+    searchError.value = true
+    searchResults.value = []
+    totalResults.value = 0
+    totalPages.value = 0
   } finally {
     loading.value = false
   }
@@ -276,19 +273,26 @@ const changePage = (page: number) => {
   }
 }
 
+const escapeHtml = (text: string): string => {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
 const highlightSearchTerm = (content: string) => {
-  if (!searchQuery.value.trim()) return content
-  
-  const regex = new RegExp(`(${searchQuery.value})`, 'gi')
-  return content.replace(regex, '<mark>$1</mark>')
+  if (!searchQuery.value.trim()) return escapeHtml(content)
+
+  const escaped = escapeHtml(content)
+  const queryEscaped = searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${queryEscaped})`, 'gi')
+  return escaped.replace(regex, '<mark>$1</mark>')
 }
 
 const formatTime = (timestamp: string) => {
   return dayjs(timestamp).format('YYYY/MM/DD HH:mm')
 }
 
-const goToMessage = (result: any) => {
-  // 메시지가 있는 채팅방으로 이동
+const goToMessage = (result: SearchResultItem) => {
   router.push(`/chat/${result.chatRoomId}`)
 }
 </script>
