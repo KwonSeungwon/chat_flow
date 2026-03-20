@@ -20,7 +20,6 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/search/blog")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class BlogSearchController {
 

@@ -1,0 +1,75 @@
+# 프로덕션 환경: 고가용성, TLS, 충분한 리소스
+global:
+  image:
+    tag: "v1.0.0"  # CI에서 실제 태그로 치환
+
+ingress:
+  host: chatflow.example.com
+  tls:
+    enabled: true
+    secretName: chatflow-prod-tls
+
+gateway-service:
+  replicaCount: 3
+  hpa:
+    minReplicas: 3
+    maxReplicas: 10
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+
+chat-service:
+  replicaCount: 3
+  hpa:
+    minReplicas: 3
+    maxReplicas: 12
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+
+ai-summary-service:
+  replicaCount: 2
+  hpa:
+    minReplicas: 2
+    maxReplicas: 5
+  resources:
+    requests:
+      cpu: 300m
+      memory: 768Mi
+    limits:
+      cpu: 750m
+      memory: 1536Mi
+
+search-service:
+  replicaCount: 3
+  hpa:
+    minReplicas: 3
+    maxReplicas: 8
+  resources:
+    requests:
+      cpu: 300m
+      memory: 768Mi
+    limits:
+      cpu: 750m
+      memory: 1536Mi
+
+frontend:
+  replicaCount: 3
+  hpa:
+    minReplicas: 3
+    maxReplicas: 6
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi

@@ -25,7 +25,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   // 개발 모드 체크
-  isDev: process.env.NODE_ENV === 'development'
+  isDev: process.env.NODE_ENV === 'development',
+
+  // 온라인 상태 모니터링
+  getOnlineStatus: () => navigator.onLine,
+  onOnlineStatusChange: (callback) => {
+    const onlineHandler = () => callback(true)
+    const offlineHandler = () => callback(false)
+    window.addEventListener('online', onlineHandler)
+    window.addEventListener('offline', offlineHandler)
+    return () => {
+      window.removeEventListener('online', onlineHandler)
+      window.removeEventListener('offline', offlineHandler)
+    }
+  }
 })
 
 // DOM이 로드되면 실행

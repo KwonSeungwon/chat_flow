@@ -1,26 +1,20 @@
 package com.chatflow.search.exception;
 
-import com.chatflow.common.dto.ApiResponse;
+import com.chatflow.common.dto.ErrorResponse;
+import com.chatflow.common.exception.BaseExceptionHandler;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class GlobalExceptionHandler extends BaseExceptionHandler {
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
-        log.warn("Bad request: {}", e.getMessage());
-        return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception e) {
-        log.error("Unexpected error", e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("서버 내부 오류가 발생했습니다."));
+    @ExceptionHandler(SearchException.class)
+    public ResponseEntity<ErrorResponse> handleSearchException(SearchException e) {
+        log.error("Search error: {}", e.getMessage(), e);
+        return ResponseEntity.internalServerError()
+                .body(ErrorResponse.of(500, "SEARCH_ERROR", e.getMessage()));
     }
 }

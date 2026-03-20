@@ -174,6 +174,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import dayjs from 'dayjs'
+import DOMPurify from 'dompurify'
 
 interface SearchResultItem {
   id: string
@@ -285,7 +286,7 @@ const highlightSearchTerm = (content: string) => {
   const escaped = escapeHtml(content)
   const queryEscaped = searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const regex = new RegExp(`(${queryEscaped})`, 'gi')
-  return escaped.replace(regex, '<mark>$1</mark>')
+  return DOMPurify.sanitize(escaped.replace(regex, '<mark>$1</mark>'), { ALLOWED_TAGS: ['mark'] })
 }
 
 const formatTime = (timestamp: string) => {

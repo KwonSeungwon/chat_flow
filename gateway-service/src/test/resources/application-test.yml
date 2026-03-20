@@ -1,0 +1,23 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: chat-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/chat/**
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: test-jwt-secret-key-must-be-at-least-32-bytes-long-for-hmac
+  expiration-ms: 86400000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

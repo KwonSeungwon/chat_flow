@@ -1,0 +1,18 @@
+dependencies:
+- name: gateway-service
+  repository: file://charts/gateway-service
+  version: 0.1.0
+- name: chat-service
+  repository: file://charts/chat-service
+  version: 0.1.0
+- name: ai-summary-service
+  repository: file://charts/ai-summary-service
+  version: 0.1.0
+- name: search-service
+  repository: file://charts/search-service
+  version: 0.1.0
+- name: frontend
+  repository: file://charts/frontend
+  version: 0.1.0
+digest: sha256:130e9b7184f8dcfca70188b9fe2632f02f3157a76a94e9867fb18b52600979c6
+generated: "2026-03-14T15:37:50.979876+09:00"

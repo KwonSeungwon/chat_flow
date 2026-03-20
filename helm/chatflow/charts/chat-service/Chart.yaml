@@ -1,0 +1,6 @@
+apiVersion: v2
+name: chat-service
+description: ChatFlow 실시간 채팅 서비스 (WebSocket + Kafka + JPA)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

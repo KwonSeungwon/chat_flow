@@ -13,7 +13,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -24,27 +23,22 @@ public class SearchService {
 
     @KafkaListener(topics = {"chat-messages", "ai-summaries"})
     public void indexChatMessage(ChatMessage message) {
-        try {
-            log.info("Indexing message: {} for room: {}", message.getMessageId(), message.getChatRoomId());
-            
-            ChatMessageDocument document = ChatMessageDocument.builder()
-                    .id(UUID.randomUUID().toString())
-                    .messageId(message.getMessageId())
-                    .chatRoomId(message.getChatRoomId())
-                    .userId(message.getUserId())
-                    .username(message.getUsername())
-                    .content(message.getContent())
-                    .timestamp(message.getTimestamp())
-                    .messageType(message.getType().toString())
-                    .isAiGenerated(message.isAiGenerated())
-                    .build();
-            
-            searchRepository.save(document);
-            log.info("Successfully indexed message: {}", message.getMessageId());
-            
-        } catch (Exception e) {
-            log.error("Error indexing message: {}", message.getMessageId(), e);
-        }
+        log.info("Indexing message: {} for room: {}", message.getMessageId(), message.getChatRoomId());
+
+        ChatMessageDocument document = ChatMessageDocument.builder()
+                .id(message.getMessageId())
+                .messageId(message.getMessageId())
+                .chatRoomId(message.getChatRoomId())
+                .userId(message.getUserId())
+                .username(message.getUsername())
+                .content(message.getContent())
+                .timestamp(message.getTimestamp())
+                .messageType(message.getType().toString())
+                .isAiGenerated(message.isAiGenerated())
+                .build();
+
+        searchRepository.save(document);
+        log.info("Successfully indexed message: {}", message.getMessageId());
     }
 
     public Page<ChatMessageDocument> searchByContent(String content, int page, int size) {

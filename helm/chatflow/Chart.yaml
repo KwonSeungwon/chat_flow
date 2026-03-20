@@ -1,0 +1,28 @@
+apiVersion: v2
+name: chatflow
+description: ChatFlow - Real-time Chat + AI Summary Platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: gateway-service
+    version: 0.1.0
+    repository: "file://charts/gateway-service"
+    condition: gateway-service.enabled
+  - name: chat-service
+    version: 0.1.0
+    repository: "file://charts/chat-service"
+    condition: chat-service.enabled
+  - name: ai-summary-service
+    version: 0.1.0
+    repository: "file://charts/ai-summary-service"
+    condition: ai-summary-service.enabled
+  - name: search-service
+    version: 0.1.0
+    repository: "file://charts/search-service"
+    condition: search-service.enabled
+  - name: frontend
+    version: 0.1.0
+    repository: "file://charts/frontend"
+    condition: frontend.enabled

@@ -1,0 +1,45 @@
+# 스테이징 환경: 프로덕션 구조를 축소 규모로 미러링
+global:
+  image:
+    tag: "release-latest"  # CI에서 실제 태그로 치환
+
+ingress:
+  host: staging.chatflow.example.com
+  tls:
+    enabled: true
+    secretName: chatflow-staging-tls
+
+gateway-service:
+  replicaCount: 2
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 3
+
+chat-service:
+  replicaCount: 2
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+
+ai-summary-service:
+  replicaCount: 1
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 2
+
+search-service:
+  replicaCount: 1
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+
+frontend:
+  replicaCount: 2
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 3

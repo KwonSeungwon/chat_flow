@@ -20,6 +20,9 @@ dependencies {
     implementation 'dev.langchain4j:langchain4j:0.36.2'
     implementation 'dev.langchain4j:langchain4j-google-ai-gemini:0.36.2'
 
+    // Rate Limiting
+    implementation 'com.bucket4j:bucket4j-core:8.10.1'
+
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
     compileOnly 'org.projectlombok:lombok'

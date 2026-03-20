@@ -1,0 +1,21 @@
+replicaCount: 2
+
+image:
+  name: search-service
+
+service:
+  port: 8082
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70

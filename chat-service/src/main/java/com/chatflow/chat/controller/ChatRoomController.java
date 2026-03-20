@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -17,7 +18,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/chat/rooms")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class ChatRoomController {
 
     private final ChatRoomRepository chatRoomRepository;
@@ -37,12 +37,7 @@ public class ChatRoomController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<ChatRoom>> createRoom(@RequestBody ChatRoom request) {
-        if (request.getName() == null || request.getName().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("채팅방 이름은 필수입니다."));
-        }
-
+    public ResponseEntity<ApiResponse<ChatRoom>> createRoom(@Valid @RequestBody ChatRoom request) {
         ChatRoom room = ChatRoom.builder()
                 .id("room_" + UUID.randomUUID().toString().substring(0, 8))
                 .name(request.getName().trim())

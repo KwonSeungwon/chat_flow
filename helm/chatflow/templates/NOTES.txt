@@ -1,0 +1,16 @@
+🚀 ChatFlow가 배포되었습니다!
+
+{{- if .Values.ingress.enabled }}
+접속 URL: {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+{{- end }}
+
+서비스 상태 확인:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=chatflow
+  kubectl -n {{ .Release.Namespace }} get svc
+
+필수 Secret이 클러스터에 생성되어 있는지 확인하세요:
+  - {{ .Values.global.externalSecrets.postgresql.secretName }}
+  - {{ .Values.global.externalSecrets.kafka.secretName }}
+  - {{ .Values.global.externalSecrets.valkey.secretName }}
+  - {{ .Values.global.externalSecrets.elasticsearch.secretName }}
+  - {{ .Values.global.externalSecrets.gemini.secretName }}

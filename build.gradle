@@ -17,6 +17,8 @@ subprojects {
     apply plugin: 'java'
     apply plugin: 'org.springframework.boot'
     apply plugin: 'io.spring.dependency-management'
+    apply plugin: 'jacoco'
+    apply plugin: 'checkstyle'
 
     java {
         sourceCompatibility = '17'
@@ -37,11 +39,35 @@ subprojects {
 
     dependencies {
         implementation 'org.springframework.boot:spring-boot-starter'
+
+        // 분산 추적 (OpenTelemetry + Zipkin)
+        implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+        implementation 'io.opentelemetry:opentelemetry-exporter-zipkin'
+
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testImplementation 'org.testcontainers:junit-jupiter'
     }
 
     tasks.named('test') {
         useJUnitPlatform()
+    }
+
+    jacoco {
+        toolVersion = '0.8.11'
+    }
+
+    tasks.named('jacocoTestReport') {
+        dependsOn tasks.named('test')
+        reports {
+            xml.required = true
+            html.required = true
+        }
+    }
+
+    checkstyle {
+        toolVersion = '10.12.5'
+        configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+        maxWarnings = 0
+        ignoreFailures = true  // Start lenient, tighten later
     }
 }

@@ -2,12 +2,18 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.common.dto.ChatMessage;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Controller
@@ -15,15 +21,30 @@ import org.springframework.stereotype.Controller;
 public class ChatController {
 
     private final ChatService chatService;
+    private final Validator validator;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage) {
+        Set<ConstraintViolation<ChatMessage>> violations = validator.validate(chatMessage);
+        if (!violations.isEmpty()) {
+            String errors = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining(", "));
+            log.warn("메시지 유효성 검증 실패: {}", errors);
+            if (chatMessage.getChatRoomId() != null) {
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + chatMessage.getChatRoomId() + "/errors",
+                        java.util.Map.of("error", errors, "timestamp", java.time.LocalDateTime.now().toString()));
+            }
+            return;
+        }
         log.debug("Received message: {}", chatMessage);
         chatService.processMessage(chatMessage);
     }
 
     @MessageMapping("/chat.addUser")
-    public void addUser(@Payload ChatMessage chatMessage, 
+    public void addUser(@Payload ChatMessage chatMessage,
                        SimpMessageHeaderAccessor headerAccessor) {
         headerAccessor.getSessionAttributes().put("username", chatMessage.getUsername());
         chatService.addUser(chatMessage);

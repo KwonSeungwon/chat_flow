@@ -1,0 +1,138 @@
+global:
+  namespace: chatflow
+  image:
+    registry: ghcr.io
+    repository: OWNER/chatflow  # GitHub org/user — CI에서 자동 치환
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  imagePullSecrets:
+    - name: ghcr-pull-secret
+
+  # 외부 인프라 Secret 참조 (클러스터에 미리 생성 필요)
+  externalSecrets:
+    postgresql:
+      secretName: chatflow-postgresql-secret
+    kafka:
+      secretName: chatflow-kafka-secret
+    valkey:
+      secretName: chatflow-valkey-secret
+    elasticsearch:
+      secretName: chatflow-elasticsearch-secret
+    gemini:
+      secretName: chatflow-gemini-secret
+
+  springProfile: prod
+
+# --- Ingress (단일 진입점) ---
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  host: chatflow.example.com
+  tls:
+    enabled: false
+    secretName: chatflow-tls
+
+# --- 서비스별 기본값 ---
+gateway-service:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: gateway-service
+  service:
+    port: 8000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+chat-service:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: chat-service
+  service:
+    port: 8080
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+ai-summary-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: ai-summary-service
+  service:
+    port: 8081
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 75
+
+search-service:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: search-service
+  service:
+    port: 8082
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: frontend
+  service:
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 80
+  gatewayServicePort: 8000

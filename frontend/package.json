@@ -14,19 +14,22 @@
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:pack": "npm run build && electron-builder --config .electron-builder.config.js",
     "electron:dist": "npm run build && electron-builder --config .electron-builder.config.js --publish=never",
-    "electron:publish": "npm run build && electron-builder --config .electron-builder.config.js --publish=always"
+    "electron:publish": "npm run build && electron-builder --config .electron-builder.config.js --publish=always",
+    "test": "vitest run"
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "vue-router": "^4.2.0",
-    "pinia": "^2.1.0",
-    "bootstrap": "^5.3.0",
     "@popperjs/core": "^2.11.0",
-    "axios": "^1.6.0",
-    "sockjs-client": "^1.6.0",
     "@stomp/stompjs": "^7.0.0",
+    "@types/dompurify": "^3.0.5",
     "@vueuse/core": "^10.7.0",
-    "dayjs": "^1.11.0"
+    "axios": "^1.6.0",
+    "bootstrap": "^5.3.0",
+    "dayjs": "^1.11.0",
+    "dompurify": "^3.3.3",
+    "pinia": "^2.1.0",
+    "sockjs-client": "^1.6.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.16.0",
@@ -35,6 +38,7 @@
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-vue": "^5.1.0",
     "@vue/eslint-config-typescript": "^12.0.0",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.5.0",
     "concurrently": "^8.2.0",
     "electron": "^31.0.0",
@@ -44,9 +48,11 @@
     "electron-window-state": "^5.0.3",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.28.0",
+    "happy-dom": "^20.8.4",
     "sass": "^1.79.0",
     "typescript": "~5.5.0",
     "vite": "^5.4.0",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.1.0",
     "wait-on": "^7.2.0"
   },
@@ -69,7 +75,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },

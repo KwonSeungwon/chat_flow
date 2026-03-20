@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gateway-service.fullname" . }}
+  labels:
+    {{- include "gateway-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "gateway-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gateway-service.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gateway-service.fullname" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.global.image.registry }}/{{ .Values.global.image.repository }}/{{ .Values.image.name }}:{{ .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.global.springProfile | quote }}
+            # K8s 내부 서비스 디스커버리
+            - name: CHAT_SERVICE_URL
+              value: "http://{{ .Release.Name }}-chat-service:8080"
+            - name: AI_SUMMARY_SERVICE_URL
+              value: "http://{{ .Release.Name }}-ai-summary-service:8081"
+            - name: SEARCH_SERVICE_URL
+              value: "http://{{ .Release.Name }}-search-service:8082"
+            - name: CHAT_SERVICE_WS_URL
+              value: "ws://{{ .Release.Name }}-chat-service:8080"
+            # Valkey (외부 Secret)
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_HOST
+            - name: VALKEY_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_PORT
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: {{ include "gateway-service.fullname" . }}
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}

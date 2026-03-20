@@ -15,7 +15,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "chat_messages", indexes = {
     @Index(name = "idx_chat_room_id", columnList = "chatRoomId"),
-    @Index(name = "idx_timestamp", columnList = "timestamp")
+    @Index(name = "idx_timestamp", columnList = "timestamp"),
+    @Index(name = "idx_chat_room_timestamp", columnList = "chatRoomId, timestamp DESC")
 })
 public class ChatMessageEntity {
 

@@ -1,4 +1,4 @@
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useElectron } from './useElectron'
 
@@ -41,15 +41,23 @@ export function useTheme() {
   }, { immediate: true })
 
   // 시스템 테마 변경 감지 (웹 환경)
+  let mediaQueryCleanup: (() => void) | null = null
+
   onMounted(() => {
     if (!isElectron) {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      mediaQuery.addEventListener('change', () => {
+      const handler = () => {
         if (theme.value === 'auto') {
           applyTheme()
         }
-      })
+      }
+      mediaQuery.addEventListener('change', handler)
+      mediaQueryCleanup = () => mediaQuery.removeEventListener('change', handler)
     }
+  })
+
+  onUnmounted(() => {
+    mediaQueryCleanup?.()
   })
 
   // 테마 이름 반환

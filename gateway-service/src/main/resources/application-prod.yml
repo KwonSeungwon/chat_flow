@@ -98,6 +98,12 @@ management:
     export:
       prometheus:
         enabled: true
+  tracing:
+    sampling:
+      probability: 0.1
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
 
 resilience4j:
   circuitbreaker:
@@ -114,6 +120,10 @@ resilience4j:
     instances:
       default:
         timeout-duration: 10s
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}
 
 logging:
   level:

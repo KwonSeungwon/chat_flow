@@ -1,0 +1,213 @@
+name: Release Pipeline
+
+on:
+  push:
+    branches:
+      - 'release/**'
+      - 'hotfix/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/chatflow
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # --- 테스트 ---
+  test-backend:
+    runs-on: ubuntu-latest
+    name: Backend Tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+      - name: Run tests
+        run: |
+          chmod +x gradlew
+          ./gradlew test
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    name: Frontend Tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.5'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - name: Test frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run lint
+          npm run type-check
+          npm run build
+
+  # --- 백엔드 이미지 빌드 + GHCR 푸시 ---
+  build-and-push-backend:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    strategy:
+      matrix:
+        service: [gateway-service, chat-service, ai-summary-service, search-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build JAR
+        run: |
+          chmod +x gradlew
+          ./gradlew :${{ matrix.service }}:build -x test
+
+      - name: Extract version tag
+        id: version
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          if [[ "$BRANCH_NAME" == release/* ]]; then
+            VERSION="${BRANCH_NAME#release/}"
+            echo "tag=release-${VERSION}" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == hotfix/* ]]; then
+            VERSION="${BRANCH_NAME#hotfix/}"
+            echo "tag=hotfix-${VERSION}" >> $GITHUB_OUTPUT
+          fi
+          echo "sha=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          build-args: SERVICE_NAME=${{ matrix.service }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ steps.version.outputs.tag }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ steps.version.outputs.sha }}
+
+  # --- 프론트엔드 이미지 빌드 + GHCR 푸시 ---
+  build-and-push-frontend:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version tag
+        id: version
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          if [[ "$BRANCH_NAME" == release/* ]]; then
+            VERSION="${BRANCH_NAME#release/}"
+            echo "tag=release-${VERSION}" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == hotfix/* ]]; then
+            VERSION="${BRANCH_NAME#hotfix/}"
+            echo "tag=hotfix-${VERSION}" >> $GITHUB_OUTPUT
+          fi
+          echo "sha=sha-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.version.outputs.tag }}
+            ${{ env.IMAGE_PREFIX }}/frontend:${{ steps.version.outputs.sha }}
+
+  # --- Staging 배포 ---
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-and-push-backend, build-and-push-frontend]
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version tag
+        id: version
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          if [[ "$BRANCH_NAME" == release/* ]]; then
+            VERSION="${BRANCH_NAME#release/}"
+            echo "tag=release-${VERSION}" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == hotfix/* ]]; then
+            VERSION="${BRANCH_NAME#hotfix/}"
+            echo "tag=hotfix-${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
+
+      - name: Deploy to staging
+        run: |
+          helm dependency update helm/chatflow
+          helm upgrade --install chatflow-staging helm/chatflow \
+            --namespace chatflow-staging \
+            --create-namespace \
+            -f helm/chatflow/values-staging.yaml \
+            --set global.image.tag=${{ steps.version.outputs.tag }} \
+            --set global.image.repository=${{ github.repository_owner }}/chatflow \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl -n chatflow-staging get pods -l app.kubernetes.io/part-of=chatflow
+          kubectl -n chatflow-staging rollout status deployment/chatflow-staging-gateway-service --timeout=300s
+          kubectl -n chatflow-staging rollout status deployment/chatflow-staging-chat-service --timeout=300s
+          kubectl -n chatflow-staging rollout status deployment/chatflow-staging-ai-summary-service --timeout=300s
+          kubectl -n chatflow-staging rollout status deployment/chatflow-staging-search-service --timeout=300s
+          kubectl -n chatflow-staging rollout status deployment/chatflow-staging-frontend --timeout=300s

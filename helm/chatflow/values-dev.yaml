@@ -1,0 +1,71 @@
+# 개발 환경: 최소 리소스, 단일 레플리카, HPA 비활성
+global:
+  image:
+    tag: "latest"
+    pullPolicy: Always
+  springProfile: prod
+
+ingress:
+  host: dev.chatflow.example.com
+  tls:
+    enabled: false
+
+gateway-service:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+chat-service:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+ai-summary-service:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+search-service:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+frontend:
+  replicaCount: 1
+  hpa:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

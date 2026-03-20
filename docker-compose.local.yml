@@ -168,6 +168,20 @@ services:
     networks:
       - chatflow-local
 
+  zipkin:
+    image: openzipkin/zipkin:3
+    hostname: zipkin
+    container_name: zipkin-local
+    ports:
+      - "9411:9411"
+    networks:
+      - chatflow-local
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9411/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 networks:
   chatflow-local:
     driver: bridge

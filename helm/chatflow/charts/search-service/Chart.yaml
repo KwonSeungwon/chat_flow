@@ -1,0 +1,6 @@
+apiVersion: v2
+name: search-service
+description: ChatFlow 검색 서비스 (Elasticsearch + Nori 한국어 검색)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

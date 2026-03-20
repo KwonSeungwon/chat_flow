@@ -8,6 +8,7 @@ import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.chatflow.search.document.ChatMessageDocument;
+import com.chatflow.search.exception.SearchException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -30,7 +31,7 @@ public class KoreanSearchService {
             // Multi-match query with Korean analyzer and n-gram support
             Query multiMatchQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content^2", "content.ngram^1", "username^1.5", "username.ngram^0.5")
+                    .fields("content^2", "content.ngram^0.5", "username^1.5")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
                     .fuzziness("AUTO")
             )._toQuery();
@@ -88,7 +89,7 @@ public class KoreanSearchService {
 
         } catch (Exception e) {
             log.error("Error performing Korean search for query: {}", query, e);
-            return Page.empty(pageable);
+            throw new SearchException("한국어 검색 중 오류가 발생했습니다: " + query, e);
         }
     }
 
@@ -97,7 +98,7 @@ public class KoreanSearchService {
             // N-gram based search for partial matching
             Query ngramQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content.ngram^2", "username.ngram^1")
+                    .fields("content.ngram^2")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
             )._toQuery();
 
@@ -142,7 +143,7 @@ public class KoreanSearchService {
 
         } catch (Exception e) {
             log.error("Error performing N-gram search for query: {}", query, e);
-            return Page.empty(pageable);
+            throw new SearchException("N-gram 검색 중 오류가 발생했습니다: " + query, e);
         }
     }
 }
