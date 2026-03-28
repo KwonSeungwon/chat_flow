@@ -1,0 +1,319 @@
+# ChatFlow Production Docker Compose
+# Target: EC2 t3.small (2GB RAM) with 2GB swap
+# Total memory budget: ~1.85GB (leaves headroom for OS)
+#
+# Usage:
+#   cp .env.prod.example .env.prod  # fill in values
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # ──────────────────────────────────────────────
+  # Infrastructure
+  # ──────────────────────────────────────────────
+
+  postgresql:
+    image: postgres:16-alpine
+    container_name: chatflow-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-chatflow}
+      POSTGRES_USER: ${DB_USER:-chatflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chatflow} -d ${DB_NAME:-chatflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    container_name: chatflow-valkey
+    restart: unless-stopped
+    command: valkey-server --appendonly yes --save 60 1 --loglevel warning --maxmemory 48mb --maxmemory-policy allkeys-lru
+    volumes:
+      - valkey_data:/data
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: chatflow-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: "-Xmx96m -Xms64m"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: chatflow-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 536870912  # 512MB
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xmx256m -Xms128m}
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  elasticsearch:
+    build:
+      context: ./elasticsearch
+      dockerfile: Dockerfile
+    container_name: chatflow-elasticsearch
+    restart: unless-stopped
+    environment:
+      - node.name=chatflow-es
+      - cluster.name=chatflow-prod
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms256m -Xmx256m}"
+      - xpack.security.enabled=false
+      - xpack.monitoring.collection.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────
+  # Application Services
+  # ──────────────────────────────────────────────
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: gateway-service
+        SERVICE_PORT: 8000
+    container_name: chatflow-gateway
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx160m -Xms80m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m}
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+    ports:
+      - "8000:8000"
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: chat-service
+        SERVICE_PORT: 8080
+    container_name: chatflow-chat
+    restart: unless-stopped
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      JAVA_OPTS: ${CHAT_JAVA_OPTS:--Xmx160m -Xms80m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/${DB_NAME:-chatflow}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-chatflow}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  ai-summary-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: ai-summary-service
+        SERVICE_PORT: 8081
+    container_name: chatflow-ai-summary
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx160m -Xms80m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  search-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: search-service
+        SERVICE_PORT: 8082
+    container_name: chatflow-search
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      JAVA_OPTS: ${SEARCH_JAVA_OPTS:--Xmx160m -Xms80m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m}
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # ──────────────────────────────────────────────
+  # Frontend
+  # ──────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chatflow-frontend
+    restart: unless-stopped
+    depends_on:
+      gateway-service:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - chatflow-prod
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  chatflow-prod:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  valkey_data:
+  zookeeper_data:
+  kafka_data:
+  es_data:
