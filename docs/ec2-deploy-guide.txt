@@ -1,0 +1,203 @@
+================================================================================
+  ChatFlow EC2 배포 가이드 (t3.small / 2GB RAM)
+================================================================================
+
+사전 조건:
+  - EC2 인스턴스 (Ubuntu 24.04, t3.small 이상)
+  - 보안 그룹: 22(SSH), 80(HTTP), 8000(Gateway API) 인바운드 허용
+  - 로컬: Docker Desktop, Java 17+, Gradle
+
+================================================================================
+  1단계: 환경 준비
+================================================================================
+
+# .env.prod 생성
+cp .env.prod.example .env.prod
+vi .env.prod
+  → GEMINI_API_KEY, DB_PASSWORD 필수 입력
+  → JWT_SECRET 자동생성됨 (deploy-ec2.sh 사용 시)
+  → JAVA_OPTS 관련 항목은 주석 유지 (compose 기본값 사용)
+
+================================================================================
+  2단계: 로컬 빌드 (Mac/Linux)
+================================================================================
+
+# Gradle 빌드
+./gradlew clean build -x test --no-daemon
+
+# Docker 이미지 빌드 (amd64 크로스빌드 - Mac ARM 필수)
+docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=gateway-service --build-arg SERVICE_PORT=8000 -t chatflow/gateway:latest .
+docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=chat-service --build-arg SERVICE_PORT=8080 -t chatflow/chat:latest .
+docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=ai-summary-service --build-arg SERVICE_PORT=8081 -t chatflow/ai-summary:latest .
+docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=search-service --build-arg SERVICE_PORT=8082 -t chatflow/search:latest .
+docker buildx build --platform linux/amd64 -t chatflow/elasticsearch:latest ./elasticsearch
+docker buildx build --platform linux/amd64 -t chatflow/frontend:latest ./frontend
+
+# 이미지 압축
+docker save chatflow/gateway chatflow/chat chatflow/ai-summary chatflow/search chatflow/elasticsearch chatflow/frontend | gzip > chatflow-images.tar.gz
+
+================================================================================
+  3단계: EC2 전송
+================================================================================
+
+KEY=~/.ssh/your-key.pem
+HOST=ubuntu@<EC2-IP>
+
+scp -i $KEY chatflow-images.tar.gz $HOST:~
+scp -i $KEY docker-compose.prod.yml .env.prod $HOST:~
+scp -i $KEY search-service/src/main/resources/elasticsearch/korean-analyzer-config.json $HOST:~
+
+================================================================================
+  4단계: EC2 서버 설정
+================================================================================
+
+ssh -i $KEY $HOST
+
+# Docker 설치 (없는 경우)
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
+
+# 2GB 스왑 생성 (없는 경우)
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+sudo sysctl vm.swappiness=60
+
+================================================================================
+  5단계: 이미지 로드 + compose 패치
+================================================================================
+
+# 이미지 로드
+gunzip -c ~/chatflow-images.tar.gz | docker load
+
+# compose에서 build → image로 패치 (EC2에 소스 없으므로)
+python3 -c "
+import re
+with open('docker-compose.prod.yml', 'r') as f:
+    content = f.read()
+for svc, img in {
+    'gateway-service': 'chatflow/gateway:latest',
+    'chat-service': 'chatflow/chat:latest',
+    'ai-summary-service': 'chatflow/ai-summary:latest',
+    'search-service': 'chatflow/search:latest',
+}.items():
+    pattern = r'build:\n\s+context: \.\n\s+dockerfile: Dockerfile\n\s+args:\n\s+SERVICE_NAME: ' + svc + r'\n\s+SERVICE_PORT: \d+'
+    content = re.sub(pattern, 'image: ' + img, content)
+content = re.sub(r'build:\n\s+context: \./elasticsearch\n\s+dockerfile: Dockerfile', 'image: chatflow/elasticsearch:latest', content)
+content = re.sub(r'build:\n\s+context: \./frontend\n\s+dockerfile: Dockerfile', 'image: chatflow/frontend:latest', content)
+with open('docker-compose.prod.yml', 'w') as f:
+    f.write(content)
+print('Patched')
+"
+
+================================================================================
+  6단계: 서비스 시작 (단계별)
+================================================================================
+
+# Phase 1: 인프라
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d postgresql valkey zookeeper elasticsearch
+sleep 40
+
+# Phase 2: Kafka
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d kafka
+sleep 45
+
+# Phase 3: ES 한국어 인덱스 생성
+python3 -c "
+import json
+with open('korean-analyzer-config.json') as f:
+    config = json.load(f)
+config['settings']['index'] = {'max_ngram_diff': 3}
+with open('/tmp/kf.json', 'w') as f:
+    json.dump(config, f)
+"
+docker cp /tmp/kf.json chatflow-elasticsearch:/tmp/kf.json
+docker exec chatflow-elasticsearch curl -sf -X PUT http://localhost:9200/chat_messages \
+  -H "Content-Type: application/json" -d @/tmp/kf.json
+
+# Phase 4: 앱 서비스
+docker compose -f docker-compose.prod.yml --env-file .env.prod create \
+  gateway-service chat-service ai-summary-service search-service frontend
+docker start chatflow-gateway chatflow-chat chatflow-ai-summary chatflow-search chatflow-frontend
+
+# 시작 대기 (JVM 콜드스타트 ~2-3분)
+sleep 180
+
+# 상태 확인
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps -a
+
+================================================================================
+  7단계: 검증
+================================================================================
+
+# Gateway 헬스체크
+curl -sf http://localhost:8000/actuator/health
+
+# Frontend
+curl -sf -o /dev/null -w "%{http_code}" http://localhost:80
+
+# 메모리 사용량
+docker stats --no-stream
+
+================================================================================
+  운영 명령어
+================================================================================
+
+# 로그 보기
+docker compose -f docker-compose.prod.yml logs -f [서비스명]
+
+# 서비스 재시작
+docker compose -f docker-compose.prod.yml --env-file .env.prod stop [서비스명]
+docker compose -f docker-compose.prod.yml --env-file .env.prod rm -f [서비스명]
+docker compose -f docker-compose.prod.yml --env-file .env.prod create [서비스명]
+docker start chatflow-[서비스명]
+
+# 전체 중지
+docker compose -f docker-compose.prod.yml --env-file .env.prod down
+
+# 전체 중지 + 볼륨 삭제 (데이터 초기화)
+docker compose -f docker-compose.prod.yml --env-file .env.prod down -v
+
+================================================================================
+  주의사항
+================================================================================
+
+1. MaxMetaspaceSize 설정 금지
+   .env.prod에 JAVA_OPTS를 오버라이드하면 compose 기본값이 무시됨.
+   Spring Boot 3.2는 metaspace ~200MB 필요. 80m으로 제한하면 OOM 발생.
+
+2. ES 인덱스 사전 생성 필수
+   Search 서비스 시작 전 chat_messages 인덱스를 korean-analyzer-config.json으로
+   생성해야 함. max_ngram_diff: 3 설정 포함 필수.
+
+3. Mac에서 빌드 시 --platform linux/amd64 필수
+   Apple Silicon Mac에서 빌드한 이미지를 EC2(x86)에서 실행하면
+   "exec format error" 발생.
+
+4. docker compose up -d 대신 단계별 시작 권장
+   depends_on: condition: service_healthy가 타이밍 문제로 실패할 수 있음.
+   docker create → docker start로 의존성 체크를 우회.
+
+5. Cloudflare 사용 시 SSL 모드를 Flexible로 설정
+   EC2에 SSL 인증서가 없으므로 Cloudflare가 HTTPS를 처리하고
+   origin은 HTTP로 접속해야 함.
+
+================================================================================
+  메모리 예산 (실측값, t3.small 2GB RAM + 2GB Swap)
+================================================================================
+
+  PostgreSQL      :  ~15MB / 256MB
+  Valkey          :  ~2MB  / 64MB
+  Zookeeper       :  ~20MB / 128MB
+  Kafka           :  ~90MB / 300MB
+  Elasticsearch   : ~500MB / 512MB
+  Gateway         :  ~70MB / 256MB
+  Chat            : ~190MB / 512MB
+  AI-Summary      : ~155MB / 450MB
+  Search          : ~190MB / 400MB
+  Frontend(nginx) :  ~2MB  / 32MB
+  ─────────────────────────────────
+  합계            : ~1.2GB 실사용 / 2.9GB 할당
+  시스템           : RAM 1.7GB + Swap 1.3GB 사용
+
+================================================================================
