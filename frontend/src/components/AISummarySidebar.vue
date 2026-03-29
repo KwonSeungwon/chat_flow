@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import axios from 'axios'
+import api from '@/utils/api'
 import dayjs from 'dayjs'
 import type { ChatMessage } from '@/types'
 
@@ -80,7 +80,7 @@ const requestSummary = async () => {
   loading.value = true
   error.value = false
   try {
-    await axios.post('/api/ai-summary/request', {
+    await api.post('/api/ai-summary/request', {
       chatRoomId: props.roomId
     })
     // 잠시 대기 후 요약 새로고침
@@ -95,7 +95,7 @@ const requestSummary = async () => {
 const fetchSummaries = async () => {
   error.value = false
   try {
-    const response = await axios.get(`/api/ai-summary/room/${props.roomId}`)
+    const response = await api.get(`/api/ai-summary/room/${props.roomId}`)
     summaries.value = response.data || []
   } catch (e) {
     console.error('요약 데이터 로드 실패:', e)

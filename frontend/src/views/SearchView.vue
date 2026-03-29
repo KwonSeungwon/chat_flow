@@ -172,7 +172,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import api from '@/utils/api'
 import dayjs from 'dayjs'
 import DOMPurify from 'dompurify'
 
@@ -249,7 +249,7 @@ const performSearch = async () => {
       params.append('end', `${dateTo.value}T23:59:59`)
     }
 
-    const response = await axios.get(`${url}?${params}`)
+    const response = await api.get(`${url}?${params}`)
     const data = response.data
 
     searchResults.value = data.content || []

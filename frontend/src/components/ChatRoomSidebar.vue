@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '@/utils/api'
 import type { ChatRoom } from '@/types'
 import CreateRoomModal from './CreateRoomModal.vue'
 
@@ -99,7 +99,7 @@ const fetchRooms = async () => {
   loading.value = true
   error.value = false
   try {
-    const response = await axios.get('/api/chat/rooms')
+    const response = await api.get('/api/chat/rooms')
     const data = response.data
     rooms.value = data.data || data || []
   } catch (e) {
@@ -124,7 +124,7 @@ const selectRoom = (roomId: string) => {
 
 const handleRoomCreated = async (roomData: CreateRoomData) => {
   try {
-    const response = await axios.post('/api/chat/rooms', {
+    const response = await api.post('/api/chat/rooms', {
       name: roomData.name,
       description: roomData.description,
       color: roomData.color,

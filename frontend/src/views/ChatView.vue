@@ -41,6 +41,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLocalStorage } from '@vueuse/core'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { ensureAuthenticated } from '@/utils/api'
 import type { ChatMessage, MessageType } from '@/types'
 
 import ChatRoomSidebar from '@/components/ChatRoomSidebar.vue'
@@ -105,11 +106,14 @@ watch(username, (newUsername) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   if (!username.value) {
     username.value = `Guest_${Math.floor(Math.random() * 1000)}`
   }
-  
+
+  await ensureAuthenticated()
+  username.value = localStorage.getItem('chatflow-username') || username.value
+
   if (currentRoomId.value) {
     connect(currentRoomId.value, username.value)
   }
