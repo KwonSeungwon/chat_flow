@@ -52,6 +52,10 @@ spring:
             allowedOriginPatterns:
               - "https://*.chatflow.com"
               - "https://chatflow.com"
+              - "https://*.chatflow.ai.kr"
+              - "https://chatflow.ai.kr"
+              - "http://*.chatflow.ai.kr"
+              - "http://chatflow.ai.kr"
               - "https://*.tistory.com"
             allowedMethods: 
               - GET
