@@ -79,11 +79,9 @@ management:
       prometheus:
         enabled: true
   tracing:
+    enabled: false
     sampling:
-      probability: 0.1
-  zipkin:
-    tracing:
-      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
+      probability: 0.0
 
 logging:
   level:
