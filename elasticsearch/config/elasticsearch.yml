@@ -4,8 +4,3 @@ discovery.type: single-node
 bootstrap.memory_lock: true
 xpack.security.enabled: false
 xpack.monitoring.collection.enabled: false
-
-# Korean text analysis settings
-# Install analysis-nori plugin
-plugins.mandatory:
-  - analysis-nori

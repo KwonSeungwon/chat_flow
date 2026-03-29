@@ -6,9 +6,6 @@ server:
     accept-count: 200
 
 spring:
-  profiles:
-    active: prod
-  
   cloud:
     gateway:
       routes:

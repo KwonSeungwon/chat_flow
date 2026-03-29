@@ -6,9 +6,6 @@ server:
     accept-count: 50
 
 spring:
-  profiles:
-    active: prod,spring-ai  # AI 프로바이더 전환: spring-ai 또는 langchain4j
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:

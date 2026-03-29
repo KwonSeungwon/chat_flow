@@ -6,9 +6,6 @@ server:
     accept-count: 75
 
 spring:
-  profiles:
-    active: prod
-  
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS}
     connection-timeout: 3s

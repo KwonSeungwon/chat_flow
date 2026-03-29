@@ -6,9 +6,6 @@ server:
     accept-count: 100
 
 spring:
-  profiles:
-    active: prod
-  
   # Production PostgreSQL with connection pooling
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
@@ -24,7 +21,7 @@ spring:
   
   jpa:
     hibernate:
-      ddl-auto: validate  # Never auto-create in production
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
