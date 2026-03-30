@@ -1,6 +1,8 @@
 package com.chatflow.common.dto;
 
+import com.chatflow.common.config.FlexibleLocalDateTimeDeserializer;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -33,7 +35,8 @@ public abstract class BaseMessage {
     @Size(max = 10000, message = "content는 10,000자를 초과할 수 없습니다")
     private String content;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss[.SSS]")
+    @JsonDeserialize(using = FlexibleLocalDateTimeDeserializer.class)
     private LocalDateTime timestamp;
 
     @NotNull(message = "메시지 타입은 필수입니다")
