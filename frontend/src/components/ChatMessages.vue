@@ -15,12 +15,12 @@
       <!-- AI 요약 메시지 -->
       <div v-if="message.type === 'AI_SUMMARY'" class="ai-summary-message">
         <div class="card border-info">
-          <div class="card-header bg-info text-white d-flex align-items-center">
+          <div class="card-header bg-info text-white d-flex align-items-center py-2">
             <i class="bi bi-robot me-2"></i>
             <strong>AI 요약</strong>
             <small class="ms-auto">{{ formatTime(message.timestamp) }}</small>
           </div>
-          <div class="card-body">
+          <div class="card-body py-2">
             <p class="card-text mb-0">{{ message.content }}</p>
           </div>
         </div>
@@ -39,9 +39,9 @@
       <div v-else class="chat-message">
         <div class="d-flex" :class="{ 'justify-content-end': isCurrentUser(message) }">
           <!-- 상대방 아바타 -->
-          <div v-if="!isCurrentUser(message)" class="avatar me-2">
-            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-              <small class="text-white fw-bold">{{ getInitials(message.username) }}</small>
+          <div v-if="!isCurrentUser(message)" class="avatar me-2 flex-shrink-0">
+            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+              <small class="text-white fw-bold" style="font-size: 0.7em;">{{ getInitials(message.username) }}</small>
             </div>
           </div>
 
@@ -50,17 +50,17 @@
             <div v-if="!isCurrentUser(message)" class="message-header mb-1">
               <small class="text-muted fw-bold">{{ message.username }}</small>
             </div>
-            
-            <div 
+
+            <div
               class="message-bubble px-3 py-2 rounded-3 d-inline-block"
               :class="{
                 'bg-primary text-white': isCurrentUser(message),
                 'bg-light': !isCurrentUser(message)
               }"
             >
-              <div>{{ message.content }}</div>
+              <div class="message-text">{{ message.content }}</div>
               <div class="message-time mt-1">
-                <small 
+                <small
                   :class="{
                     'text-white-50': isCurrentUser(message),
                     'text-muted': !isCurrentUser(message)
@@ -73,27 +73,11 @@
           </div>
 
           <!-- 내 아바타 -->
-          <div v-if="isCurrentUser(message)" class="avatar ms-2">
-            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-              <small class="text-white fw-bold">{{ getInitials(message.username) }}</small>
+          <div v-if="isCurrentUser(message)" class="avatar ms-2 flex-shrink-0">
+            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+              <small class="text-white fw-bold" style="font-size: 0.7em;">{{ getInitials(message.username) }}</small>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 타이핑 인디케이터 -->
-    <div v-if="isTyping" class="typing-indicator">
-      <div class="d-flex align-items-center">
-        <div class="avatar me-2">
-          <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-            <small class="text-white">...</small>
-          </div>
-        </div>
-        <div class="typing-dots">
-          <span></span>
-          <span></span>
-          <span></span>
         </div>
       </div>
     </div>
@@ -103,7 +87,10 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
 import type { ChatMessage } from '@/types'
+
+dayjs.extend(utc)
 
 interface Props {
   messages: ChatMessage[]
@@ -114,7 +101,6 @@ interface Props {
 const props = defineProps<Props>()
 
 const messagesContainer = ref<HTMLElement>()
-const isTyping = ref(false)
 
 const isCurrentUser = (message: ChatMessage) => {
   return message.username === props.currentUser
@@ -125,14 +111,15 @@ const getInitials = (name: string) => {
 }
 
 const formatTime = (timestamp: string) => {
-  return dayjs(timestamp).format('HH:mm')
+  // 항상 KST(UTC+9) 기준으로 표시
+  return dayjs.utc(timestamp).utcOffset(9).format('HH:mm')
 }
 
 const getMessageClass = (message: ChatMessage) => {
   return {
     'current-user': isCurrentUser(message),
     'other-user': !isCurrentUser(message) && message.type === 'CHAT',
-    'system-message': ['JOIN', 'LEAVE', 'SYSTEM'].includes(message.type),
+    'system-msg': ['JOIN', 'LEAVE', 'SYSTEM'].includes(message.type),
     'ai-summary': message.type === 'AI_SUMMARY'
   }
 }
@@ -145,7 +132,6 @@ const scrollToBottom = () => {
   })
 }
 
-// 새 메시지가 추가되면 스크롤을 아래로
 watch(() => props.messages.length, () => {
   scrollToBottom()
 })
@@ -155,11 +141,26 @@ watch(() => props.messages.length, () => {
 .chat-messages {
   height: 100%;
   background-color: var(--bs-body-bg);
+  -webkit-overflow-scrolling: touch;
 }
 
 .message-bubble {
-  max-width: 70%;
-  word-wrap: break-word;
+  max-width: 75%;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.message-text {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.current-user .message-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .current-user .message-bubble {
@@ -172,45 +173,31 @@ watch(() => props.messages.length, () => {
 }
 
 .ai-summary-message {
-  margin: 1rem 0;
+  margin: 0.5rem 0;
 }
 
-.typing-indicator {
-  padding: 1rem 0;
-}
-
-.typing-dots {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.typing-dots span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--bs-secondary);
-  animation: typing 1.5s infinite;
-}
-
-.typing-dots span:nth-child(2) {
-  animation-delay: 0.5s;
-}
-
-.typing-dots span:nth-child(3) {
-  animation-delay: 1s;
-}
-
-@keyframes typing {
-  0%, 60%, 100% {
-    transform: translateY(0);
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .chat-messages {
+    padding: 0.5rem !important;
   }
-  30% {
-    transform: translateY(-10px);
+
+  .message-bubble {
+    max-width: 85%;
+    font-size: 0.9rem;
+  }
+
+  .avatar > div {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .avatar small {
+    font-size: 0.6em !important;
   }
 }
 
-/* 다크모드 지원 */
+/* Dark mode */
 [data-bs-theme="dark"] .other-user .message-bubble {
   background-color: var(--bs-dark);
   color: var(--bs-light);

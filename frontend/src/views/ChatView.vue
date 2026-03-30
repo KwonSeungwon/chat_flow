@@ -9,7 +9,7 @@
     </div>
 
     <!-- 메인 채팅 영역 -->
-    <div class="col-md-9 col-lg-7 d-flex flex-column">
+    <div class="col-md-9 col-lg-7 d-flex flex-column chat-main">
       <ChatHeader
         :room-id="currentRoomId"
         :is-connected="isConnected"
@@ -23,7 +23,7 @@
         :messages="allMessages"
         :current-user="auth.username"
         :loading-history="loadingHistory"
-        class="flex-grow-1"
+        class="flex-grow-1 overflow-hidden"
       />
 
       <ChatInput
@@ -140,5 +140,16 @@ onMounted(() => {
 <style scoped>
 .row {
   margin: 0;
+}
+
+.chat-main {
+  min-height: 0; /* flex child가 overflow 되지 않도록 */
+  max-height: 100%;
+}
+
+@media (max-width: 767px) {
+  .chat-main {
+    height: 100%;
+  }
 }
 </style>

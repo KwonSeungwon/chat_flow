@@ -1,19 +1,41 @@
 <template>
-  <div class="chat-input border-top p-3">
-    <form @submit.prevent="handleSubmit" class="d-flex gap-2">
+  <div class="chat-input border-top p-2">
+    <!-- 이모지 피커 (input 위에) -->
+    <div v-if="showEmojiPicker" class="emoji-picker mb-2">
+      <div class="card">
+        <div class="card-body p-2">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <small class="text-muted fw-semibold">이모지</small>
+            <button class="btn btn-sm btn-close" @click="showEmojiPicker = false"></button>
+          </div>
+          <div class="d-flex flex-wrap gap-1">
+            <button
+              v-for="emoji in commonEmojis"
+              :key="emoji"
+              class="btn btn-sm btn-outline-secondary emoji-btn"
+              @click="insertEmoji(emoji)"
+            >
+              {{ emoji }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form @submit.prevent="handleSubmit" class="d-flex gap-2 align-items-end">
       <div class="flex-grow-1">
         <div class="input-group">
-          <input
+          <textarea
             ref="messageInput"
             v-model="message"
-            type="text"
             class="form-control"
             placeholder="메시지를 입력하세요..."
             :disabled="disabled"
             @keydown="handleKeyDown"
-            @keyup="handleKeyUp"
+            @input="autoResize"
+            rows="1"
             maxlength="1000"
-          >
+          ></textarea>
           <button
             class="btn btn-outline-secondary"
             type="button"
@@ -24,48 +46,20 @@
             <i class="bi bi-emoji-smile"></i>
           </button>
         </div>
-        
-        <!-- 문자 수 표시 -->
         <div v-if="message.length > 800" class="text-end mt-1">
           <small class="text-muted">{{ message.length }}/1000</small>
         </div>
       </div>
-      
+
       <button
         type="submit"
-        class="btn btn-primary"
+        class="btn btn-primary flex-shrink-0"
         :disabled="disabled || !message.trim()"
-        title="전송 (Ctrl+Enter)"
+        title="전송 (Enter)"
       >
         <i class="bi bi-send"></i>
       </button>
     </form>
-
-    <!-- 이모지 피커 (간단한 버전) -->
-    <div v-if="showEmojiPicker" class="emoji-picker mt-2">
-      <div class="card">
-        <div class="card-body">
-          <div class="d-flex flex-wrap gap-1">
-            <button
-              v-for="emoji in commonEmojis"
-              :key="emoji"
-              class="btn btn-sm btn-outline-secondary"
-              @click="insertEmoji(emoji)"
-            >
-              {{ emoji }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 타이핑 상태 표시 -->
-    <div v-if="isTyping" class="mt-2">
-      <small class="text-muted">
-        <i class="bi bi-three-dots"></i>
-        입력 중...
-      </small>
-    </div>
   </div>
 </template>
 
@@ -87,18 +81,16 @@ const emit = defineEmits<{
 }>()
 
 const message = ref('')
-const messageInput = ref<HTMLInputElement>()
+const messageInput = ref<HTMLTextAreaElement>()
 const showEmojiPicker = ref(false)
-const isTyping = ref(false)
-const typingTimer = ref<number>()
 
 const commonEmojis = [
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
-  '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
-  '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪',
-  '😎', '🤓', '🧐', '🤔', '🤨', '😐', '😑', '😶',
+  '🙂', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘',
+  '😎', '🤓', '🤔', '😐', '😶', '😏', '😒', '😔',
   '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙',
-  '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🖤'
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🖤',
+  '🔥', '⭐', '🎉', '💯', '✅', '❌', '🙏', '💪'
 ]
 
 const handleSubmit = () => {
@@ -106,54 +98,34 @@ const handleSubmit = () => {
   if (content && !props.disabled) {
     emit('send-message', content)
     message.value = ''
-    stopTyping()
-    
-    // 포커스 유지
+    showEmojiPicker.value = false
     nextTick(() => {
+      resetTextareaHeight()
       messageInput.value?.focus()
     })
   }
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter') {
-    if (event.ctrlKey || event.metaKey) {
-      // Ctrl+Enter로 전송
-      handleSubmit()
-    }
-    // 일반 Enter는 기본 동작 방지
+  if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
+    handleSubmit()
   }
-  
-  startTyping()
+  // Shift+Enter = new line (default textarea behavior)
 }
 
-const handleKeyUp = () => {
-  // 타이핑 중지 타이머 리셋
-  if (typingTimer.value) {
-    clearTimeout(typingTimer.value)
-  }
-  
-  typingTimer.value = setTimeout(() => {
-    stopTyping()
-  }, 1000) as unknown as number
-}
-
-const startTyping = () => {
-  if (!isTyping.value) {
-    isTyping.value = true
-    emit('typing-start')
+const autoResize = () => {
+  const el = messageInput.value
+  if (el) {
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
   }
 }
 
-const stopTyping = () => {
-  if (isTyping.value) {
-    isTyping.value = false
-    emit('typing-stop')
-    
-    if (typingTimer.value) {
-      clearTimeout(typingTimer.value)
-    }
+const resetTextareaHeight = () => {
+  const el = messageInput.value
+  if (el) {
+    el.style.height = 'auto'
   }
 }
 
@@ -162,28 +134,23 @@ const toggleEmojiPicker = () => {
 }
 
 const insertEmoji = (emoji: string) => {
-  const input = messageInput.value
-  if (input) {
-    const start = input.selectionStart || 0
-    const end = input.selectionEnd || 0
+  const el = messageInput.value
+  if (el) {
+    const start = el.selectionStart || 0
+    const end = el.selectionEnd || 0
     const text = message.value
-    
     message.value = text.substring(0, start) + emoji + text.substring(end)
-    
-    // 커서 위치 조정
     nextTick(() => {
-      const newPosition = start + emoji.length
-      input.setSelectionRange(newPosition, newPosition)
-      input.focus()
+      const pos = start + emoji.length
+      el.setSelectionRange(pos, pos)
+      el.focus()
     })
   } else {
     message.value += emoji
   }
-  
-  showEmojiPicker.value = false
+  // 이모지 피커 열어둠 — 연속 입력 가능
 }
 
-// 컴포넌트가 마운트되면 입력창에 포커스
 nextTick(() => {
   messageInput.value?.focus()
 })
@@ -192,7 +159,15 @@ nextTick(() => {
 <style scoped>
 .chat-input {
   background-color: var(--bs-body-bg);
-  border-color: var(--bs-border-color);
+  flex-shrink: 0;
+}
+
+textarea.form-control {
+  resize: none;
+  min-height: 38px;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.4;
 }
 
 .emoji-picker {
@@ -200,14 +175,21 @@ nextTick(() => {
   z-index: 1000;
 }
 
-.btn:disabled {
-  opacity: 0.5;
+.emoji-btn {
+  font-size: 1.2em;
+  padding: 2px 6px;
+  line-height: 1;
+  border: none;
 }
 
-/* 모바일에서 입력창 크기 조정 */
+.emoji-btn:hover {
+  background-color: var(--bs-light);
+  transform: scale(1.2);
+}
+
 @media (max-width: 768px) {
-  .input-group input {
-    font-size: 16px; /* iOS에서 줌 방지 */
+  textarea.form-control {
+    font-size: 16px; /* iOS zoom 방지 */
   }
 }
 </style>

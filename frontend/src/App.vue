@@ -1,22 +1,24 @@
 <template>
   <div id="app" :data-bs-theme="theme">
-    <NavBar @toggle-theme="toggleTheme" />
-    <main class="container-fluid h-100">
+    <NavBar v-if="showNavBar" @toggle-theme="toggleTheme" />
+    <main class="container-fluid" :class="{ 'h-100': showNavBar, 'min-vh-100': !showNavBar }">
       <RouterView />
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { RouterView } from 'vue-router'
+import { computed, onMounted } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import NavBar from '@/components/NavBar.vue'
 import { useTheme } from '@/composables/useTheme'
 
+const route = useRoute()
 const { theme, toggleTheme } = useTheme()
 
+const showNavBar = computed(() => route.name !== 'login')
+
 onMounted(() => {
-  // Bootstrap theme 초기화
   document.documentElement.setAttribute('data-bs-theme', theme.value)
 })
 </script>
