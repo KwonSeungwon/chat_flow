@@ -2,8 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
-import com.chatflow.chat.repository.ChatMessageRepository;
-import com.chatflow.chat.repository.ChatRoomRepository;
+import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +13,7 @@ import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -24,18 +21,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ChatRoomController {
 
-    private final ChatRoomRepository chatRoomRepository;
-    private final ChatMessageRepository chatMessageRepository;
+    private final ChatRoomService chatRoomService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
-        List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
-        return ResponseEntity.ok(ApiResponse.ok(rooms));
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.getAllRooms()));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ChatRoom>> getRoom(@PathVariable String id) {
-        return chatRoomRepository.findById(id)
+        return chatRoomService.getRoom(id)
                 .map(room -> ResponseEntity.ok(ApiResponse.ok(room)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error("채팅방을 찾을 수 없습니다: " + id)));
@@ -43,45 +38,16 @@ public class ChatRoomController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChatRoom>> createRoom(@Valid @RequestBody ChatRoom request) {
-        ChatRoom room = ChatRoom.builder()
-                .id("room_" + UUID.randomUUID().toString().substring(0, 8))
-                .name(request.getName().trim())
-                .description(request.getDescription())
-                .color(request.getColor() != null ? request.getColor() : "#6366f1")
-                .isPrivate(request.isPrivate())
-                .allowInvites(request.isAllowInvites())
-                .participantCount(0)
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        ChatRoom saved = chatRoomRepository.save(room);
-        log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
-
+        ChatRoom saved = chatRoomService.createRoom(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(saved, "채팅방이 생성되었습니다."));
     }
 
     @PostMapping("/get-or-create")
     public ResponseEntity<ApiResponse<ChatRoom>> getOrCreateRoom(@RequestBody GetOrCreateRequest request) {
         if (request.externalId == null || request.externalId.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("externalId는 필수입니다."));
+            return ResponseEntity.badRequest().body(ApiResponse.error("externalId는 필수입니다."));
         }
-
-        ChatRoom room = chatRoomRepository.findByExternalId(request.externalId)
-                .orElseGet(() -> {
-                    ChatRoom newRoom = ChatRoom.builder()
-                            .id("ext_" + UUID.randomUUID().toString().substring(0, 8))
-                            .externalId(request.externalId)
-                            .name(request.name != null ? request.name : request.externalId)
-                            .description(request.description)
-                            .color("#10b981")
-                            .participantCount(0)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                    log.info("Auto-created room for external ID: {}", request.externalId);
-                    return chatRoomRepository.save(newRoom);
-                });
-
+        ChatRoom room = chatRoomService.getOrCreateByExternalId(request.externalId, request.name, request.description);
         return ResponseEntity.ok(ApiResponse.ok(room));
     }
 
@@ -91,8 +57,7 @@ public class ChatRoomController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         size = Math.min(size, 100);
-        Page<ChatMessageEntity> messages = chatMessageRepository
-                .findByChatRoomIdOrderByTimestampDesc(roomId, PageRequest.of(page, size));
+        Page<ChatMessageEntity> messages = chatRoomService.getMessages(roomId, PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 

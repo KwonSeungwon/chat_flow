@@ -1,4 +1,4 @@
-package com.chatflow.aisummary.config;
+package com.chatflow.common.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -24,7 +24,6 @@ public class KafkaErrorConfig {
                             record.topic() + ".DLT", record.partition());
                 });
 
-        // 지수 백오프: 1s → 2s → 4s → 8s → 10s(cap) → DLQ
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, createExponentialBackOff());
 
         errorHandler.addNotRetryableExceptions(
