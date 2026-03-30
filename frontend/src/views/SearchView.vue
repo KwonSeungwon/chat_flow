@@ -174,6 +174,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+dayjs.extend(utc)
 import DOMPurify from 'dompurify'
 
 interface SearchResultItem {
@@ -290,7 +292,7 @@ const highlightSearchTerm = (content: string) => {
 }
 
 const formatTime = (timestamp: string) => {
-  return dayjs(timestamp).format('YYYY/MM/DD HH:mm')
+  return dayjs.utc(timestamp).utcOffset(9).format('YYYY/MM/DD HH:mm')
 }
 
 const goToMessage = (result: SearchResultItem) => {

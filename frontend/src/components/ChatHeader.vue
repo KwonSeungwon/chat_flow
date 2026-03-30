@@ -77,6 +77,9 @@ const avatarText = computed(() => props.username ? props.username.substring(0, 2
 .chat-header {
   background-color: var(--bs-light);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 [data-bs-theme="dark"] .chat-header {
