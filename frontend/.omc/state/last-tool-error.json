@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/seungwon-kwon/IdeaProjects/chat_flow/frontend/search-service/src/main/java/com/chatflow/search/config/IndexInitializer.java\"}",
+  "error": "File does not exist. Note: your current working directory is /Users/seungwon-kwon/IdeaProjects/chat_flow/frontend.",
+  "timestamp": "2026-03-30T13:18:19.212Z",
+  "retry_count": 1
+}

@@ -1,37 +1,19 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import { fileURLToPath, URL } from 'node:url'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  test: {
-    environment: 'happy-dom',
-    globals: true,
-  },
-  plugins: [vue()],
+  plugins: [react()],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    alias: { '@': path.resolve(__dirname, './src') }
   },
-  define: {
-    global: 'globalThis',
-  },
+  define: { global: 'globalThis' },
   server: {
     port: 3000,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
-      },
-      '/ws': {
-        target: 'ws://localhost:8000',
-        ws: true,
-        changeOrigin: true
-      }
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/ws': { target: 'http://localhost:8000', ws: true, changeOrigin: true }
     }
   },
-  build: {
-    target: 'esnext'
-  }
+  build: { target: 'esnext' }
 })

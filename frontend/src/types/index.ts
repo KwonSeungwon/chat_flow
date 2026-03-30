@@ -1,3 +1,5 @@
+export type MessageType = 'CHAT' | 'JOIN' | 'LEAVE' | 'SYSTEM' | 'AI_SUMMARY'
+
 export interface ChatMessage {
   id?: string
   messageId?: string
@@ -8,47 +10,18 @@ export interface ChatMessage {
   timestamp: string
   type: MessageType
   isAiGenerated?: boolean
-}
-
-export enum MessageType {
-  CHAT = 'CHAT',
-  JOIN = 'JOIN',
-  LEAVE = 'LEAVE',
-  SYSTEM = 'SYSTEM',
-  AI_SUMMARY = 'AI_SUMMARY'
+  messageType?: string
 }
 
 export interface ChatRoom {
   id: string
   name: string
   description?: string
-  participantCount: number
-  createdAt: string
   color?: string
+  externalId?: string
   isPrivate?: boolean
   allowInvites?: boolean
-}
-
-export interface SearchResult {
-  content: {
-    id: string
-    messageId: string
-    chatRoomId: string
-    userId: string
-    username: string
-    content: string
-    timestamp: string
-    messageType: string
-    isAiGenerated: boolean
-  }[]
-  totalElements: number
-  totalPages: number
-  size: number
-  number: number
-}
-
-export interface User {
-  id: string
-  username: string
-  avatar?: string
+  participantCount: number
+  maxParticipants?: number
+  createdAt: string
 }
