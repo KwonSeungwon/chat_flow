@@ -1,10 +1,14 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
@@ -21,6 +25,7 @@ import java.util.UUID;
 public class ChatRoomController {
 
     private final ChatRoomRepository chatRoomRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
@@ -78,6 +83,17 @@ public class ChatRoomController {
                 });
 
         return ResponseEntity.ok(ApiResponse.ok(room));
+    }
+
+    @GetMapping("/{roomId}/messages")
+    public ResponseEntity<ApiResponse<Page<ChatMessageEntity>>> getMessages(
+            @PathVariable String roomId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        size = Math.min(size, 100);
+        Page<ChatMessageEntity> messages = chatMessageRepository
+                .findByChatRoomIdOrderByTimestampDesc(roomId, PageRequest.of(page, size));
+        return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}

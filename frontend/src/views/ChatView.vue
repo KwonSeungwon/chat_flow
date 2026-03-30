@@ -2,27 +2,31 @@
   <div class="row h-100 g-0">
     <!-- 채팅방 사이드바 (모바일에서는 숨김) -->
     <div class="col-md-3 col-lg-2 d-none d-md-block border-end">
-      <ChatRoomSidebar 
-        v-model:selected-room="currentRoomId" 
+      <ChatRoomSidebar
+        v-model:selected-room="currentRoomId"
         @room-selected="joinRoom"
       />
     </div>
 
     <!-- 메인 채팅 영역 -->
     <div class="col-md-9 col-lg-7 d-flex flex-column">
-      <ChatHeader 
+      <ChatHeader
         :room-id="currentRoomId"
         :is-connected="isConnected"
         :participants="onlineUsers"
+        :username="auth.username"
+        :is-guest="auth.isGuest"
+        @logout="handleLogout"
       />
-      
-      <ChatMessages 
-        :messages="messages"
-        :current-user="username"
+
+      <ChatMessages
+        :messages="allMessages"
+        :current-user="auth.username"
+        :loading-history="loadingHistory"
         class="flex-grow-1"
       />
-      
-      <ChatInput 
+
+      <ChatInput
         v-if="isConnected"
         @send-message="handleSendMessage"
         :disabled="!isConnected"
@@ -39,9 +43,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useLocalStorage } from '@vueuse/core'
+import { useAuthStore } from '@/stores/auth'
 import { useWebSocket } from '@/composables/useWebSocket'
-import { ensureAuthenticated } from '@/utils/api'
+import api from '@/utils/api'
 import type { ChatMessage, MessageType } from '@/types'
 
 import ChatRoomSidebar from '@/components/ChatRoomSidebar.vue'
@@ -52,22 +56,48 @@ import AISummarySidebar from '@/components/AISummarySidebar.vue'
 
 const route = useRoute()
 const router = useRouter()
-const username = useLocalStorage('chatflow-username', '')
+const auth = useAuthStore()
 
-// WebSocket 연결
 const { isConnected, messages, connect, disconnect, sendMessage } = useWebSocket()
 
 const currentRoomId = ref(route.params.roomId as string || 'general')
 const onlineUsers = ref<string[]>([])
+const historyMessages = ref<ChatMessage[]>([])
+const loadingHistory = ref(false)
+
+const allMessages = computed(() => {
+  const history = historyMessages.value.filter(
+    h => !messages.value.some(m => m.messageId === h.messageId)
+  )
+  return [...history, ...messages.value]
+})
+
+async function loadHistory(roomId: string) {
+  loadingHistory.value = true
+  try {
+    const res = await api.get(`/api/chat/rooms/${roomId}/messages?size=50`)
+    const page = res.data.data
+    const items = (page.content || []).map((m: any) => ({
+      ...m,
+      type: m.type || m.messageType,
+      isAiGenerated: m.aiGenerated || m.isAiGenerated || false
+    }))
+    historyMessages.value = items.reverse()
+  } catch {
+    historyMessages.value = []
+  } finally {
+    loadingHistory.value = false
+  }
+}
 
 const joinRoom = (roomId: string) => {
   if (currentRoomId.value !== roomId) {
     disconnect()
     currentRoomId.value = roomId
     router.push(`/chat/${roomId}`)
-    
-    if (username.value) {
-      connect(roomId, username.value)
+    loadHistory(roomId)
+    if (auth.username) {
+      connect(roomId, auth.username)
     }
   }
 }
@@ -75,17 +105,21 @@ const joinRoom = (roomId: string) => {
 const handleSendMessage = (content: string) => {
   const message: Partial<ChatMessage> = {
     chatRoomId: currentRoomId.value,
-    userId: `user_${Date.now()}`,
-    username: username.value,
+    userId: auth.userId || `user_${Date.now()}`,
+    username: auth.username,
     content,
     type: 'CHAT' as MessageType,
     timestamp: new Date().toISOString()
   }
-  
   sendMessage(message)
 }
 
-// 라우트 변경 감지
+function handleLogout() {
+  disconnect()
+  auth.logout()
+  router.push('/login')
+}
+
 watch(
   () => route.params.roomId,
   (newRoomId) => {
@@ -95,27 +129,10 @@ watch(
   }
 )
 
-// 사용자명 변경 감지
-watch(username, (newUsername) => {
-  if (newUsername && isConnected.value) {
-    // 재연결
-    disconnect()
-    setTimeout(() => {
-      connect(currentRoomId.value, newUsername)
-    }, 100)
-  }
-})
-
-onMounted(async () => {
-  if (!username.value) {
-    username.value = `Guest_${Math.floor(Math.random() * 1000)}`
-  }
-
-  await ensureAuthenticated()
-  username.value = localStorage.getItem('chatflow-username') || username.value
-
+onMounted(() => {
   if (currentRoomId.value) {
-    connect(currentRoomId.value, username.value)
+    loadHistory(currentRoomId.value)
+    connect(currentRoomId.value, auth.username)
   }
 })
 </script>

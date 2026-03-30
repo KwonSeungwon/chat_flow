@@ -1,7 +1,13 @@
 <template>
   <div ref="messagesContainer" class="chat-messages overflow-auto p-3">
-    <div 
-      v-for="message in messages" 
+    <!-- History loading -->
+    <div v-if="loadingHistory" class="text-center py-3">
+      <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
+      <small class="text-muted ms-2">이전 메시지 불러오는 중...</small>
+    </div>
+
+    <div
+      v-for="message in messages"
       :key="message.id || message.messageId || message.timestamp"
       class="message-wrapper mb-3"
       :class="getMessageClass(message)"
@@ -96,23 +102,22 @@
 
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
-import { useLocalStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
 import type { ChatMessage } from '@/types'
 
 interface Props {
   messages: ChatMessage[]
   currentUser: string
+  loadingHistory?: boolean
 }
 
 const props = defineProps<Props>()
 
 const messagesContainer = ref<HTMLElement>()
 const isTyping = ref(false)
-const username = useLocalStorage('chatflow-username', '')
 
 const isCurrentUser = (message: ChatMessage) => {
-  return message.username === username.value
+  return message.username === props.currentUser
 }
 
 const getInitials = (name: string) => {
