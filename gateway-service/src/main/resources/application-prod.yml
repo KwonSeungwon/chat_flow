@@ -14,7 +14,6 @@ spring:
           predicates:
             - Path=/api/chat/**
           filters:
-            - StripPrefix=2
             - name: Retry
               args:
                 retries: 3
@@ -27,7 +26,6 @@ spring:
           predicates:
             - Path=/api/ai-summary/**
           filters:
-            - StripPrefix=2
             - name: Retry
               args:
                 retries: 3
@@ -37,7 +35,6 @@ spring:
           predicates:
             - Path=/api/search/**
           filters:
-            - StripPrefix=2
             - name: Retry
               args:
                 retries: 2
@@ -71,6 +68,7 @@ spring:
           args:
             redis-rate-limiter.replenishRate: 100
             redis-rate-limiter.burstCapacity: 200
+            deny-empty-key: false
   
   # Production Valkey Configuration
   data:

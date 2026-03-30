@@ -168,7 +168,7 @@ services:
       JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
       JWT_SECRET: ${JWT_SECRET}
       CHAT_SERVICE_URL: http://chat-service:8080
-      CHAT_SERVICE_WS_URL: ws://chat-service:8080
+      CHAT_SERVICE_WS_URL: http://chat-service:8080
       AI_SUMMARY_SERVICE_URL: http://ai-summary-service:8081
       SEARCH_SERVICE_URL: http://search-service:8082
       VALKEY_HOST: valkey
@@ -213,6 +213,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-chatflow}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CHATFLOW_ALLOWED_ORIGINS: "*"
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
     networks:
