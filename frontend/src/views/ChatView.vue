@@ -35,7 +35,7 @@
           :messages="allMessages"
           :current-user="auth.username"
           :loading-history="loadingHistory"
-          class="flex-grow-1 overflow-hidden"
+          class="flex-grow-1 min-h-0"
         />
 
         <ChatInput
@@ -187,6 +187,10 @@ onMounted(() => {
   background: var(--bs-body-bg);
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
   overflow-y: auto;
+}
+
+.min-h-0 {
+  min-height: 0;
 }
 
 @media (max-width: 767px) {
