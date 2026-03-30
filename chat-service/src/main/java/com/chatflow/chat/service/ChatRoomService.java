@@ -92,4 +92,42 @@ public class ChatRoomService {
                 .map(room -> room.getParticipantCount() >= room.getMaxParticipants())
                 .orElse(false);
     }
+
+    /**
+     * 기본 생성방이 꽉 차면 "일반-2", "일반-3" ... 자동 생성하여 반환.
+     * 여유 있는 방이 있으면 기존 방 반환.
+     */
+    public ChatRoom findOrCreateAvailableRoom(String baseName) {
+        List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
+
+        // baseName으로 시작하는 방 중 여유 있는 방 찾기
+        Optional<ChatRoom> available = rooms.stream()
+                .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
+                .filter(r -> r.getParticipantCount() < r.getMaxParticipants())
+                .findFirst();
+
+        if (available.isPresent()) {
+            return available.get();
+        }
+
+        // 같은 시리즈 방 개수로 다음 번호 결정
+        long count = rooms.stream()
+                .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
+                .count();
+
+        String newName = baseName + "-" + (count + 1);
+        ChatRoom newRoom = ChatRoom.builder()
+                .id("room_" + UUID.randomUUID().toString().substring(0, 8))
+                .name(newName)
+                .description(baseName + " 채팅방 (자동 생성)")
+                .color("#6366f1")
+                .participantCount(0)
+                .maxParticipants(MAX_PARTICIPANTS)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        ChatRoom saved = chatRoomRepository.save(newRoom);
+        log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
+        return saved;
+    }
 }

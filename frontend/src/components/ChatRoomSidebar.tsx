@@ -31,7 +31,11 @@ export default function ChatRoomSidebar({ currentRoomId, onSelectRoom }: Props) 
     }
   }, [])
 
-  useEffect(() => { fetchRooms() }, [fetchRooms])
+  useEffect(() => {
+    fetchRooms()
+    const interval = setInterval(fetchRooms, 10000) // 10초마다 참여자 수 갱신
+    return () => clearInterval(interval)
+  }, [fetchRooms])
 
   const handleCreate = async () => {
     if (name.trim().length < 2 || creating) return
@@ -60,7 +64,10 @@ export default function ChatRoomSidebar({ currentRoomId, onSelectRoom }: Props) 
             <span className="rounded-circle flex-shrink-0" style={{ width: 12, height: 12, background: room.color || '#6366f1' }} />
             <div className="flex-grow-1 text-truncate">
               <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{room.name}</div>
-              <small className={currentRoomId === room.id ? 'text-white-50' : 'text-muted'}>{room.participantCount || 0}명{room.maxParticipants ? `/${room.maxParticipants}` : ''}</small>
+              <small className={currentRoomId === room.id ? 'text-white-50' : 'text-muted'}>
+                <i className="bi bi-people me-1" />{room.participantCount || 0}/{room.maxParticipants || 10}명
+                {(room.participantCount || 0) >= (room.maxParticipants || 10) && <span className="badge bg-danger ms-1" style={{ fontSize: '0.6em' }}>만석</span>}
+              </small>
             </div>
           </div>
         ))}

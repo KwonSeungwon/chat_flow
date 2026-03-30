@@ -47,6 +47,7 @@ public class ChatController {
     public void addUser(@Payload ChatMessage chatMessage,
                        SimpMessageHeaderAccessor headerAccessor) {
         headerAccessor.getSessionAttributes().put("username", chatMessage.getUsername());
+        headerAccessor.getSessionAttributes().put("chatRoomId", chatMessage.getChatRoomId());
         chatService.addUser(chatMessage);
     }
 }

@@ -79,7 +79,7 @@ export default function ChatPage() {
   }, [paramRoomId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="d-flex h-100" style={{ overflow: 'hidden' }}>
+    <div className="d-flex" style={{ overflow: 'hidden', height: '100%', maxHeight: '100%' }}>
       {/* Mobile sidebar overlay */}
       {showSidebar && (
         <div className="position-fixed top-0 start-0 w-100 h-100" style={{ background: 'rgba(0,0,0,0.5)', zIndex: 1050 }} onClick={() => setShowSidebar(false)}>

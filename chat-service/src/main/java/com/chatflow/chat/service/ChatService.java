@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,13 +41,19 @@ public class ChatService {
     }
 
     public void addUser(ChatMessage message) {
-        // 방 인원 제한 체크
+        // 방 인원 제한 체크 → 꽉 차면 자동 생성방으로 리다이렉트
         if (chatRoomService.isRoomFull(message.getChatRoomId())) {
-            log.warn("Room {} is full, rejecting user {}", message.getChatRoomId(), message.getUsername());
+            ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
+            String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
+            ChatRoom newRoom = chatRoomService.findOrCreateAvailableRoom(baseName);
+
+            log.info("Room {} full, redirecting user {} to {}", message.getChatRoomId(), message.getUsername(), newRoom.getId());
             messagingTemplate.convertAndSend(
                     "/topic/chat/" + message.getChatRoomId() + "/errors",
-                    "채팅방이 가득 찼습니다. (최대 10명)");
-            return;
+                    java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+
+            // 새 방에 입장 처리
+            message.setChatRoomId(newRoom.getId());
         }
 
         message.setType(ChatMessage.MessageType.JOIN);
