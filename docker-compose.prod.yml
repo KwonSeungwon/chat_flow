@@ -26,7 +26,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 192M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chatflow} -d ${DB_NAME:-chatflow}"]
       interval: 10s
@@ -61,7 +61,7 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      KAFKA_HEAP_OPTS: "-Xmx96m -Xms64m"
+      KAFKA_HEAP_OPTS: "-Xmx64m -Xms48m"
       KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok,srvr,stat"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
@@ -70,7 +70,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 96M
     healthcheck:
       test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep Mode"]
       interval: 10s
@@ -96,7 +96,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_LOG_RETENTION_HOURS: 24
       KAFKA_LOG_RETENTION_BYTES: 536870912  # 512MB
-      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xmx256m -Xms128m}
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xmx192m -Xms128m}
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
@@ -104,7 +104,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 300M
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 15s
@@ -124,7 +124,7 @@ services:
       - cluster.name=chatflow-prod
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms256m -Xmx256m}"
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms192m -Xmx192m}"
       - xpack.security.enabled=false
       - xpack.monitoring.collection.enabled=false
     ulimits:
@@ -138,7 +138,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 350M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 20s
@@ -165,7 +165,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
+      JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
       JWT_SECRET: ${JWT_SECRET}
       CHAT_SERVICE_URL: http://chat-service:8080
       CHAT_SERVICE_WS_URL: http://chat-service:8080
@@ -181,7 +181,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 180M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/actuator/health || exit 1"]
       interval: 15s
@@ -208,7 +208,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${CHAT_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
+      JAVA_OPTS: ${CHAT_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -Xss256k}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/${DB_NAME:-chatflow}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-chatflow}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -221,7 +221,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
       interval: 15s
@@ -244,7 +244,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod},spring-ai
-      JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
+      JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
@@ -256,7 +256,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 450M
+          memory: 220M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health || exit 1"]
       interval: 15s
@@ -281,7 +281,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${SEARCH_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
+      JAVA_OPTS: ${SEARCH_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_URIS: http://elasticsearch:9200
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -294,7 +294,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400M
+          memory: 220M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8082/actuator/health || exit 1"]
       interval: 15s

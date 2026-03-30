@@ -2,8 +2,8 @@
 server:
   port: 8081
   tomcat:
-    max-threads: 100
-    accept-count: 50
+    max-threads: 20
+    accept-count: 10
 
 spring:
   kafka:
@@ -36,9 +36,9 @@ spring:
       password: ${VALKEY_PASSWORD}
       lettuce:
         pool:
-          max-active: 15
-          max-idle: 8
-          min-idle: 2
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
           max-wait: -1ms
 
   # Spring AI - Google Gemini 설정 (spring-ai 프로필 활성 시)

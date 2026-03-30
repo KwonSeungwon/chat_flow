@@ -2,8 +2,8 @@
 server:
   port: 8080
   tomcat:
-    max-threads: 200
-    accept-count: 100
+    max-threads: 30
+    accept-count: 20
 
 spring:
   # Production PostgreSQL with connection pooling
@@ -13,8 +13,8 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: 5
+      minimum-idle: 2
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
@@ -41,9 +41,9 @@ spring:
       password: ${VALKEY_PASSWORD}
       lettuce:
         pool:
-          max-active: 20
-          max-idle: 8
-          min-idle: 2
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
           max-wait: -1ms
   
   kafka:

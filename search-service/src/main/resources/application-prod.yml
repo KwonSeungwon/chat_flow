@@ -2,8 +2,8 @@
 server:
   port: 8082
   tomcat:
-    max-threads: 150
-    accept-count: 75
+    max-threads: 30
+    accept-count: 20
 
 spring:
   elasticsearch:
