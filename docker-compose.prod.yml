@@ -113,6 +113,7 @@ services:
       start_period: 30s
 
   elasticsearch:
+    image: chatflow-elasticsearch:latest
     build:
       context: ./elasticsearch
       dockerfile: Dockerfile
@@ -140,16 +141,17 @@ services:
           memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 15s
+      interval: 20s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 120s
 
   # ──────────────────────────────────────────────
   # Application Services
   # ──────────────────────────────────────────────
 
   gateway-service:
+    image: chatflow-gateway:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -188,6 +190,7 @@ services:
       start_period: 90s
 
   chat-service:
+    image: chatflow-chat:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -226,6 +229,7 @@ services:
       start_period: 90s
 
   ai-summary-service:
+    image: chatflow-ai-summary:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -240,7 +244,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod},spring-ai
       JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
       VALKEY_HOST: valkey
@@ -260,6 +264,7 @@ services:
       start_period: 90s
 
   search-service:
+    image: chatflow-search:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -279,6 +284,9 @@ services:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_URIS: http://elasticsearch:9200
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      VALKEY_HOST: valkey
+      VALKEY_PORT: 6379
+      VALKEY_PASSWORD: ""
       SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
     networks:
       - chatflow-prod
@@ -298,6 +306,7 @@ services:
   # ──────────────────────────────────────────────
 
   frontend:
+    image: chatflow-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -315,7 +324,7 @@ services:
         limits:
           memory: 32M
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:80 || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
