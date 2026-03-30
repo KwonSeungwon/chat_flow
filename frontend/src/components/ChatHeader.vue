@@ -1,70 +1,52 @@
 <template>
-  <div class="chat-header border-bottom p-3 bg-light">
+  <div class="chat-header border-bottom px-2 py-2">
     <div class="d-flex justify-content-between align-items-center">
-      <div class="d-flex align-items-center">
-        <h5 class="mb-0 me-3">
-          <i class="bi bi-hash me-1"></i>
-          {{ roomId }}
-        </h5>
+      <div class="d-flex align-items-center gap-2 min-width-0">
+        <!-- 모바일 채팅방 토글 -->
+        <button class="btn btn-sm btn-outline-secondary d-md-none" @click="$emit('toggle-sidebar')">
+          <i class="bi bi-list"></i>
+        </button>
 
-        <div class="connection-status">
-          <span
-            class="badge rounded-pill"
-            :class="isConnected ? 'bg-success' : 'bg-danger'"
-          >
-            <i :class="isConnected ? 'bi bi-wifi' : 'bi bi-wifi-off'" class="me-1"></i>
-            {{ isConnected ? '연결됨' : '연결 끊김' }}
-          </span>
-        </div>
+        <h6 class="mb-0 text-truncate">
+          <i class="bi bi-hash"></i>{{ roomId }}
+        </h6>
+
+        <span
+          class="badge rounded-pill flex-shrink-0"
+          :class="isConnected ? 'bg-success' : 'bg-danger'"
+          style="font-size: 0.65em;"
+        >
+          {{ isConnected ? '연결' : '끊김' }}
+        </span>
       </div>
 
-      <div class="d-flex align-items-center gap-3">
-        <div class="participants d-none d-md-flex align-items-center">
-          <i class="bi bi-people me-1"></i>
-          <small class="text-muted">{{ participants.length }}명 온라인</small>
-        </div>
-
-        <!-- User profile -->
+      <div class="d-flex align-items-center gap-1 flex-shrink-0">
+        <!-- User dropdown -->
         <div class="dropdown">
           <button
-            class="btn btn-outline-secondary btn-sm dropdown-toggle d-flex align-items-center"
+            class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"
             type="button"
             data-bs-toggle="dropdown"
           >
-            <span class="user-avatar me-1">{{ avatarText }}</span>
-            <span class="d-none d-md-inline">{{ username }}</span>
-            <span v-if="isGuest" class="badge bg-secondary ms-1 d-none d-md-inline" style="font-size: 0.6em;">게스트</span>
+            <span class="avatar-sm">{{ avatarText }}</span>
+            <span class="d-none d-sm-inline text-truncate" style="max-width: 80px;">{{ username }}</span>
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
             <li>
               <span class="dropdown-item-text small text-muted">
-                <i class="bi bi-person me-2"></i>{{ username }}
+                <i class="bi bi-person me-1"></i>{{ username }}
+                <span v-if="isGuest" class="badge bg-secondary ms-1" style="font-size: 0.7em;">게스트</span>
               </span>
             </li>
             <li v-if="isGuest">
               <a class="dropdown-item" href="/login">
-                <i class="bi bi-box-arrow-in-right me-2"></i>
-                로그인 / 회원가입
-              </a>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
-              <a class="dropdown-item" href="#">
-                <i class="bi bi-info-circle me-2"></i>
-                채팅방 정보
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#">
-                <i class="bi bi-bell me-2"></i>
-                알림 설정
+                <i class="bi bi-box-arrow-in-right me-2"></i>로그인
               </a>
             </li>
             <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item text-danger" href="#" @click.prevent="$emit('logout')">
-                <i class="bi bi-box-arrow-left me-2"></i>
-                로그아웃
+                <i class="bi bi-box-arrow-left me-2"></i>로그아웃
               </a>
             </li>
           </ul>
@@ -86,37 +68,36 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-defineEmits<{ logout: [] }>()
+defineEmits<{ logout: [], 'toggle-sidebar': [] }>()
 
-const avatarText = computed(() => {
-  return props.username ? props.username.substring(0, 2).toUpperCase() : '??'
-})
+const avatarText = computed(() => props.username ? props.username.substring(0, 2).toUpperCase() : '??')
 </script>
 
 <style scoped>
 .chat-header {
   background-color: var(--bs-light);
-  border-color: var(--bs-border-color);
+  flex-shrink: 0;
 }
 
 [data-bs-theme="dark"] .chat-header {
   background-color: var(--bs-dark);
 }
 
-.connection-status .badge {
-  font-size: 0.75em;
+.min-width-0 {
+  min-width: 0;
 }
 
-.user-avatar {
+.avatar-sm {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background-color: var(--bs-primary);
+  background: var(--bs-primary);
   color: white;
-  font-size: 0.6em;
+  font-size: 0.55rem;
   font-weight: bold;
+  flex-shrink: 0;
 }
 </style>

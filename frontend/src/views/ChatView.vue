@@ -1,41 +1,54 @@
 <template>
-  <div class="row h-100 g-0">
-    <!-- 채팅방 사이드바 (모바일에서는 숨김) -->
-    <div class="col-md-3 col-lg-2 d-none d-md-block border-end">
-      <ChatRoomSidebar
-        v-model:selected-room="currentRoomId"
-        @room-selected="joinRoom"
-      />
+  <div class="chat-layout h-100">
+    <!-- 모바일 채팅방 사이드바 (오버레이) -->
+    <div v-if="showMobileSidebar" class="mobile-sidebar-overlay" @click="showMobileSidebar = false">
+      <div class="mobile-sidebar" @click.stop>
+        <ChatRoomSidebar
+          v-model:selected-room="currentRoomId"
+          @room-selected="handleMobileRoomSelect"
+        />
+      </div>
     </div>
 
-    <!-- 메인 채팅 영역 -->
-    <div class="col-md-9 col-lg-7 d-flex flex-column chat-main">
-      <ChatHeader
-        :room-id="currentRoomId"
-        :is-connected="isConnected"
-        :participants="onlineUsers"
-        :username="auth.username"
-        :is-guest="auth.isGuest"
-        @logout="handleLogout"
-      />
+    <div class="row h-100 g-0">
+      <!-- 채팅방 사이드바 (데스크톱) -->
+      <div class="col-md-3 col-lg-2 d-none d-md-block border-end">
+        <ChatRoomSidebar
+          v-model:selected-room="currentRoomId"
+          @room-selected="joinRoom"
+        />
+      </div>
 
-      <ChatMessages
-        :messages="allMessages"
-        :current-user="auth.username"
-        :loading-history="loadingHistory"
-        class="flex-grow-1 overflow-hidden"
-      />
+      <!-- 메인 채팅 영역 -->
+      <div class="col-12 col-md-9 col-lg-7 d-flex flex-column chat-main">
+        <ChatHeader
+          :room-id="currentRoomId"
+          :is-connected="isConnected"
+          :participants="onlineUsers"
+          :username="auth.username"
+          :is-guest="auth.isGuest"
+          @logout="handleLogout"
+          @toggle-sidebar="showMobileSidebar = !showMobileSidebar"
+        />
 
-      <ChatInput
-        v-if="isConnected"
-        @send-message="handleSendMessage"
-        :disabled="!isConnected"
-      />
-    </div>
+        <ChatMessages
+          :messages="allMessages"
+          :current-user="auth.username"
+          :loading-history="loadingHistory"
+          class="flex-grow-1 overflow-hidden"
+        />
 
-    <!-- AI 요약 사이드바 -->
-    <div class="col-lg-3 d-none d-lg-block border-start">
-      <AISummarySidebar :room-id="currentRoomId" />
+        <ChatInput
+          v-if="isConnected"
+          @send-message="handleSendMessage"
+          :disabled="!isConnected"
+        />
+      </div>
+
+      <!-- AI 요약 사이드바 -->
+      <div class="col-lg-3 d-none d-lg-block border-start">
+        <AISummarySidebar :room-id="currentRoomId" />
+      </div>
     </div>
   </div>
 </template>
@@ -64,6 +77,7 @@ const currentRoomId = ref(route.params.roomId as string || 'general')
 const onlineUsers = ref<string[]>([])
 const historyMessages = ref<ChatMessage[]>([])
 const loadingHistory = ref(false)
+const showMobileSidebar = ref(false)
 
 const allMessages = computed(() => {
   const history = historyMessages.value.filter(
@@ -102,6 +116,11 @@ const joinRoom = (roomId: string) => {
   }
 }
 
+const handleMobileRoomSelect = (roomId: string) => {
+  showMobileSidebar.value = false
+  joinRoom(roomId)
+}
+
 const handleSendMessage = (content: string) => {
   const message: Partial<ChatMessage> = {
     chatRoomId: currentRoomId.value,
@@ -138,13 +157,36 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.chat-layout {
+  position: relative;
+}
+
 .row {
   margin: 0;
 }
 
 .chat-main {
-  min-height: 0; /* flex child가 overflow 되지 않도록 */
+  min-height: 0;
   max-height: 100%;
+}
+
+/* 모바일 사이드바 오버레이 */
+.mobile-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1050;
+}
+
+.mobile-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--bs-body-bg);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+  overflow-y: auto;
 }
 
 @media (max-width: 767px) {

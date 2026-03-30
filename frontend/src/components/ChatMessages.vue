@@ -1,5 +1,5 @@
 <template>
-  <div ref="messagesContainer" class="chat-messages overflow-auto p-3">
+  <div ref="messagesContainer" class="chat-messages overflow-auto p-2 p-md-3">
     <!-- History loading -->
     <div v-if="loadingHistory" class="text-center py-3">
       <div class="spinner-border spinner-border-sm text-muted" role="status"></div>
@@ -9,16 +9,15 @@
     <div
       v-for="message in messages"
       :key="message.id || message.messageId || message.timestamp"
-      class="message-wrapper mb-3"
-      :class="getMessageClass(message)"
+      class="mb-2"
     >
       <!-- AI 요약 메시지 -->
-      <div v-if="message.type === 'AI_SUMMARY'" class="ai-summary-message">
+      <div v-if="message.type === 'AI_SUMMARY'" class="ai-summary-message my-2">
         <div class="card border-info">
           <div class="card-header bg-info text-white d-flex align-items-center py-2">
             <i class="bi bi-robot me-2"></i>
             <strong>AI 요약</strong>
-            <small class="ms-auto">{{ formatTime(message.timestamp) }}</small>
+            <span class="ms-auto time-text">{{ formatTime(message.timestamp) }}</span>
           </div>
           <div class="card-body py-2">
             <p class="card-text mb-0">{{ message.content }}</p>
@@ -27,55 +26,34 @@
       </div>
 
       <!-- 시스템 메시지 (입장/퇴장) -->
-      <div v-else-if="message.type === 'JOIN' || message.type === 'LEAVE' || message.type === 'SYSTEM'" class="system-message text-center">
+      <div v-else-if="isSystemMsg(message)" class="text-center my-1">
         <small class="text-muted fst-italic">
-          <i class="bi bi-info-circle me-1"></i>
           {{ message.content }}
-          <span class="ms-2">{{ formatTime(message.timestamp) }}</span>
+          <span class="time-text ms-1">{{ formatTime(message.timestamp) }}</span>
         </small>
       </div>
 
-      <!-- 일반 채팅 메시지 -->
-      <div v-else class="chat-message">
-        <div class="d-flex" :class="{ 'justify-content-end': isCurrentUser(message) }">
-          <!-- 상대방 아바타 -->
-          <div v-if="!isCurrentUser(message)" class="avatar me-2 flex-shrink-0">
-            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-              <small class="text-white fw-bold" style="font-size: 0.7em;">{{ getInitials(message.username) }}</small>
-            </div>
+      <!-- 내 메시지 -->
+      <div v-else-if="isCurrentUser(message)" class="d-flex justify-content-end">
+        <div class="bubble mine">
+          <div class="bubble-text">{{ message.content }}</div>
+          <div class="bubble-time text-end">
+            <span class="time-text text-white-50">{{ formatTime(message.timestamp) }}</span>
           </div>
+        </div>
+      </div>
 
-          <!-- 메시지 내용 -->
-          <div class="message-content" :class="{ 'text-end': isCurrentUser(message) }">
-            <div v-if="!isCurrentUser(message)" class="message-header mb-1">
-              <small class="text-muted fw-bold">{{ message.username }}</small>
-            </div>
-
-            <div
-              class="message-bubble px-3 py-2 rounded-3 d-inline-block"
-              :class="{
-                'bg-primary text-white': isCurrentUser(message),
-                'bg-light': !isCurrentUser(message)
-              }"
-            >
-              <div class="message-text">{{ message.content }}</div>
-              <div class="message-time mt-1">
-                <small
-                  :class="{
-                    'text-white-50': isCurrentUser(message),
-                    'text-muted': !isCurrentUser(message)
-                  }"
-                >
-                  {{ formatTime(message.timestamp) }}
-                </small>
-              </div>
-            </div>
-          </div>
-
-          <!-- 내 아바타 -->
-          <div v-if="isCurrentUser(message)" class="avatar ms-2 flex-shrink-0">
-            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-              <small class="text-white fw-bold" style="font-size: 0.7em;">{{ getInitials(message.username) }}</small>
+      <!-- 상대 메시지 -->
+      <div v-else class="d-flex align-items-start">
+        <div class="avatar-circle me-2 flex-shrink-0">
+          {{ getInitials(message.username) }}
+        </div>
+        <div class="bubble-wrap">
+          <div class="bubble-username">{{ message.username }}</div>
+          <div class="bubble other">
+            <div class="bubble-text">{{ message.content }}</div>
+            <div class="bubble-time">
+              <span class="time-text text-muted">{{ formatTime(message.timestamp) }}</span>
             </div>
           </div>
         </div>
@@ -99,29 +77,14 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-
 const messagesContainer = ref<HTMLElement>()
 
-const isCurrentUser = (message: ChatMessage) => {
-  return message.username === props.currentUser
-}
-
-const getInitials = (name: string) => {
-  return name.substring(0, 2).toUpperCase()
-}
+const isCurrentUser = (message: ChatMessage) => message.username === props.currentUser
+const isSystemMsg = (message: ChatMessage) => ['JOIN', 'LEAVE', 'SYSTEM'].includes(message.type)
+const getInitials = (name: string) => name.substring(0, 2).toUpperCase()
 
 const formatTime = (timestamp: string) => {
-  // 항상 KST(UTC+9) 기준으로 표시
   return dayjs.utc(timestamp).utcOffset(9).format('HH:mm')
-}
-
-const getMessageClass = (message: ChatMessage) => {
-  return {
-    'current-user': isCurrentUser(message),
-    'other-user': !isCurrentUser(message) && message.type === 'CHAT',
-    'system-msg': ['JOIN', 'LEAVE', 'SYSTEM'].includes(message.type),
-    'ai-summary': message.type === 'AI_SUMMARY'
-  }
 }
 
 const scrollToBottom = () => {
@@ -132,74 +95,104 @@ const scrollToBottom = () => {
   })
 }
 
-watch(() => props.messages.length, () => {
-  scrollToBottom()
-})
+watch(() => props.messages.length, () => scrollToBottom())
 </script>
 
 <style scoped>
 .chat-messages {
   height: 100%;
-  background-color: var(--bs-body-bg);
   -webkit-overflow-scrolling: touch;
 }
 
-.message-bubble {
-  max-width: 75%;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
-}
-
-.message-text {
-  word-break: break-word;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
-}
-
-.current-user .message-content {
+/* 아바타 */
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bs-secondary);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: bold;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.current-user .message-bubble {
-  background-color: var(--bs-primary) !important;
+/* 유저네임 */
+.bubble-username {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  font-weight: 600;
+  margin-bottom: 2px;
 }
 
-.other-user .message-bubble {
-  background-color: var(--bs-light);
+/* 버블 공통 */
+.bubble {
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: min(75%, 400px);
+  width: fit-content;
+}
+
+.bubble-wrap {
+  min-width: 0;
+  max-width: min(75%, 400px);
+}
+
+/* 내 메시지 */
+.bubble.mine {
+  background: var(--bs-primary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+/* 상대 메시지 */
+.bubble.other {
+  background: var(--bs-light);
   color: var(--bs-body-color);
+  border-bottom-left-radius: 4px;
+  max-width: 100%;
 }
 
-.ai-summary-message {
-  margin: 0.5rem 0;
+/* 텍스트 줄바꿈 */
+.bubble-text {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
-  .chat-messages {
-    padding: 0.5rem !important;
-  }
+/* 시간 — 줄바꿈 금지 */
+.time-text {
+  font-size: 0.65rem;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
 
-  .message-bubble {
-    max-width: 85%;
+.bubble-time {
+  margin-top: 2px;
+}
+
+/* 다크모드 */
+[data-bs-theme="dark"] .bubble.other {
+  background: var(--bs-dark);
+  color: var(--bs-light);
+}
+
+/* 모바일 */
+@media (max-width: 576px) {
+  .bubble {
+    max-width: min(82%, 300px);
     font-size: 0.9rem;
   }
-
-  .avatar > div {
-    width: 28px !important;
-    height: 28px !important;
+  .bubble-wrap {
+    max-width: min(82%, 300px);
   }
-
-  .avatar small {
-    font-size: 0.6em !important;
+  .avatar-circle {
+    width: 28px;
+    height: 28px;
+    font-size: 0.6rem;
   }
-}
-
-/* Dark mode */
-[data-bs-theme="dark"] .other-user .message-bubble {
-  background-color: var(--bs-dark);
-  color: var(--bs-light);
 }
 </style>
