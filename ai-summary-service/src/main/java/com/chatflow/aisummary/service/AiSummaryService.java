@@ -146,9 +146,19 @@ public class AiSummaryService {
         }
     }
 
+    /**
+     * Redis 버퍼를 원자적으로 읽고 삭제 (Lua 스크립트).
+     * range() + delete() 사이에 새 메시지가 유실되는 race condition 방지.
+     */
     private List<ChatMessage> consumeBuffer(String bufferKey) {
-        List<String> jsonList = redisTemplate.opsForList().range(bufferKey, 0, -1);
-        redisTemplate.delete(bufferKey);
+        String luaScript = "local items = redis.call('LRANGE', KEYS[1], 0, -1); " +
+                "redis.call('DEL', KEYS[1]); " +
+                "return items;";
+
+        @SuppressWarnings("unchecked")
+        List<String> jsonList = redisTemplate.execute(
+                new org.springframework.data.redis.core.script.DefaultRedisScript<>(luaScript, List.class),
+                List.of(bufferKey));
 
         if (jsonList == null || jsonList.isEmpty()) {
             return List.of();
