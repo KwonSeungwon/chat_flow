@@ -124,7 +124,7 @@ services:
       - cluster.name=chatflow-prod
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms192m -Xmx192m}"
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms200m -Xmx200m}"
       - xpack.security.enabled=false
       - xpack.monitoring.collection.enabled=false
     ulimits:
@@ -138,7 +138,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 350M
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 20s
@@ -165,7 +165,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
+      JAVA_OPTS: ${GATEWAY_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC -Xss512k}
       JWT_SECRET: ${JWT_SECRET}
       CHAT_SERVICE_URL: http://chat-service:8080
       CHAT_SERVICE_WS_URL: http://chat-service:8080
@@ -181,7 +181,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 180M
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/actuator/health || exit 1"]
       interval: 15s
@@ -208,7 +208,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${CHAT_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -Xss256k}
+      JAVA_OPTS: ${CHAT_JAVA_OPTS:--Xmx128m -XX:+UseSerialGC -Xss512k}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/${DB_NAME:-chatflow}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-chatflow}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -244,7 +244,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod},spring-ai
-      JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
+      JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -Xss512k}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
@@ -281,7 +281,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      JAVA_OPTS: ${SEARCH_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -Xss256k}
+      JAVA_OPTS: ${SEARCH_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -Xss512k}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_URIS: http://elasticsearch:9200
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
