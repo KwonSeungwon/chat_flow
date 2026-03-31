@@ -46,6 +46,10 @@ spring:
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
             - Path=/ws/**
+        - id: websocket-native
+          uri: ${CHAT_SERVICE_WS_URL}
+          predicates:
+            - Path=/ws-native/**
       globalcors:
         corsConfigurations:
           '[/**]':
@@ -57,6 +61,8 @@ spring:
               - "http://*.chatflow.ai.kr"
               - "http://chatflow.ai.kr"
               - "https://*.tistory.com"
+              - "http://43.201.22.86"
+              - "http://43.201.22.86:*"
             allowedMethods: 
               - GET
               - POST

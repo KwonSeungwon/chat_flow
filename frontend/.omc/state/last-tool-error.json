@@ -1,7 +1,7 @@
 {
-  "tool_name": "Read",
-  "tool_input_preview": "{\"file_path\":\"/Users/seungwon-kwon/IdeaProjects/chat_flow/frontend/search-service/src/main/java/com/chatflow/search/config/IndexInitializer.java\"}",
-  "error": "File does not exist. Note: your current working directory is /Users/seungwon-kwon/IdeaProjects/chat_flow/frontend.",
-  "timestamp": "2026-03-30T13:18:19.212Z",
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"find /opt/homebrew -name \\\"flutter\\\" -type f 2>/dev/null | head -3; ls /opt/homebrew/Caskroom/flutter/ 2>/dev/null\",\"timeout\":10000,\"description\":\"Find flutter in homebrew caskroom\"}",
+  "error": "Exit code 1",
+  "timestamp": "2026-03-31T10:20:31.671Z",
   "retry_count": 1
 }
