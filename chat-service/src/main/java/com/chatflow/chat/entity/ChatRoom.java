@@ -1,19 +1,22 @@
 package com.chatflow.chat.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = {})
 @Entity
-@Table(name = "chat_rooms")
+@Table(name = "chat_rooms", indexes = {
+    @Index(name = "idx_chat_room_created_at", columnList = "created_at DESC"),
+    @Index(name = "idx_chat_room_name", columnList = "name")
+})
 public class ChatRoom {
 
     @Id

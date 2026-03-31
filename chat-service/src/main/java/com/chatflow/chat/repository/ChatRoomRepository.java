@@ -2,6 +2,9 @@ package com.chatflow.chat.repository;
 
 import com.chatflow.chat.entity.ChatRoom;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -11,4 +14,15 @@ import java.util.Optional;
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
     List<ChatRoom> findAllByOrderByCreatedAtDesc();
     Optional<ChatRoom> findByExternalId(String externalId);
+
+    @Modifying
+    @Query("UPDATE ChatRoom r SET r.participantCount = r.participantCount + 1 WHERE r.id = :roomId")
+    int incrementParticipantCount(@Param("roomId") String roomId);
+
+    @Modifying
+    @Query("UPDATE ChatRoom r SET r.participantCount = CASE WHEN r.participantCount > 0 THEN r.participantCount - 1 ELSE 0 END WHERE r.id = :roomId")
+    int decrementParticipantCount(@Param("roomId") String roomId);
+
+    @Query("SELECT CASE WHEN r.participantCount >= r.maxParticipants THEN true ELSE false END FROM ChatRoom r WHERE r.id = :roomId")
+    boolean isRoomFull(@Param("roomId") String roomId);
 }
