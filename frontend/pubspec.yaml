@@ -16,15 +16,12 @@ dependencies:
   stomp_dart_client: ^2.0.0
   # State Management
   flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
   # Routing
   go_router: ^14.2.7
   # Secure Storage
   flutter_secure_storage: ^9.2.2
   # Date/Time
   intl: ^0.19.0
-  # JSON
-  json_annotation: ^4.9.0
   # Environment
   flutter_dotenv: ^5.1.0
   # Icons
@@ -34,9 +31,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  build_runner: ^2.4.11
-  json_serializable: ^6.8.0
-  riverpod_generator: ^2.4.3
 
 flutter:
   uses-material-design: true

@@ -38,7 +38,9 @@ class AppTheme {
     ),
     appBarTheme: const AppBarTheme(
       elevation: 0,
+      foregroundColor: Colors.white,
       titleTextStyle: TextStyle(
+        color: Colors.white,
         fontSize: 18,
         fontWeight: FontWeight.bold,
       ),

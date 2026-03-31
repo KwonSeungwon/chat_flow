@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/theme_provider.dart';
 import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
 import 'widgets/chat_room_sidebar.dart';
@@ -17,7 +18,16 @@ class ChatPage extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     final chatState = ref.watch(chatNotifierProvider(roomId));
     final chatNotifier = ref.read(chatNotifierProvider(roomId).notifier);
+    final themeMode = ref.watch(themeModeProvider);
     final isWide = MediaQuery.of(context).size.width >= 600;
+
+    final roomDisplayName = ref.watch(chatRoomsProvider).maybeWhen(
+          data: (rooms) {
+            final match = rooms.where((r) => r.id == roomId);
+            return match.isNotEmpty ? match.first.name : roomId;
+          },
+          orElse: () => roomId,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -33,12 +43,24 @@ class ChatPage extends ConsumerWidget {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(roomId),
+            Text(roomDisplayName),
             const SizedBox(width: 8),
             _ConnectionDot(connected: chatState.isConnected),
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(
+              themeMode == ThemeMode.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
+            tooltip: themeMode == ThemeMode.dark ? '라이트 모드' : '다크 모드',
+            onPressed: () {
+              ref.read(themeModeProvider.notifier).state =
+                  themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: '메시지 검색',

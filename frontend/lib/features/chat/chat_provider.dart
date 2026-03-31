@@ -216,8 +216,10 @@ final chatNotifierProvider =
       username: auth.username,
       userId: auth.userId ?? '',
     );
-    // Auto-join when created
-    notifier.joinRoom(roomId);
+    // Guard: only join when token is available (prevents empty-token WebSocket on auth hydration)
+    if (auth.token != null) {
+      notifier.joinRoom(roomId);
+    }
     ref.onDispose(() => notifier.disconnect());
     return notifier;
   },

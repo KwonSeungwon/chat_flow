@@ -65,9 +65,6 @@ class SearchNotifier extends StateNotifier<SearchState> {
     }
   }
 
-  void clear() {
-    state = const SearchState();
-  }
 }
 
 final searchProvider =

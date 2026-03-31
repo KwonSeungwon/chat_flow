@@ -5,13 +5,12 @@
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![Vue](https://img.shields.io/badge/Vue-3.4-brightgreen.svg)](https://vuejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.22-54C5F8.svg)](https://flutter.dev/)
+[![Dart](https://img.shields.io/badge/Dart-3.3-0175C2.svg)](https://dart.dev/)
 [![Valkey](https://img.shields.io/badge/Valkey-7.2-red.svg)](https://valkey.io/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/KwonSeungwon/chat_flow/actions/workflows/ci.yml/badge.svg)](https://github.com/KwonSeungwon/chat_flow/actions)
 [![Checkstyle](https://img.shields.io/badge/Checkstyle-Google%20Style-brightgreen.svg)](config/checkstyle/checkstyle.xml)
-[![ESLint](https://img.shields.io/badge/ESLint-Vue3%20Recommended-4B32C3.svg)](frontend/.eslintrc.cjs)
 
 ## 📋 목차
 - [🏗️ 시스템 아키텍처](#️-시스템-아키텍처)
@@ -31,8 +30,8 @@
 ```mermaid
 graph TB
     subgraph "Frontend Layer"
-        WEB[Vue3 Web App<br/>Port: 3000]
-        ELECTRON[Electron Desktop App]
+        WEB[Flutter Web App<br/>Port: 80 / nginx]
+        APK[Android APK<br/>chatflow-app.apk]
     end
     
     subgraph "API Layer"
@@ -59,7 +58,7 @@ graph TB
     end
     
     WEB --> GATEWAY
-    ELECTRON --> GATEWAY
+    APK --> GATEWAY
     
     GATEWAY --> CHAT
     GATEWAY --> AI  
@@ -87,12 +86,12 @@ graph TB
 ## 🚀 기술 스택
 
 ### 🖥️ **Frontend**
-- ![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat&logo=vue.js) **Vue 3.4** - 컴포지션 API, 리액티비티
-- ![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat&logo=typescript) **TypeScript 5.5** - 타입 안전성
-- ![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?style=flat&logo=vite) **Vite 5.4** - 초고속 빌드 도구
-- ![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap) **Bootstrap 5** - 반응형 UI 프레임워크
-- ![Pinia](https://img.shields.io/badge/Pinia-2.1-F9D71C?style=flat&logo=vue.js) **Pinia** - Vue 상태 관리
-- ![Electron](https://img.shields.io/badge/Electron-31.0-47848F?style=flat&logo=electron) **Electron 31** - 크로스 플랫폼 데스크톱
+- ![Flutter](https://img.shields.io/badge/Flutter-3.22-54C5F8?style=flat&logo=flutter) **Flutter 3.22** - 크로스 플랫폼 UI (Web + Android)
+- ![Dart](https://img.shields.io/badge/Dart-3.3-0175C2?style=flat&logo=dart) **Dart 3.3** - 타입 안전 언어
+- ![Riverpod](https://img.shields.io/badge/Riverpod-2.5-00BCD4?style=flat) **Riverpod 2.5** - 반응형 상태 관리
+- ![GoRouter](https://img.shields.io/badge/GoRouter-14-546E7A?style=flat) **GoRouter 14** - 선언적 라우팅
+- ![Dio](https://img.shields.io/badge/Dio-5.4-FF7043?style=flat) **Dio 5** - HTTP 클라이언트 (JWT 인터셉터)
+- ![STOMP](https://img.shields.io/badge/STOMP-Dart-6DB33F?style=flat) **stomp_dart_client** - WebSocket 실시간 통신
 
 ### ⚡ **Backend**
 - ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat&logo=openjdk) **Java 21** - LTS 버전, 최신 기능
@@ -143,7 +142,7 @@ graph TB
 
 ### 🔧 **사전 요구사항**
 - **Java 21+** (OpenJDK 권장)
-- **Node.js 23.5+** 
+- **Flutter SDK 3.22+**
 - **Docker & Docker Compose**
 - **Git**
 
@@ -163,54 +162,64 @@ docker compose up -d valkey kafka elasticsearch postgresql
 
 # 4. 프론트엔드 실행 (새 터미널)
 cd frontend
-npm install
-npm run dev
+flutter pub get
+flutter run -d chrome
 ```
 
-🎉 **완료!** 브라우저에서 http://localhost:3000 접속
+🎉 **완료!** Chrome에서 Flutter 앱 실행됨
 
-### 🖥️ **데스크톱 앱 실행**
+### 📱 **Android APK 빌드**
 
 ```bash
 cd frontend
-
-# 개발 모드 (hot reload)
-npm run electron:dev
-
-# 프로덕션 빌드
-npm run electron:dist
+flutter build apk --release
+# 빌드 결과: build/app/outputs/flutter-apk/app-release.apk
+# 또는 웹에서 /chatflow-app.apk 경로로 다운로드 가능
 ```
 
 ## 📦 모듈 구조
 
 ```
 chat_flow/
-├── 🎨 frontend/                    # Vue3 + Electron 프론트엔드
-│   ├── src/
-│   │   ├── components/            # 재사용 가능한 컴포넌트
-│   │   │   ├── CreateRoomModal.vue    # 채팅방 생성 모달
-│   │   │   ├── ChatRoomSidebar.vue    # 채팅방 목록
-│   │   │   ├── ChatMessages.vue       # 메시지 렌더링
-│   │   │   ├── ChatHeader.vue         # 채팅방 헤더
-│   │   │   ├── ChatInput.vue          # 메시지 입력
-│   │   │   ├── NavBar.vue             # 네비게이션 바
-│   │   │   └── AISummarySidebar.vue   # AI 요약 사이드바
-│   │   ├── views/                 # 페이지 뷰 (ChatView, SearchView)
-│   │   ├── composables/           # Vue 3 Composables
-│   │   │   ├── useWebSocket.ts    # STOMP/WebSocket 관리
-│   │   │   ├── useTheme.ts        # 다크/라이트 테마 (안전한 cleanup)
-│   │   │   ├── useOfflineQueue.ts # 오프라인 메시지 큐
-│   │   │   └── useElectron.ts     # Electron 연동
-│   │   ├── stores/                # Pinia 상태 관리
-│   │   │   └── auth.ts            # 인증 상태 (userId, username, token)
-│   │   ├── __tests__/             # Vitest 단위 테스트
-│   │   ├── types/                 # TypeScript 타입 정의
-│   │   └── assets/styles/         # SCSS 스타일
-│   ├── electron/                  # Electron 메인 프로세스
-│   ├── .eslintrc.cjs              # ESLint (vue3-recommended + TS)
-│   ├── .prettierrc                # Prettier 포맷 설정
-│   ├── vitest.config.ts           # Vitest 테스트 설정
-│   └── package.json
+├── 🎨 frontend/                    # Flutter Web + Android
+│   ├── lib/
+│   │   ├── main.dart              # 앱 엔트리포인트 (ProviderScope, dotenv)
+│   │   ├── core/
+│   │   │   ├── network/
+│   │   │   │   ├── dio_client.dart    # HTTP 클라이언트 + JWT 인터셉터
+│   │   │   │   └── stomp_service.dart # WebSocket STOMP (자동 재연결)
+│   │   │   ├── routing/
+│   │   │   │   └── app_router.dart    # GoRouter (token 기반 redirect)
+│   │   │   └── theme/
+│   │   │       ├── app_theme.dart     # Material 3 라이트/다크 테마
+│   │   │       └── theme_provider.dart # themeModeProvider (StateProvider)
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   │   ├── auth_provider.dart # AuthNotifier + 게스트 로그인
+│   │   │   │   └── login_page.dart    # 로그인/회원가입/게스트 UI
+│   │   │   ├── chat/
+│   │   │   │   ├── chat_provider.dart # ChatRoomsNotifier + ChatNotifier
+│   │   │   │   ├── chat_page.dart     # 반응형 채팅 페이지 (사이드바+메시지)
+│   │   │   │   └── widgets/
+│   │   │   │       ├── chat_room_sidebar.dart  # 채팅방 목록
+│   │   │   │       ├── chat_messages_list.dart # 메시지 버블 렌더링
+│   │   │   │       ├── chat_input.dart         # 입력창 + 이모지
+│   │   │   │       └── create_room_dialog.dart # 채팅방 생성 다이얼로그
+│   │   │   └── search/
+│   │   │       ├── search_provider.dart # SearchNotifier (한국어 검색)
+│   │   │       └── search_page.dart     # 검색 + 결과 하이라이트
+│   │   ├── shared/models/
+│   │   │   ├── chat_message.dart   # ChatMessage (fromJson/toJson)
+│   │   │   └── chat_room.dart      # ChatRoom (fromJson, isFull)
+│   │   └── core/utils/
+│   │       ├── apk_downloader.dart      # 조건부 export
+│   │       ├── apk_downloader_web.dart  # dart:html AnchorElement
+│   │       └── apk_downloader_stub.dart # no-op (non-web)
+│   ├── android/app/build.gradle.kts  # minSdk=23 (flutter_secure_storage 요구)
+│   ├── web/chatflow-app.apk          # 배포용 APK (nginx /chatflow-app.apk)
+│   ├── nginx.conf                    # 리버스 프록시 + 캐시 정책
+│   ├── Dockerfile                    # nginx:alpine 컨테이너
+│   └── pubspec.yaml                  # Flutter 의존성
 ├── 🏗️ common/                      # 공통 라이브러리
 │   └── src/main/java/com/chatflow/common/
 │       ├── dto/
@@ -329,10 +338,11 @@ logging:
 ### 🚀 **애플리케이션**
 | 서비스 | URL | 설명 |
 |--------|-----|------|
-| **웹 앱** | http://localhost:3000 | Vue3 프론트엔드 |
-| **데스크톱 앱** | `npm run electron:dev` | Electron 앱 |
+| **웹 앱 (로컬)** | chrome (`flutter run -d chrome`) | Flutter Web 개발 서버 |
+| **웹 앱 (프로덕션)** | https://app.chatflow.ai.kr | EC2 nginx 컨테이너 |
+| **Android APK** | https://app.chatflow.ai.kr/chatflow-app.apk | 웹 UI 다운로드 버튼 |
 | **API Gateway** | http://localhost:8000 | 통합 API 엔드포인트 |
-| **WebSocket** | ws://localhost:8000/ws | 실시간 통신 |
+| **WebSocket** | ws://localhost:8000/ws-native | STOMP 실시간 통신 |
 
 ### 🔧 **개발 도구**
 | 도구 | URL | 계정 | 설명 |
@@ -430,20 +440,43 @@ docker-compose up -d --scale chat-service=3
 
 #### 개별 서비스 빌드
 ```bash
-# 백엔드 서비스들
-docker build --build-arg SERVICE_NAME=chat-service -t chatflow/chat-service .
-docker build --build-arg SERVICE_NAME=ai-summary-service -t chatflow/ai-summary-service .
-docker build --build-arg SERVICE_NAME=search-service -t chatflow/search-service .
-docker build --build-arg SERVICE_NAME=gateway-service -t chatflow/gateway-service .
+# 백엔드 서비스들 (amd64 크로스 빌드 — EC2 t3.small은 로컬 빌드 불가)
+docker buildx build --platform linux/amd64 \
+  --build-arg SERVICE_NAME=chat-service -t chatflow/chat-service:prod --load .
+docker buildx build --platform linux/amd64 \
+  --build-arg SERVICE_NAME=gateway-service -t chatflow/gateway-service:prod --load .
 
-# 프론트엔드
+# 프론트엔드 (Flutter 빌드 후 Docker)
 cd frontend
-docker build -t chatflow/frontend .
+flutter build web --release --web-renderer canvaskit
+docker buildx build --platform linux/amd64 -t chatflow/frontend:prod --load .
+cd ..
 
 # Elasticsearch (Nori 포함)
-cd elasticsearch
-docker build -t chatflow/elasticsearch .
+docker buildx build --platform linux/amd64 \
+  -t chatflow/elasticsearch:prod --load elasticsearch/
 ```
+
+### 🖥️ **EC2 배포 (app.chatflow.ai.kr)**
+
+```bash
+# 1. 이미지 저장 & EC2 전송
+docker save chatflow/frontend:prod | gzip > /tmp/frontend.tar.gz
+scp -i ~/web-app-key.pem /tmp/frontend.tar.gz ubuntu@43.201.22.86:~/
+
+# 2. EC2에서 로드 & 재시작
+ssh -i ~/web-app-key.pem ubuntu@43.201.22.86 << 'EOF'
+  docker load < frontend.tar.gz
+  cd ~/chat_flow
+  docker compose -f docker-compose.prod.yml up --no-deps -d frontend
+  docker compose -f docker-compose.prod.yml ps
+  docker image prune -f   # 공간 정리
+EOF
+```
+
+> **EC2 정보**: ubuntu@43.201.22.86 · t3.small · 키: `~/web-app-key.pem`
+> **도메인**: Cloudflare → EC2 (`app.chatflow.ai.kr`)
+> **디스크 관리**: 100% 시 `docker image prune -af` (약 2GB 확보)
 
 ### ☸️ **Kubernetes 배포 (Helm)**
 
@@ -502,15 +535,14 @@ helm template chatflow helm/chatflow
 ```bash
 cd frontend
 
-# 단위 테스트 (Vitest + happy-dom)
-npm test
+# 위젯 테스트
+flutter test
 
-# 워치 모드
-npm run test:watch
+# 린트 분석
+flutter analyze
 
-# 린트 + 타입 체크
-npm run lint
-npm run type-check
+# 의존성 갱신
+flutter pub get
 ```
 
 ### 🔍 **한국어 검색 테스트**
@@ -534,10 +566,9 @@ npm run type-check
 ### **프론트엔드**
 | 도구 | 용도 | 설정 |
 |------|------|------|
-| **ESLint** | Vue 3 + TypeScript 린팅 (vue3-recommended) | `frontend/.eslintrc.cjs` |
-| **Prettier** | 코드 포맷팅 | `frontend/.prettierrc` |
-| **Vitest** | 단위 테스트 (happy-dom 환경) | `frontend/vitest.config.ts` |
-| **DOMPurify** | XSS 방지 (v-html 사용 시 sanitize) | `SearchView.vue` |
+| **flutter analyze** | Dart 정적 분석 | `frontend/analysis_options.yaml` |
+| **flutter_lints** | 린트 규칙 (권장 규칙셋) | `dev_dependencies` |
+| **flutter test** | 위젯 단위 테스트 | `frontend/test/` |
 
 ### **보안**
 | 항목 | 구현 |
@@ -594,7 +625,7 @@ npm run type-check
 - [ ] 채팅 봇 통합
 
 ### 🌟 **v2.0 (장기 비전)**
-- [ ] 모바일 앱 (React Native)
+- [x] 모바일 앱 (Flutter Android APK)
 - [ ] 엔터프라이즈 기능 (SSO, 감사 로그)
 - [ ] AI 챗봇 어시스턴트
 - [ ] 블록체인 기반 보안 메시징

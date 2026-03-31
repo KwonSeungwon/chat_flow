@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/utils/apk_downloader.dart';
 import 'auth_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -286,6 +288,24 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     label: const Text('게스트로 시작하기'),
                   ),
                 ),
+
+                // Android download (web only)
+                if (kIsWeb) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: () => downloadApk('/chatflow-app.apk'),
+                      icon: const Icon(Icons.android),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF3DDC84),
+                        side: const BorderSide(color: Color(0xFF3DDC84)),
+                      ),
+                      label: const Text('Android 앱 다운로드'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

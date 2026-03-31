@@ -87,7 +87,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/chat'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/chat'),
         ),
         title: const Text('메시지 검색'),
       ),

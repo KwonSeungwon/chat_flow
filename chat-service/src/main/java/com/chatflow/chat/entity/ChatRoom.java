@@ -48,18 +48,20 @@ public class ChatRoom {
 
     @Builder.Default
     @Column(name = "participant_count")
-    private int participantCount = 0;
+    private Integer participantCount = 0;
 
     @Builder.Default
     @Column(name = "max_participants")
-    private int maxParticipants = 10;
+    private Integer maxParticipants = 10;
 
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public boolean isFull() {
-        return participantCount >= maxParticipants;
+        int count = participantCount != null ? participantCount : 0;
+        int max = maxParticipants != null ? maxParticipants : 10;
+        return count >= max;
     }
 
     public static String nextOverflowName(String baseName, long existingCount) {

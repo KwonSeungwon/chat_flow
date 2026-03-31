@@ -130,15 +130,6 @@ class StompService {
     }
   }
 
-  void sendJoin(Map<String, dynamic> message) {
-    if (_connected && _client != null) {
-      _client!.send(
-        destination: '/app/chat.addUser',
-        body: jsonEncode(message),
-      );
-    }
-  }
-
   void disconnect() {
     _manualDisconnect = true;
     _reconnectTimer?.cancel();
