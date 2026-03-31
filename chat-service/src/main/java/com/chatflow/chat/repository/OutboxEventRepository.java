@@ -16,6 +16,10 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     List<OutboxEvent> findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus status);
 
     @Modifying
+    @Query("UPDATE OutboxEvent e SET e.status = 'PROCESSED', e.processedAt = :now WHERE e.id IN :ids AND e.status = com.chatflow.chat.entity.OutboxEvent.OutboxStatus.PENDING")
+    int markProcessed(@Param("ids") List<Long> ids, @Param("now") LocalDateTime now);
+
+    @Modifying
     @Query("DELETE FROM OutboxEvent e WHERE e.status = 'PROCESSED' AND e.processedAt < :before")
     int deleteProcessedBefore(@Param("before") LocalDateTime before);
 }

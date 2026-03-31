@@ -2,6 +2,8 @@ package com.chatflow.chat.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.DynamicInsert;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
@@ -11,8 +13,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(of = "id")
-@ToString(exclude = {})
 @Entity
+@DynamicInsert
+@DynamicUpdate
 @Table(name = "chat_rooms", indexes = {
     @Index(name = "idx_chat_room_created_at", columnList = "created_at DESC"),
     @Index(name = "idx_chat_room_name", columnList = "name")
@@ -54,4 +57,12 @@ public class ChatRoom {
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    public boolean isFull() {
+        return participantCount >= maxParticipants;
+    }
+
+    public static String nextOverflowName(String baseName, long existingCount) {
+        return baseName + "-" + (existingCount + 1);
+    }
 }

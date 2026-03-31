@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.repository.ChatMessageRepository;
@@ -35,39 +36,41 @@ public class ChatRoomService {
     private final ChatMessageRepository chatMessageRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RedisHealthTracker redisHealth;
 
     public List<ChatRoom> getAllRooms() {
-        try {
-            String cached = redisTemplate.opsForValue().get(ROOMS_LIST_KEY);
-            if (cached != null) {
-                return objectMapper.readValue(cached, new TypeReference<List<ChatRoom>>() {});
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                String cached = redisTemplate.opsForValue().get(ROOMS_LIST_KEY);
+                if (cached != null) {
+                    redisHealth.recordSuccess();
+                    return objectMapper.readValue(cached, new TypeReference<List<ChatRoom>>() {});
+                }
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
             }
-        } catch (Exception e) {
-            log.debug("Room list cache miss or error: {}", e.getMessage());
         }
 
         List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
-
-        try {
-            redisTemplate.opsForValue().set(ROOMS_LIST_KEY, objectMapper.writeValueAsString(rooms), LIST_TTL);
-        } catch (Exception e) {
-            log.debug("Failed to cache room list: {}", e.getMessage());
-        }
+        cacheValue(ROOMS_LIST_KEY, rooms, LIST_TTL);
         return rooms;
     }
 
     public Optional<ChatRoom> getRoom(String id) {
-        try {
-            String cached = redisTemplate.opsForValue().get(ROOM_CACHE_KEY + id);
-            if (cached != null) {
-                return Optional.of(objectMapper.readValue(cached, ChatRoom.class));
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                String cached = redisTemplate.opsForValue().get(ROOM_CACHE_KEY + id);
+                if (cached != null) {
+                    redisHealth.recordSuccess();
+                    return Optional.of(objectMapper.readValue(cached, ChatRoom.class));
+                }
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
             }
-        } catch (Exception e) {
-            log.debug("Room cache miss or error for {}: {}", id, e.getMessage());
         }
 
         Optional<ChatRoom> room = chatRoomRepository.findById(id);
-        room.ifPresent(r -> cacheRoom(r));
+        room.ifPresent(r -> cacheValue(ROOM_CACHE_KEY + r.getId(), r, ROOM_TTL));
         return room;
     }
 
@@ -112,6 +115,14 @@ public class ChatRoomService {
         return chatMessageRepository.findByChatRoomIdOrderByTimestampDesc(roomId, pageable);
     }
 
+    public List<ChatMessageEntity> getMessagesByCursor(String roomId, LocalDateTime before, int size) {
+        Pageable limit = Pageable.ofSize(size);
+        if (before == null) {
+            return chatMessageRepository.findLatestByChatRoomId(roomId, limit);
+        }
+        return chatMessageRepository.findByChatRoomIdBeforeCursor(roomId, before, limit);
+    }
+
     @Transactional
     public void incrementParticipantCount(String roomId) {
         chatRoomRepository.incrementParticipantCount(roomId);
@@ -133,29 +144,23 @@ public class ChatRoomService {
         }
     }
 
-    /**
-     * 기본 생성방이 꽉 차면 "일반-2", "일반-3" ... 자동 생성하여 반환.
-     * 여유 있는 방이 있으면 기존 방 반환.
-     */
     public ChatRoom findOrCreateAvailableRoom(String baseName) {
         List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
 
-        // baseName으로 시작하는 방 중 여유 있는 방 찾기
         Optional<ChatRoom> available = rooms.stream()
                 .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
-                .filter(r -> r.getParticipantCount() < r.getMaxParticipants())
+                .filter(r -> !r.isFull())
                 .findFirst();
 
         if (available.isPresent()) {
             return available.get();
         }
 
-        // 같은 시리즈 방 개수로 다음 번호 결정
         long count = rooms.stream()
                 .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
                 .count();
 
-        String newName = baseName + "-" + (count + 1);
+        String newName = ChatRoom.nextOverflowName(baseName, count);
         ChatRoom newRoom = ChatRoom.builder()
                 .id("room_" + UUID.randomUUID().toString().substring(0, 8))
                 .name(newName)
@@ -172,23 +177,24 @@ public class ChatRoomService {
         return saved;
     }
 
-    private void cacheRoom(ChatRoom room) {
+    private <T> void cacheValue(String key, T value, Duration ttl) {
+        if (redisHealth.isCircuitOpen()) return;
         try {
-            redisTemplate.opsForValue().set(
-                    ROOM_CACHE_KEY + room.getId(),
-                    objectMapper.writeValueAsString(room),
-                    ROOM_TTL);
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), ttl);
+            redisHealth.recordSuccess();
         } catch (Exception e) {
-            log.debug("Failed to cache room {}: {}", room.getId(), e.getMessage());
+            redisHealth.recordFailure(e);
         }
     }
 
     private void evictRoomCaches(String roomId) {
+        if (redisHealth.isCircuitOpen()) return;
         try {
             redisTemplate.delete(ROOM_CACHE_KEY + roomId);
             redisTemplate.delete(ROOMS_LIST_KEY);
+            redisHealth.recordSuccess();
         } catch (Exception e) {
-            log.debug("Failed to evict room cache: {}", e.getMessage());
+            redisHealth.recordFailure(e);
         }
     }
 }

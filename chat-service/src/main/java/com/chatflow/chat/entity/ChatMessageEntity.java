@@ -2,6 +2,7 @@ package com.chatflow.chat.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.DynamicInsert;
 import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @EqualsAndHashCode(of = "messageId")
 @Entity
+@DynamicInsert
 @Table(name = "chat_messages", indexes = {
     @Index(name = "idx_chat_room_id", columnList = "chatRoomId"),
     @Index(name = "idx_timestamp", columnList = "timestamp"),

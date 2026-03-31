@@ -3,6 +3,8 @@ package com.chatflow.search.service;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.repository.ChatMessageSearchRepository;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -35,8 +37,11 @@ public class SearchService {
     private final ReentrantLock bufferLock = new ReentrantLock();
     private int consecutiveFailures = 0;
 
-    public SearchService(ChatMessageSearchRepository searchRepository) {
+    public SearchService(ChatMessageSearchRepository searchRepository, MeterRegistry registry) {
         this.searchRepository = searchRepository;
+        Gauge.builder("chatflow.search.buffer.size", buffer, List::size)
+                .description("Search indexing buffer size")
+                .register(registry);
     }
 
     @KafkaListener(topics = {"chat-messages", "ai-summaries"})

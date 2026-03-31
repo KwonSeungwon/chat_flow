@@ -3,10 +3,10 @@ package com.chatflow.chat.service;
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -18,16 +18,36 @@ import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class OutboxPoller {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
+    private final Timer pollTimer;
+
+    public OutboxPoller(OutboxEventRepository outboxEventRepository,
+                        KafkaTemplate<String, Object> kafkaTemplate,
+                        TransactionTemplate transactionTemplate,
+                        ObjectMapper objectMapper,
+                        MeterRegistry registry) {
+        this.outboxEventRepository = outboxEventRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.transactionTemplate = transactionTemplate;
+        this.objectMapper = objectMapper;
+        this.pollTimer = Timer.builder("chatflow.outbox.poll.duration")
+                .description("Outbox poll cycle duration")
+                .register(registry);
+        registry.gauge("chatflow.outbox.pending", outboxEventRepository,
+                repo -> repo.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING).size());
+    }
 
     @Scheduled(fixedDelay = 200)
     public void pollOutbox() {
+        pollTimer.record(() -> doPoll());
+    }
+
+    private void doPoll() {
         List<OutboxEvent> pendingEvents =
                 outboxEventRepository.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING);
 
@@ -59,23 +79,14 @@ public class OutboxPoller {
             }
         }
 
-        // Phase 3: 성공한 이벤트를 한 트랜잭션에서 일괄 PROCESSED 처리
+        // Phase 3: 성공한 이벤트를 단일 JPQL로 일괄 PROCESSED 처리
         if (!succeeded.isEmpty()) {
             try {
+                List<Long> ids = succeeded.stream().map(OutboxEvent::getId).toList();
                 transactionTemplate.executeWithoutResult(status -> {
-                    LocalDateTime now = LocalDateTime.now();
-                    for (OutboxEvent event : succeeded) {
-                        OutboxEvent fresh = outboxEventRepository.findById(event.getId()).orElse(null);
-                        if (fresh != null && fresh.getStatus() == OutboxEvent.OutboxStatus.PENDING) {
-                            fresh.setStatus(OutboxEvent.OutboxStatus.PROCESSED);
-                            fresh.setProcessedAt(now);
-                            outboxEventRepository.save(fresh);
-                        }
-                    }
+                    int updated = outboxEventRepository.markProcessed(ids, LocalDateTime.now());
+                    log.info("Outbox batch processed: {}/{} events", updated, pendingEvents.size());
                 });
-                log.info("Outbox batch processed: {}/{} events", succeeded.size(), pendingEvents.size());
-            } catch (ObjectOptimisticLockingFailureException e) {
-                log.debug("Some outbox events already processed by another instance");
             } catch (Exception e) {
                 log.error("Failed to update outbox status for batch", e);
             }
