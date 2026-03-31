@@ -44,7 +44,7 @@ class StompService {
         dotenv.env['WS_URL'] ?? 'ws://43.201.22.86:8000/ws-native/websocket';
 
     _client = StompClient(
-      config: StompConfig.webSocket(
+      config: StompConfig(
         url: wsUrl,
         onConnect: (frame) => _onConnect(frame),
         onDisconnect: (frame) => _onDisconnect(),
