@@ -4,12 +4,17 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -21,16 +26,49 @@ import java.util.UUID;
 public class ChatRoomService {
 
     private static final int MAX_PARTICIPANTS = 10;
+    private static final String ROOM_CACHE_KEY = "chatflow:room:";
+    private static final String ROOMS_LIST_KEY = "chatflow:rooms:list";
+    private static final Duration ROOM_TTL = Duration.ofMinutes(5);
+    private static final Duration LIST_TTL = Duration.ofSeconds(30);
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public List<ChatRoom> getAllRooms() {
-        return chatRoomRepository.findAllByOrderByCreatedAtDesc();
+        try {
+            String cached = redisTemplate.opsForValue().get(ROOMS_LIST_KEY);
+            if (cached != null) {
+                return objectMapper.readValue(cached, new TypeReference<List<ChatRoom>>() {});
+            }
+        } catch (Exception e) {
+            log.debug("Room list cache miss or error: {}", e.getMessage());
+        }
+
+        List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
+
+        try {
+            redisTemplate.opsForValue().set(ROOMS_LIST_KEY, objectMapper.writeValueAsString(rooms), LIST_TTL);
+        } catch (Exception e) {
+            log.debug("Failed to cache room list: {}", e.getMessage());
+        }
+        return rooms;
     }
 
     public Optional<ChatRoom> getRoom(String id) {
-        return chatRoomRepository.findById(id);
+        try {
+            String cached = redisTemplate.opsForValue().get(ROOM_CACHE_KEY + id);
+            if (cached != null) {
+                return Optional.of(objectMapper.readValue(cached, ChatRoom.class));
+            }
+        } catch (Exception e) {
+            log.debug("Room cache miss or error for {}: {}", id, e.getMessage());
+        }
+
+        Optional<ChatRoom> room = chatRoomRepository.findById(id);
+        room.ifPresent(r -> cacheRoom(r));
+        return room;
     }
 
     public ChatRoom createRoom(ChatRoom request) {
@@ -47,6 +85,7 @@ public class ChatRoomService {
                 .build();
 
         ChatRoom saved = chatRoomRepository.save(room);
+        evictRoomCaches(saved.getId());
         log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
         return saved;
     }
@@ -73,24 +112,25 @@ public class ChatRoomService {
         return chatMessageRepository.findByChatRoomIdOrderByTimestampDesc(roomId, pageable);
     }
 
+    @Transactional
     public void incrementParticipantCount(String roomId) {
-        chatRoomRepository.findById(roomId).ifPresent(room -> {
-            room.setParticipantCount(room.getParticipantCount() + 1);
-            chatRoomRepository.save(room);
-        });
+        chatRoomRepository.incrementParticipantCount(roomId);
+        evictRoomCaches(roomId);
     }
 
+    @Transactional
     public void decrementParticipantCount(String roomId) {
-        chatRoomRepository.findById(roomId).ifPresent(room -> {
-            room.setParticipantCount(Math.max(0, room.getParticipantCount() - 1));
-            chatRoomRepository.save(room);
-        });
+        chatRoomRepository.decrementParticipantCount(roomId);
+        evictRoomCaches(roomId);
     }
 
+    @Transactional(readOnly = true)
     public boolean isRoomFull(String roomId) {
-        return chatRoomRepository.findById(roomId)
-                .map(room -> room.getParticipantCount() >= room.getMaxParticipants())
-                .orElse(false);
+        try {
+            return chatRoomRepository.isRoomFull(roomId);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -127,7 +167,28 @@ public class ChatRoomService {
                 .build();
 
         ChatRoom saved = chatRoomRepository.save(newRoom);
+        evictRoomCaches(saved.getId());
         log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
         return saved;
+    }
+
+    private void cacheRoom(ChatRoom room) {
+        try {
+            redisTemplate.opsForValue().set(
+                    ROOM_CACHE_KEY + room.getId(),
+                    objectMapper.writeValueAsString(room),
+                    ROOM_TTL);
+        } catch (Exception e) {
+            log.debug("Failed to cache room {}: {}", room.getId(), e.getMessage());
+        }
+    }
+
+    private void evictRoomCaches(String roomId) {
+        try {
+            redisTemplate.delete(ROOM_CACHE_KEY + roomId);
+            redisTemplate.delete(ROOMS_LIST_KEY);
+        } catch (Exception e) {
+            log.debug("Failed to evict room cache: {}", e.getMessage());
+        }
     }
 }

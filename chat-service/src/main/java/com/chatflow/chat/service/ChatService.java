@@ -69,6 +69,15 @@ public class ChatService {
     }
 
     public void removeUser(String roomId, String username) {
+        ChatMessage leaveMessage = new ChatMessage();
+        leaveMessage.setChatRoomId(roomId);
+        leaveMessage.setUsername(username);
+        leaveMessage.setType(ChatMessage.MessageType.LEAVE);
+        leaveMessage.setTimestamp(LocalDateTime.now());
+        leaveMessage.setMessageId(UUID.randomUUID().toString());
+        leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
+
+        messagingTemplate.convertAndSend("/topic/chat/" + roomId, leaveMessage);
         chatRoomService.decrementParticipantCount(roomId);
         log.info("User {} left chat room {}", username, roomId);
     }

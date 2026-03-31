@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -25,7 +26,16 @@ public class ChatController {
     private final SimpMessagingTemplate messagingTemplate;
 
     @MessageMapping("/chat.sendMessage")
-    public void sendMessage(@Payload ChatMessage chatMessage) {
+    public void sendMessage(@Payload ChatMessage chatMessage,
+                           SimpMessageHeaderAccessor headerAccessor) {
+        // 세션에서 인증된 사용자 정보로 덮어쓰기 (클라이언트 위조 방지)
+        Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+        if (sessionAttrs != null) {
+            String sessionUsername = (String) sessionAttrs.get("username");
+            String sessionUserId = (String) sessionAttrs.get("userId");
+            if (sessionUsername != null) chatMessage.setUsername(sessionUsername);
+            if (sessionUserId != null) chatMessage.setUserId(sessionUserId);
+        }
         Set<ConstraintViolation<ChatMessage>> violations = validator.validate(chatMessage);
         if (!violations.isEmpty()) {
             String errors = violations.stream()
