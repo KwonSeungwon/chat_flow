@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
@@ -113,10 +115,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> guestLogin() async {
     state = state.copyWith(isLoading: true, error: null);
+    await _doGuestRegister(0);
+  }
+
+  Future<void> _doGuestRegister(int retryCount) async {
+    // Timestamp (13 digits) + 4-digit secure random → collision probability ≈ 0
     final ts = DateTime.now().millisecondsSinceEpoch;
-    final username =
-        'Guest_${ts.toString().substring(ts.toString().length - 5)}';
-    final password = 'guest_$ts';
+    final rand = Random.secure().nextInt(9000) + 1000;
+    final username = 'Guest_$ts$rand';
+    final password = 'gp_${ts}_$rand';
     try {
       final resp = await _dioClient.dio.post(
         '/api/auth/register',
@@ -136,8 +143,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username: username,
         isGuest: true,
       );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: '게스트 로그인 실패');
+    } on DioException catch (e) {
+      // 400 = duplicate username (near-impossible but retry once)
+      if (e.response?.statusCode == 400 && retryCount < 2) {
+        return _doGuestRegister(retryCount + 1);
+      }
+      final code = e.response?.statusCode;
+      final msg = code != null
+          ? '서버 오류 ($code). 잠시 후 다시 시도해주세요.'
+          : '네트워크 오류. 인터넷 연결을 확인해주세요.';
+      state = state.copyWith(isLoading: false, error: msg);
+    } catch (_) {
+      state = state.copyWith(isLoading: false, error: '게스트 로그인 실패. 다시 시도해주세요.');
     }
   }
 
