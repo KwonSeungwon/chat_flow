@@ -243,7 +243,7 @@ services:
       kafka:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod},spring-ai
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod},langchain4j
       JAVA_OPTS: ${AI_SUMMARY_JAVA_OPTS:--Xmx96m -XX:+UseSerialGC -Xss512k}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092

@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -24,42 +26,58 @@ public class OutboxPoller {
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
 
-    // TODO(human): 폴링 전략을 구현하세요.
-    // 현재 fixedDelay = 200ms, 배치 크기 50입니다.
-    // 고려사항:
-    // - 200ms는 실시간 채팅에 적절한 지연인가? (100ms로 줄이면 DB 부하 증가)
-    // - 메시지가 없을 때도 200ms마다 쿼리가 실행됩니다 → adaptive polling 고려
-    // - 배치 크기 50은 적절한가? (burst traffic에서의 처리량 vs DB 트랜잭션 크기)
-
     @Scheduled(fixedDelay = 200)
     public void pollOutbox() {
         List<OutboxEvent> pendingEvents =
                 outboxEventRepository.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING);
 
+        if (pendingEvents.isEmpty()) return;
+
+        // Phase 1: 모든 이벤트를 병렬로 Kafka 전송, future 수집
+        List<CompletableFuture<OutboxEvent>> futures = new ArrayList<>();
         for (OutboxEvent event : pendingEvents) {
             try {
-                transactionTemplate.executeWithoutResult(status -> {
-                    OutboxEvent fresh = outboxEventRepository.findById(event.getId())
-                            .orElse(null);
-                    if (fresh == null || fresh.getStatus() != OutboxEvent.OutboxStatus.PENDING) {
-                        return;
-                    }
-
-                    try {
-                        Object payloadObj = objectMapper.readValue(fresh.getPayload(), Object.class);
-                        kafkaTemplate.send(fresh.getTopic(), fresh.getPartitionKey(), payloadObj);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Kafka 전송 실패", e);
-                    }
-
-                    fresh.setStatus(OutboxEvent.OutboxStatus.PROCESSED);
-                    fresh.setProcessedAt(LocalDateTime.now());
-                    outboxEventRepository.save(fresh);
-                });
-            } catch (ObjectOptimisticLockingFailureException e) {
-                log.debug("Outbox event {} already processed by another instance", event.getId());
+                Object payloadObj = objectMapper.readValue(event.getPayload(), Object.class);
+                CompletableFuture<OutboxEvent> future = kafkaTemplate
+                        .send(event.getTopic(), event.getPartitionKey(), payloadObj)
+                        .thenApply(result -> event)
+                        .toCompletableFuture();
+                futures.add(future);
             } catch (Exception e) {
-                log.error("Failed to process outbox event: id={}", event.getId(), e);
+                log.error("Failed to parse outbox event payload: id={}", event.getId(), e);
+            }
+        }
+
+        // Phase 2: 모든 전송 완료 대기 (30초 타임아웃)
+        List<OutboxEvent> succeeded = new ArrayList<>();
+        for (CompletableFuture<OutboxEvent> future : futures) {
+            try {
+                OutboxEvent sent = future.get(30, java.util.concurrent.TimeUnit.SECONDS);
+                succeeded.add(sent);
+            } catch (Exception e) {
+                log.error("Kafka send failed for outbox event: {}", e.getMessage());
+            }
+        }
+
+        // Phase 3: 성공한 이벤트를 한 트랜잭션에서 일괄 PROCESSED 처리
+        if (!succeeded.isEmpty()) {
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    LocalDateTime now = LocalDateTime.now();
+                    for (OutboxEvent event : succeeded) {
+                        OutboxEvent fresh = outboxEventRepository.findById(event.getId()).orElse(null);
+                        if (fresh != null && fresh.getStatus() == OutboxEvent.OutboxStatus.PENDING) {
+                            fresh.setStatus(OutboxEvent.OutboxStatus.PROCESSED);
+                            fresh.setProcessedAt(now);
+                            outboxEventRepository.save(fresh);
+                        }
+                    }
+                });
+                log.info("Outbox batch processed: {}/{} events", succeeded.size(), pendingEvents.size());
+            } catch (ObjectOptimisticLockingFailureException e) {
+                log.debug("Some outbox events already processed by another instance");
+            } catch (Exception e) {
+                log.error("Failed to update outbox status for batch", e);
             }
         }
     }

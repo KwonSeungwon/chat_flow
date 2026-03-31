@@ -1,11 +1,14 @@
 # Production Environment Configuration
 server:
   port: 8080
+  shutdown: graceful
   tomcat:
     max-threads: 30
     accept-count: 20
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   # Production PostgreSQL with connection pooling
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
@@ -44,7 +47,7 @@ spring:
           max-active: 8
           max-idle: 4
           min-idle: 1
-          max-wait: -1ms
+          max-wait: 2000ms
   
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
@@ -62,6 +65,8 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        spring.json.use.type.info.headers: false
+        spring.json.value.default.type: com.chatflow.common.dto.ChatMessage
       auto-offset-reset: earliest
       enable-auto-commit: false
       max-poll-records: 100

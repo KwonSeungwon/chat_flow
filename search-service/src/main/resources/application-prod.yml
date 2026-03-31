@@ -1,11 +1,14 @@
 # Search Service - Production Environment
 server:
   port: 8082
+  shutdown: graceful
   tomcat:
     max-threads: 30
     accept-count: 20
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS}
     connection-timeout: 3s
@@ -33,6 +36,8 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        spring.json.use.type.info.headers: false
+        spring.json.value.default.type: com.chatflow.common.dto.ChatMessage
       auto-offset-reset: earliest
       enable-auto-commit: false
       max-poll-records: 100
@@ -45,22 +50,6 @@ spring:
       trust-store-password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
       key-store-location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
       key-store-password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
-
-# Circuit breaker for Elasticsearch
-resilience4j:
-  circuitbreaker:
-    instances:
-      elasticsearch:
-        sliding-window-size: 20
-        minimum-number-of-calls: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 5
-  retry:
-    instances:
-      elasticsearch:
-        max-attempts: 3
-        wait-duration: 1s
 
 management:
   endpoints:

@@ -1,11 +1,14 @@
 # AI Summary Service - Production Environment
 server:
   port: 8081
+  shutdown: graceful
   tomcat:
     max-threads: 20
     accept-count: 10
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:
@@ -14,6 +17,8 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        spring.json.use.type.info.headers: false
+        spring.json.value.default.type: com.chatflow.common.dto.ChatMessage
       auto-offset-reset: earliest
       enable-auto-commit: false
       max-poll-records: 50
@@ -39,7 +44,7 @@ spring:
           max-active: 8
           max-idle: 4
           min-idle: 1
-          max-wait: -1ms
+          max-wait: 2000ms
 
   # Spring AI - Google Gemini 설정 (spring-ai 프로필 활성 시)
   ai:
@@ -58,22 +63,6 @@ langchain4j:
       api-key: ${GEMINI_API_KEY}
       model-name: gemini-2.0-flash
       temperature: 0.2
-
-# Circuit breaker for AI service
-resilience4j:
-  circuitbreaker:
-    instances:
-      gemini:
-        sliding-window-size: 20
-        minimum-number-of-calls: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 5
-  retry:
-    instances:
-      gemini:
-        max-attempts: 3
-        wait-duration: 2s
 
 management:
   endpoints:

@@ -27,10 +27,13 @@ import java.util.concurrent.locks.ReentrantLock;
 public class SearchService {
 
     private static final int BULK_SIZE = 50;
+    private static final int MAX_BUFFER_SIZE = 5000;
+    private static final int MAX_RETRY_COUNT = 3;
 
     private final ChatMessageSearchRepository searchRepository;
     private final List<ChatMessageDocument> buffer = new ArrayList<>();
     private final ReentrantLock bufferLock = new ReentrantLock();
+    private int consecutiveFailures = 0;
 
     public SearchService(ChatMessageSearchRepository searchRepository) {
         this.searchRepository = searchRepository;
@@ -52,6 +55,10 @@ public class SearchService {
 
         bufferLock.lock();
         try {
+            if (buffer.size() >= MAX_BUFFER_SIZE) {
+                log.warn("Buffer full ({} messages), dropping oldest batch to prevent OOM", buffer.size());
+                buffer.subList(0, BULK_SIZE).clear();
+            }
             buffer.add(document);
             if (buffer.size() >= BULK_SIZE) {
                 flushBuffer();
@@ -82,14 +89,17 @@ public class SearchService {
         try {
             searchRepository.saveAll(batch);
             log.info("Bulk indexed {} messages", batch.size());
+            consecutiveFailures = 0;
         } catch (Exception e) {
-            log.error("Bulk indexing failed for {} messages: {}", batch.size(), e.getMessage());
-            // 실패 시 버퍼에 다시 추가 (재시도)
-            bufferLock.lock();
-            try {
+            consecutiveFailures++;
+            if (consecutiveFailures <= MAX_RETRY_COUNT) {
+                log.error("Bulk indexing failed ({}/{}), re-queuing {} messages: {}",
+                        consecutiveFailures, MAX_RETRY_COUNT, batch.size(), e.getMessage());
                 buffer.addAll(0, batch);
-            } finally {
-                bufferLock.unlock();
+            } else {
+                log.error("Bulk indexing failed {} consecutive times, dropping {} messages to prevent OOM",
+                        consecutiveFailures, batch.size());
+                consecutiveFailures = 0;
             }
         }
     }

@@ -1,11 +1,14 @@
 # Gateway Service - Production Environment
 server:
   port: 8000
+  shutdown: graceful
   tomcat:
     max-threads: 300
     accept-count: 200
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   cloud:
     gateway:
       routes:
@@ -83,7 +86,7 @@ spring:
           max-active: 8
           max-idle: 4
           min-idle: 1
-          max-wait: -1ms
+          max-wait: 2000ms
 
 management:
   endpoints:
