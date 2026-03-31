@@ -99,7 +99,7 @@ cd frontend
 
 flutter pub get                                              # 의존성 설치
 flutter run -d chrome                                        # 웹 개발 서버
-flutter build web --release --web-renderer canvaskit         # 웹 프로덕션 빌드
+flutter build web --release                                  # 웹 프로덕션 빌드
 flutter build apk --release                                  # Android APK 빌드
 
 # Docker 이미지 빌드 (EC2 배포용, amd64 크로스 빌드)
@@ -217,17 +217,17 @@ cd frontend
 flutter build web --release --web-renderer canvaskit
 cd ..
 docker buildx build --platform linux/amd64 \
-  -t chatflow/frontend:prod --load frontend/
+  -t chatflow-frontend:latest --load frontend/
 
 # 2. 이미지 저장 → EC2 전송
-docker save chatflow/frontend:prod | gzip > frontend.tar.gz
-scp -i ~/web-app-key.pem frontend.tar.gz ubuntu@43.201.22.86:~/
+docker save chatflow-frontend:latest | gzip > /tmp/frontend.tar.gz
+scp -i ~/web-app-key.pem /tmp/frontend.tar.gz ubuntu@43.201.22.86:~/
 
-# 3. EC2에서 로드 & 실행
+# 3. EC2에서 로드 & 실행 (docker-compose.prod.yml, .env.prod 모두 ~/에 위치)
 ssh -i ~/web-app-key.pem ubuntu@43.201.22.86
-docker load < frontend.tar.gz
-docker compose -f docker-compose.prod.yml up --no-deps -d frontend
-docker compose -f docker-compose.prod.yml ps
+docker load < ~/frontend.tar.gz
+docker compose -f ~/docker-compose.prod.yml --env-file ~/.env.prod up --no-deps -d frontend
+docker compose -f ~/docker-compose.prod.yml --env-file ~/.env.prod ps
 ```
 
 **도메인**: https://app.chatflow.ai.kr (Cloudflare → EC2 nginx)

@@ -23,7 +23,7 @@ flutter pub get
 flutter run -d chrome
 
 # 프로덕션 웹 빌드
-flutter build web --release --web-renderer canvaskit
+flutter build web --release
 
 # Android APK
 flutter build apk --release
@@ -62,7 +62,7 @@ WS_URL=wss://app.chatflow.ai.kr/ws-native # Android 네이티브용
 
 ```bash
 # 1. Flutter 웹 빌드
-flutter build web --release --web-renderer canvaskit
+flutter build web --release
 
 # 2. amd64 이미지 빌드 (Mac M1/M2에서 크로스 빌드)
 docker buildx build --platform linux/amd64 \

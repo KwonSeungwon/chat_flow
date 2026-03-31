@@ -448,7 +448,7 @@ docker buildx build --platform linux/amd64 \
 
 # 프론트엔드 (Flutter 빌드 후 Docker)
 cd frontend
-flutter build web --release --web-renderer canvaskit
+flutter build web --release
 docker buildx build --platform linux/amd64 -t chatflow/frontend:prod --load .
 cd ..
 
