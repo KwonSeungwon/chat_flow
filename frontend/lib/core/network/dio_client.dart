@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -10,7 +11,11 @@ class DioClient {
   static const _storage = FlutterSecureStorage();
 
   DioClient() {
-    final baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://43.201.22.86:8000';
+    // On web: derive origin from current page URL (works for any domain/IP)
+    // On native: fall back to .env or default
+    final baseUrl = kIsWeb
+        ? _webOrigin()
+        : (dotenv.env['API_BASE_URL'] ?? 'http://43.201.22.86:8000');
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -37,4 +42,12 @@ class DioClient {
   }
 
   Dio get dio => _dio;
+
+  static String _webOrigin() {
+    final uri = Uri.base;
+    final port = (uri.hasPort && uri.port != 80 && uri.port != 443)
+        ? ':${uri.port}'
+        : '';
+    return '${uri.scheme}://${uri.host}$port';
+  }
 }

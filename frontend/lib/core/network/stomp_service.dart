@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
@@ -40,8 +41,9 @@ class StompService {
   }
 
   void _doConnect(String token) {
-    final wsUrl =
-        dotenv.env['WS_URL'] ?? 'ws://43.201.22.86:8000/ws-native/websocket';
+    // On web: derive WS URL from current page origin (http→ws, https→wss)
+    // On native: fall back to .env or default
+    final wsUrl = kIsWeb ? _webWsUrl() : (dotenv.env['WS_URL'] ?? 'ws://43.201.22.86/ws-native');
 
     _client = StompClient(
       config: StompConfig(
@@ -147,5 +149,14 @@ class StompService {
 
   void dispose() {
     disconnect();
+  }
+
+  static String _webWsUrl() {
+    final uri = Uri.base;
+    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    final port = (uri.hasPort && uri.port != 80 && uri.port != 443)
+        ? ':${uri.port}'
+        : '';
+    return '$scheme://${uri.host}$port/ws-native';
   }
 }
