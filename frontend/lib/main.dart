@@ -14,18 +14,22 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Firebase init — wrapped in try-catch so the app loads even if Firebase fails (e.g., on web)
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Crashlytics: catch errors from Flutter framework
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    if (!kIsWeb) {
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+    }
 
-  // Crashlytics: catch async errors outside Flutter (e.g., isolate exceptions)
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
-
-  await FcmService.initialize();
+    await FcmService.initialize();
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
 
   runApp(const ProviderScope(child: ChatFlowApp()));
 }
