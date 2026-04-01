@@ -216,6 +216,9 @@ services:
       CHATFLOW_ALLOWED_ORIGINS: "*"
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
+      FIREBASE_SERVICE_ACCOUNT_PATH: file:/app/config/firebase-service-account.json
+    volumes:
+      - ./firebase-service-account.json:/app/config/firebase-service-account.json:ro
     networks:
       - chatflow-prod
     deploy:
