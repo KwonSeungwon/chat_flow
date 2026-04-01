@@ -9,25 +9,26 @@ import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 
 class ChatPage extends ConsumerWidget {
-  final String roomId;
+  final String? roomId;
 
-  const ChatPage({super.key, required this.roomId});
+  const ChatPage({super.key, this.roomId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    final chatState = ref.watch(chatNotifierProvider(roomId));
-    final chatNotifier = ref.read(chatNotifierProvider(roomId).notifier);
     final themeMode = ref.watch(themeModeProvider);
     final isWide = MediaQuery.of(context).size.width >= 600;
+    final effectiveRoomId = roomId;
 
-    final roomDisplayName = ref.watch(chatRoomsProvider).maybeWhen(
-          data: (rooms) {
-            final match = rooms.where((r) => r.id == roomId);
-            return match.isNotEmpty ? match.first.name : roomId;
-          },
-          orElse: () => roomId,
-        );
+    final roomDisplayName = effectiveRoomId != null
+        ? ref.watch(chatRoomsProvider).maybeWhen(
+              data: (rooms) {
+                final match = rooms.where((r) => r.id == effectiveRoomId);
+                return match.isNotEmpty ? match.first.name : effectiveRoomId;
+              },
+              orElse: () => effectiveRoomId,
+            )
+        : 'ChatFlow';
 
     return Scaffold(
       appBar: AppBar(
@@ -44,8 +45,12 @@ class ChatPage extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(roomDisplayName),
-            const SizedBox(width: 8),
-            _ConnectionDot(connected: chatState.isConnected),
+            if (effectiveRoomId != null) ...[
+              const SizedBox(width: 8),
+              _ConnectionDot(
+                connected: ref.watch(chatNotifierProvider(effectiveRoomId)).isConnected,
+              ),
+            ],
           ],
         ),
         actions: [
@@ -94,53 +99,96 @@ class ChatPage extends ConsumerWidget {
               : Drawer(
                 child: SafeArea(
                   child: ChatRoomSidebar(
-                    currentRoomId: roomId,
+                    currentRoomId: effectiveRoomId ?? '',
                     onRoomSelected: () => Navigator.of(context).pop(),
                   ),
                 ),
               ),
       body: Row(
         children: [
-          // Sidebar (desktop only)
           if (isWide)
-            ChatRoomSidebar(currentRoomId: roomId),
-
-          // Divider between sidebar and content
+            ChatRoomSidebar(currentRoomId: effectiveRoomId ?? ''),
           if (isWide)
             const VerticalDivider(width: 1, thickness: 1),
-
-          // Main content
           Expanded(
-            child: Column(
-              children: [
-                // Loading indicator
-                if (chatState.isLoadingHistory)
-                  const LinearProgressIndicator(),
-
-                // Messages
-                Expanded(
-                  child: ChatMessagesList(
-                    messages: chatState.messages,
-                    currentUsername: auth.username,
-                  ),
-                ),
-
-                // Input
-                ChatInput(
-                  isConnected: chatState.isConnected,
-                  onSend: (content) {
-                    chatNotifier.sendMessage(
-                      roomId: roomId,
-                      content: content,
-                    );
-                  },
-                ),
-              ],
-            ),
+            child: effectiveRoomId != null
+                ? _ChatRoomContent(
+                    roomId: effectiveRoomId,
+                    username: auth.username,
+                  )
+                : const _LobbyPlaceholder(),
           ),
         ],
       ),
       resizeToAvoidBottomInset: true,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Active chat room content (messages + input)
+// ---------------------------------------------------------------------------
+class _ChatRoomContent extends ConsumerWidget {
+  final String roomId;
+  final String username;
+
+  const _ChatRoomContent({required this.roomId, required this.username});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chatState = ref.watch(chatNotifierProvider(roomId));
+    final chatNotifier = ref.read(chatNotifierProvider(roomId).notifier);
+
+    return Column(
+      children: [
+        if (chatState.isLoadingHistory) const LinearProgressIndicator(),
+        Expanded(
+          child: ChatMessagesList(
+            messages: chatState.messages,
+            currentUsername: username,
+          ),
+        ),
+        ChatInput(
+          isConnected: chatState.isConnected,
+          onSend: (content) {
+            chatNotifier.sendMessage(roomId: roomId, content: content);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lobby placeholder — shown when no room is selected
+// ---------------------------------------------------------------------------
+class _LobbyPlaceholder extends StatelessWidget {
+  const _LobbyPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.chat_bubble_outline, size: 64, color: colorScheme.outline),
+          const SizedBox(height: 16),
+          Text(
+            '채팅방을 선택하거나 새로 만드세요',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '왼쪽 사이드바에서 + 버튼으로 채팅방을 만들 수 있습니다',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.outline,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }

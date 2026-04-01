@@ -17,7 +17,6 @@ final chatRoomsProvider =
 
 class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
   final DioClient _dioClient;
-  static const _defaultRoomIds = ['general', 'tech', 'random'];
 
   ChatRoomsNotifier(this._dioClient) : super(const AsyncValue.loading()) {
     fetchRooms();
@@ -41,21 +40,9 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
           list
               .map((e) => ChatRoom.fromJson(e as Map<String, dynamic>))
               .toList();
-      if (rooms.isEmpty) {
-        state = AsyncValue.data(
-          _defaultRoomIds
-              .map((id) => ChatRoom(id: id, name: id, participantCount: 0))
-              .toList(),
-        );
-      } else {
-        state = AsyncValue.data(rooms);
-      }
-    } catch (_) {
-      state = AsyncValue.data(
-        _defaultRoomIds
-            .map((id) => ChatRoom(id: id, name: id, participantCount: 0))
-            .toList(),
-      );
+      state = AsyncValue.data(rooms);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 

@@ -213,7 +213,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${DB_USER:-chatflow}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      CHATFLOW_ALLOWED_ORIGINS: "*"
+      CHATFLOW_ALLOWED_ORIGINS: "https://app.chatflow.ai.kr,https://chatflow.ai.kr,http://43.201.22.86"
       VALKEY_HOST: valkey
       VALKEY_PORT: 6379
       FIREBASE_SERVICE_ACCOUNT_PATH: file:/app/config/firebase-service-account.json

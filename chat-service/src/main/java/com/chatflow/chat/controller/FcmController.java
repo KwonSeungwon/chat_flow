@@ -4,6 +4,8 @@ import com.chatflow.chat.service.FcmNotificationService;
 import com.chatflow.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +43,7 @@ public class FcmController {
 
     @Data
     public static class SubscribeRequest {
-        @NotBlank private String token;
-        @NotBlank private String roomId;
+        @NotBlank @Size(min = 100, max = 300) private String token;
+        @NotBlank @Pattern(regexp = "^[a-zA-Z0-9\\-]{1,64}$") private String roomId;
     }
 }

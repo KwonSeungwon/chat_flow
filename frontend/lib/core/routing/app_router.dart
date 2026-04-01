@@ -24,13 +24,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/chat',
-        builder: (context, state) => const ChatPage(roomId: 'general'),
+        builder: (context, state) => const ChatPage(),
         routes: [
           GoRoute(
             path: ':roomId',
-            builder: (context, state) => ChatPage(
-              roomId: state.pathParameters['roomId'] ?? 'general',
-            ),
+            builder: (context, state) {
+              final roomId = state.pathParameters['roomId'];
+              return roomId != null ? ChatPage(roomId: roomId) : const ChatPage();
+            },
           ),
         ],
       ),
