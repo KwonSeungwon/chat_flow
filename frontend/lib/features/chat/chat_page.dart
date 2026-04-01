@@ -17,6 +17,15 @@ class ChatPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
+
+    // Reactive auth guard — redirects to login on 401 or token expiry
+    if (!auth.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('/login');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final themeMode = ref.watch(themeModeProvider);
     final isWide = MediaQuery.of(context).size.width >= 600;
     final effectiveRoomId = roomId;

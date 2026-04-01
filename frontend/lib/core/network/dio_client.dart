@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,9 +11,10 @@ class DioClient {
   late final Dio _dio;
   static const _storage = FlutterSecureStorage();
 
+  /// Called when a 401 response is received — auth provider hooks this to reset state.
+  VoidCallback? onUnauthorized;
+
   DioClient() {
-    // On web: derive origin from current page URL (works for any domain/IP)
-    // On native: fall back to .env or default
     final baseUrl = kIsWeb
         ? _webOrigin()
         : (dotenv.env['API_BASE_URL'] ?? 'http://43.201.22.86:8000');
@@ -34,7 +36,7 @@ class DioClient {
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
           await _storage.deleteAll();
-          // Signal 401 to providers
+          onUnauthorized?.call();
         }
         return handler.next(error);
       },

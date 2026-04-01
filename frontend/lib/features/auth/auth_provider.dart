@@ -42,6 +42,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _storage = FlutterSecureStorage();
 
   AuthNotifier(this._dioClient) : super(const AuthState()) {
+    _dioClient.onUnauthorized = () => state = const AuthState();
     _hydrate();
   }
 
