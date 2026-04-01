@@ -47,5 +47,8 @@ app.*.map.json
 # APK binary (served from web/ but too large for git — copy manually before Docker build)
 web/chatflow-app.apk
 
+# Firebase — contains API keys, do not commit (add to each dev machine manually)
+android/app/google-services.json
+
 # OMC working state
 .omc/
