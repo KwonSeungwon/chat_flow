@@ -8,11 +8,19 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, String> {
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM ChatMessageEntity m WHERE m.timestamp < :cutoff")
+    int deleteMessagesOlderThan(@Param("cutoff") LocalDateTime cutoff);
     Page<ChatMessageEntity> findByChatRoomIdOrderByTimestampDesc(String chatRoomId, Pageable pageable);
 
     @Query("SELECT m FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp < :cursor ORDER BY m.timestamp DESC")
