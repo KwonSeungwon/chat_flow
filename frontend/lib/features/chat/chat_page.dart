@@ -7,6 +7,7 @@ import 'chat_provider.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
+import 'widgets/create_room_dialog.dart';
 
 class ChatPage extends ConsumerWidget {
   final String? roomId;
@@ -20,36 +21,45 @@ class ChatPage extends ConsumerWidget {
     final isWide = MediaQuery.of(context).size.width >= 600;
     final effectiveRoomId = roomId;
 
-    final roomDisplayName = effectiveRoomId != null
-        ? ref.watch(chatRoomsProvider).maybeWhen(
+    // Room info for AppBar
+    final roomData = effectiveRoomId != null
+        ? ref.watch(chatRoomsProvider).whenOrNull(
               data: (rooms) {
                 final match = rooms.where((r) => r.id == effectiveRoomId);
-                return match.isNotEmpty ? match.first.name : effectiveRoomId;
+                return match.isNotEmpty ? match.first : null;
               },
-              orElse: () => effectiveRoomId,
             )
-        : 'ChatFlow';
+        : null;
+    final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'ChatFlow';
 
     return Scaffold(
       appBar: AppBar(
-        leading:
-            isWide
-                ? null
-                : Builder(
-                  builder: (ctx) => IconButton(
-                    icon: const Icon(Icons.menu),
-                    onPressed: () => Scaffold.of(ctx).openDrawer(),
-                  ),
+        leading: isWide
+            ? null
+            : Builder(
+                builder: (ctx) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
                 ),
+              ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(roomDisplayName),
+            Flexible(
+              child: Text(roomDisplayName, overflow: TextOverflow.ellipsis),
+            ),
             if (effectiveRoomId != null) ...[
               const SizedBox(width: 8),
               _ConnectionDot(
                 connected: ref.watch(chatNotifierProvider(effectiveRoomId)).isConnected,
               ),
+              if (roomData != null) ...[
+                const SizedBox(width: 10),
+                _ParticipantBadge(
+                  count: roomData.participantCount,
+                  max: roomData.maxParticipants,
+                ),
+              ],
             ],
           ],
         ),
@@ -93,34 +103,59 @@ class ChatPage extends ConsumerWidget {
           ),
         ],
       ),
-      drawer:
-          isWide
-              ? null
-              : Drawer(
-                child: SafeArea(
-                  child: ChatRoomSidebar(
-                    currentRoomId: effectiveRoomId ?? '',
-                    onRoomSelected: () => Navigator.of(context).pop(),
-                  ),
+      drawer: isWide
+          ? null
+          : Drawer(
+              child: SafeArea(
+                child: ChatRoomSidebar(
+                  currentRoomId: effectiveRoomId ?? '',
+                  onRoomSelected: () => Navigator.of(context).pop(),
                 ),
               ),
+            ),
       body: Row(
         children: [
-          if (isWide)
-            ChatRoomSidebar(currentRoomId: effectiveRoomId ?? ''),
-          if (isWide)
-            const VerticalDivider(width: 1, thickness: 1),
+          if (isWide) ChatRoomSidebar(currentRoomId: effectiveRoomId ?? ''),
+          if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
             child: effectiveRoomId != null
-                ? _ChatRoomContent(
-                    roomId: effectiveRoomId,
-                    username: auth.username,
-                  )
+                ? _ChatRoomContent(roomId: effectiveRoomId, username: auth.username)
                 : const _LobbyPlaceholder(),
           ),
         ],
       ),
       resizeToAvoidBottomInset: true,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Participant badge in AppBar
+// ---------------------------------------------------------------------------
+class _ParticipantBadge extends StatelessWidget {
+  final int count;
+  final int max;
+  const _ParticipantBadge({required this.count, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(40),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.people_outline, size: 14, color: Colors.white70),
+          const SizedBox(width: 4),
+          Text(
+            '$count/$max',
+            style: const TextStyle(fontSize: 12, color: Colors.white70),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -169,25 +204,53 @@ class _LobbyPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.chat_bubble_outline, size: 64, color: colorScheme.outline),
-          const SizedBox(height: 16),
-          Text(
-            '채팅방을 선택하거나 새로 만드세요',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '왼쪽 사이드바에서 + 버튼으로 채팅방을 만들 수 있습니다',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.outline,
-                ),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withAlpha(80),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.forum_outlined,
+                size: 48,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              '채팅을 시작하세요',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '채팅방을 선택하거나 새로 만들어\n대화를 시작할 수 있습니다',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => const CreateRoomDialog(),
+                );
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('새 채팅방 만들기'),
+            ),
+          ],
+        ),
       ),
     );
   }
