@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/stomp_service.dart';
+import '../../core/services/fcm_service.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/chat_room.dart';
 import '../auth/auth_provider.dart';
@@ -171,6 +172,22 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         }
       },
     );
+
+    // Subscribe FCM token to room topic for push notifications (fire & forget)
+    _subscribeFcmToRoom(roomId);
+  }
+
+  Future<void> _subscribeFcmToRoom(String roomId) async {
+    try {
+      final token = await FcmService.getToken();
+      if (token == null) return;
+      await _dioClient.dio.post('/api/fcm/subscribe', data: {
+        'token': token,
+        'roomId': roomId,
+      });
+    } catch (_) {
+      // Best-effort — FCM failure must not interrupt room join
+    }
   }
 
   void _onMessage(Map<String, dynamic> rawMsg) {
