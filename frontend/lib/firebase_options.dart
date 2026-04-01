@@ -29,10 +29,9 @@ class DefaultFirebaseOptions {
     storageBucket: 'chatflow-e9596.firebasestorage.app',
   );
 
-  // To enable web: Register a Web app in Firebase Console and replace appId.
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyC9-9ROdtCkb2oxnMViAT_yfHghbtoN9TU',
-    appId: '1:1004331287506:web:REPLACE_WITH_WEB_APP_ID',
+    appId: '1:1004331287506:web:86b5777c3a965d67b57e0b',
     messagingSenderId: '1004331287506',
     projectId: 'chatflow-e9596',
     authDomain: 'chatflow-e9596.firebaseapp.com',

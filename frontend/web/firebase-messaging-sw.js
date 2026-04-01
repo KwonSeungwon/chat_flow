@@ -10,7 +10,7 @@ firebase.initializeApp({
   projectId: 'chatflow-e9596',
   storageBucket: 'chatflow-e9596.firebasestorage.app',
   messagingSenderId: '1004331287506',
-  appId: '1:1004331287506:web:REPLACE_WITH_WEB_APP_ID',
+  appId: '1:1004331287506:web:86b5777c3a965d67b57e0b',
 });
 
 const messaging = firebase.messaging();
