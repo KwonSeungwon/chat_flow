@@ -19,6 +19,7 @@ class ChatMessagesList extends StatefulWidget {
 class _ChatMessagesListState extends State<ChatMessagesList> {
   final _scrollController = ScrollController();
   bool _autoScroll = true;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -28,8 +29,13 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
       final atBottom =
           _scrollController.offset >=
           _scrollController.position.maxScrollExtent - 80;
-      if (_autoScroll != atBottom) {
-        _autoScroll = atBottom;
+      if (atBottom && !_autoScroll) {
+        setState(() {
+          _autoScroll = true;
+          _unreadCount = 0;
+        });
+      } else if (!atBottom && _autoScroll) {
+        _autoScroll = false;
       }
     });
   }
@@ -37,10 +43,13 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   @override
   void didUpdateWidget(covariant ChatMessagesList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.messages.length > oldWidget.messages.length && _autoScroll) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
-      });
+    if (widget.messages.length > oldWidget.messages.length) {
+      if (_autoScroll) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      } else {
+        final newCount = widget.messages.length - oldWidget.messages.length;
+        setState(() => _unreadCount += newCount);
+      }
     }
   }
 
@@ -51,6 +60,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
+      setState(() => _unreadCount = 0);
     }
   }
 
@@ -89,29 +99,77 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
       );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: widget.messages.length,
-      itemBuilder: (context, index) {
-        final msg = widget.messages[index];
-        final type = msg.type.toUpperCase();
+    return Stack(
+      children: [
+        ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          itemCount: widget.messages.length,
+          itemBuilder: (context, index) {
+            final msg = widget.messages[index];
+            final type = msg.type.toUpperCase();
 
-        if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
-          return _SystemBubble(msg: msg);
-        }
+            if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
+              return _SystemBubble(msg: msg);
+            }
 
-        if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
-          return _AiSummaryCard(msg: msg);
-        }
+            if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
+              return _AiSummaryCard(msg: msg);
+            }
 
-        final isMine = msg.username == widget.currentUsername;
-        return _ChatBubble(
-          msg: msg,
-          isMine: isMine,
-          time: _formatTimestamp(msg.timestamp),
-        );
-      },
+            final isMine = msg.username == widget.currentUsername;
+            return _ChatBubble(
+              msg: msg,
+              isMine: isMine,
+              time: _formatTimestamp(msg.timestamp),
+            );
+          },
+        ),
+
+        // "새 메시지" scroll-to-bottom button
+        if (_unreadCount > 0)
+          Positioned(
+            bottom: 12,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(20),
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: _scrollToBottom,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.arrow_downward,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '새 메시지 $_unreadCount개',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -176,11 +234,7 @@ class _AiSummaryCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.smart_toy,
-                    size: 18,
-                    color: colorScheme.primary,
-                  ),
+                  Icon(Icons.smart_toy, size: 18, color: colorScheme.primary),
                   const SizedBox(width: 6),
                   Text(
                     'AI 대화 요약',

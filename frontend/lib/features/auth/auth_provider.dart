@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,7 +7,6 @@ class AuthState {
   final String? token;
   final String? userId;
   final String username;
-  final bool isGuest;
   final bool isLoading;
   final String? error;
 
@@ -16,7 +14,6 @@ class AuthState {
     this.token,
     this.userId,
     this.username = '',
-    this.isGuest = false,
     this.isLoading = false,
     this.error,
   });
@@ -27,7 +24,6 @@ class AuthState {
     String? token,
     String? userId,
     String? username,
-    bool? isGuest,
     bool? isLoading,
     String? error,
   }) {
@@ -35,7 +31,6 @@ class AuthState {
       token: token ?? this.token,
       userId: userId ?? this.userId,
       username: username ?? this.username,
-      isGuest: isGuest ?? this.isGuest,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -54,13 +49,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final token = await _storage.read(key: 'chatflow-token');
     final userId = await _storage.read(key: 'chatflow-userId');
     final username = await _storage.read(key: 'chatflow-username');
-    final isGuest = await _storage.read(key: 'chatflow-isGuest') == 'true';
     if (token != null) {
       state = AuthState(
         token: token,
         userId: userId,
         username: username ?? '',
-        isGuest: isGuest,
       );
     }
   }
@@ -74,17 +67,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      await _saveCredentials(
-        token: token,
-        userId: userId,
-        username: username,
-        isGuest: false,
-      );
+      await _saveCredentials(token: token, userId: userId, username: username);
       state = AuthState(token: token, userId: userId, username: username);
-    } catch (e) {
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      final msg = code == 401
+          ? '아이디 또는 비밀번호가 올바르지 않습니다.'
+          : '로그인 실패. 잠시 후 다시 시도해주세요.';
+      state = state.copyWith(isLoading: false, error: msg);
+    } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        error: '로그인 실패. 아이디/비밀번호를 확인해주세요.',
+        error: '로그인 실패. 네트워크를 확인해주세요.',
       );
     }
   }
@@ -98,63 +92,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      await _saveCredentials(
-        token: token,
-        userId: userId,
-        username: username,
-        isGuest: false,
-      );
+      await _saveCredentials(token: token, userId: userId, username: username);
       state = AuthState(token: token, userId: userId, username: username);
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: '회원가입 실패. 이미 사용 중인 아이디일 수 있습니다.',
-      );
-    }
-  }
-
-  Future<void> guestLogin() async {
-    state = state.copyWith(isLoading: true, error: null);
-    await _doGuestRegister(0);
-  }
-
-  Future<void> _doGuestRegister(int retryCount) async {
-    // Timestamp (13 digits) + 4-digit secure random → collision probability ≈ 0
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final rand = Random.secure().nextInt(9000) + 1000;
-    final username = 'Guest_$ts$rand';
-    final password = 'gp_${ts}_$rand';
-    try {
-      final resp = await _dioClient.dio.post(
-        '/api/auth/register',
-        data: {'username': username, 'password': password},
-      );
-      final token = resp.data['token'] as String;
-      final userId = resp.data['userId']?.toString() ?? '';
-      await _saveCredentials(
-        token: token,
-        userId: userId,
-        username: username,
-        isGuest: true,
-      );
-      state = AuthState(
-        token: token,
-        userId: userId,
-        username: username,
-        isGuest: true,
-      );
     } on DioException catch (e) {
-      // 400 = duplicate username (near-impossible but retry once)
-      if (e.response?.statusCode == 400 && retryCount < 2) {
-        return _doGuestRegister(retryCount + 1);
-      }
       final code = e.response?.statusCode;
-      final msg = code != null
-          ? '서버 오류 ($code). 잠시 후 다시 시도해주세요.'
-          : '네트워크 오류. 인터넷 연결을 확인해주세요.';
+      final msg = code == 400
+          ? '이미 사용 중인 아이디입니다.'
+          : '회원가입 실패. 잠시 후 다시 시도해주세요.';
       state = state.copyWith(isLoading: false, error: msg);
     } catch (_) {
-      state = state.copyWith(isLoading: false, error: '게스트 로그인 실패. 다시 시도해주세요.');
+      state = state.copyWith(
+        isLoading: false,
+        error: '회원가입 실패. 네트워크를 확인해주세요.',
+      );
     }
   }
 
@@ -170,12 +120,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String token,
     required String userId,
     required String username,
-    required bool isGuest,
   }) async {
     await _storage.write(key: 'chatflow-token', value: token);
     await _storage.write(key: 'chatflow-userId', value: userId);
     await _storage.write(key: 'chatflow-username', value: username);
-    await _storage.write(key: 'chatflow-isGuest', value: isGuest.toString());
   }
 }
 

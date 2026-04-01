@@ -60,21 +60,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
     }
   }
 
-  Future<void> _guestLogin() async {
-    await ref.read(authProvider.notifier).guestLogin();
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Navigate on auth success
     ref.listen<AuthState>(authProvider, (prev, next) {
-      if (next.isAuthenticated) {
-        context.go('/chat');
-      }
+      if (next.isAuthenticated) context.go('/chat');
     });
 
     return Scaffold(
@@ -87,11 +80,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo
-                Icon(
-                  Icons.chat_bubble_rounded,
-                  size: 64,
-                  color: colorScheme.primary,
-                ),
+                Icon(Icons.chat_bubble_rounded, size: 64, color: colorScheme.primary),
                 const SizedBox(height: 12),
                 Text(
                   'ChatFlow',
@@ -109,7 +98,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                 ),
                 const SizedBox(height: 32),
 
-                // Tab bar
+                // Auth card
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -125,8 +114,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
                           ],
                         ),
                         const SizedBox(height: 24),
-
-                        // Form
                         Form(
                           key: _formKey,
                           child: Column(
@@ -159,19 +146,15 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                           ? Icons.visibility_off
                                           : Icons.visibility,
                                     ),
-                                    onPressed:
-                                        () => setState(
-                                          () =>
-                                              _obscurePassword =
-                                                  !_obscurePassword,
-                                        ),
+                                    onPressed: () => setState(
+                                      () => _obscurePassword = !_obscurePassword,
+                                    ),
                                   ),
                                 ),
                                 obscureText: _obscurePassword,
-                                textInputAction:
-                                    _isRegister
-                                        ? TextInputAction.next
-                                        : TextInputAction.done,
+                                textInputAction: _isRegister
+                                    ? TextInputAction.next
+                                    : TextInputAction.done,
                                 onFieldSubmitted:
                                     _isRegister ? null : (_) => _submit(),
                                 validator: (v) {
@@ -181,8 +164,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                   return null;
                                 },
                               ),
-
-                              // Confirm password (register only)
                               if (_isRegister) ...[
                                 const SizedBox(height: 16),
                                 TextFormField(
@@ -196,12 +177,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                             ? Icons.visibility_off
                                             : Icons.visibility,
                                       ),
-                                      onPressed:
-                                          () => setState(
-                                            () =>
-                                                _obscureConfirm =
-                                                    !_obscureConfirm,
-                                          ),
+                                      onPressed: () => setState(
+                                        () => _obscureConfirm = !_obscureConfirm,
+                                      ),
                                     ),
                                   ),
                                   obscureText: _obscureConfirm,
@@ -215,11 +193,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                   },
                                 ),
                               ],
-                              const SizedBox(height: 8),
-
-                              // Error
                               if (auth.error != null) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 12),
                                 Text(
                                   auth.error!,
                                   style: TextStyle(
@@ -228,27 +203,22 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 16),
-
-                              // Submit button
+                              const SizedBox(height: 20),
                               SizedBox(
                                 width: double.infinity,
                                 height: 48,
                                 child: FilledButton(
                                   onPressed: auth.isLoading ? null : _submit,
-                                  child:
-                                      auth.isLoading
-                                          ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                          : Text(
-                                            _isRegister ? '회원가입' : '로그인',
+                                  child: auth.isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
                                           ),
+                                        )
+                                      : Text(_isRegister ? '회원가입' : '로그인'),
                                 ),
                               ),
                             ],
@@ -258,40 +228,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Divider
-                Row(
-                  children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        '또는',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const Expanded(child: Divider()),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Guest login
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    onPressed: auth.isLoading ? null : _guestLogin,
-                    icon: const Icon(Icons.person_add_outlined),
-                    label: const Text('게스트로 시작하기'),
-                  ),
-                ),
 
                 // Android download (web only)
                 if (kIsWeb) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     height: 48,

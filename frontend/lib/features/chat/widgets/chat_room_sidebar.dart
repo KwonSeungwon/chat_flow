@@ -182,10 +182,19 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                                   ),
                                 )
                                 : null,
-                        onTap: () {
-                          context.go('/chat/${room.id}');
-                          widget.onRoomSelected?.call();
-                        },
+                        onTap: room.isFull
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('이 채팅방은 만석입니다 (최대 10명)'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            : () {
+                                context.go('/chat/${room.id}');
+                                widget.onRoomSelected?.call();
+                              },
                       ),
                     );
                   },

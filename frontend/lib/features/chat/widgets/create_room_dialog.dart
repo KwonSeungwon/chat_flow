@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../chat_provider.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
@@ -45,13 +46,16 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isCreating = true);
     try {
-      await ref.read(chatRoomsProvider.notifier).createRoom(
+      final roomId = await ref.read(chatRoomsProvider.notifier).createRoom(
         name: _nameCtrl.text.trim(),
         description:
             _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         color: _presetColors[_selectedColorIndex],
       );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+        if (roomId != null) context.go('/chat/$roomId');
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -46,21 +46,24 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     }
   }
 
-  Future<void> createRoom({
+  /// Creates a room and returns its ID for navigation.
+  Future<String?> createRoom({
     required String name,
     String? description,
     String? color,
   }) async {
-    try {
-      await _dioClient.dio.post('/api/chat/rooms', data: {
-        'name': name,
-        if (description != null) 'description': description,
-        if (color != null) 'color': color,
-      });
-      await fetchRooms();
-    } catch (_) {
-      rethrow;
+    final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
+      'name': name,
+      if (description != null) 'description': description,
+      if (color != null) 'color': color,
+    });
+    await fetchRooms();
+    // Extract room ID from response
+    final data = resp.data;
+    if (data is Map) {
+      return (data['data']?['id'] ?? data['id'])?.toString();
     }
+    return null;
   }
 }
 
