@@ -131,6 +131,10 @@ frontend/release/
 *.key
 *.crt
 
+# Firebase service account (contains private key — never commit)
+firebase-service-account.json
+**/firebase-service-account.json
+
 # Local environment files
 .env
 .env.local

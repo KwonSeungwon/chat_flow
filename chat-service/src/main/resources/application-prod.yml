@@ -74,6 +74,9 @@ spring:
 chatflow:
   allowed-origins: "http://app.chatflow.ai.kr,https://app.chatflow.ai.kr,http://chatflow.ai.kr,https://chatflow.ai.kr,http://43.201.22.86,http://localhost:3000,http://localhost:8000"
 
+firebase:
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:classpath:firebase-service-account.json}
+
 management:
   endpoints:
     web:

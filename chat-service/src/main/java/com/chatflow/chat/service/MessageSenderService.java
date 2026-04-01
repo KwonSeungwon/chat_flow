@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -14,10 +15,14 @@ import java.util.UUID;
 public class MessageSenderService {
 
     private final ChatPersistenceService chatPersistenceService;
+    private final FcmNotificationService fcmNotificationService;
     private final Counter messageCounter;
 
-    public MessageSenderService(ChatPersistenceService chatPersistenceService, MeterRegistry registry) {
+    public MessageSenderService(ChatPersistenceService chatPersistenceService,
+                                FcmNotificationService fcmNotificationService,
+                                MeterRegistry registry) {
         this.chatPersistenceService = chatPersistenceService;
+        this.fcmNotificationService = fcmNotificationService;
         this.messageCounter = Counter.builder("chatflow.messages.processed")
                 .description("Total chat messages processed")
                 .register(registry);
@@ -35,6 +40,11 @@ public class MessageSenderService {
         String aiTopic = shouldRequestAISummary(message) ? AI_SUMMARY_TOPIC : null;
         chatPersistenceService.persistMessageAndPublish(message, CHAT_TOPIC, "MESSAGE_SENT", aiTopic);
         messageCounter.increment();
+
+        if (MessageType.CHAT.equals(message.getType())) {
+            fcmNotificationService.sendMessageNotification(
+                message.getChatRoomId(), message.getUsername(), message.getContent());
+        }
     }
 
     private boolean shouldRequestAISummary(ChatMessage message) {

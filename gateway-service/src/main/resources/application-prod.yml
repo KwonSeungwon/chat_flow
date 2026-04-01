@@ -24,6 +24,15 @@ spring:
                 backoff:
                   firstBackoff: 50ms
                   maxBackoff: 500ms
+        - id: fcm-service
+          uri: ${CHAT_SERVICE_URL}
+          predicates:
+            - Path=/api/fcm/**
+          filters:
+            - name: Retry
+              args:
+                retries: 2
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
         - id: ai-summary-service
           uri: ${AI_SUMMARY_SERVICE_URL}
           predicates:
