@@ -7,12 +7,14 @@ class SearchState {
   final int total;
   final bool isLoading;
   final bool hasSearched;
+  final String? error;
 
   const SearchState({
     this.results = const [],
     this.total = 0,
     this.isLoading = false,
     this.hasSearched = false,
+    this.error,
   });
 
   SearchState copyWith({
@@ -20,12 +22,15 @@ class SearchState {
     int? total,
     bool? isLoading,
     bool? hasSearched,
+    String? error,
+    bool clearError = false,
   }) {
     return SearchState(
       results: results ?? this.results,
       total: total ?? this.total,
       isLoading: isLoading ?? this.isLoading,
       hasSearched: hasSearched ?? this.hasSearched,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -37,7 +42,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
 
   Future<void> search(String query) async {
     if (query.trim().isEmpty) return;
-    state = state.copyWith(isLoading: true, hasSearched: true);
+    state = state.copyWith(isLoading: true, hasSearched: true, clearError: true);
     try {
       final resp = await _dioClient.dio.get(
         '/api/search/korean',
@@ -61,7 +66,12 @@ class SearchNotifier extends StateNotifier<SearchState> {
         isLoading: false,
       );
     } catch (_) {
-      state = state.copyWith(results: [], total: 0, isLoading: false);
+      state = state.copyWith(
+        results: [],
+        total: 0,
+        isLoading: false,
+        error: '검색에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }
 

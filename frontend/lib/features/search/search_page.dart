@@ -25,6 +25,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final q = _queryCtrl.text.trim();
     if (q.isEmpty) return;
     ref.read(searchProvider.notifier).search(q);
+    FocusScope.of(context).unfocus();
   }
 
   String _formatTimestamp(String timestamp) {
@@ -83,6 +84,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    ref.listen<SearchState>(searchProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.error!), duration: const Duration(seconds: 3)),
+        );
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -108,14 +117,23 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   child: TextField(
                     controller: _queryCtrl,
                     decoration: InputDecoration(
-                      hintText: '검색어를 입력하세요',
-                      prefixIcon: const Icon(Icons.search, size: 20),
+                      hintText: '한국어로 검색하세요',
+                      prefixIcon: Icon(Icons.search, size: 20,
+                          color: colorScheme.onSurfaceVariant),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerHighest,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(color: colorScheme.outline),
                       ),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest.withAlpha(120),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide(color: colorScheme.outline),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+                      ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 10,
@@ -277,12 +295,20 @@ class _SearchResultTile extends StatelessWidget {
                 color: colorScheme.secondaryContainer,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
-                msg.chatRoomId,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: colorScheme.onSecondaryContainer,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.forum_outlined,
+                      size: 10, color: colorScheme.onSecondaryContainer),
+                  const SizedBox(width: 3),
+                  Text(
+                    '채팅방',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

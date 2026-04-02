@@ -72,6 +72,8 @@ spring:
               - "https://*.tistory.com"
               - "http://43.201.22.86"
               - "http://43.201.22.86:*"
+              - "http://43.201.94.100"
+              - "http://43.201.94.100:*"
             allowedMethods: 
               - GET
               - POST
