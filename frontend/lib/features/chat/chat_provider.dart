@@ -159,7 +159,13 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
               .toList()
               .reversed
               .toList();
-      state = state.copyWith(messages: history, isLoadingHistory: false);
+      // Merge history with any live STOMP messages already received
+      final live = state.messages;
+      final merged = [...history, ...live];
+      final seen = <String>{};
+      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
+      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      state = state.copyWith(messages: deduped, isLoadingHistory: false);
     } catch (_) {
       state = state.copyWith(isLoadingHistory: false);
     }

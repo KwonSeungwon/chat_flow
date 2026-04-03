@@ -99,14 +99,23 @@
       "username": {
         "type": "keyword"
       },
-      "room_id": {
+      "chatRoomId": {
+        "type": "keyword"
+      },
+      "userId": {
+        "type": "keyword"
+      },
+      "messageId": {
         "type": "keyword"
       },
       "timestamp": {
         "type": "date"
       },
-      "message_type": {
+      "messageType": {
         "type": "keyword"
+      },
+      "isAiGenerated": {
+        "type": "boolean"
       }
     }
   }
