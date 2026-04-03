@@ -33,7 +33,7 @@ public class SecurityConfig {
                         })
                 )
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/api/auth/**").permitAll()
+                        .pathMatchers("/api/auth/**", "/api/chat/auth/**").permitAll()
                         .pathMatchers("/ws/**").permitAll()
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
                         .pathMatchers("/actuator/**").permitAll()
