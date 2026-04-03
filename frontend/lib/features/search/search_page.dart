@@ -102,62 +102,38 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       ),
       body: Column(
         children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(12),
+          // Search bar — hardcoded colors for dark/light visibility
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            color: const Color(0xFF1E2130),
             child: Row(
               children: [
                 Expanded(
-                  child: SizedBox(
+                  child: Container(
                     height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2E42),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFF4A4E68), width: 1),
+                    ),
                     child: TextField(
                       controller: _queryCtrl,
                       autofocus: true,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: '검색어를 입력하세요...',
-                        hintStyle: TextStyle(
-                          color: colorScheme.onSurface.withAlpha(100),
-                          fontSize: 15,
-                        ),
+                        hintStyle: TextStyle(color: Color(0xFF8890A8), fontSize: 15),
                         prefixIcon: Padding(
-                          padding: const EdgeInsets.only(left: 12, right: 8),
-                          child: Icon(Icons.search, size: 22,
-                              color: colorScheme.onSurface.withAlpha(150)),
+                          padding: EdgeInsets.only(left: 14, right: 8),
+                          child: Icon(Icons.search, size: 22, color: Color(0xFF8890A8)),
                         ),
-                        prefixIconConstraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                        filled: true,
-                        fillColor: colorScheme.onSurface.withAlpha(20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide(
-                            color: colorScheme.onSurface.withAlpha(60),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide(
-                            color: colorScheme.onSurface.withAlpha(60),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide(
-                            color: colorScheme.primary,
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
+                        prefixIconConstraints: BoxConstraints(minWidth: 44, minHeight: 44),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 14),
                       ),
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 15,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      cursorColor: Colors.white,
                       textInputAction: TextInputAction.search,
                       onSubmitted: (_) => _doSearch(),
                     ),
@@ -166,28 +142,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 const SizedBox(width: 10),
                 SizedBox(
                   height: 48,
-                  child: FilledButton.icon(
+                  child: ElevatedButton(
                     onPressed: searchState.isLoading ? null : _doSearch,
-                    icon: searchState.isLoading
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.search, size: 18),
-                    label: const Text('검색', style: TextStyle(fontSize: 15)),
-                    style: FilledButton.styleFrom(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
+                      elevation: 0,
                     ),
+                    child: searchState.isLoading
+                        ? const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('검색', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: colorScheme.onSurface.withAlpha(30)),
 
           // Results
           Expanded(

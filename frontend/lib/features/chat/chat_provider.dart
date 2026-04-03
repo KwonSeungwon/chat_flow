@@ -247,7 +247,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final resp = await _dioClient.dio
           .post('/api/ai-summary/request', data: {'chatRoomId': roomId});
       final data = resp.data;
-      if (data is Map && data['status'] != null && data['status'] != 200) {
+      if (data is Map && data['success'] == false) {
         return data['message']?.toString() ?? '요약할 메시지가 충분하지 않습니다.';
       }
       return ''; // success
