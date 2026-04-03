@@ -61,15 +61,25 @@ public class AiSummaryService {
     }
 
     @KafkaListener(topics = "ai-summary-requests")
-    public void handleSummaryRequest(ChatMessage message) {
-        log.info("Received summary request for room: {}", message.getChatRoomId());
-        addMessageAndCheckTrigger(message);
+    public void handleSummaryRequest(String messageJson) {
+        try {
+            ChatMessage message = objectMapper.readValue(messageJson, ChatMessage.class);
+            log.info("Received summary request for room: {}", message.getChatRoomId());
+            addMessageAndCheckTrigger(message);
+        } catch (JsonProcessingException e) {
+            log.error("요약 요청 메시지 역직렬화 실패", e);
+        }
     }
 
     @KafkaListener(topics = "chat-messages")
-    public void handleChatMessage(ChatMessage message) {
-        log.debug("Storing message for potential summary: {}", message.getMessageId());
-        addMessageAndCheckTrigger(message);
+    public void handleChatMessage(String messageJson) {
+        try {
+            ChatMessage message = objectMapper.readValue(messageJson, ChatMessage.class);
+            log.debug("Storing message for potential summary: {}", message.getMessageId());
+            addMessageAndCheckTrigger(message);
+        } catch (JsonProcessingException e) {
+            log.error("채팅 메시지 역직렬화 실패", e);
+        }
     }
 
     private void addMessageAndCheckTrigger(ChatMessage message) {

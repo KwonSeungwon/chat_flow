@@ -3,6 +3,8 @@ package com.chatflow.search.service;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.repository.ChatMessageSearchRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
@@ -33,19 +35,29 @@ public class SearchService {
     private static final int MAX_RETRY_COUNT = 3;
 
     private final ChatMessageSearchRepository searchRepository;
+    private final ObjectMapper objectMapper;
     private final List<ChatMessageDocument> buffer = new ArrayList<>();
     private final ReentrantLock bufferLock = new ReentrantLock();
     private int consecutiveFailures = 0;
 
-    public SearchService(ChatMessageSearchRepository searchRepository, MeterRegistry registry) {
+    public SearchService(ChatMessageSearchRepository searchRepository, ObjectMapper objectMapper, MeterRegistry registry) {
         this.searchRepository = searchRepository;
+        this.objectMapper = objectMapper;
         Gauge.builder("chatflow.search.buffer.size", buffer, List::size)
                 .description("Search indexing buffer size")
                 .register(registry);
     }
 
     @KafkaListener(topics = {"chat-messages", "ai-summaries"})
-    public void indexChatMessage(ChatMessage message) {
+    public void indexChatMessage(String messageJson) {
+        ChatMessage message;
+        try {
+            message = objectMapper.readValue(messageJson, ChatMessage.class);
+        } catch (JsonProcessingException e) {
+            log.error("Kafka 메시지 역직렬화 실패", e);
+            return;
+        }
+
         ChatMessageDocument document = ChatMessageDocument.builder()
                 .id(message.getMessageId())
                 .messageId(message.getMessageId())
