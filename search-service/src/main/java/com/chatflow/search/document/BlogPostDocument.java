@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(indexName = "blog_posts")
+@Document(indexName = "blog_posts", createIndex = false)
 public class BlogPostDocument {
 
     @Id

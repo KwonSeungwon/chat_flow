@@ -17,7 +17,7 @@ class DioClient {
   DioClient() {
     final baseUrl = kIsWeb
         ? _webOrigin()
-        : (dotenv.env['API_BASE_URL'] ?? 'http://43.201.22.86:8000');
+        : (dotenv.env['API_BASE_URL'] ?? 'http://43.201.94.100:8000');
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -35,7 +35,9 @@ class DioClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          await _storage.deleteAll();
+          await _storage.delete(key: 'chatflow-token');
+          await _storage.delete(key: 'chatflow-userId');
+          await _storage.delete(key: 'chatflow-username');
           onUnauthorized?.call();
         }
         return handler.next(error);

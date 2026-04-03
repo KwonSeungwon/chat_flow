@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/theme/app_theme.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
+  final bool isAiLoading;
   final void Function(String content) onSend;
+  final Future<void> Function(String question)? onAskAi;
 
   const ChatInput({
     super.key,
     required this.isConnected,
+    this.isAiLoading = false,
     required this.onSend,
+    this.onAskAi,
   });
 
   @override
@@ -16,9 +23,10 @@ class ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<ChatInput> {
   final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-  static const _maxLength = 1000;
+  final _focusNode  = FocusNode();
+  static const _maxLength     = 1000;
   static const _warnThreshold = 800;
+  bool _aiMode = false;
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -29,67 +37,101 @@ class _ChatInputState extends State<ChatInput> {
     '☕', '🍕', '🎵', '📝', '⏰', '🌟',
   ];
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || !widget.isConnected) return;
-    widget.onSend(text);
-    _controller.clear();
-    _focusNode.requestFocus();
+    if (_aiMode && widget.onAskAi != null) {
+      _controller.clear();
+      _focusNode.requestFocus();
+      try {
+        await widget.onAskAi!(text);
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('AI 답변을 가져오는데 실패했습니다.')),
+        );
+      }
+    } else {
+      widget.onSend(text);
+      _controller.clear();
+      _focusNode.requestFocus();
+    }
   }
 
   void _showEmojiSheet() {
+    final cs = Theme.of(context).colorScheme;
+    // Dismiss keyboard before showing sheet to avoid layout conflicts
+    FocusScope.of(context).unfocus();
+
     showModalBottomSheet(
       context: context,
-      builder: (ctx) {
-        return Container(
-          padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          padding: const EdgeInsets.all(20),
           height: 280,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cs.outline.withAlpha(60)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 '이모지',
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+                style: TextStyle(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Expanded(
                 child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 6,
                     mainAxisSpacing: 8,
                     crossAxisSpacing: 8,
                   ),
                   itemCount: _emojiList.length,
-                  itemBuilder: (_, i) {
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () {
-                        final current = _controller.text;
-                        if (current.length < _maxLength) {
-                          _controller.text = current + _emojiList[i];
-                          _controller.selection = TextSelection.fromPosition(
-                            TextPosition(offset: _controller.text.length),
-                          );
-                        }
-                        Navigator.of(ctx).pop();
-                        _focusNode.requestFocus();
-                      },
-                      child: Center(
-                        child: Text(
-                          _emojiList[i],
-                          style: const TextStyle(fontSize: 24),
-                        ),
-                      ),
-                    );
-                  },
+                  itemBuilder: (_, i) => InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      if (_controller.text.length < _maxLength) {
+                        final text = _controller.text;
+                        final sel = _controller.selection;
+                        final insertAt = (sel.baseOffset >= 0 &&
+                                sel.baseOffset <= text.length)
+                            ? sel.baseOffset
+                            : text.length;
+                        final newText = text.substring(0, insertAt) +
+                            _emojiList[i] +
+                            text.substring(
+                                sel.extentOffset >= 0 ? sel.extentOffset : text.length);
+                        _controller.value = TextEditingValue(
+                          text: newText,
+                          selection: TextSelection.collapsed(
+                              offset: insertAt + _emojiList[i].length),
+                        );
+                      }
+                      Navigator.of(ctx).pop();
+                      _focusNode.requestFocus();
+                    },
+                    child: Center(
+                      child: Text(
+                          _emojiList[i], style: const TextStyle(fontSize: 26)),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -102,14 +144,14 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: cs.surface,
         border: Border(
-          top: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+          top: BorderSide(color: cs.outline.withAlpha(60)),
         ),
       ),
       child: SafeArea(
@@ -117,7 +159,7 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Character counter
+            // Character counter (shows only near limit)
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _controller,
               builder: (_, value, __) {
@@ -133,10 +175,9 @@ class _ChatInputState extends State<ChatInput> {
                       '$remaining자 남음',
                       style: TextStyle(
                         fontSize: 11,
-                        color:
-                            remaining <= 0
-                                ? colorScheme.error
-                                : colorScheme.onSurfaceVariant,
+                        color: remaining <= 0
+                            ? AppColors.error
+                            : cs.onSurfaceVariant.withAlpha(150),
                       ),
                     ),
                   ),
@@ -147,75 +188,226 @@ class _ChatInputState extends State<ChatInput> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Emoji button
-                IconButton(
-                  icon: const Icon(Icons.emoji_emotions_outlined, size: 22),
-                  onPressed: widget.isConnected ? _showEmojiSheet : null,
-                  tooltip: '이모지',
-                ),
-
-                // Text field
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
+                // AI mode toggle
+                if (widget.onAskAi != null) ...[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _aiMode
+                          ? AppColors.secondary.withAlpha(30)
+                          : cs.surfaceContainer,
+                      border: Border.all(
+                        color: _aiMode ? AppColors.secondary : cs.outline,
+                        width: _aiMode ? 1.5 : 1,
+                      ),
+                    ),
+                    child: widget.isAiLoading
+                        ? Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          )
+                        : Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: widget.isConnected
+                                  ? () => setState(() {
+                                        _aiMode = !_aiMode;
+                                        _controller.clear();
+                                      })
+                                  : null,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Center(
+                                child: Text(
+                                  'AI',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _aiMode
+                                        ? AppColors.secondary
+                                        : widget.isConnected
+                                            ? cs.onSurfaceVariant
+                                            : cs.onSurfaceVariant.withAlpha(80),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // Emoji button (hidden in AI mode)
+                if (!_aiMode) ...[
+                  _CircleIconBtn(
+                    icon: Icons.emoji_emotions_outlined,
                     enabled: widget.isConnected,
-                    maxLines: 5,
-                    minLines: 1,
-                    maxLength: _maxLength,
-                    buildCounter: (
-                      context, {
-                      required currentLength,
-                      required isFocused,
-                      required maxLength,
-                    }) => null,
-                    textInputAction: TextInputAction.newline,
-                    decoration: InputDecoration(
-                      hintText:
-                          widget.isConnected
-                              ? '메시지를 입력하세요...'
-                              : '연결 중...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide.none,
+                    onTap: _showEmojiSheet,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+
+                // Text field (pill style)
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 120),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainer,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: cs.outline.withAlpha(80)),
+                    ),
+                    child: KeyboardListener(
+                      focusNode: FocusNode(),
+                      onKeyEvent: (event) {
+                        if (kIsWeb &&
+                            event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.enter &&
+                            !HardwareKeyboard.instance.isShiftPressed) {
+                          _send();
+                        }
+                      },
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        enabled: widget.isConnected,
+                        maxLines: 5,
+                        minLines: 1,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(_maxLength),
+                        ],
+                        textInputAction: kIsWeb
+                            ? TextInputAction.none
+                            : TextInputAction.newline,
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: !widget.isConnected
+                              ? '연결 중...'
+                              : _aiMode
+                                  ? 'AI에게 질문하세요...'
+                                  : '메시지를 입력하세요...',
+                          hintStyle: TextStyle(
+                              color: cs.onSurfaceVariant.withAlpha(130),
+                              fontSize: 14),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          isDense: true,
+                        ),
                       ),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest.withAlpha(
-                        120,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      isDense: true,
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
 
-                const SizedBox(width: 4),
-
-                // Send button
+                // Send button (animated fill on active)
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _controller,
                   builder: (_, value, __) {
-                    final canSend =
-                        widget.isConnected && value.text.trim().isNotEmpty;
-                    return IconButton(
-                      icon: Icon(
-                        Icons.send_rounded,
-                        color:
-                            canSend
-                                ? colorScheme.primary
-                                : colorScheme.onSurfaceVariant.withAlpha(100),
+                    final canSend = widget.isConnected &&
+                        value.text.trim().isNotEmpty &&
+                        !(_aiMode && widget.isAiLoading);
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: canSend
+                            ? AppColors.primary
+                            : cs.surfaceContainer,
+                        border: Border.all(
+                          color: canSend
+                              ? AppColors.primary
+                              : cs.outline,
+                        ),
+                        boxShadow: canSend
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.primary.withAlpha(70),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
                       ),
-                      onPressed: canSend ? _send : null,
-                      tooltip: '전송',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: canSend ? _send : null,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Icon(
+                            Icons.send_rounded,
+                            size: 18,
+                            color: canSend
+                                ? Colors.white
+                                : cs.onSurfaceVariant.withAlpha(130),
+                          ),
+                        ),
+                      ),
                     );
                   },
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CircleIconBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final bool active;
+  final VoidCallback onTap;
+  const _CircleIconBtn({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: active ? AppColors.secondary.withAlpha(30) : cs.surfaceContainer,
+        border: Border.all(
+          color: active ? AppColors.secondary : cs.outline,
+          width: active ? 1.5 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(20),
+          child: Icon(
+            icon,
+            size: 20,
+            color: active
+                ? AppColors.secondary
+                : enabled
+                    ? cs.onSurfaceVariant
+                    : cs.onSurfaceVariant.withAlpha(80),
+          ),
         ),
       ),
     );

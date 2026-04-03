@@ -1,5 +1,8 @@
 {
   "settings": {
+    "index": {
+      "max_ngram_diff": 3
+    },
     "analysis": {
       "tokenizer": {
         "nori_user_dict": {

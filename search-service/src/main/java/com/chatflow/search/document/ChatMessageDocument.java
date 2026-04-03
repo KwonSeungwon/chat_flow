@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-@Document(indexName = "chat_messages")
+@Document(indexName = "chat_messages", createIndex = false)
 public class ChatMessageDocument {
     
     @Id
