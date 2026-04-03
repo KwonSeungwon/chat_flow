@@ -103,58 +103,91 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       body: Column(
         children: [
           // Search bar
-          Container(
+          Padding(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
-              ),
-            ),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _queryCtrl,
-                    decoration: InputDecoration(
-                      hintText: '한국어로 검색하세요',
-                      prefixIcon: Icon(Icons.search, size: 20,
-                          color: colorScheme.onSurfaceVariant),
-                      filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: colorScheme.outline),
+                  child: SizedBox(
+                    height: 48,
+                    child: TextField(
+                      controller: _queryCtrl,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: '검색어를 입력하세요...',
+                        hintStyle: TextStyle(
+                          color: colorScheme.onSurface.withAlpha(100),
+                          fontSize: 15,
+                        ),
+                        prefixIcon: Padding(
+                          padding: const EdgeInsets.only(left: 12, right: 8),
+                          child: Icon(Icons.search, size: 22,
+                              color: colorScheme.onSurface.withAlpha(150)),
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        filled: true,
+                        fillColor: colorScheme.onSurface.withAlpha(20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide(
+                            color: colorScheme.onSurface.withAlpha(60),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide(
+                            color: colorScheme.onSurface.withAlpha(60),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide(
+                            color: colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: colorScheme.outline),
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
+                        fontSize: 15,
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      isDense: true,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _doSearch(),
                     ),
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _doSearch(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: searchState.isLoading ? null : _doSearch,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: searchState.isLoading ? null : _doSearch,
+                    icon: searchState.isLoading
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.search, size: 18),
+                    label: const Text('검색', style: TextStyle(fontSize: 15)),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
                   ),
-                  child: const Text('검색'),
                 ),
               ],
             ),
           ),
+          Divider(height: 1, color: colorScheme.onSurface.withAlpha(30)),
 
           // Results
           Expanded(
