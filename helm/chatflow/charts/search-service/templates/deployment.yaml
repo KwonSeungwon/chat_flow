@@ -22,6 +22,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      enableServiceLinks: false
       serviceAccountName: {{ include "search-service.fullname" . }}
       containers:
         - name: {{ .Chart.Name }}
@@ -64,6 +65,22 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.externalSecrets.elasticsearch.secretName }}
                   key: ELASTICSEARCH_PASSWORD
+            # Valkey (외부 Secret)
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_HOST
+            - name: VALKEY_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_PORT
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.valkey.secretName }}
+                  key: VALKEY_PASSWORD
           envFrom:
             - configMapRef:
                 name: {{ include "search-service.fullname" . }}
@@ -71,8 +88,8 @@ spec:
             httpGet:
               path: /actuator/health
               port: http
-            initialDelaySeconds: 10
-            periodSeconds: 5
+            initialDelaySeconds: 30
+            periodSeconds: 10
             failureThreshold: 30
           livenessProbe:
             httpGet:

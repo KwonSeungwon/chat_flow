@@ -1,0 +1,118 @@
+# K3s 단일노드 배포: 최소 리소스, 로컬 이미지, Traefik Ingress
+global:
+  namespace: chatflow
+  image:
+    registry: docker.io
+    repository: chatflow
+    pullPolicy: Never  # 로컬 import된 이미지 사용
+    tag: "latest"
+  imagePullSecrets: []  # 로컬 이미지이므로 pull secret 불필요
+
+  externalSecrets:
+    postgresql:
+      secretName: chatflow-postgresql-secret
+    kafka:
+      secretName: chatflow-kafka-secret
+    valkey:
+      secretName: chatflow-valkey-secret
+    elasticsearch:
+      secretName: chatflow-elasticsearch-secret
+    gemini:
+      secretName: chatflow-gemini-secret
+
+  springProfile: prod,langchain4j
+
+ingress:
+  enabled: false  # Cloudflare tunnel이 Ingress 역할
+
+gateway-service:
+  enabled: true
+  replicaCount: 1
+  jwtSecret: "vqeDsIwa8tGm/tgB11tiza+8Zbw390s9eic5pV0AHjSj6saiUDKBQibgTKgW3md6"
+  image:
+    name: gateway-service
+  service:
+    port: 8000
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+  hpa:
+    enabled: false
+
+chat-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: chat-service
+  service:
+    port: 8080
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  hpa:
+    enabled: false
+
+ai-summary-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: ai-summary-service
+  service:
+    port: 8081
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 150m
+      memory: 384Mi
+    limits:
+      cpu: 400m
+      memory: 768Mi
+  hpa:
+    enabled: false
+
+search-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: search-service
+  service:
+    port: 8082
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 150m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+  hpa:
+    enabled: false
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: frontend
+  service:
+    port: 80
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  hpa:
+    enabled: false
+  gatewayServicePort: 8000

@@ -22,6 +22,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      enableServiceLinks: false
       serviceAccountName: {{ include "frontend.fullname" . }}
       containers:
         - name: {{ .Chart.Name }}
@@ -43,6 +44,10 @@ spec:
             - name: nginx-config
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           livenessProbe:
             httpGet:
               path: /
@@ -63,3 +68,7 @@ spec:
         - name: nginx-config
           configMap:
             name: {{ include "frontend.fullname" . }}-nginx
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
