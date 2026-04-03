@@ -5,4 +5,4 @@ metadata:
   labels:
     {{- include "chat-service.labels" . | nindent 4 }}
 data:
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"

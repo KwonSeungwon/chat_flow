@@ -1,12 +1,12 @@
-# K3s 단일노드 배포: 최소 리소스, 로컬 이미지, Traefik Ingress
+# K3s 단일노드 배포: 최소 리소스, 로컬 이미지
 global:
   namespace: chatflow
   image:
     registry: docker.io
     repository: chatflow
-    pullPolicy: Never  # 로컬 import된 이미지 사용
+    pullPolicy: Never
     tag: "latest"
-  imagePullSecrets: []  # 로컬 이미지이므로 pull secret 불필요
+  imagePullSecrets: []
 
   externalSecrets:
     postgresql:
@@ -23,7 +23,7 @@ global:
   springProfile: prod,langchain4j
 
 ingress:
-  enabled: false  # Cloudflare tunnel이 Ingress 역할
+  enabled: false
 
 gateway-service:
   enabled: true
@@ -36,11 +36,11 @@ gateway-service:
     type: ClusterIP
   resources:
     requests:
-      cpu: 200m
-      memory: 384Mi
+      cpu: 100m
+      memory: 256Mi
     limits:
       cpu: "1"
-      memory: 768Mi
+      memory: 512Mi
   hpa:
     enabled: false
 
@@ -54,11 +54,11 @@ chat-service:
     type: ClusterIP
   resources:
     requests:
-      cpu: 200m
-      memory: 384Mi
+      cpu: 100m
+      memory: 256Mi
     limits:
       cpu: 500m
-      memory: 768Mi
+      memory: 512Mi
   hpa:
     enabled: false
 
@@ -72,11 +72,11 @@ ai-summary-service:
     type: ClusterIP
   resources:
     requests:
-      cpu: 150m
-      memory: 384Mi
+      cpu: 100m
+      memory: 256Mi
     limits:
       cpu: 400m
-      memory: 768Mi
+      memory: 512Mi
   hpa:
     enabled: false
 
@@ -90,11 +90,11 @@ search-service:
     type: ClusterIP
   resources:
     requests:
-      cpu: 150m
-      memory: 384Mi
+      cpu: 100m
+      memory: 256Mi
     limits:
       cpu: "1"
-      memory: 768Mi
+      memory: 512Mi
   hpa:
     enabled: false
 
