@@ -70,14 +70,29 @@ data:
                 proxy_send_timeout 3600s;
             }
 
-            # Flutter core JS — always revalidate
-            location ~* ^/(main\.dart\.js|flutter_bootstrap\.js|flutter\.js|flutter_service_worker\.js|version\.json)$ {
+            # Flutter core JS — exact match (highest priority, no cache)
+            location = /main.dart.js {
+                add_header Cache-Control "no-cache, no-store, must-revalidate";
+                add_header Pragma "no-cache";
+                expires 0;
+            }
+            location = /flutter_bootstrap.js {
+                add_header Cache-Control "no-cache, no-store, must-revalidate";
+                add_header Pragma "no-cache";
+                expires 0;
+            }
+            location = /flutter_service_worker.js {
+                add_header Cache-Control "no-cache, no-store, must-revalidate";
+                add_header Pragma "no-cache";
+                expires 0;
+            }
+            location = /version.json {
                 add_header Cache-Control "no-cache, no-store, must-revalidate";
                 add_header Pragma "no-cache";
                 expires 0;
             }
 
-            # Static assets — long cache (hash filenames)
+            # Static assets — long cache (hash filenames, excludes exact-matched above)
             location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
                 expires 1y;
                 add_header Cache-Control "public, immutable";
