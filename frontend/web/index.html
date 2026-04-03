@@ -4,19 +4,182 @@
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="ChatFlow - Real-time Chat">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="description" content="ChatFlow - AI 기반 실시간 채팅">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ChatFlow">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
   <link rel="icon" type="image/png" href="favicon.png"/>
   <title>ChatFlow</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body { margin: 0; background-color: #1976D2; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0D0F14;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    #chatflow-loader {
+      position: fixed;
+      inset: 0;
+      background: #0D0F14;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      z-index: 9999;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #chatflow-loader.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Ambient glow blobs */
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.18;
+      pointer-events: none;
+    }
+    .blob-1 {
+      width: 320px; height: 320px;
+      background: #7C6FF7;
+      top: -60px; left: -80px;
+      animation: drift1 8s ease-in-out infinite;
+    }
+    .blob-2 {
+      width: 240px; height: 240px;
+      background: #4ECDC4;
+      bottom: -40px; right: -60px;
+      animation: drift2 10s ease-in-out infinite;
+    }
+
+    /* Logo */
+    .logo-wrap {
+      position: relative;
+      width: 80px; height: 80px;
+    }
+    .logo-ring {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #9D94F8 0%, #6558E8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 0 0 1px rgba(124,111,247,0.3),
+        0 0 40px rgba(124,111,247,0.35),
+        0 8px 32px rgba(0,0,0,0.4);
+      animation: logo-pulse 2.4s ease-in-out infinite;
+    }
+    .logo-ring svg {
+      width: 38px; height: 38px;
+    }
+    /* Spinning orbit ring */
+    .orbit {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1.5px solid transparent;
+      border-top-color: rgba(124,111,247,0.6);
+      border-right-color: rgba(78,205,196,0.4);
+      animation: orbit-spin 2s linear infinite;
+    }
+
+    /* App name */
+    .app-name {
+      color: #F0F2F5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .app-sub {
+      color: #545F72;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.2px;
+      margin-top: -20px;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      width: 140px;
+      height: 2px;
+      background: #1E2130;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #7C6FF7, #4ECDC4);
+      animation: progress-sweep 1.8s ease-in-out infinite;
+    }
+
+    @keyframes logo-pulse {
+      0%, 100% { box-shadow: 0 0 0 1px rgba(124,111,247,0.3), 0 0 30px rgba(124,111,247,0.25), 0 8px 32px rgba(0,0,0,0.4); }
+      50% { box-shadow: 0 0 0 1px rgba(124,111,247,0.5), 0 0 60px rgba(124,111,247,0.5), 0 8px 40px rgba(0,0,0,0.5); }
+    }
+    @keyframes orbit-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes progress-sweep {
+      0%   { width: 0%;   margin-left: 0%; }
+      50%  { width: 70%;  margin-left: 15%; }
+      100% { width: 0%;   margin-left: 100%; }
+    }
+    @keyframes drift1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(30px, 20px) scale(1.1); }
+    }
+    @keyframes drift2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-20px, -30px) scale(1.05); }
+    }
   </style>
 </head>
 <body>
+  <div id="chatflow-loader">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <div class="logo-wrap">
+      <div class="logo-ring">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z"
+            fill="white" fill-opacity="0.95"/>
+        </svg>
+      </div>
+      <div class="orbit"></div>
+    </div>
+
+    <div class="app-name">ChatFlow</div>
+    <div class="app-sub">AI 기반 실시간 채팅</div>
+
+    <div class="progress-wrap">
+      <div class="progress-fill"></div>
+    </div>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var loader = document.getElementById('chatflow-loader');
+      if (loader) {
+        loader.classList.add('fade-out');
+        setTimeout(function () { loader.remove(); }, 460);
+      }
+    });
+  </script>
 </body>
 </html>

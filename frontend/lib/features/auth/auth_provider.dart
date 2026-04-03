@@ -47,15 +47,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _hydrate() async {
-    final token = await _storage.read(key: 'chatflow-token');
-    final userId = await _storage.read(key: 'chatflow-userId');
-    final username = await _storage.read(key: 'chatflow-username');
-    if (token != null) {
-      state = AuthState(
-        token: token,
-        userId: userId,
-        username: username ?? '',
-      );
+    try {
+      final token = await _storage.read(key: 'chatflow-token');
+      final userId = await _storage.read(key: 'chatflow-userId');
+      final username = await _storage.read(key: 'chatflow-username');
+      if (token != null) {
+        state = AuthState(
+          token: token,
+          userId: userId,
+          username: username ?? '',
+        );
+      }
+    } catch (_) {
+      // Corrupted or locked secure storage — fall back to logged-out state
+      state = const AuthState();
     }
   }
 
@@ -113,7 +118,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _dioClient.dio.post('/api/auth/logout');
     } catch (_) {}
-    await _storage.deleteAll();
+    await _storage.delete(key: 'chatflow-token');
+    await _storage.delete(key: 'chatflow-userId');
+    await _storage.delete(key: 'chatflow-username');
     state = const AuthState();
   }
 

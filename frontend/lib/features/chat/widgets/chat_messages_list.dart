@@ -137,10 +137,12 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
               return _AiSummaryCard(msg: msg);
             }
+            final isAiQuestion = msg.effectiveId.startsWith('ai-q-');
             return _ChatBubble(
               msg: msg,
               isMine: msg.username == widget.currentUsername,
               time: _formatTime(msg.timestamp),
+              isAiQuestion: isAiQuestion,
             );
           },
         ),
@@ -506,11 +508,13 @@ class _ChatBubble extends StatelessWidget {
   final ChatMessage msg;
   final bool isMine;
   final String time;
+  final bool isAiQuestion;
 
   const _ChatBubble({
     required this.msg,
     required this.isMine,
     required this.time,
+    this.isAiQuestion = false,
   });
 
   Color _avatarColor(String name) =>
@@ -574,22 +578,43 @@ class _ChatBubble extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                gradient: AppColors.myBubbleGradient,
+                                gradient: isAiQuestion
+                                    ? const LinearGradient(
+                                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                                      )
+                                    : AppColors.myBubbleGradient,
                                 borderRadius: radius,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primary.withAlpha(50),
+                                    color: (isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
                                     blurRadius: 10,
                                     offset: const Offset(0, 3),
                                   ),
                                 ],
                               ),
-                              child: Text(
-                                msg.content,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    height: 1.4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (isAiQuestion)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.auto_awesome, size: 12, color: Colors.white.withAlpha(200)),
+                                          const SizedBox(width: 4),
+                                          Text('To AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white.withAlpha(200))),
+                                        ],
+                                      ),
+                                    ),
+                                  Text(
+                                    msg.content,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        height: 1.4),
+                                  ),
+                                ],
                               ),
                             )
                           : Container(

@@ -258,7 +258,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   Future<void> askAi(String roomId, String question) async {
     final questionMsg = ChatMessage(
-      messageId: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      messageId: 'ai-q-${DateTime.now().microsecondsSinceEpoch}',
       chatRoomId: roomId,
       userId: _userId,
       username: _username,

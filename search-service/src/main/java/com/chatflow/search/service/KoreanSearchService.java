@@ -28,17 +28,24 @@ public class KoreanSearchService {
 
     public Page<ChatMessageDocument> searchKoreanContent(String query, String chatRoomId, Pageable pageable) {
         try {
-            // Multi-match query with Korean analyzer and n-gram support
+            // Multi-match query with Korean analyzer
             Query multiMatchQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content^2", "content.ngram^0.5", "username^1.5")
+                    .fields("content^2", "content.ngram^0.5")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
-                    .fuzziness("AUTO")
             )._toQuery();
 
-            // Build bool query with room filter if provided
+            // Build bool query: must match content + filter by type + optional room
             BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder()
-                    .should(multiMatchQuery);
+                    .must(multiMatchQuery)
+                    .mustNot(mn -> mn.terms(t -> t
+                            .field("messageType")
+                            .terms(tv -> tv.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
+                            )))
+                    ));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
                 boolQueryBuilder.filter(f -> f

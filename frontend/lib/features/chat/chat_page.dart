@@ -321,16 +321,19 @@ class _AiSummaryButtonState extends ConsumerState<_AiSummaryButton> {
     final isSummaryLoading = ref.watch(
       chatNotifierProvider(widget.roomId).select((s) => s.isSummaryLoading),
     );
-    return IconButton(
-      icon: isSummaryLoading
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Text('AI', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-      tooltip: 'AI 대화 요약',
-      onPressed: isSummaryLoading ? null : _onTap,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: ActionChip(
+        avatar: isSummaryLoading
+            ? const SizedBox(
+                width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.auto_awesome, size: 16),
+        label: const Text('요약', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        tooltip: 'AI 대화 요약',
+        onPressed: isSummaryLoading ? null : _onTap,
+      ),
     );
   }
 }

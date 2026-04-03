@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../chat_provider.dart';
 import 'create_room_dialog.dart';
@@ -22,17 +23,19 @@ class ChatRoomSidebar extends ConsumerStatefulWidget {
 
 class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
   Timer? _refreshTimer;
+  bool _disposed = false;
 
   @override
   void initState() {
     super.initState();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      ref.read(chatRoomsProvider.notifier).fetchRooms();
+      if (!_disposed) ref.read(chatRoomsProvider.notifier).fetchRooms();
     });
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -44,200 +47,60 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
         return Color(int.parse('FF$hex', radix: 16));
       } catch (_) {}
     }
-    final colors = [
-      Colors.blue, Colors.green, Colors.orange, Colors.purple,
-      Colors.red, Colors.teal, Colors.indigo, Colors.pink,
-      Colors.cyan, Colors.amber,
-    ];
-    return colors[room.name.hashCode.abs() % colors.length];
+    return AppColors.avatarPalette[
+        room.name.hashCode.abs() % AppColors.avatarPalette.length];
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final roomsAsync = ref.watch(chatRoomsProvider);
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Container(
       width: 280,
-      color: colorScheme.surfaceContainerLow,
+      color: cs.surface,
       child: Column(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-            child: Row(
-              children: [
-                Icon(Icons.forum, color: colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '채팅방',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, size: 22),
-                  tooltip: '새 채팅방',
-                  onPressed: () => _showCreateDialog(context),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-
-          // Room list
+          _SidebarHeader(onCreateTap: () => _showCreateDialog(context)),
+          Divider(height: 1, color: cs.outline.withAlpha(60), thickness: 1),
           Expanded(
             child: roomsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.wifi_off, size: 40, color: colorScheme.error),
-                      const SizedBox(height: 12),
-                      Text(
-                        '채팅방 목록을 불러올 수 없습니다',
-                        style: TextStyle(color: colorScheme.error, fontSize: 13),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text('다시 시도'),
-                      ),
-                    ],
-                  ),
-                ),
+              loading: () => const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+              error: (_, __) => _ErrorState(
+                onRetry: () =>
+                    ref.read(chatRoomsProvider.notifier).fetchRooms(),
               ),
-              data: (rooms) {
-                if (rooms.isEmpty) {
-                  return _EmptyRoomState(onCreateTap: () => _showCreateDialog(context));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: rooms.length,
-                  itemBuilder: (context, index) {
-                    final room = rooms[index];
-                    final isSelected = room.id == widget.currentRoomId;
-                    final color = _roomColor(room);
-                    final isFull = room.isFull;
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      child: Opacity(
-                        opacity: isFull && !isSelected ? 0.55 : 1.0,
-                        child: ListTile(
-                          dense: true,
-                          selected: isSelected,
-                          selectedTileColor: colorScheme.primaryContainer.withAlpha(80),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          leading: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: color.withAlpha(40),
-                            child: Text(
-                              room.name.isNotEmpty ? room.name[0].toUpperCase() : '#',
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            room.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              fontSize: 14,
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (room.description != null && room.description!.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    room.description!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.people_outline,
-                                      size: 12,
-                                      color: isFull
-                                          ? colorScheme.error
-                                          : colorScheme.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      '${room.participantCount}/${room.maxParticipants}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isFull
-                                            ? colorScheme.error
-                                            : colorScheme.onSurfaceVariant,
-                                        fontWeight: isFull ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                                    if (isFull) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.errorContainer,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          '만석',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.onErrorContainer,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          onTap: isFull && !isSelected
-                              ? () {
+              data: (rooms) => rooms.isEmpty
+                  ? _EmptyRoomState(
+                      onCreateTap: () => _showCreateDialog(context))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 8),
+                      itemCount: rooms.length,
+                      itemBuilder: (context, index) {
+                        final room = rooms[index];
+                        return _RoomTile(
+                          room: room,
+                          color: _roomColor(room),
+                          isSelected: room.id == widget.currentRoomId,
+                          isFull: room.isFull,
+                          onTap: room.isFull &&
+                                  room.id != widget.currentRoomId
+                              ? () =>
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text('이 채팅방은 만석입니다 (최대 10명)'),
                                       duration: Duration(seconds: 2),
                                     ),
-                                  );
-                                }
+                                  )
                               : () {
                                   context.go('/chat/${room.id}');
                                   widget.onRoomSelected?.call();
                                 },
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
+                        );
+                      },
+                    ),
             ),
           ),
         ],
@@ -246,36 +109,334 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
   }
 
   void _showCreateDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => const CreateRoomDialog(),
+    showDialog(context: context, builder: (_) => const CreateRoomDialog());
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sidebar header
+// ─────────────────────────────────────────────────────────────────
+class _SidebarHeader extends StatelessWidget {
+  final VoidCallback onCreateTap;
+  const _SidebarHeader({required this.onCreateTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      color: cs.surface,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primaryGlow, AppColors.primaryDim],
+              ),
+            ),
+            child:
+                const Icon(Icons.forum_rounded, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'ChatFlow',
+            style: TextStyle(
+              color: cs.onSurface,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const Spacer(),
+          Tooltip(
+            message: '새 채팅방',
+            child: InkWell(
+              onTap: onCreateTap,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: cs.surfaceContainer,
+                  border: Border.all(color: cs.outline.withAlpha(80)),
+                ),
+                child: Icon(Icons.edit_outlined,
+                    size: 16, color: cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Empty room list state with CTA
-// ---------------------------------------------------------------------------
-class _EmptyRoomState extends StatelessWidget {
-  final VoidCallback onCreateTap;
-  const _EmptyRoomState({required this.onCreateTap});
+// ─────────────────────────────────────────────────────────────────
+// Individual room tile
+// ─────────────────────────────────────────────────────────────────
+class _RoomTile extends StatefulWidget {
+  final ChatRoom room;
+  final Color color;
+  final bool isSelected;
+  final bool isFull;
+  final VoidCallback onTap;
+
+  const _RoomTile({
+    required this.room,
+    required this.color,
+    required this.isSelected,
+    required this.isFull,
+    required this.onTap,
+  });
+
+  @override
+  State<_RoomTile> createState() => _RoomTileState();
+}
+
+class _RoomTileState extends State<_RoomTile> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+
+    final bg = widget.isSelected
+        ? AppColors.primary.withAlpha(22)
+        : _hovered
+            ? cs.surfaceContainerHigh
+            : Colors.transparent;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+            border: widget.isSelected
+                ? Border.all(color: AppColors.primary.withAlpha(55), width: 1)
+                : null,
+          ),
+          child: Row(
+            children: [
+              // Left accent bar
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 3,
+                height: 44,
+                margin: const EdgeInsets.only(left: 4, right: 10),
+                decoration: BoxDecoration(
+                  color: widget.isSelected
+                      ? AppColors.primary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Avatar + text (dimmed if full)
+              Expanded(
+                child: Opacity(
+                  opacity:
+                      widget.isFull && !widget.isSelected ? 0.48 : 1.0,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        // Gradient avatar
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                widget.color.withAlpha(220),
+                                widget.color.withAlpha(130),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              widget.room.name.isNotEmpty
+                                  ? widget.room.name[0].toUpperCase()
+                                  : '#',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+
+                        // Name + participant count
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                widget.room.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: widget.isSelected
+                                      ? cs.onSurface
+                                      : cs.onSurfaceVariant,
+                                  fontWeight: widget.isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.people_outline_rounded,
+                                    size: 11,
+                                    color: widget.isFull
+                                        ? AppColors.error
+                                        : cs.onSurfaceVariant.withAlpha(150),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '${widget.room.participantCount}/${widget.room.maxParticipants}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: widget.isFull
+                                          ? AppColors.error
+                                          : cs.onSurfaceVariant.withAlpha(150),
+                                      fontWeight: widget.isFull
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                  if (widget.isFull) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.error.withAlpha(22),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color:
+                                                AppColors.error.withAlpha(80),
+                                            width: 1),
+                                      ),
+                                      child: const Text(
+                                        '만석',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: AppColors.error,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Error state
+// ─────────────────────────────────────────────────────────────────
+class _ErrorState extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _ErrorState({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_outlined, size: 48, color: colorScheme.outline),
+            Icon(Icons.wifi_off_rounded,
+                size: 36, color: cs.onSurfaceVariant.withAlpha(150)),
             const SizedBox(height: 12),
+            Text(
+              '채팅방 목록을 불러올 수 없습니다',
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('다시 시도'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Empty state
+// ─────────────────────────────────────────────────────────────────
+class _EmptyRoomState extends StatelessWidget {
+  final VoidCallback onCreateTap;
+  const _EmptyRoomState({required this.onCreateTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.surfaceContainer,
+                border: Border.all(color: cs.outline.withAlpha(80)),
+              ),
+              child: Icon(Icons.chat_bubble_outline_rounded,
+                  size: 26, color: cs.onSurfaceVariant.withAlpha(150)),
+            ),
+            const SizedBox(height: 16),
             Text(
               '아직 채팅방이 없습니다',
               style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
             ),
@@ -283,14 +444,14 @@ class _EmptyRoomState extends StatelessWidget {
             Text(
               '첫 번째 채팅방을 만들어보세요',
               style: TextStyle(
-                color: colorScheme.outline,
-                fontSize: 12,
-              ),
+                  color: cs.onSurfaceVariant.withAlpha(150), fontSize: 12),
             ),
             const SizedBox(height: 16),
-            FilledButton.tonal(
+            FilledButton.icon(
               onPressed: onCreateTap,
-              child: const Text('채팅방 만들기'),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('채팅방 만들기'),
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
             ),
           ],
         ),

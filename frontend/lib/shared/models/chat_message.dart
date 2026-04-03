@@ -50,5 +50,5 @@ class ChatMessage {
     'isAiGenerated': isAiGenerated,
   };
 
-  String get effectiveId => messageId ?? id ?? '$timestamp-$username';
+  String get effectiveId => messageId ?? id ?? '$timestamp-$username-${content.hashCode}';
 }

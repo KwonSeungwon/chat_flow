@@ -58,6 +58,14 @@ public class SearchService {
             return;
         }
 
+        // JOIN/LEAVE/SYSTEM 메시지는 검색 인덱싱 제외
+        if (message.getType() != null) {
+            var type = message.getType();
+            if (type == ChatMessage.MessageType.JOIN || type == ChatMessage.MessageType.LEAVE || type == ChatMessage.MessageType.SYSTEM) {
+                return;
+            }
+        }
+
         ChatMessageDocument document = ChatMessageDocument.builder()
                 .id(message.getMessageId())
                 .messageId(message.getMessageId())

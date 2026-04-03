@@ -17,7 +17,9 @@ class StompService {
 
   String? _currentRoomId;
   String? _currentUsername;
+  String? _currentUserId;
   String? _currentToken;
+  Future<String?> Function()? _tokenProvider;
   MessageCallback? _onMessage;
   ConnectionCallback? _onConnectionChanged;
 
@@ -26,13 +28,17 @@ class StompService {
   void connect({
     required String roomId,
     required String username,
+    required String userId,
     required String token,
     required MessageCallback onMessage,
     required ConnectionCallback onConnectionChanged,
+    Future<String?> Function()? tokenProvider,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
+    _currentUserId = userId;
     _currentToken = token;
+    _tokenProvider = tokenProvider;
     _onMessage = onMessage;
     _onConnectionChanged = onConnectionChanged;
     _manualDisconnect = false;
@@ -41,9 +47,12 @@ class StompService {
   }
 
   void _doConnect(String token) {
-    // On web: derive WS URL from current page origin (http→ws, https→wss)
-    // On native: fall back to .env or default
-    final wsUrl = kIsWeb ? _webWsUrl() : (dotenv.env['WS_URL'] ?? 'ws://43.201.22.86/ws-native');
+    // Deactivate existing client before creating a new one to prevent ghost connections
+    _client?.deactivate();
+
+    final wsUrl = kIsWeb
+        ? _webWsUrl()
+        : (dotenv.env['WS_URL'] ?? 'ws://43.201.94.100/ws-native');
 
     _client = StompClient(
       config: StompConfig(
@@ -78,10 +87,12 @@ class StompService {
       },
     );
 
-    // Subscribe to errors
+    // Subscribe to server-side errors
     _client!.subscribe(
       destination: '/topic/chat/$_currentRoomId/errors',
-      callback: (frame) {},
+      callback: (frame) {
+        // Server errors (rate limit, banned word, etc.) — currently logged only
+      },
     );
 
     // Send JOIN via /app/chat.addUser
@@ -89,6 +100,7 @@ class StompService {
       destination: '/app/chat.addUser',
       body: jsonEncode({
         'chatRoomId': _currentRoomId,
+        'userId': _currentUserId ?? '',
         'username': _currentUsername,
         'content': '',
         'type': 'JOIN',
@@ -114,8 +126,13 @@ class StompService {
     final delay = Duration(seconds: (1 << _retryCount).clamp(1, 30));
     _retryCount++;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(delay, () {
+    _reconnectTimer = Timer(delay, () async {
       if (!_manualDisconnect && _currentToken != null) {
+        // Refresh token from secure storage before reconnecting
+        if (_tokenProvider != null) {
+          final freshToken = await _tokenProvider!();
+          if (freshToken != null) _currentToken = freshToken;
+        }
         _doConnect(_currentToken!);
       }
     });

@@ -43,6 +43,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   }
 
   Future<void> _create() async {
+    if (_isCreating) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isCreating = true);
     try {
