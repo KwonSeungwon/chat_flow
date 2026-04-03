@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_provider.dart';
 import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
@@ -73,6 +74,8 @@ class ChatPage extends ConsumerWidget {
           ],
         ),
         actions: [
+          if (effectiveRoomId != null)
+            _AiSummaryButton(roomId: effectiveRoomId),
           IconButton(
             icon: Icon(
               themeMode == ThemeMode.dark
@@ -149,19 +152,22 @@ class _ParticipantBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(40),
+        color: AppColors.surfaceHigh,
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people_outline, size: 14, color: Colors.white70),
+          const Icon(Icons.people_outline_rounded,
+              size: 13, color: AppColors.textSecondary),
           const SizedBox(width: 4),
           Text(
             '$count/$max',
-            style: const TextStyle(fontSize: 12, color: Colors.white70),
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -190,13 +196,16 @@ class _ChatRoomContent extends ConsumerWidget {
           child: ChatMessagesList(
             messages: chatState.messages,
             currentUsername: username,
+            isAiLoading: chatState.isAiLoading,
           ),
         ),
         ChatInput(
           isConnected: chatState.isConnected,
+          isAiLoading: chatState.isAiLoading,
           onSend: (content) {
             chatNotifier.sendMessage(roomId: roomId, content: content);
           },
+          onAskAi: (question) => chatNotifier.askAi(roomId, question),
         ),
       ],
     );
@@ -211,7 +220,6 @@ class _LobbyPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -219,48 +227,110 @@ class _LobbyPlaceholder extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 96,
-              height: 96,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withAlpha(80),
                 shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary.withAlpha(30),
+                    AppColors.secondary.withAlpha(20),
+                  ],
+                ),
+                border: Border.all(
+                    color: AppColors.primary.withAlpha(60), width: 1),
               ),
-              child: Icon(
-                Icons.forum_outlined,
-                size: 48,
-                color: colorScheme.primary,
-              ),
+              child: const Icon(Icons.forum_outlined,
+                  size: 40, color: AppColors.primary),
             ),
             const SizedBox(height: 24),
-            Text(
+            const Text(
               '채팅을 시작하세요',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               '채팅방을 선택하거나 새로 만들어\n대화를 시작할 수 있습니다',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 14, height: 1.5),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             FilledButton.icon(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => const CreateRoomDialog(),
-                );
-              },
-              icon: const Icon(Icons.add),
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => const CreateRoomDialog(),
+              ),
+              icon: const Icon(Icons.add_rounded),
               label: const Text('새 채팅방 만들기'),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI summary request button
+// ---------------------------------------------------------------------------
+class _AiSummaryButton extends ConsumerStatefulWidget {
+  final String roomId;
+  const _AiSummaryButton({required this.roomId});
+
+  @override
+  ConsumerState<_AiSummaryButton> createState() => _AiSummaryButtonState();
+}
+
+class _AiSummaryButtonState extends ConsumerState<_AiSummaryButton> {
+  Future<void> _onTap() async {
+    try {
+      final msg = await ref
+          .read(chatNotifierProvider(widget.roomId).notifier)
+          .requestSummary(widget.roomId);
+      if (!mounted) return;
+      if (msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI 요약을 요청했습니다. 잠시 후 채팅방에 표시됩니다.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('요약 요청에 실패했습니다.')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSummaryLoading = ref.watch(
+      chatNotifierProvider(widget.roomId).select((s) => s.isSummaryLoading),
+    );
+    return IconButton(
+      icon: isSummaryLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Text('AI', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      tooltip: 'AI 대화 요약',
+      onPressed: isSummaryLoading ? null : _onTap,
     );
   }
 }
@@ -274,14 +344,18 @@ class _ConnectionDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = connected ? AppColors.success : AppColors.error;
     return Tooltip(
       message: connected ? '연결됨' : '연결 끊김',
       child: Container(
-        width: 8,
-        height: 8,
+        width: 9,
+        height: 9,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: connected ? Colors.greenAccent : Colors.red,
+          color: color,
+          boxShadow: [
+            BoxShadow(color: color.withAlpha(120), blurRadius: 6, spreadRadius: 1),
+          ],
         ),
       ),
     );

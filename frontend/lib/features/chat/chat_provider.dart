@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/stomp_service.dart';
 import '../../core/services/fcm_service.dart';
@@ -57,13 +58,17 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
       if (description != null) 'description': description,
       if (color != null) 'color': color,
     });
-    await fetchRooms();
-    // Extract room ID from response
+    // Extract room ID first — fetchRooms failure must not mask successful creation
     final data = resp.data;
-    if (data is Map) {
-      return (data['data']?['id'] ?? data['id'])?.toString();
+    final roomId = data is Map
+        ? (data['data']?['id'] ?? data['id'])?.toString()
+        : null;
+    try {
+      await fetchRooms();
+    } catch (_) {
+      // Best-effort refresh — room was created regardless
     }
-    return null;
+    return roomId;
   }
 }
 
@@ -75,22 +80,30 @@ class ChatMessagesState {
   final List<ChatMessage> messages;
   final bool isConnected;
   final bool isLoadingHistory;
+  final bool isAiLoading;
+  final bool isSummaryLoading;
 
   const ChatMessagesState({
     this.messages = const [],
     this.isConnected = false,
     this.isLoadingHistory = false,
+    this.isAiLoading = false,
+    this.isSummaryLoading = false,
   });
 
   ChatMessagesState copyWith({
     List<ChatMessage>? messages,
     bool? isConnected,
     bool? isLoadingHistory,
+    bool? isAiLoading,
+    bool? isSummaryLoading,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
       isConnected: isConnected ?? this.isConnected,
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
+      isAiLoading: isAiLoading ?? this.isAiLoading,
+      isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
     );
   }
 }
@@ -101,6 +114,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final String _token;
   final String _username;
   final String _userId;
+  static const _storage = FlutterSecureStorage();
 
   ChatNotifier(
     this._dioClient, {
@@ -150,11 +164,17 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       state = state.copyWith(isLoadingHistory: false);
     }
 
+    // Load AI summaries and merge into history
+    await _fetchSummaries(roomId);
+
     // Connect WebSocket
     _stompService.connect(
       roomId: roomId,
       username: _username,
+      userId: _userId,
       token: _token,
+      tokenProvider: () async =>
+          await _storage.read(key: 'chatflow-token') ?? _token,
       onMessage: (msg) => _onMessage(msg),
       onConnectionChanged: (connected) {
         if (mounted) {
@@ -191,6 +211,95 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     final capped =
         updated.length > 500 ? updated.sublist(updated.length - 500) : updated;
     state = state.copyWith(messages: capped);
+  }
+
+  Future<void> _fetchSummaries(String roomId) async {
+    try {
+      final resp = await _dioClient.dio.get('/api/ai-summary/room/$roomId');
+      final data = resp.data;
+      List<dynamic> items;
+      if (data is List) {
+        items = data;
+      } else if (data is Map && data['data'] is List) {
+        items = data['data'] as List;
+      } else {
+        return;
+      }
+      final summaries = items
+          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (summaries.isEmpty || !mounted) return;
+      final existing = state.messages;
+      final merged = [...existing, ...summaries];
+      final seen = <String>{};
+      final deduped =
+          merged.where((m) => seen.add(m.effectiveId)).toList();
+      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      state = state.copyWith(messages: deduped);
+    } catch (_) {
+      // Best-effort — summary load must not interrupt chat
+    }
+  }
+
+  Future<String> requestSummary(String roomId) async {
+    state = state.copyWith(isSummaryLoading: true);
+    try {
+      final resp = await _dioClient.dio
+          .post('/api/ai-summary/request', data: {'chatRoomId': roomId});
+      final data = resp.data;
+      if (data is Map && data['status'] != null && data['status'] != 200) {
+        return data['message']?.toString() ?? '요약할 메시지가 충분하지 않습니다.';
+      }
+      return ''; // success
+    } finally {
+      if (mounted) state = state.copyWith(isSummaryLoading: false);
+    }
+  }
+
+  Future<void> askAi(String roomId, String question) async {
+    final questionMsg = ChatMessage(
+      messageId: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      chatRoomId: roomId,
+      userId: _userId,
+      username: _username,
+      content: question,
+      type: 'CHAT',
+      timestamp: DateTime.now().toIso8601String(),
+    );
+    state = state.copyWith(messages: [...state.messages, questionMsg], isAiLoading: true);
+
+    try {
+      final resp = await _dioClient.dio.post('/api/ai-summary/ask', data: {
+        'chatRoomId': roomId,
+        'question': question,
+      });
+      if (!mounted) return;
+      // Parse AI response directly from REST — no WebSocket dependency
+      final data = resp.data;
+      Map<String, dynamic>? msgJson;
+      if (data is Map && data['data'] is Map) {
+        msgJson = data['data'] as Map<String, dynamic>;
+      } else if (data is Map && data['messageId'] != null) {
+        msgJson = data as Map<String, dynamic>;
+      }
+      if (msgJson != null) {
+        final aiMsg = ChatMessage.fromJson(msgJson);
+        if (!state.messages.any((m) => m.effectiveId == aiMsg.effectiveId)) {
+          state = state.copyWith(messages: [...state.messages, aiMsg], isAiLoading: false);
+        } else {
+          state = state.copyWith(isAiLoading: false);
+        }
+      } else {
+        state = state.copyWith(isAiLoading: false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final updated = state.messages
+          .where((m) => m.effectiveId != questionMsg.effectiveId)
+          .toList();
+      state = state.copyWith(messages: updated, isAiLoading: false);
+      rethrow;
+    }
   }
 
   void sendMessage({required String roomId, required String content}) {

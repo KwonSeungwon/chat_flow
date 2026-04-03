@@ -257,7 +257,7 @@ public class AiSummaryService {
         }
     }
 
-    public void requestSummary(String roomId) {
+    public boolean requestSummary(String roomId) {
         String bufferKey = REDIS_BUFFER_PREFIX + roomId;
         List<ChatMessage> snapshot = consumeBuffer(bufferKey);
 
@@ -266,9 +266,71 @@ public class AiSummaryService {
             redisTemplate.opsForSet().remove(REDIS_ACTIVE_ROOMS_KEY, roomId);
             String hash = computeMessageHash(snapshot);
             generateSummary(roomId, snapshot, hash);
+            return true;
         } else {
             log.info("No messages to summarize for room: {}", roomId);
+            return false;
         }
+    }
+
+    /**
+     * AI Q&A: 최근 대화 맥락을 참고해 질문에 답변한다.
+     * 응답은 Kafka ai-summaries 토픽으로 브로드캐스트되어 방 전체에 표시된다.
+     */
+    public ChatMessage answerQuestion(String roomId, String question) {
+        if (!rateLimiter.tryConsume(1)) {
+            throw new IllegalStateException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+
+        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+        List<String> rawMessages = redisTemplate.opsForList().range(bufferKey, 0, -1);
+        List<ChatMessage> recentMessages = new ArrayList<>();
+        if (rawMessages != null) {
+            for (String json : rawMessages) {
+                try {
+                    recentMessages.add(objectMapper.readValue(json, ChatMessage.class));
+                } catch (JsonProcessingException e) {
+                    log.warn("Q&A 컨텍스트 메시지 역직렬화 실패", e);
+                }
+            }
+        }
+
+        String contextText = recentMessages.isEmpty()
+                ? "현재 대화 내역이 없습니다."
+                : buildConversationText(recentMessages);
+
+        String prompt = String.format("""
+                채팅방의 최근 대화 내용을 참고하여 사용자의 질문에 답해주세요.
+
+                최근 대화:
+                %s
+
+                질문: %s
+
+                답변 규칙:
+                1. 한국어로 답변하세요
+                2. 대화 맥락이 있으면 활용하고, 없으면 일반 지식으로 답변하세요
+                3. 간결하고 명확하게 답변하세요
+                4. 존댓말을 사용하세요
+                """, contextText, question);
+
+        String answer = chatModelClient.generate(prompt);
+
+        ChatMessage response = ChatMessage.builder()
+                .messageId(UUID.randomUUID().toString())
+                .chatRoomId(roomId)
+                .userId("ai-system")
+                .username("ChatFlow AI")
+                .content(answer)
+                .type(ChatMessage.MessageType.AI_SUMMARY)
+                .timestamp(LocalDateTime.now())
+                .isAiGenerated(true)
+                .build();
+
+        cacheSummary(roomId, response);
+        kafkaTemplate.send(SUMMARY_TOPIC, roomId, response);
+
+        return response;
     }
 
     private void cacheSummary(String roomId, ChatMessage summaryMessage) {
