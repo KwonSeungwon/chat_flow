@@ -77,18 +77,6 @@ class ChatPage extends ConsumerWidget {
           if (effectiveRoomId != null)
             _AiSummaryButton(roomId: effectiveRoomId),
           IconButton(
-            icon: Icon(
-              themeMode == ThemeMode.dark
-                  ? Icons.light_mode_outlined
-                  : Icons.dark_mode_outlined,
-            ),
-            tooltip: themeMode == ThemeMode.dark ? '라이트 모드' : '다크 모드',
-            onPressed: () {
-              ref.read(themeModeProvider.notifier).state =
-                  themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.search),
             tooltip: '메시지 검색',
             onPressed: () => context.push('/search'),
@@ -96,7 +84,10 @@ class ChatPage extends ConsumerWidget {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) async {
-              if (value == 'logout') {
+              if (value == 'theme') {
+                ref.read(themeModeProvider.notifier).state =
+                    themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+              } else if (value == 'logout') {
                 await ref.read(authProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
               }
@@ -110,6 +101,18 @@ class ChatPage extends ConsumerWidget {
                 ),
               ),
               const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'theme',
+                child: Row(
+                  children: [
+                    Icon(themeMode == ThemeMode.dark
+                        ? Icons.light_mode_outlined
+                        : Icons.dark_mode_outlined, size: 20),
+                    const SizedBox(width: 8),
+                    Text(themeMode == ThemeMode.dark ? '라이트 모드' : '다크 모드'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(value: 'logout', child: Text('로그아웃')),
             ],
           ),
@@ -321,19 +324,15 @@ class _AiSummaryButtonState extends ConsumerState<_AiSummaryButton> {
     final isSummaryLoading = ref.watch(
       chatNotifierProvider(widget.roomId).select((s) => s.isSummaryLoading),
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ActionChip(
-        avatar: isSummaryLoading
-            ? const SizedBox(
-                width: 14, height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.auto_awesome, size: 16),
-        label: const Text('요약', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        tooltip: 'AI 대화 요약',
-        onPressed: isSummaryLoading ? null : _onTap,
-      ),
+    return IconButton(
+      icon: isSummaryLoading
+          ? const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.auto_awesome, size: 20),
+      tooltip: 'AI 대화 요약',
+      onPressed: isSummaryLoading ? null : _onTap,
     );
   }
 }
