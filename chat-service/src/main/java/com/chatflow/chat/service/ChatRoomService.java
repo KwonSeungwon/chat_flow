@@ -81,6 +81,7 @@ public class ChatRoomService {
                 .description(request.getDescription())
                 .color(request.getColor() != null ? request.getColor() : "#6366f1")
                 .isPrivate(request.isPrivate())
+                .password(request.getPassword())
                 .allowInvites(request.isAllowInvites())
                 .participantCount(0)
                 .maxParticipants(MAX_PARTICIPANTS)
@@ -121,6 +122,15 @@ public class ChatRoomService {
             return chatMessageRepository.findLatestByChatRoomId(roomId, limit);
         }
         return chatMessageRepository.findByChatRoomIdBeforeCursor(roomId, before, limit);
+    }
+
+    public boolean verifyRoomPassword(String roomId, String password) {
+        return chatRoomRepository.findById(roomId)
+                .map(room -> {
+                    if (!room.isPrivate() || room.getPassword() == null) return true;
+                    return room.getPassword().equals(password);
+                })
+                .orElse(false);
     }
 
     @Transactional

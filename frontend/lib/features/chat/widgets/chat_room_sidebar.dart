@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../chat_provider.dart';
@@ -95,8 +96,12 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                                     ),
                                   )
                               : () {
-                                  context.go('/chat/${room.id}');
-                                  widget.onRoomSelected?.call();
+                                  if (room.isPrivate && room.id != widget.currentRoomId) {
+                                    _showPasswordDialog(context, room);
+                                  } else {
+                                    context.go('/chat/${room.id}');
+                                    widget.onRoomSelected?.call();
+                                  }
                                 },
                         );
                       },
@@ -110,6 +115,69 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
 
   void _showCreateDialog(BuildContext context) {
     showDialog(context: context, builder: (_) => const CreateRoomDialog());
+  }
+
+  void _showPasswordDialog(BuildContext context, ChatRoom room) {
+    final pwCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.lock, size: 20),
+            const SizedBox(width: 8),
+            Text(room.name, style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: TextField(
+          controller: pwCtrl,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: '비밀번호',
+            prefixIcon: Icon(Icons.password),
+          ),
+          onSubmitted: (_) async {
+            final ok = await _verifyAndJoin(ctx, room.id, pwCtrl.text.trim());
+            if (ok && ctx.mounted) Navigator.of(ctx).pop();
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final ok = await _verifyAndJoin(ctx, room.id, pwCtrl.text.trim());
+              if (ok && ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: const Text('입장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _verifyAndJoin(BuildContext context, String roomId, String password) async {
+    try {
+      final dio = ref.read(dioClientProvider).dio;
+      final resp = await dio.post('/api/chat/rooms/$roomId/verify', data: {'password': password});
+      if (resp.statusCode == 200) {
+        if (context.mounted) {
+          context.go('/chat/$roomId');
+          widget.onRoomSelected?.call();
+        }
+        return true;
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('비밀번호가 일치하지 않습니다.')),
+        );
+      }
+    }
+    return false;
   }
 }
 
@@ -289,7 +357,15 @@ class _RoomTileState extends State<_RoomTile> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
+                              Row(
+                                children: [
+                                  if (widget.room.isPrivate) ...[
+                                    Icon(Icons.lock, size: 12,
+                                        color: cs.onSurfaceVariant.withAlpha(150)),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
                                 widget.room.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -302,6 +378,9 @@ class _RoomTileState extends State<_RoomTile> {
                                       : FontWeight.w400,
                                   fontSize: 14,
                                 ),
+                                  ),
+                                ),
+                                ],
                               ),
                               const SizedBox(height: 3),
                               Row(

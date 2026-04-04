@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"ssh -i ~/web-app-key.pem -o StrictHostKeyChecking=no ubuntu@43.201.94.100 \\\"\\n  docker load < ~/frontend.tar.gz &&\\n  docker tag chatflow-frontend:prod chatflow-frontend:latest &&\\n  docke...",
-  "error": "Exit code 1\nLoaded image: chatflow-frontend:prod\n Container chatflow-frontend Recreate \n Container chatflow-frontend Recreated \n Container chatflow-frontend Starting \n Container chatflow-frontend Started \n--- container status ---\ntime=\"2026-04-02T14:30:50Z\" level=warning msg=\"The \\\"JWT_SECRET\\\" variable is not set. Defaulting to a blank string.\"\ntime=\"2026-04-02T14:30:50Z\" level=warning msg=\"The \\\"DB_PASSWORD\\\" variable is not set. Defaulting to a blank string.\"\nerror while interpolating service...",
-  "timestamp": "2026-04-02T14:30:51.053Z",
+  "tool_input_preview": "{\"command\":\"./gradlew :chat-service:bootJar :ai-summary-service:bootJar --no-daemon 2>&1 | tail -3 && cd frontend && flutter build web --release 2>&1 | tail -2 && cd .. && echo \\\"=== DOCKER ===\\\" && d...",
+  "error": "Exit code 1\n(eval):1: no such file or directory: ./gradlew\n(eval):cd:1: no such file or directory: frontend",
+  "timestamp": "2026-04-04T09:35:22.733Z",
   "retry_count": 1
 }

@@ -137,7 +137,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
               return _AiSummaryCard(msg: msg);
             }
-            final isAiQuestion = msg.effectiveId.startsWith('ai-q-');
+            final isAiQuestion = msg.content.startsWith('[AI에게] ');
             return _ChatBubble(
               msg: msg,
               isMine: msg.username == widget.currentUsername,
@@ -608,7 +608,7 @@ class _ChatBubble extends StatelessWidget {
                                       ),
                                     ),
                                   Text(
-                                    msg.content,
+                                    isAiQuestion ? msg.content.replaceFirst('[AI에게] ', '') : msg.content,
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,

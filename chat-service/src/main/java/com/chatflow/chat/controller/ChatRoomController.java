@@ -88,5 +88,18 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    @PostMapping("/{roomId}/verify")
+    public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> request) {
+        String password = request.get("password");
+        boolean valid = chatRoomService.verifyRoomPassword(roomId, password);
+        if (valid) {
+            return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
+    }
+
     public record GetOrCreateRequest(String externalId, String name, String description) {}
 }

@@ -52,11 +52,15 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     required String name,
     String? description,
     String? color,
+    bool isPrivate = false,
+    String? password,
   }) async {
     final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
       'name': name,
       if (description != null) 'description': description,
       if (color != null) 'color': color,
+      'isPrivate': isPrivate,
+      if (password != null) 'password': password,
     });
     // Extract room ID first — fetchRooms failure must not mask successful creation
     final data = resp.data;
@@ -262,17 +266,20 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  static const _aiQuestionPrefix = '[AI에게] ';
+
   Future<void> askAi(String roomId, String question) async {
-    final questionMsg = ChatMessage(
-      messageId: 'ai-q-${DateTime.now().microsecondsSinceEpoch}',
-      chatRoomId: roomId,
-      userId: _userId,
-      username: _username,
-      content: question,
-      type: 'CHAT',
-      timestamp: DateTime.now().toIso8601String(),
-    );
-    state = state.copyWith(messages: [...state.messages, questionMsg], isAiLoading: true);
+    // Send AI question via STOMP for persistence
+    final taggedContent = '$_aiQuestionPrefix$question';
+    _stompService.sendMessage({
+      'chatRoomId': roomId,
+      'userId': _userId,
+      'username': _username,
+      'content': taggedContent,
+      'type': 'CHAT',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    state = state.copyWith(isAiLoading: true);
 
     try {
       final resp = await _dioClient.dio.post('/api/ai-summary/ask', data: {
@@ -300,10 +307,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       }
     } catch (e) {
       if (!mounted) return;
-      final updated = state.messages
-          .where((m) => m.effectiveId != questionMsg.effectiveId)
-          .toList();
-      state = state.copyWith(messages: updated, isAiLoading: false);
+      state = state.copyWith(isAiLoading: false);
       rethrow;
     }
   }

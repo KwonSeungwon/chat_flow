@@ -51,7 +51,7 @@ public class AiSummaryController {
         if (generated) {
             return ResponseEntity.ok(ApiResponse.ok(null, "요약 요청이 접수되었습니다."));
         } else {
-            return ResponseEntity.ok(ApiResponse.error("요약할 메시지가 충분하지 않습니다. 대화를 더 나눈 후 시도해주세요."));
+            return ResponseEntity.ok(ApiResponse.error("요약할 대화 내용이 부족합니다."));
         }
     }
 }

@@ -42,6 +42,9 @@ public class ChatRoom {
     @Column(name = "is_private")
     private boolean isPrivate = false;
 
+    @Column(name = "password")
+    private String password;
+
     @Builder.Default
     @Column(name = "allow_invites")
     private boolean allowInvites = true;

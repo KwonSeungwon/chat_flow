@@ -13,9 +13,11 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
 class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   int _selectedColorIndex = 0;
   bool _isCreating = false;
+  bool _isPrivate = false;
 
   static const _presetColors = [
     '#1976D2', // Blue
@@ -39,6 +41,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
@@ -52,6 +55,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         description:
             _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
         color: _presetColors[_selectedColorIndex],
+        isPrivate: _isPrivate,
+        password: _isPrivate ? _passwordCtrl.text.trim() : null,
       );
       if (mounted) {
         Navigator.of(context).pop();
@@ -119,6 +124,33 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                   return null;
                 },
               ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('비밀방'),
+                subtitle: const Text('비밀번호를 입력해야 입장 가능'),
+                secondary: Icon(_isPrivate ? Icons.lock : Icons.lock_open),
+                value: _isPrivate,
+                onChanged: (v) => setState(() => _isPrivate = v),
+              ),
+              if (_isPrivate) ...[
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _passwordCtrl,
+                  decoration: const InputDecoration(
+                    labelText: '비밀번호',
+                    hintText: '4자 이상',
+                    prefixIcon: Icon(Icons.password),
+                  ),
+                  obscureText: true,
+                  validator: (v) {
+                    if (_isPrivate && (v == null || v.trim().length < 4)) {
+                      return '비밀번호는 4자 이상이어야 합니다';
+                    }
+                    return null;
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
               Text(
                 '색상',
