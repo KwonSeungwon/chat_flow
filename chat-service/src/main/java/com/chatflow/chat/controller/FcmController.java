@@ -44,6 +44,6 @@ public class FcmController {
     @Data
     public static class SubscribeRequest {
         @NotBlank @Size(min = 100, max = 300) private String token;
-        @NotBlank @Pattern(regexp = "^[a-zA-Z0-9\\-]{1,64}$") private String roomId;
+        @NotBlank @Pattern(regexp = "^[a-zA-Z0-9_\\-]{1,64}$") private String roomId;
     }
 }
