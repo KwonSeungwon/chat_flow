@@ -95,6 +95,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.externalSecrets.valkey.secretName }}
                   key: VALKEY_PASSWORD
+            - name: FIREBASE_SERVICE_ACCOUNT_PATH
+              value: "file:/app/config/firebase/firebase-service-account.json"
           envFrom:
             - configMapRef:
                 name: {{ include "chat-service.fullname" . }}
@@ -124,9 +126,6 @@ spec:
             - name: firebase-sa
               mountPath: /app/config/firebase
               readOnly: true
-          env:
-            - name: FIREBASE_SERVICE_ACCOUNT_PATH
-              value: "file:/app/config/firebase/firebase-service-account.json"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
