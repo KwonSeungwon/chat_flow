@@ -99,7 +99,7 @@ graph TB
 - ![Spring WebSocket](https://img.shields.io/badge/WebSocket-STOMP-6DB33F?style=flat&logo=spring) **Spring WebSocket** - 실시간 통신
 - ![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-7.4-000000?style=flat&logo=apachekafka) **Apache Kafka** - 이벤트 스트리밍
 - ![LangChain4J](https://img.shields.io/badge/LangChain4J-0.25-FF6B6B?style=flat) **LangChain4J** - AI 통합 프레임워크
-- ![Gemini](https://img.shields.io/badge/Gemini-1.5_Flash-4285F4?style=flat&logo=google) **Google Gemini** - AI 언어 모델
+- ![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash_Lite-4285F4?style=flat&logo=google) **Google Gemini** - AI 언어 모델
 
 ### 🗄️ **Data & Search**
 - ![Valkey](https://img.shields.io/badge/Valkey-7.2-DC382D?style=flat&logo=redis) **Valkey 7.2** - Redis 호환 인메모리 DB
@@ -119,7 +119,7 @@ graph TB
 
 ### 🎯 **핵심 기능**
 - **🔄 실시간 채팅** - WebSocket 기반 즉시 메시지 전송
-- **🤖 AI 요약** - Google Gemini 1.5 Flash로 대화 내용 자동 요약
+- **🤖 AI 요약 & Q&A** - Google Gemini 2.5 Flash Lite로 대화 요약 + AI 질문 답변
 - **🔍 한국어 검색** - Nori 형태소 분석기 + N-gram 검색
 - **📱 크로스 플랫폼** - 웹/데스크톱 통합 지원
 - **🏗️ 마이크로서비스** - 독립적이고 확장 가능한 아키텍처
@@ -339,7 +339,7 @@ logging:
 | 서비스 | URL | 설명 |
 |--------|-----|------|
 | **웹 앱 (로컬)** | chrome (`flutter run -d chrome`) | Flutter Web 개발 서버 |
-| **웹 앱 (프로덕션)** | https://app.chatflow.ai.kr | EC2 nginx 컨테이너 |
+| **웹 앱 (프로덕션)** | https://app.chatflow.ai.kr | K3s + Cloudflare Tunnel |
 | **Android APK** | https://app.chatflow.ai.kr/chatflow-app.apk | 웹 UI 다운로드 버튼 |
 | **API Gateway** | http://localhost:8000 | 통합 API 엔드포인트 |
 | **WebSocket** | ws://localhost:8000/ws-native | STOMP 실시간 통신 |
@@ -359,7 +359,7 @@ logging:
 | **Kafka** | 9092 | 메시지 큐 |
 | **Elasticsearch** | 9200 | 검색 엔진 |
 | **PostgreSQL** | 5432 | 메인 데이터베이스 |
-| **Zookeeper** | 2181 | Kafka 코디네이터 |
+| ~~Zookeeper~~ | ~~2181~~ | KRaft 모드 전환으로 제거됨 |
 
 ## 🌐 API 명세
 
@@ -391,13 +391,18 @@ POST /api/chat/rooms
 }
 ```
 
-### 🤖 **AI Summary API**
+### 🤖 **AI Summary & Q&A API**
 ```http
 # 채팅방 요약 조회
 GET /api/ai-summary/room/{roomId}
 
 # 요약 요청
-POST /api/ai-summary/room/{roomId}/generate
+POST /api/ai-summary/request
+{ "chatRoomId": "room_xxx" }
+
+# AI 질문 (대화 맥락 기반 답변)
+POST /api/ai-summary/ask
+{ "chatRoomId": "room_xxx", "question": "질문 내용" }
 ```
 
 ### 🔍 **Search API**
@@ -474,31 +479,45 @@ ssh -i ~/web-app-key.pem ubuntu@43.201.22.86 << 'EOF'
 EOF
 ```
 
-> **EC2 정보**: ubuntu@43.201.22.86 · t3.small · 키: `~/web-app-key.pem`
-> **도메인**: Cloudflare → EC2 (`app.chatflow.ai.kr`)
-> **디스크 관리**: 100% 시 `docker image prune -af` (약 2GB 확보)
+> **레거시 EC2**: ubuntu@43.201.94.100 · t3.small (페이드아웃 중)
+> **현재 프로덕션**: K3s (온프레미스) · Cloudflare Tunnel
 
-### ☸️ **Kubernetes 배포 (Helm)**
+### ☸️ **K3s 배포 (현재 프로덕션)**
 
 ```bash
-# Secrets 생성 (PostgreSQL, Kafka, Valkey, Elasticsearch, Gemini)
-bash scripts/create-secrets.sh
+# 1. 인프라 배포 (PostgreSQL, Valkey, Kafka KRaft, Elasticsearch)
+kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
 
-# Helm 차트 배포
-helm install chatflow helm/chatflow \
-  --namespace chatflow --create-namespace \
-  --set global.image.tag=latest
+# 2. Secrets 생성
+bash scripts/create-secrets.sh chatflow
 
-# 배포 상태 확인
+# 3. 이미지 빌드 & containerd import
+./gradlew bootJar && flutter build web --release
+docker save chatflow/gateway-service:latest ... | gzip > images.tar.gz
+scp images.tar.gz ksw@node.chatflow.ai.kr:~/
+ssh node.chatflow.ai.kr "sudo k3s ctr images import ~/images.tar.gz"
+
+# 4. Helm 배포
+helm upgrade --install chatflow helm/chatflow \
+  -n chatflow -f helm/chatflow/values-k3s.yaml
+
+# 5. 상태 확인
 kubectl get pods -n chatflow
-helm status chatflow -n chatflow
+```
 
-# 차트 업그레이드
-helm upgrade chatflow helm/chatflow -n chatflow
+> **K3s 특이사항**:
+> - `enableServiceLinks: false` — K8s 서비스 env 변수가 Kafka/Valkey와 충돌 방지
+> - `imagePullPolicy: Never` — containerd 로컬 이미지 사용
+> - Kafka KRaft 모드 (Zookeeper 제거, ~95Mi 절감)
+> - JVM: `-Xmx256m -Xms128m -XX:+UseSerialGC` (시작 32초, 메모리 ~270Mi)
 
-# 차트 검증
+### ☸️ **Helm Chart 구조**
+
+```bash
+# 차트 검증 & 배포
 helm lint helm/chatflow
-helm template chatflow helm/chatflow
+helm template chatflow helm/chatflow -f helm/chatflow/values-k3s.yaml
+helm upgrade chatflow helm/chatflow -n chatflow -f helm/chatflow/values-k3s.yaml
 ```
 
 > Helm umbrella chart에 5개 subchart(gateway, chat, ai-summary, search, frontend) 포함.
@@ -599,8 +618,7 @@ flutter pub get
 
 3. **코드 스타일**: 
    - Java: Google Java Style Guide
-   - TypeScript: ESLint + Prettier
-   - Vue: Vue Style Guide
+   - Dart: `flutter analyze` + flutter_lints
 
 ### 🐛 **이슈 리포팅**
 - [GitHub Issues](https://github.com/KwonSeungwon/chat_flow/issues)에서 버그 리포트 및 기능 요청
@@ -613,6 +631,10 @@ flutter pub get
 - [x] 코드 품질 게이트 (Checkstyle, JaCoCo, ESLint, Vitest)
 - [x] Helm 기반 K8s 배포 + CI/CD 파이프라인
 - [x] 컨테이너 보안 강화 (non-root, securityContext)
+- [x] K3s 온프레미스 이관 (Cloudflare Tunnel)
+- [x] AI Q&A 기능 (대화 맥락 기반 질문 답변)
+- [x] Kafka KRaft 전환 (Zookeeper 제거)
+- [x] JVM 메모리 최적화 (SerialGC, 고정힙)
 - [ ] 파일 업로드 및 이미지 공유
 - [ ] 메시지 읽음/안읽음 상태
 - [ ] 푸시 알림 (PWA)
@@ -644,7 +666,7 @@ flutter pub get
 이 프로젝트는 다음 오픈소스 프로젝트들의 도움을 받았습니다:
 
 - **Spring Framework** - 강력한 백엔드 프레임워크
-- **Vue.js** - 직관적인 프론트엔드 프레임워크  
+- **Flutter** - 크로스 플랫폼 UI 프레임워크  
 - **Valkey** - Redis 호환 고성능 인메모리 DB
 - **Elasticsearch** - 확장 가능한 검색 엔진
 - **Apache Kafka** - 확장 가능한 이벤트 스트리밍 플랫폼
