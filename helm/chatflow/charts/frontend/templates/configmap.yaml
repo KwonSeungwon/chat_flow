@@ -92,6 +92,13 @@ data:
                 expires 0;
             }
 
+            # Android APK download
+            location = /chatflow-app.apk {
+                add_header Content-Disposition 'attachment; filename="chatflow-app.apk"';
+                add_header Content-Type application/vnd.android.package-archive;
+                add_header Cache-Control "no-cache";
+            }
+
             # Static assets — long cache (hash filenames, excludes exact-matched above)
             location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
                 expires 1y;
