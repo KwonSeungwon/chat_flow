@@ -16,6 +16,17 @@ public class LangChainChatModelClient implements ChatModelClient {
 
     @Override
     public String generate(String prompt) {
-        return chatLanguageModel.generate(prompt);
+        try {
+            return chatLanguageModel.generate(prompt);
+        } catch (Exception e) {
+            log.error("Gemini API 호출 실패: {}", e.getMessage());
+            String msg = (e.getMessage() != null &&
+                         (e.getMessage().contains("quota") ||
+                          e.getMessage().contains("RESOURCE_EXHAUSTED") ||
+                          e.getMessage().contains("429")))
+                ? "AI 서비스 사용량 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
+                : "AI 서비스 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            throw new IllegalStateException(msg, e);
+        }
     }
 }

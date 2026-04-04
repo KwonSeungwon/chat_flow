@@ -231,7 +231,7 @@ docker compose -f ~/docker-compose.prod.yml --env-file ~/.env.prod ps
 ```
 
 **도메인**: https://app.chatflow.ai.kr (Cloudflare → EC2 nginx)
-**EC2**: ubuntu@43.201.22.86 (키: ~/web-app-key.pem, t3.small)
+**EC2**: ubuntu@43.201.94.100 (키: ~/web-app-key.pem, t3.small)
 **디스크 관리**: `docker image prune -af` (공간 부족 시)
 
 ## Common Issues
