@@ -23,7 +23,8 @@ public class LangChainChatModelClient implements ChatModelClient {
             String msg = (e.getMessage() != null &&
                          (e.getMessage().contains("quota") ||
                           e.getMessage().contains("RESOURCE_EXHAUSTED") ||
-                          e.getMessage().contains("429")))
+                          e.getMessage().contains("429") ||
+                          e.getMessage().contains("403")))
                 ? "일일한도를 초과했습니다. 잠시 후 다시 시도해 주세요."
                 : "AI 서비스 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.";
             throw new IllegalStateException(msg, e);
