@@ -84,17 +84,19 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
       title: const Text('새 채팅방'),
       content: SizedBox(
         width: 360,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Room type toggle
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  color: colorScheme.surfaceContainerHighest.withAlpha(80),
+                  color: colorScheme.surfaceContainerHighest,
+                  border: Border.all(color: colorScheme.outline.withAlpha(80)),
                 ),
                 child: Row(
                   children: [
@@ -261,6 +263,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               ),
             ],
           ),
+        ),
         ),
       ),
       actions: [
