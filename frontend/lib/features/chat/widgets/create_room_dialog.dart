@@ -82,8 +82,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
 
     return AlertDialog(
       title: const Text('새 채팅방'),
-      content: SizedBox(
-        width: 360,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -94,13 +94,27 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               // Room type toggle
               SegmentedButton<bool>(
                 segments: const [
-                  ButtonSegment(value: false, label: Text('일반 채팅'), icon: Icon(Icons.chat_bubble_outline)),
-                  ButtonSegment(value: true, label: Text('인수인계'), icon: Icon(Icons.swap_horiz_rounded)),
+                  ButtonSegment(value: false, label: Text('일반 채팅'), icon: Icon(Icons.chat_bubble_outline, size: 18)),
+                  ButtonSegment(value: true, label: Text('인수인계'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
                 ],
                 selected: {_isHandoff},
                 onSelectionChanged: (v) => setState(() => _isHandoff = v.first),
+                showSelectedIcon: false,
                 style: ButtonStyle(
                   visualDensity: VisualDensity.compact,
+                  side: WidgetStatePropertyAll(BorderSide(color: colorScheme.outline)),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return _isHandoff ? const Color(0xFF00796B).withAlpha(50) : colorScheme.primaryContainer;
+                    }
+                    return colorScheme.surfaceContainerHigh;
+                  }),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return _isHandoff ? const Color(0xFF00796B) : colorScheme.onPrimaryContainer;
+                    }
+                    return colorScheme.onSurface;
+                  }),
                 ),
               ),
               const SizedBox(height: 12),

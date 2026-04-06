@@ -325,7 +325,8 @@ class _Logo extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(18),
-            child: Image.asset('assets/app_icon.png', width: 72, height: 72),
+            child: Image.asset('assets/app_icon.png', width: 72, height: 72,
+              errorBuilder: (_, __, ___) => const Icon(Icons.local_hospital, size: 36, color: Colors.white)),
           ),
         ),
         const SizedBox(height: 18),

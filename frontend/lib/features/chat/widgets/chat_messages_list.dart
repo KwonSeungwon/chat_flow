@@ -592,6 +592,30 @@ class _ChatBubble extends StatelessWidget {
                       ],
                     ),
                   ),
+                if (isMine && (msg.priority == 'URGENT' || msg.priority == 'STAT'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4, bottom: 3),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: msg.priority == 'STAT'
+                              ? const Color(0xFFD32F2F).withAlpha(20)
+                              : const Color(0xFFF57C00).withAlpha(20),
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(msg.priority, style: TextStyle(
+                          fontSize: 9, fontWeight: FontWeight.w700,
+                          color: msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
+                        )),
+                      ),
+                    ),
+                  ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
