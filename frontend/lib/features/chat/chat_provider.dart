@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
@@ -310,7 +311,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (e) {
       if (!mounted) return;
       state = state.copyWith(isAiLoading: false);
-      rethrow;
+      // Extract backend error message for display
+      String errMsg = 'AI 답변을 가져오는데 실패했습니다.';
+      if (e is DioException && e.response?.data is Map) {
+        errMsg = (e.response!.data as Map)['message']?.toString() ?? errMsg;
+      }
+      throw Exception(errMsg);
     }
   }
 

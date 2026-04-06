@@ -48,10 +48,11 @@ class _ChatInputState extends State<ChatInput> {
       _focusNode.requestFocus();
       try {
         await widget.onAskAi!(text);
-      } catch (_) {
+      } catch (e) {
         if (!mounted) return;
+        final msg = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('AI 답변을 가져오는데 실패했습니다.')),
+          SnackBar(content: Text(msg)),
         );
       }
     } else {
