@@ -31,8 +31,9 @@ public class KoreanSearchService {
             // Multi-match query with Korean analyzer
             Query multiMatchQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content^2", "content.ngram^0.5")
+                    .fields("content^3", "content.ngram^0.3")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
+                    .minimumShouldMatch("75%")
             )._toQuery();
 
             // Build bool query: must match content + filter by type + optional room
@@ -110,7 +111,15 @@ public class KoreanSearchService {
             )._toQuery();
 
             BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder()
-                    .must(ngramQuery);
+                    .must(ngramQuery)
+                    .mustNot(mn -> mn.terms(t -> t
+                            .field("messageType")
+                            .terms(tv -> tv.value(List.of(
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
+                                    co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
+                            )))
+                    ));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
                 boolQueryBuilder.filter(f -> f
@@ -126,12 +135,19 @@ public class KoreanSearchService {
             SearchRequest searchRequest = SearchRequest.of(s -> s
                     .index("chat_messages")
                     .query(finalQuery)
+                    .minScore(0.5)
                     .from((int) pageable.getOffset())
                     .size(pageable.getPageSize())
                     .sort(sort -> sort
                             .field(f -> f
                                     .field("timestamp")
                                     .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
+                            )
+                    )
+                    .highlight(h -> h
+                            .fields("content.ngram", hf -> hf
+                                    .preTags("<mark>")
+                                    .postTags("</mark>")
                             )
                     )
             );

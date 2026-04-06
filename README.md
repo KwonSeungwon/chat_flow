@@ -99,7 +99,7 @@ graph TB
 - ![Spring WebSocket](https://img.shields.io/badge/WebSocket-STOMP-6DB33F?style=flat&logo=spring) **Spring WebSocket** - 실시간 통신
 - ![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-7.4-000000?style=flat&logo=apachekafka) **Apache Kafka** - 이벤트 스트리밍
 - ![LangChain4J](https://img.shields.io/badge/LangChain4J-0.25-FF6B6B?style=flat) **LangChain4J** - AI 통합 프레임워크
-- ![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash_Lite-4285F4?style=flat&logo=google) **Google Gemini** - AI 언어 모델
+- ![Gemini](https://img.shields.io/badge/Gemini-2.0_Flash-4285F4?style=flat&logo=google) **Google Gemini** - AI 언어 모델
 
 ### 🗄️ **Data & Search**
 - ![Valkey](https://img.shields.io/badge/Valkey-7.2-DC382D?style=flat&logo=redis) **Valkey 7.2** - Redis 호환 인메모리 DB
@@ -118,25 +118,38 @@ graph TB
 ## ✨ 주요 기능
 
 ### 🎯 **핵심 기능**
-- **🔄 실시간 채팅** - WebSocket 기반 즉시 메시지 전송
-- **🤖 AI 요약 & Q&A** - Google Gemini 2.5 Flash Lite로 대화 요약 + AI 질문 답변
-- **🔍 한국어 검색** - Nori 형태소 분석기 + N-gram 검색
-- **📱 크로스 플랫폼** - 웹/데스크톱 통합 지원
+- **🔄 실시간 채팅** - WebSocket/STOMP 기반 즉시 메시지 전송
+- **🤖 AI 요약 & Q&A** - Google Gemini 2.0 Flash로 대화 요약 + AI 질문 답변
+- **🔍 한국어 검색** - Nori 형태소 분석기 + N-gram 부분 매칭 + 의료 용어 동의어
+- **📱 크로스 플랫폼** - Flutter Web + Android APK 지원
 - **🏗️ 마이크로서비스** - 독립적이고 확장 가능한 아키텍처
 
+### 🏥 **EMR (병원 시스템) 연계 기능**
+- **🔄 인수인계 채팅방** - SBAR 구조화 템플릿 (Situation/Background/Assessment/Recommendation)
+- **📋 환자 카드 메시지** - 환자명/병실/진단/바이탈을 구조화된 카드로 공유
+- **🚨 긴급 메시지** - ROUTINE/URGENT/STAT 우선순위 플래그
+- **📊 AI SOAP 임상 노트** - HANDOFF 방 전용 SOAP 형식 자동 요약
+- **📝 교대 보고서** - AI 기반 근무 교대 인수인계 보고서 자동 생성
+- **👥 역할 기반 접근제어 (RBAC)** - 의사/간호사/약사/관리자 역할별 방 접근 제한
+- **✅ 읽음 확인** - STOMP 기반 실시간 읽음 상태 추적
+- **🏥 HL7 FHIR 연동** - 환자/처방 데이터 조회 API (Mock)
+- **💊 처방/검사 알림** - Kafka 기반 오더 이벤트 → 채팅방 자동 시스템 알림
+- **📜 감사 로그** - 메시지 접근 이력 ES 인덱싱 (의료법 준수)
+- **🔐 메시지 암호화** - AES-256-GCM at-rest 암호화
+
 ### 💎 **고급 기능**
-- **🎨 모던 UI/UX** - 아름다운 채팅방 생성 모달, 그라디언트 디자인
-- **🌙 다크 모드** - 시스템 테마 자동 감지 (메모리 누수 없는 안전한 이벤트 리스너)
-- **🚀 성능 최적화** - Valkey 캐싱, 비동기 처리, 오프라인 큐
+- **🎨 모던 UI/UX** - Material 3 디자인, 채팅+의료 십자 앱 아이콘
+- **🌙 다크/라이트 모드** - 테마 토글 지원
+- **🚀 성능 최적화** - Valkey 캐싱, Outbox 패턴, 비동기 Kafka 파이프라인
 - **📈 실시간 모니터링** - Prometheus/Grafana 메트릭
-- **🔐 보안** - JWT 인증 + Valkey 기반 토큰 블랙리스트, DOMPurify XSS 방지, Gateway 통합 CORS
-- **🏗️ Outbox 패턴** - 메시지 영속화와 Kafka 발행의 트랜잭션 일관성 보장
+- **🔐 보안** - JWT 인증 + 토큰 블랙리스트, 비밀방 비밀번호, Gateway CORS
+- **🔔 FCM 푸시 알림** - Firebase Cloud Messaging 기반 실시간 알림
 
 ### 🎪 **사용자 경험**
 - **채팅방별 색상 구분** - 시각적 식별성 강화
-- **실시간 타이핑 표시** - 사용자 활동 상태 표시
 - **검색 결과 하이라이트** - 검색어 강조 표시
-- **반응형 디자인** - 모든 디바이스에서 최적화
+- **반응형 디자인** - 768px 브레이크포인트 (모바일 drawer / 데스크톱 사이드바)
+- **의료 용어 동의어 검색** - 바이탈↔활력징후, 처방↔오더 등 15종 자동 매핑
 
 ## 🏃‍♂️ 빠른 시작
 
