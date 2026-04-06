@@ -80,6 +80,7 @@ public class ChatRoomService {
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .color(request.getColor() != null ? request.getColor() : "#6366f1")
+                .roomType(request.getRoomType() != null ? request.getRoomType() : com.chatflow.chat.entity.RoomType.GENERAL)
                 .isPrivate(request.isPrivate())
                 .password(request.getPassword())
                 .allowInvites(request.isAllowInvites())
@@ -127,7 +128,7 @@ public class ChatRoomService {
     public boolean verifyRoomPassword(String roomId, String password) {
         return chatRoomRepository.findById(roomId)
                 .map(room -> {
-                    if (!room.isPrivate() || room.getPassword() == null) return true;
+                    if (room.getPassword() == null || room.getPassword().isEmpty()) return true;
                     return room.getPassword().equals(password);
                 })
                 .orElse(false);

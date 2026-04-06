@@ -205,8 +205,12 @@ class _ChatRoomContent extends ConsumerWidget {
         ChatInput(
           isConnected: chatState.isConnected,
           isAiLoading: chatState.isAiLoading,
-          onSend: (content) {
-            chatNotifier.sendMessage(roomId: roomId, content: content);
+          isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
+            data: (rooms) => rooms.any((r) => r.id == roomId && r.isHandoff),
+            orElse: () => false,
+          ),
+          onSend: (content, {String priority = 'ROUTINE'}) {
+            chatNotifier.sendMessage(roomId: roomId, content: content, priority: priority);
           },
           onAskAi: (question) => chatNotifier.askAi(roomId, question),
         ),

@@ -15,13 +15,16 @@ import java.util.UUID;
 public class MessageSenderService {
 
     private final ChatPersistenceService chatPersistenceService;
+    private final ChatRoomService chatRoomService;
     private final FcmNotificationService fcmNotificationService;
     private final Counter messageCounter;
 
     public MessageSenderService(ChatPersistenceService chatPersistenceService,
+                                ChatRoomService chatRoomService,
                                 FcmNotificationService fcmNotificationService,
                                 MeterRegistry registry) {
         this.chatPersistenceService = chatPersistenceService;
+        this.chatRoomService = chatRoomService;
         this.fcmNotificationService = fcmNotificationService;
         this.messageCounter = Counter.builder("chatflow.messages.processed")
                 .description("Total chat messages processed")
@@ -34,6 +37,11 @@ public class MessageSenderService {
     public void send(ChatMessage message) {
         message.setMessageId(UUID.randomUUID().toString());
         message.setTimestamp(LocalDateTime.now());
+
+        // Enrich message with room metadata
+        chatRoomService.getRoom(message.getChatRoomId()).ifPresent(room -> {
+            message.setRoomType(room.getRoomType() != null ? room.getRoomType().name() : "GENERAL");
+        });
 
         log.info("Processing chat message: {}", message.getMessageId());
 

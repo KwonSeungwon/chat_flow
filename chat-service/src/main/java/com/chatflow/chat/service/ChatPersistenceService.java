@@ -42,6 +42,7 @@ public class ChatPersistenceService {
                 .content(message.getContent())
                 .timestamp(message.getTimestamp())
                 .type(message.getType() != null ? message.getType().name() : "CHAT")
+                .priority(message.getPriority() != null ? message.getPriority() : "ROUTINE")
                 .isAiGenerated(message.isAiGenerated())
                 .build();
         chatMessageRepository.save(entity);

@@ -52,6 +52,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     required String name,
     String? description,
     String? color,
+    String roomType = 'GENERAL',
     bool isPrivate = false,
     String? password,
   }) async {
@@ -59,6 +60,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
       'name': name,
       if (description != null) 'description': description,
       if (color != null) 'color': color,
+      'roomType': roomType,
       'isPrivate': isPrivate,
       if (password != null) 'password': password,
     });
@@ -312,13 +314,14 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  void sendMessage({required String roomId, required String content}) {
+  void sendMessage({required String roomId, required String content, String priority = 'ROUTINE'}) {
     _stompService.sendMessage({
       'chatRoomId': roomId,
       'userId': _userId,
       'username': _username,
       'content': content,
       'type': 'CHAT',
+      'priority': priority,
       'timestamp': DateTime.now().toIso8601String(),
     });
   }

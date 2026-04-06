@@ -69,19 +69,20 @@
     }
     .logo-ring {
       width: 80px; height: 80px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #9D94F8 0%, #6558E8 100%);
+      border-radius: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow:
-        0 0 0 1px rgba(124,111,247,0.3),
-        0 0 40px rgba(124,111,247,0.35),
+        0 0 0 1px rgba(13,148,136,0.3),
+        0 0 40px rgba(13,148,136,0.35),
         0 8px 32px rgba(0,0,0,0.4);
       animation: logo-pulse 2.4s ease-in-out infinite;
+      overflow: hidden;
     }
-    .logo-ring svg {
-      width: 38px; height: 38px;
+    .logo-ring img {
+      width: 100%; height: 100%;
+      object-fit: cover;
     }
     /* Spinning orbit ring */
     .orbit {
@@ -126,8 +127,8 @@
     }
 
     @keyframes logo-pulse {
-      0%, 100% { box-shadow: 0 0 0 1px rgba(124,111,247,0.3), 0 0 30px rgba(124,111,247,0.25), 0 8px 32px rgba(0,0,0,0.4); }
-      50% { box-shadow: 0 0 0 1px rgba(124,111,247,0.5), 0 0 60px rgba(124,111,247,0.5), 0 8px 40px rgba(0,0,0,0.5); }
+      0%, 100% { box-shadow: 0 0 0 1px rgba(13,148,136,0.3), 0 0 30px rgba(13,148,136,0.25), 0 8px 32px rgba(0,0,0,0.4); }
+      50% { box-shadow: 0 0 0 1px rgba(13,148,136,0.5), 0 0 60px rgba(13,148,136,0.5), 0 8px 40px rgba(0,0,0,0.5); }
     }
     @keyframes orbit-spin {
       from { transform: rotate(0deg); }
@@ -155,10 +156,7 @@
 
     <div class="logo-wrap">
       <div class="logo-ring">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z"
-            fill="white" fill-opacity="0.95"/>
-        </svg>
+        <img src="icons/Icon-512.png" alt="ChatFlow">
       </div>
       <div class="orbit"></div>
     </div>

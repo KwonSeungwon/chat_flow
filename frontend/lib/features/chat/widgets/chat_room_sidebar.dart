@@ -359,6 +359,18 @@ class _RoomTileState extends State<_RoomTile> {
                             children: [
                               Row(
                                 children: [
+                                  if (widget.room.isHandoff) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                      margin: const EdgeInsets.only(right: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00796B).withAlpha(25),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: const Color(0xFF00796B).withAlpha(80), width: 0.5),
+                                      ),
+                                      child: const Text('SBAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF00796B))),
+                                    ),
+                                  ],
                                   if (widget.room.isPrivate) ...[
                                     Icon(Icons.lock, size: 12,
                                         color: cs.onSurfaceVariant.withAlpha(150)),

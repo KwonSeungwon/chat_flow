@@ -3,6 +3,7 @@ class ChatRoom {
   final String name;
   final String? description;
   final String? color;
+  final String roomType;
   final bool isPrivate;
   final int participantCount;
   final int maxParticipants;
@@ -13,6 +14,7 @@ class ChatRoom {
     required this.name,
     this.description,
     this.color,
+    this.roomType = 'GENERAL',
     this.isPrivate = false,
     required this.participantCount,
     this.maxParticipants = 10,
@@ -25,6 +27,7 @@ class ChatRoom {
       name: json['name']?.toString() ?? '',
       description: json['description']?.toString(),
       color: json['color']?.toString(),
+      roomType: json['roomType']?.toString() ?? 'GENERAL',
       isPrivate: json['isPrivate'] == true || json['private'] == true,
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
       maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? 10,
@@ -33,4 +36,5 @@ class ChatRoom {
   }
 
   bool get isFull => participantCount >= maxParticipants;
+  bool get isHandoff => roomType == 'HANDOFF';
 }

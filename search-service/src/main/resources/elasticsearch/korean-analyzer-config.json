@@ -37,7 +37,22 @@
           "synonyms": [
             "채팅,대화,메시지",
             "요약,정리,요약정리",
-            "검색,찾기,조회"
+            "검색,찾기,조회",
+            "처방,오더,order",
+            "활력징후,바이탈,vital",
+            "인수인계,핸드오프,handoff",
+            "환자,patient",
+            "진단,diagnosis",
+            "투약,medication,약물",
+            "수술,operation,시술",
+            "혈압,BP,blood pressure",
+            "맥박,심박수,HR,heart rate",
+            "체온,BT,body temperature",
+            "호흡,RR,respiratory rate",
+            "알러지,알레르기,allergy",
+            "응급,긴급,STAT,emergency",
+            "경과,progress,경과기록",
+            "퇴원,discharge,퇴원요약"
           ]
         }
       },

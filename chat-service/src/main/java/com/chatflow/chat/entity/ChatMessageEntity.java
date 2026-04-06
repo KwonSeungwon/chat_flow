@@ -49,6 +49,10 @@ public class ChatMessageEntity implements Persistable<String> {
     private String type;
 
     @Builder.Default
+    @Column(length = 10)
+    private String priority = "ROUTINE";
+
+    @Builder.Default
     @Column(name = "is_ai_generated")
     private boolean isAiGenerated = false;
 

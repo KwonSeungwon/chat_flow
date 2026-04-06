@@ -6,13 +6,15 @@ import '../../../core/theme/app_theme.dart';
 class ChatInput extends StatefulWidget {
   final bool isConnected;
   final bool isAiLoading;
-  final void Function(String content) onSend;
+  final bool isHandoff;
+  final void Function(String content, {String priority}) onSend;
   final Future<void> Function(String question)? onAskAi;
 
   const ChatInput({
     super.key,
     required this.isConnected,
     this.isAiLoading = false,
+    this.isHandoff = false,
     required this.onSend,
     this.onAskAi,
   });
@@ -27,6 +29,7 @@ class _ChatInputState extends State<ChatInput> {
   static const _maxLength     = 1000;
   static const _warnThreshold = 800;
   bool _aiMode = false;
+  String _priority = 'ROUTINE';
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -52,8 +55,9 @@ class _ChatInputState extends State<ChatInput> {
         );
       }
     } else {
-      widget.onSend(text);
+      widget.onSend(text, priority: _priority);
       _controller.clear();
+      if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
       _focusNode.requestFocus();
     }
   }
@@ -243,6 +247,63 @@ class _ChatInputState extends State<ChatInput> {
                   ),
                   const SizedBox(width: 6),
                 ],
+                // Priority toggle (handoff rooms only)
+                if (widget.isHandoff && !_aiMode) ...[
+                  GestureDetector(
+                    onTap: widget.isConnected ? () {
+                      setState(() {
+                        _priority = _priority == 'ROUTINE' ? 'URGENT'
+                            : _priority == 'URGENT' ? 'STAT' : 'ROUTINE';
+                      });
+                    } : null,
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: _priority == 'STAT' ? const Color(0xFFD32F2F).withAlpha(25)
+                            : _priority == 'URGENT' ? const Color(0xFFF57C00).withAlpha(25)
+                            : Theme.of(context).colorScheme.surfaceContainer,
+                        border: Border.all(
+                          color: _priority == 'STAT' ? const Color(0xFFD32F2F)
+                              : _priority == 'URGENT' ? const Color(0xFFF57C00)
+                              : Theme.of(context).colorScheme.outline,
+                          width: _priority != 'ROUTINE' ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _priority,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _priority == 'STAT' ? const Color(0xFFD32F2F)
+                                : _priority == 'URGENT' ? const Color(0xFFF57C00)
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // SBAR template button (handoff rooms only)
+                if (widget.isHandoff && !_aiMode) ...[
+                  _CircleIconBtn(
+                    icon: Icons.assignment_outlined,
+                    enabled: widget.isConnected,
+                    active: false,
+                    onTap: () {
+                      final template = buildSbarTemplate();
+                      _controller.text = template;
+                      _controller.selection = TextSelection.collapsed(
+                        offset: template.length,
+                      );
+                      _focusNode.requestFocus();
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 // Emoji button (hidden in AI mode)
                 if (!_aiMode) ...[
                   _CircleIconBtn(
@@ -366,6 +427,25 @@ class _ChatInputState extends State<ChatInput> {
       ),
     );
   }
+}
+
+String buildSbarTemplate() {
+  return '[SBAR 인수인계]\n'
+      '\n'
+      '[S] 환자: / 병실: \n'
+      '    주호소: \n'
+      '\n'
+      '[B] 진단: \n'
+      '    이력: \n'
+      '    알러지: \n'
+      '\n'
+      '[A] V/S: BP /  HR  RR  BT \n'
+      '    현재상태: \n'
+      '    주의사항: \n'
+      '\n'
+      '[R] 다음조치: \n'
+      '    투약: \n'
+      '    모니터링: ';
 }
 
 class _CircleIconBtn extends StatelessWidget {

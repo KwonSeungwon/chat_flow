@@ -1,5 +1,6 @@
 package com.chatflow.chat.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -39,6 +40,12 @@ public class ChatRoom {
     private String externalId;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "room_type", length = 20)
+    private RoomType roomType = RoomType.GENERAL;
+
+    @Builder.Default
+    @JsonProperty("isPrivate")
     @Column(name = "is_private")
     private boolean isPrivate = false;
 

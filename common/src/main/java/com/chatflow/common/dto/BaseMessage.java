@@ -42,6 +42,11 @@ public abstract class BaseMessage {
     @NotNull(message = "메시지 타입은 필수입니다")
     private MessageType type;
 
+    private String roomType;
+
+    @lombok.Builder.Default
+    private String priority = "ROUTINE";
+
     public enum MessageType {
         CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY
     }

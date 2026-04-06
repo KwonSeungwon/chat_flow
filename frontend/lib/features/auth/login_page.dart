@@ -314,12 +314,7 @@ class _Logo extends StatelessWidget {
           width: 72,
           height: 72,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primaryGlow, AppColors.primaryDim],
-            ),
+            borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
                 color: AppColors.primary.withAlpha(90),
@@ -328,7 +323,10 @@ class _Logo extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.forum_rounded, size: 36, color: Colors.white),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Image.asset('assets/app_icon.png', width: 72, height: 72),
+          ),
         ),
         const SizedBox(height: 18),
         const Text(

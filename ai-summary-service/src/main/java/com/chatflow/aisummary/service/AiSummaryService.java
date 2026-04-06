@@ -221,7 +221,11 @@ public class AiSummaryService {
             log.info("Generating AI summary for room: {} with {} messages", roomId, messages.size());
 
             String conversationText = buildConversationText(messages);
-            String summaryPrompt = buildSummaryPrompt(conversationText);
+            boolean isHandoff = messages.stream()
+                    .anyMatch(m -> "HANDOFF".equals(m.getRoomType()));
+            String summaryPrompt = isHandoff
+                    ? buildSoapPrompt(conversationText)
+                    : buildSummaryPrompt(conversationText);
 
             String summary = chatModelClient.generate(summaryPrompt);
 
@@ -396,6 +400,28 @@ public class AiSummaryService {
             2. 3-5문장으로 간결하게 작성
             3. 한국어로 작성
             4. 존댓말 사용
+            """, conversationText);
+    }
+
+    private String buildSoapPrompt(String conversationText) {
+        return String.format("""
+            다음은 의료진 인수인계 채팅방의 대화 내용입니다.
+            SOAP 형식으로 임상 노트를 작성해주세요.
+
+            대화 내용:
+            %s
+
+            SOAP 형식으로 작성:
+            [S] Subjective (주관적 소견): 환자 호소, 증상, 불편감
+            [O] Objective (객관적 소견): 활력징후, 검사결과, 관찰 소견
+            [A] Assessment (평가): 현재 상태 평가, 진단명, 주요 문제
+            [P] Plan (계획): 치료계획, 투약, 모니터링, 다음 조치
+
+            작성 규칙:
+            1. 대화에서 추출 가능한 임상 정보만 기록
+            2. 각 섹션은 핵심만 간결하게 작성
+            3. 한국어로 작성
+            4. 대화에 없는 내용은 '언급 없음'으로 표기
             """, conversationText);
     }
 }

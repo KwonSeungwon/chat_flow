@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Background gradient: teal to blue (medical + tech) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D9488"/>
+      <stop offset="50%" stop-color="#0E7490"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <!-- Cross gradient -->
+    <linearGradient id="crossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D9488"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <!-- Subtle shadow for depth -->
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.12"/>
+    </filter>
+    <filter id="shadowSm" x="-5%" y="-5%" width="115%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Full bleed background (maskable icons need edge-to-edge fill) -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#bgGrad)"/>
+
+  <!-- Subtle inner glow -->
+  <rect x="0" y="0" width="512" height="512" fill="white" opacity="0.06"/>
+
+  <!-- Main chat bubble (scaled down ~15% and centered for safe zone) -->
+  <g filter="url(#shadow)">
+    <path d="
+      M 150,130
+      H 370
+      Q 400,130 400,160
+      V 295
+      Q 400,325 370,325
+      H 225
+      L 175,370
+      L 188,325
+      Q 158,325 158,295
+      V 160
+      Q 158,130 188,130
+      Z
+    " fill="white" opacity="0.95"/>
+  </g>
+
+  <!-- Medical cross inside the main bubble -->
+  <g>
+    <rect x="228" y="203" width="95" height="32" rx="7" fill="url(#crossGrad)"/>
+    <rect x="244" y="170" width="32" height="95" rx="7" fill="url(#crossGrad)"/>
+  </g>
+
+  <!-- Small secondary chat bubble -->
+  <g filter="url(#shadowSm)">
+    <path d="
+      M 300,342
+      H 388
+      Q 408,342 408,362
+      V 395
+      Q 408,415 388,415
+      H 365
+      L 378,435
+      L 348,415
+      H 330
+      Q 300,415 300,395
+      V 362
+      Q 300,342 330,342
+      Z
+    " fill="white" opacity="0.4"/>
+  </g>
+
+  <!-- Three dots in the small bubble -->
+  <circle cx="336" cy="380" r="6.5" fill="white" opacity="0.75"/>
+  <circle cx="356" cy="380" r="6.5" fill="white" opacity="0.75"/>
+  <circle cx="376" cy="380" r="6.5" fill="white" opacity="0.75"/>
+
+  <!-- ECG/Heartbeat line accent -->
+  <polyline points="100,440 150,440 170,440 182,424 194,456 206,415 218,450 228,440 275,440"
+    stroke="white" stroke-width="3" fill="none" opacity="0.3"
+    stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Accent dots -->
+  <circle cx="188" cy="155" r="5" fill="#F59E0B" opacity="0.85"/>
+  <circle cx="378" cy="165" r="4.5" fill="#34D399" opacity="0.75"/>
+  <circle cx="400" cy="355" r="3.5" fill="#F59E0B" opacity="0.65"/>
+</svg>

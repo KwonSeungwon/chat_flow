@@ -548,15 +548,48 @@ class _ChatBubble extends StatelessWidget {
                 if (!isMine)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 3),
-                    child: Text(
-                      msg.username,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          msg.username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (msg.priority == 'URGENT' || msg.priority == 'STAT') ...[
+                          const SizedBox(width: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: msg.priority == 'STAT'
+                                  ? const Color(0xFFD32F2F).withAlpha(20)
+                                  : const Color(0xFFF57C00).withAlpha(20),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: msg.priority == 'STAT'
+                                    ? const Color(0xFFD32F2F)
+                                    : const Color(0xFFF57C00),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              msg.priority,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: msg.priority == 'STAT'
+                                    ? const Color(0xFFD32F2F)
+                                    : const Color(0xFFF57C00),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 Row(

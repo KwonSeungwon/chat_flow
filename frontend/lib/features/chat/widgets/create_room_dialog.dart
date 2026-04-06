@@ -18,6 +18,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   int _selectedColorIndex = 0;
   bool _isCreating = false;
   bool _isPrivate = false;
+  bool _isHandoff = false;
 
   static const _presetColors = [
     '#1976D2', // Blue
@@ -54,7 +55,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         name: _nameCtrl.text.trim(),
         description:
             _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        color: _presetColors[_selectedColorIndex],
+        color: _isHandoff ? '#00796B' : _presetColors[_selectedColorIndex],
+        roomType: _isHandoff ? 'HANDOFF' : 'GENERAL',
         isPrivate: _isPrivate,
         password: _isPrivate ? _passwordCtrl.text.trim() : null,
       );
@@ -88,12 +90,76 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Room type toggle
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: colorScheme.surfaceContainerHighest.withAlpha(80),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _isHandoff = false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: !_isHandoff ? colorScheme.primaryContainer : Colors.transparent,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.chat_bubble_outline, size: 16,
+                                color: !_isHandoff ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 6),
+                              Text('일반 채팅',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: !_isHandoff ? FontWeight.w600 : FontWeight.normal,
+                                  color: !_isHandoff ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
+                                )),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _isHandoff = true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: _isHandoff ? const Color(0xFF00796B).withAlpha(40) : Colors.transparent,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.swap_horiz_rounded, size: 16,
+                                color: _isHandoff ? const Color(0xFF00796B) : colorScheme.onSurfaceVariant),
+                              const SizedBox(width: 6),
+                              Text('인수인계',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: _isHandoff ? FontWeight.w600 : FontWeight.normal,
+                                  color: _isHandoff ? const Color(0xFF00796B) : colorScheme.onSurfaceVariant,
+                                )),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: '채팅방 이름',
-                  hintText: '2~50자',
-                  prefixIcon: Icon(Icons.tag),
+                decoration: InputDecoration(
+                  labelText: _isHandoff ? '인수인계방 이름' : '채팅방 이름',
+                  hintText: _isHandoff ? '예: 301호 김OO 인수인계' : '2~50자',
+                  prefixIcon: Icon(_isHandoff ? Icons.swap_horiz_rounded : Icons.tag),
                 ),
                 maxLength: 50,
                 autofocus: true,

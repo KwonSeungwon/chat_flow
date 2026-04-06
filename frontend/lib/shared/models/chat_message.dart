@@ -7,6 +7,7 @@ class ChatMessage {
   final String content;
   final String timestamp;
   final String type; // CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY
+  final String priority; // ROUTINE, URGENT, STAT
   final bool isAiGenerated;
 
   ChatMessage({
@@ -18,6 +19,7 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     required this.type,
+    this.priority = 'ROUTINE',
     this.isAiGenerated = false,
   });
 
@@ -35,6 +37,7 @@ class ChatMessage {
           json['type']?.toString() ??
           json['messageType']?.toString() ??
           'CHAT',
+      priority: json['priority']?.toString() ?? 'ROUTINE',
       isAiGenerated:
           json['isAiGenerated'] == true || json['aiGenerated'] == true,
     );
@@ -47,6 +50,7 @@ class ChatMessage {
     'content': content,
     'timestamp': timestamp,
     'type': type,
+    'priority': priority,
     'isAiGenerated': isAiGenerated,
   };
 
