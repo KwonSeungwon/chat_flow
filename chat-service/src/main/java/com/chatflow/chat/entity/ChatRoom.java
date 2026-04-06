@@ -49,6 +49,7 @@ public class ChatRoom {
     @Column(name = "is_private")
     private boolean isPrivate = false;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "password")
     private String password;
 

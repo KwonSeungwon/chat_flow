@@ -197,19 +197,9 @@ class _SidebarHeader extends StatelessWidget {
       color: cs.surface,
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.primaryGlow, AppColors.primaryDim],
-              ),
-            ),
-            child:
-                const Icon(Icons.forum_rounded, size: 16, color: Colors.white),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset('assets/app_icon.png', width: 32, height: 32),
           ),
           const SizedBox(width: 10),
           Text(
