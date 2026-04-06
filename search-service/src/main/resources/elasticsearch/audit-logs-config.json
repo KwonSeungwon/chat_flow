@@ -1,0 +1,33 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    }
+  },
+  "mappings": {
+    "properties": {
+      "eventId": {
+        "type": "keyword"
+      },
+      "eventType": {
+        "type": "keyword"
+      },
+      "userId": {
+        "type": "keyword"
+      },
+      "username": {
+        "type": "keyword"
+      },
+      "resourceId": {
+        "type": "keyword"
+      },
+      "roomId": {
+        "type": "keyword"
+      },
+      "timestamp": {
+        "type": "date"
+      }
+    }
+  }
+}

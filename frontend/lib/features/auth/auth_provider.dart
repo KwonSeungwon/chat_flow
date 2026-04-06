@@ -7,6 +7,7 @@ class AuthState {
   final String? token;
   final String? userId;
   final String username;
+  final String role;
   final bool isLoading;
   final String? error;
 
@@ -14,6 +15,7 @@ class AuthState {
     this.token,
     this.userId,
     this.username = '',
+    this.role = 'NURSE',
     this.isLoading = false,
     this.error,
   });
@@ -24,6 +26,7 @@ class AuthState {
     String? token,
     String? userId,
     String? username,
+    String? role,
     bool? isLoading,
     String? error,
   }) {
@@ -31,6 +34,7 @@ class AuthState {
       token: token ?? this.token,
       userId: userId ?? this.userId,
       username: username ?? this.username,
+      role: role ?? this.role,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -52,10 +56,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userId = await _storage.read(key: 'chatflow-userId');
       final username = await _storage.read(key: 'chatflow-username');
       if (token != null) {
+        final role = await _storage.read(key: 'chatflow-role');
         state = AuthState(
           token: token,
           userId: userId,
           username: username ?? '',
+          role: role ?? 'NURSE',
         );
       }
     } catch (_) {
@@ -73,8 +79,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      await _saveCredentials(token: token, userId: userId, username: username);
-      state = AuthState(token: token, userId: userId, username: username);
+      final role = resp.data['role']?.toString() ?? 'NURSE';
+      await _saveCredentials(token: token, userId: userId, username: username, role: role);
+      state = AuthState(token: token, userId: userId, username: username, role: role);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 401
@@ -89,17 +96,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> register(String username, String password) async {
+  Future<void> register(String username, String password, {String role = 'NURSE'}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final resp = await _dioClient.dio.post(
         '/api/auth/register',
-        data: {'username': username, 'password': password},
+        data: {'username': username, 'password': password, 'role': role},
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      await _saveCredentials(token: token, userId: userId, username: username);
-      state = AuthState(token: token, userId: userId, username: username);
+      final respRole = resp.data['role']?.toString() ?? role;
+      await _saveCredentials(token: token, userId: userId, username: username, role: respRole);
+      state = AuthState(token: token, userId: userId, username: username, role: respRole);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 400
@@ -128,10 +136,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String token,
     required String userId,
     required String username,
+    String role = 'NURSE',
   }) async {
     await _storage.write(key: 'chatflow-token', value: token);
     await _storage.write(key: 'chatflow-userId', value: userId);
     await _storage.write(key: 'chatflow-username', value: username);
+    await _storage.write(key: 'chatflow-role', value: role);
   }
 }
 

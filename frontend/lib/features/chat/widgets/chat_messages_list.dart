@@ -3,17 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
+import '../../../shared/models/patient_card.dart';
+import 'patient_card_widget.dart';
 
 class ChatMessagesList extends StatefulWidget {
   final List<ChatMessage> messages;
   final String currentUsername;
   final bool isAiLoading;
+  /// messageId → read count mapping (for read receipt display)
+  final Map<String, int> readCounts;
 
   const ChatMessagesList({
     super.key,
     required this.messages,
     required this.currentUsername,
     this.isAiLoading = false,
+    this.readCounts = const {},
   });
 
   @override
@@ -137,12 +142,28 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
               return _AiSummaryCard(msg: msg);
             }
+            if (type == 'PATIENT_CARD') {
+              final card = PatientCard.tryParseContent(msg.content);
+              if (card != null) {
+                final isMine = msg.username == widget.currentUsername;
+                final readCount = widget.readCounts[msg.effectiveId] ?? 0;
+                return _PatientCardBubble(
+                  msg: msg,
+                  card: card,
+                  isMine: isMine,
+                  time: _formatTime(msg.timestamp),
+                  readCount: readCount,
+                );
+              }
+            }
             final isAiQuestion = msg.content.startsWith('[AI에게] ');
+            final readCount = widget.readCounts[msg.effectiveId] ?? 0;
             return _ChatBubble(
               msg: msg,
               isMine: msg.username == widget.currentUsername,
               time: _formatTime(msg.timestamp),
               isAiQuestion: isAiQuestion,
+              readCount: readCount,
             );
           },
         ),
@@ -209,22 +230,41 @@ class _SystemBubble extends StatelessWidget {
     return msg.content;
   }
 
+  IconData? get _alertIcon {
+    if (msg.content.startsWith('[처방알림]')) return Icons.medication_rounded;
+    if (msg.content.startsWith('[검사알림]')) return Icons.science_rounded;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final icon = _alertIcon;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainer,
+            color: cs.surfaceContainer,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(80)),
+            border: Border.all(color: cs.outline.withAlpha(80)),
           ),
-          child: Text(
-            _text,
-            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(160)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: cs.onSurfaceVariant.withAlpha(160)),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                _text,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant.withAlpha(160),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -509,12 +549,14 @@ class _ChatBubble extends StatelessWidget {
   final bool isMine;
   final String time;
   final bool isAiQuestion;
+  final int readCount;
 
   const _ChatBubble({
     required this.msg,
     required this.isMine,
     required this.time,
     this.isAiQuestion = false,
+    this.readCount = 0,
   });
 
   Color _avatarColor(String name) =>
@@ -623,9 +665,28 @@ class _ChatBubble extends StatelessWidget {
                     if (isMine)
                       Padding(
                         padding: const EdgeInsets.only(right: 5, bottom: 3),
-                        child: Text(time,
-                            style: TextStyle(
-                                fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (readCount > 0)
+                              Text(
+                                '읽음 $readCount',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.primary.withAlpha(180),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     Flexible(
                       child: isMine
@@ -700,6 +761,115 @@ class _ChatBubble extends StatelessWidget {
                         child: Text(time,
                             style: TextStyle(
                                 fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (isMine) const SizedBox(width: 6),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Patient card bubble
+// ─────────────────────────────────────────────────────────────────
+class _PatientCardBubble extends StatelessWidget {
+  final ChatMessage msg;
+  final PatientCard card;
+  final bool isMine;
+  final String time;
+  final int readCount;
+
+  const _PatientCardBubble({
+    required this.msg,
+    required this.card,
+    required this.isMine,
+    required this.time,
+    this.readCount = 0,
+  });
+
+  Color _avatarColor(String name) =>
+      AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMine) ...[
+            _Avatar(
+              name: msg.username,
+              color: _avatarColor(msg.username),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment:
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                if (!isMine)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 3),
+                    child: Text(
+                      msg.username,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 5, bottom: 3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (readCount > 0)
+                              Text(
+                                '읽음 $readCount',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: cs.primary.withAlpha(180),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: cs.onSurfaceVariant.withAlpha(140),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    PatientCardWidget(card: card, isMine: isMine),
+                    if (!isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5, bottom: 3),
+                        child: Text(
+                          time,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: cs.onSurfaceVariant.withAlpha(140),
+                          ),
+                        ),
                       ),
                   ],
                 ),

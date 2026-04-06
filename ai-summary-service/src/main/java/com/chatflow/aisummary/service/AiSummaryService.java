@@ -403,6 +403,75 @@ public class AiSummaryService {
             """, conversationText);
     }
 
+    public ChatMessage generateShiftReport(String roomId) {
+        if (!rateLimiter.tryConsume(1)) {
+            throw new IllegalStateException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+
+        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+        List<String> rawMessages = redisTemplate.opsForList().range(bufferKey, 0, -1);
+        List<ChatMessage> recentMessages = new ArrayList<>();
+        if (rawMessages != null) {
+            for (String json : rawMessages) {
+                try {
+                    recentMessages.add(objectMapper.readValue(json, ChatMessage.class));
+                } catch (JsonProcessingException e) {
+                    log.warn("교대 보고서 컨텍스트 메시지 역직렬화 실패", e);
+                }
+            }
+        }
+
+        String contextText = recentMessages.isEmpty()
+                ? "현재 대화 내역이 없습니다."
+                : buildConversationText(recentMessages);
+
+        String prompt = buildShiftReportPrompt(contextText);
+        String report = chatModelClient.generate(prompt);
+
+        ChatMessage response = ChatMessage.builder()
+                .messageId(UUID.randomUUID().toString())
+                .chatRoomId(roomId)
+                .userId("ai-system")
+                .username("AI 교대봇")
+                .content(report)
+                .type(ChatMessage.MessageType.AI_SUMMARY)
+                .timestamp(LocalDateTime.now())
+                .isAiGenerated(true)
+                .build();
+
+        cacheSummary(roomId, response);
+        kafkaTemplate.send(SUMMARY_TOPIC, roomId, response);
+        return response;
+    }
+
+    private String buildShiftReportPrompt(String conversationText) {
+        return String.format("""
+            다음은 의료진 채팅방의 대화 내용입니다.
+            의료진 교대 인수인계 보고서 형식으로 요약해주세요.
+
+            대화 내용:
+            %s
+
+            교대 인수인계 보고서 형식으로 작성:
+            [시간대별 주요 이벤트]
+            - 각 시간대의 주요 사건과 처치 내용 기록
+
+            [환자 상태 변화]
+            - 활력징후 변화, 증상 변화, 투약 변경 사항
+
+            [다음 근무조 주의사항]
+            - 지속 모니터링 필요 사항
+            - 예정된 처치 및 검사
+            - 특이사항 및 주의 환자
+
+            작성 규칙:
+            1. 대화에서 추출 가능한 임상 정보만 기록
+            2. 시간 순서대로 정리
+            3. 한국어로 작성
+            4. 대화에 없는 내용은 '언급 없음'으로 표기
+            """, conversationText);
+    }
+
     private String buildSoapPrompt(String conversationText) {
         return String.format("""
             다음은 의료진 인수인계 채팅방의 대화 내용입니다.

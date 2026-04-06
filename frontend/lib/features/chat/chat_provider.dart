@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -6,6 +7,7 @@ import '../../core/network/stomp_service.dart';
 import '../../core/services/fcm_service.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/chat_room.dart';
+import '../../shared/models/patient_card.dart';
 import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +58,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     String roomType = 'GENERAL',
     bool isPrivate = false,
     String? password,
+    String? allowedRoles,
   }) async {
     final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
       'name': name,
@@ -64,6 +67,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
       'roomType': roomType,
       'isPrivate': isPrivate,
       if (password != null) 'password': password,
+      if (allowedRoles != null) 'allowedRoles': allowedRoles,
     });
     // Extract room ID first — fetchRooms failure must not mask successful creation
     final data = resp.data;
@@ -89,6 +93,8 @@ class ChatMessagesState {
   final bool isLoadingHistory;
   final bool isAiLoading;
   final bool isSummaryLoading;
+  /// messageId → read count
+  final Map<String, int> readCounts;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -96,6 +102,7 @@ class ChatMessagesState {
     this.isLoadingHistory = false,
     this.isAiLoading = false,
     this.isSummaryLoading = false,
+    this.readCounts = const {},
   });
 
   ChatMessagesState copyWith({
@@ -104,6 +111,7 @@ class ChatMessagesState {
     bool? isLoadingHistory,
     bool? isAiLoading,
     bool? isSummaryLoading,
+    Map<String, int>? readCounts,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -111,6 +119,7 @@ class ChatMessagesState {
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
       isAiLoading: isAiLoading ?? this.isAiLoading,
       isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
+      readCounts: readCounts ?? this.readCounts,
     );
   }
 }
@@ -193,6 +202,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
         }
+      },
+      onReadReceipt: (messageId, readCount) {
+        if (!mounted) return;
+        final updated = Map<String, int>.from(state.readCounts);
+        updated[messageId] = readCount;
+        state = state.copyWith(readCounts: updated);
       },
     );
 
@@ -328,6 +343,18 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'content': content,
       'type': 'CHAT',
       'priority': priority,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  void sendPatientCard(String roomId, PatientCard card) {
+    _stompService.sendMessage({
+      'chatRoomId': roomId,
+      'userId': _userId,
+      'username': _username,
+      'content': jsonEncode(card.toJson()),
+      'type': 'PATIENT_CARD',
+      'priority': 'ROUTINE',
       'timestamp': DateTime.now().toIso8601String(),
     });
   }

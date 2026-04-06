@@ -25,10 +25,15 @@ public class JwtUtil {
     }
 
     public String generateToken(String userId, String username) {
+        return generateToken(userId, username, "NURSE");
+    }
+
+    public String generateToken(String userId, String username, String role) {
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(userId)
                 .claim("username", username)
+                .claim("role", role)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key)
@@ -58,6 +63,11 @@ public class JwtUtil {
 
     public String getUsername(String token) {
         return parseToken(token).get("username", String.class);
+    }
+
+    public String getRole(String token) {
+        String role = parseToken(token).get("role", String.class);
+        return role != null ? role : "NURSE";
     }
 
     public String getJti(String token) {

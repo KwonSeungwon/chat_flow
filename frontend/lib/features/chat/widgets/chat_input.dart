@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/patient_card.dart';
+import 'patient_card_input_dialog.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
@@ -9,6 +11,7 @@ class ChatInput extends StatefulWidget {
   final bool isHandoff;
   final void Function(String content, {String priority}) onSend;
   final Future<void> Function(String question)? onAskAi;
+  final void Function(PatientCard card)? onSendPatientCard;
 
   const ChatInput({
     super.key,
@@ -17,6 +20,7 @@ class ChatInput extends StatefulWidget {
     this.isHandoff = false,
     required this.onSend,
     this.onAskAi,
+    this.onSendPatientCard,
   });
 
   @override
@@ -301,6 +305,24 @@ class _ChatInputState extends State<ChatInput> {
                         offset: template.length,
                       );
                       _focusNode.requestFocus();
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                // Patient card button (handoff rooms only)
+                if (widget.isHandoff && !_aiMode) ...[
+                  _CircleIconBtn(
+                    icon: Icons.person_add_outlined,
+                    enabled: widget.isConnected,
+                    active: false,
+                    onTap: () async {
+                      final card = await showDialog<PatientCard>(
+                        context: context,
+                        builder: (_) => const PatientCardInputDialog(),
+                      );
+                      if (card != null && widget.onSendPatientCard != null) {
+                        widget.onSendPatientCard!(card);
+                      }
                     },
                   ),
                   const SizedBox(width: 6),

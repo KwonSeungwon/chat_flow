@@ -6,6 +6,7 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 typedef MessageCallback = void Function(Map<String, dynamic> message);
 typedef ConnectionCallback = void Function(bool connected);
+typedef ReadReceiptCallback = void Function(String messageId, int readCount);
 
 class StompService {
   StompClient? _client;
@@ -22,6 +23,7 @@ class StompService {
   Future<String?> Function()? _tokenProvider;
   MessageCallback? _onMessage;
   ConnectionCallback? _onConnectionChanged;
+  ReadReceiptCallback? _onReadReceipt;
 
   bool get isConnected => _connected;
 
@@ -33,6 +35,7 @@ class StompService {
     required MessageCallback onMessage,
     required ConnectionCallback onConnectionChanged,
     Future<String?> Function()? tokenProvider,
+    ReadReceiptCallback? onReadReceipt,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -41,6 +44,7 @@ class StompService {
     _tokenProvider = tokenProvider;
     _onMessage = onMessage;
     _onConnectionChanged = onConnectionChanged;
+    _onReadReceipt = onReadReceipt;
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -95,6 +99,23 @@ class StompService {
       },
     );
 
+    // Subscribe to read receipts
+    _client!.subscribe(
+      destination: '/topic/chat/$_currentRoomId/read-receipts',
+      callback: (frame) {
+        if (frame.body != null && _onReadReceipt != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final messageId = data['messageId']?.toString();
+            final readCount = (data['readCount'] as num?)?.toInt() ?? 0;
+            if (messageId != null) {
+              _onReadReceipt!(messageId, readCount);
+            }
+          } catch (_) {}
+        }
+      },
+    );
+
     // Send JOIN via /app/chat.addUser
     _client!.send(
       destination: '/app/chat.addUser',
@@ -143,6 +164,20 @@ class StompService {
       _client!.send(
         destination: '/app/chat.sendMessage',
         body: jsonEncode(message),
+      );
+    }
+  }
+
+  void sendReadReceipt(String roomId, String messageId) {
+    if (_connected && _client != null) {
+      _client!.send(
+        destination: '/app/chat.readReceipt',
+        body: jsonEncode({
+          'chatRoomId': roomId,
+          'messageId': messageId,
+          'userId': _currentUserId ?? '',
+          'username': _currentUsername ?? '',
+        }),
       );
     }
   }

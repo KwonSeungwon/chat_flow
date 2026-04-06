@@ -40,6 +40,20 @@ public class AiSummaryController {
         }
     }
 
+    @PostMapping("/shift-report")
+    public ResponseEntity<ApiResponse<ChatMessage>> requestShiftReport(@RequestBody Map<String, String> request) {
+        String roomId = request.get("chatRoomId");
+        if (roomId == null || roomId.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("chatRoomId는 필수입니다."));
+        }
+        try {
+            ChatMessage report = aiSummaryService.generateShiftReport(roomId);
+            return ResponseEntity.ok(ApiResponse.ok(report, "교대 보고서가 생성되었습니다."));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(429).body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
     @PostMapping("/request")
     public ResponseEntity<ApiResponse<Void>> requestSummary(@RequestBody Map<String, String> request) {
         String roomId = request.get("chatRoomId");

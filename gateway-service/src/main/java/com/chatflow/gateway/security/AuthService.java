@@ -25,9 +25,9 @@ public class AuthService {
 
     private static final String USER_KEY_PREFIX = "chatflow:user:";
 
-    public record UserRecord(String userId, String username, String encodedPassword) {}
-    public record AuthRequest(String username, String password) {}
-    public record AuthResponse(String token, String userId, String username) {}
+    public record UserRecord(String userId, String username, String encodedPassword, String role) {}
+    public record AuthRequest(String username, String password, String role) {}
+    public record AuthResponse(String token, String userId, String username, String role) {}
 
     public Mono<AuthResponse> register(AuthRequest request) {
         String key = USER_KEY_PREFIX + request.username();
@@ -37,7 +37,8 @@ public class AuthService {
                 .switchIfEmpty(Mono.defer(() -> {
                     String userId = UUID.randomUUID().toString();
                     String encoded = passwordEncoder.encode(request.password());
-                    UserRecord user = new UserRecord(userId, request.username(), encoded);
+                    String role = request.role() != null ? request.role() : "NURSE";
+                    UserRecord user = new UserRecord(userId, request.username(), encoded, role);
                     String json;
                     try {
                         json = objectMapper.writeValueAsString(user);
@@ -46,8 +47,8 @@ public class AuthService {
                     }
                     return redisTemplate.opsForValue().set(key, json)
                             .then(Mono.fromCallable(() -> {
-                                String token = jwtUtil.generateToken(userId, request.username());
-                                return new AuthResponse(token, userId, request.username());
+                                String token = jwtUtil.generateToken(userId, request.username(), role);
+                                return new AuthResponse(token, userId, request.username(), role);
                             }));
                 }));
     }
@@ -66,8 +67,9 @@ public class AuthService {
                     if (!passwordEncoder.matches(request.password(), user.encodedPassword())) {
                         return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
                     }
-                    String token = jwtUtil.generateToken(user.userId(), user.username());
-                    return Mono.just(new AuthResponse(token, user.userId(), user.username()));
+                    String role = user.role() != null ? user.role() : "NURSE";
+                    String token = jwtUtil.generateToken(user.userId(), user.username(), role);
+                    return Mono.just(new AuthResponse(token, user.userId(), user.username(), role));
                 });
     }
 

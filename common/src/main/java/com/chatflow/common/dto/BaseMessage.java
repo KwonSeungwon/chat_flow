@@ -48,6 +48,6 @@ public abstract class BaseMessage {
     private String priority = "ROUTINE";
 
     public enum MessageType {
-        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY
+        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD
     }
 }

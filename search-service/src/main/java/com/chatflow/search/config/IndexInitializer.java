@@ -27,6 +27,7 @@ public class IndexInitializer {
     public void initializeIndices() {
         createChatMessagesIndex();
         createBlogPostsIndex();
+        createAuditLogsIndex();
     }
 
     private void createChatMessagesIndex() {
@@ -100,6 +101,42 @@ public class IndexInitializer {
             }
         } catch (Exception e) {
             log.error("Failed to create blog_posts index", e);
+        }
+    }
+
+    private void createAuditLogsIndex() {
+        try {
+            String indexName = "audit_logs";
+
+            boolean exists = elasticsearchClient.indices()
+                    .exists(ExistsRequest.of(e -> e.index(indexName)))
+                    .value();
+
+            if (!exists) {
+                log.info("Creating audit_logs index...");
+
+                ClassPathResource resource = new ClassPathResource("elasticsearch/audit-logs-config.json");
+                try (InputStream inputStream = resource.getInputStream()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> indexConfig = objectMapper.readValue(inputStream, Map.class);
+
+                    String settingsJson = objectMapper.writeValueAsString(indexConfig.get("settings"));
+                    String mappingsJson = objectMapper.writeValueAsString(indexConfig.get("mappings"));
+
+                    CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
+                            .index(indexName)
+                            .settings(s -> s.withJson(new StringReader(settingsJson)))
+                            .mappings(m -> m.withJson(new StringReader(mappingsJson)))
+                    );
+
+                    elasticsearchClient.indices().create(createRequest);
+                    log.info("Successfully created audit_logs index");
+                }
+            } else {
+                log.info("audit_logs index already exists");
+            }
+        } catch (Exception e) {
+            log.error("Failed to create audit_logs index", e);
         }
     }
 }

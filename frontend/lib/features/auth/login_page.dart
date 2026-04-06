@@ -23,6 +23,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
   final _formKey      = GlobalKey<FormState>();
   bool _obscurePassword = true;
   bool _obscureConfirm  = true;
+  String _selectedRole = 'NURSE';
 
   @override
   void initState() {
@@ -55,7 +56,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final password = _passwordCtrl.text;
     final notifier = ref.read(authProvider.notifier);
     if (_isRegister) {
-      await notifier.register(username, password);
+      await notifier.register(username, password, role: _selectedRole);
     } else {
       await notifier.login(username, password);
     }
@@ -215,6 +216,45 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                             return '비밀번호가 일치하지 않습니다';
                                           }
                                           return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 12),
+                                      DropdownButtonFormField<String>(
+                                        value: _selectedRole,
+                                        decoration: InputDecoration(
+                                          labelText: '역할',
+                                          prefixIcon: const Icon(
+                                            Icons.badge_outlined,
+                                            size: 20,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                          filled: true,
+                                          fillColor: AppColors.surfaceHigher,
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: const BorderSide(color: AppColors.border),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: const BorderSide(color: AppColors.border),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                                          ),
+                                          labelStyle: const TextStyle(color: AppColors.textSecondary),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        ),
+                                        dropdownColor: AppColors.surfaceHigher,
+                                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                                        items: const [
+                                          DropdownMenuItem(value: 'DOCTOR',      child: Text('의사 (DOCTOR)')),
+                                          DropdownMenuItem(value: 'NURSE',       child: Text('간호사 (NURSE)')),
+                                          DropdownMenuItem(value: 'PHARMACIST',  child: Text('약사 (PHARMACIST)')),
+                                          DropdownMenuItem(value: 'ADMIN',       child: Text('관리자 (ADMIN)')),
+                                        ],
+                                        onChanged: (v) {
+                                          if (v != null) setState(() => _selectedRole = v);
                                         },
                                       ),
                                     ],

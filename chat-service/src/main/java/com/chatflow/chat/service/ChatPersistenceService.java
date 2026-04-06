@@ -7,6 +7,7 @@ import com.chatflow.chat.exception.PersistenceException;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.util.MessageEncryptor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class ChatPersistenceService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final MessageEncryptor messageEncryptor;
 
     /**
      * 메시지 + Outbox 이벤트를 단일 TX로 영속화.
@@ -34,12 +36,16 @@ public class ChatPersistenceService {
     @Transactional
     public void persistMessageAndPublish(ChatMessage message, String chatTopic, String eventType,
                                          String aiSummaryTopic) {
+        String storedContent = messageEncryptor.isEnabled()
+                ? messageEncryptor.encrypt(message.getContent())
+                : message.getContent();
+
         ChatMessageEntity entity = ChatMessageEntity.builder()
                 .messageId(message.getMessageId())
                 .chatRoomId(message.getChatRoomId())
                 .userId(message.getUserId())
                 .username(message.getUsername())
-                .content(message.getContent())
+                .content(storedContent)
                 .timestamp(message.getTimestamp())
                 .type(message.getType() != null ? message.getType().name() : "CHAT")
                 .priority(message.getPriority() != null ? message.getPriority() : "ROUTINE")

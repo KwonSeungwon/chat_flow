@@ -2,8 +2,10 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.common.dto.ApiResponse;
+import com.chatflow.common.dto.AuditEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -13,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -26,6 +29,7 @@ import java.util.Map;
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
+    private final AuditService auditService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
@@ -59,9 +63,12 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Page<ChatMessageEntity>>> getMessages(
             @PathVariable String roomId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "50") int size,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
         size = Math.min(size, 100);
         Page<ChatMessageEntity> messages = chatRoomService.getMessages(roomId, PageRequest.of(page, size));
+        auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 

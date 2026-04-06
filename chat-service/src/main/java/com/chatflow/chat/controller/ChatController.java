@@ -1,6 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.service.ChatService;
+import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 public class ChatController {
 
     private final ChatService chatService;
+    private final ReadReceiptService readReceiptService;
     private final Validator validator;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -59,5 +61,22 @@ public class ChatController {
         headerAccessor.getSessionAttributes().put("username", chatMessage.getUsername());
         headerAccessor.getSessionAttributes().put("chatRoomId", chatMessage.getChatRoomId());
         chatService.addUser(chatMessage);
+    }
+
+    @MessageMapping("/chat.markRead")
+    public void markRead(@Payload Map<String, String> payload,
+                         SimpMessageHeaderAccessor headerAccessor) {
+        String roomId = payload.get("roomId");
+        String lastReadMessageId = payload.get("lastReadMessageId");
+        if (roomId == null || lastReadMessageId == null) {
+            log.warn("markRead: roomId 또는 lastReadMessageId 누락");
+            return;
+        }
+        Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+        String userId = sessionAttrs != null ? (String) sessionAttrs.get("userId") : null;
+        String username = sessionAttrs != null ? (String) sessionAttrs.get("username") : null;
+        if (userId == null) userId = payload.get("userId");
+        if (username == null) username = payload.get("username");
+        readReceiptService.markRead(roomId, userId, username, lastReadMessageId);
     }
 }

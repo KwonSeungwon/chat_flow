@@ -57,6 +57,9 @@ public class ChatRoom {
     @Column(name = "allow_invites")
     private boolean allowInvites = true;
 
+    @Column(name = "allowed_roles", length = 200)
+    private String allowedRoles;
+
     @Builder.Default
     @Column(name = "participant_count")
     private Integer participantCount = 0;

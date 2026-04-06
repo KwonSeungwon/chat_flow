@@ -200,6 +200,7 @@ class _ChatRoomContent extends ConsumerWidget {
             messages: chatState.messages,
             currentUsername: username,
             isAiLoading: chatState.isAiLoading,
+            readCounts: chatState.readCounts,
           ),
         ),
         ChatInput(
@@ -213,6 +214,7 @@ class _ChatRoomContent extends ConsumerWidget {
             chatNotifier.sendMessage(roomId: roomId, content: content, priority: priority);
           },
           onAskAi: (question) => chatNotifier.askAi(roomId, question),
+          onSendPatientCard: (card) => chatNotifier.sendPatientCard(roomId, card),
         ),
       ],
     );
