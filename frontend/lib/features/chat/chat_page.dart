@@ -28,7 +28,7 @@ class ChatPage extends ConsumerWidget {
     }
 
     final themeMode = ref.watch(themeModeProvider);
-    final isWide = MediaQuery.of(context).size.width >= 600;
+    final isWide = MediaQuery.of(context).size.width >= 768;
     final effectiveRoomId = roomId;
 
     // Room info for AppBar

@@ -92,67 +92,15 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
               // Room type toggle
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: colorScheme.surfaceContainerHighest,
-                  border: Border.all(color: colorScheme.outline.withAlpha(80)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isHandoff = false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: !_isHandoff ? colorScheme.primaryContainer : Colors.transparent,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.chat_bubble_outline, size: 16,
-                                color: !_isHandoff ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant),
-                              const SizedBox(width: 6),
-                              Text('일반 채팅',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: !_isHandoff ? FontWeight.w600 : FontWeight.normal,
-                                  color: !_isHandoff ? colorScheme.onPrimaryContainer : colorScheme.onSurfaceVariant,
-                                )),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _isHandoff = true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: _isHandoff ? const Color(0xFF00796B).withAlpha(40) : Colors.transparent,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.swap_horiz_rounded, size: 16,
-                                color: _isHandoff ? const Color(0xFF00796B) : colorScheme.onSurfaceVariant),
-                              const SizedBox(width: 6),
-                              Text('인수인계',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: _isHandoff ? FontWeight.w600 : FontWeight.normal,
-                                  color: _isHandoff ? const Color(0xFF00796B) : colorScheme.onSurfaceVariant,
-                                )),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('일반 채팅'), icon: Icon(Icons.chat_bubble_outline)),
+                  ButtonSegment(value: true, label: Text('인수인계'), icon: Icon(Icons.swap_horiz_rounded)),
+                ],
+                selected: {_isHandoff},
+                onSelectionChanged: (v) => setState(() => _isHandoff = v.first),
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
               const SizedBox(height: 12),
