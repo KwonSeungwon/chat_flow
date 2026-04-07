@@ -5,5 +5,5 @@ metadata:
   labels:
     {{- include "chat-service.labels" . | nindent 4 }}
 data:
-  JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+  JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m"
   JWT_SECRET: {{ .Values.jwtSecret | default "change-me-to-a-random-secret-at-least-32-chars" | quote }}

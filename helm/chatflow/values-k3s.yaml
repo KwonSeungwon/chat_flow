@@ -56,10 +56,10 @@ chat-service:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 320Mi
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 640Mi
   hpa:
     enabled: false
   fileStorage:
