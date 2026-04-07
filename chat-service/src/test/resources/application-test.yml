@@ -34,6 +34,9 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+jwt:
+  secret: test-secret-for-chat-service-testing-12345
+
 management:
   endpoints:
     web:

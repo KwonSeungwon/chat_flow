@@ -47,6 +47,7 @@ gateway-service:
 chat-service:
   enabled: true
   replicaCount: 1
+  jwtSecret: "vqeDsIwa8tGm/tgB11tiza+8Zbw390s9eic5pV0AHjSj6saiUDKBQibgTKgW3md6"
   image:
     name: chat-service
   service:

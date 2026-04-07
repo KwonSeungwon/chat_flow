@@ -9,17 +9,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileStorageService {
+
+    private static final org.apache.tika.Tika TIKA = new org.apache.tika.Tika();
 
     private final FileStorageConfig config;
 
@@ -35,9 +39,20 @@ public class FileStorageService {
             throw new IllegalArgumentException("파일 크기가 제한을 초과합니다 (최대 20MB).");
         }
 
-        String contentType = file.getContentType();
-        if (contentType == null || !config.getAllowedMimeTypes().contains(contentType)) {
-            throw new IllegalArgumentException("허용되지 않는 파일 형식입니다: " + contentType);
+        String detectedType;
+        try {
+            byte[] header = new byte[Math.min(512, (int) file.getSize())];
+            int read;
+            try (InputStream is = file.getInputStream()) {
+                read = is.read(header, 0, header.length);
+            }
+            detectedType = TIKA.detect(Arrays.copyOf(header, read > 0 ? read : 0),
+                    file.getOriginalFilename());
+        } catch (IOException e) {
+            throw new IllegalArgumentException("파일 형식을 확인할 수 없습니다.");
+        }
+        if (!config.getAllowedMimeTypes().contains(detectedType)) {
+            throw new IllegalArgumentException("허용되지 않는 파일 형식입니다: " + detectedType);
         }
 
         String uuid = UUID.randomUUID().toString();

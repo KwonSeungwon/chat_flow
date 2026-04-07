@@ -70,7 +70,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
         // Native WebSocket endpoint (Flutter 클라이언트용 — SockJS 미지원)
         registry.addEndpoint("/ws-native")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOriginPatterns(allowedOrigins.split(","))
                 .addInterceptors(headersInterceptor);
     }
 }

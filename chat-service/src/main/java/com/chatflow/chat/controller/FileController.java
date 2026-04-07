@@ -64,7 +64,7 @@ public class FileController {
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(fr.contentType()))
                     .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
-                    .header(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                    .header("X-Content-Type-Options", "nosniff")
                     .body(fr.resource());
         } catch (IOException e) {
             log.warn("파일 다운로드 실패: uuid={}", uuid);
