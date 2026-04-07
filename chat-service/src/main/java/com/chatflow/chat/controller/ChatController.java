@@ -60,6 +60,7 @@ public class ChatController {
                        SimpMessageHeaderAccessor headerAccessor) {
         headerAccessor.getSessionAttributes().put("username", chatMessage.getUsername());
         headerAccessor.getSessionAttributes().put("chatRoomId", chatMessage.getChatRoomId());
+        headerAccessor.getSessionAttributes().put("userId", chatMessage.getUserId());
         chatService.addUser(chatMessage);
     }
 

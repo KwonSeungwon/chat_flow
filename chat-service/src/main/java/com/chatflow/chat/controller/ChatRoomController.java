@@ -4,6 +4,7 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class ChatRoomController {
     private final ChatRoomService chatRoomService;
     private final AuditService auditService;
     private final StringRedisTemplate redisTemplate;
+    private final ReadReceiptService readReceiptService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
@@ -143,6 +145,23 @@ public class ChatRoomController {
         String lastReadId = redisTemplate.opsForValue().get(key);
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("lastReadMessageId", lastReadId != null ? lastReadId : "")));
+    }
+
+    @PutMapping("/{roomId}/last-read")
+    public ResponseEntity<ApiResponse<Void>> updateLastRead(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(null));
+        }
+        String lastReadMessageId = body.get("lastReadMessageId");
+        if (lastReadMessageId == null || lastReadMessageId.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(null));
+        }
+        readReceiptService.markRead(roomId, userId, username != null ? username : "", lastReadMessageId);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}

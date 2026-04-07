@@ -243,7 +243,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                     final uri = msgId.isNotEmpty
                         ? '/chat/${msg.chatRoomId}?messageId=$msgId'
                         : '/chat/${msg.chatRoomId}';
-                    context.go(uri);
+                    context.push(uri);
                   }
                 },
               );

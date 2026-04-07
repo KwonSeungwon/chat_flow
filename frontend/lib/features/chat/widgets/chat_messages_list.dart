@@ -56,6 +56,25 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
         _autoScroll = false;
       }
     });
+    // If messages are already loaded when widget mounts (e.g. provider still alive),
+    // attempt scroll immediately on the first frame.
+    if (widget.scrollToMessageId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _tryScrollToTarget();
+      });
+    }
+  }
+
+  /// Attempt to scroll to [widget.scrollToMessageId] if it exists in the list.
+  void _tryScrollToTarget() {
+    final target = widget.scrollToMessageId;
+    if (target == null || target == _lastScrollTarget) return;
+    final hasTarget = widget.messages.any((m) => m.effectiveId == target);
+    if (hasTarget) {
+      _lastScrollTarget = target;
+      _autoScroll = false;
+      _scheduleScrollToTarget();
+    }
   }
 
   void _scheduleScrollToTarget() {
@@ -86,15 +105,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     super.didUpdateWidget(oldWidget);
 
     // When messages load and there's a scroll target, scroll to it once
-    final target = widget.scrollToMessageId;
-    if (target != null && target != _lastScrollTarget) {
-      final hasTarget = widget.messages.any((m) => m.effectiveId == target);
-      if (hasTarget) {
-        _lastScrollTarget = target;
-        _autoScroll = false; // don't auto-scroll to bottom when targeting a message
-        _scheduleScrollToTarget();
-        return;
-      }
+    if (widget.scrollToMessageId != null &&
+        widget.messages.length != oldWidget.messages.length) {
+      _tryScrollToTarget();
+      if (_lastScrollTarget == widget.scrollToMessageId) return;
     }
 
     if (widget.messages.length > oldWidget.messages.length) {

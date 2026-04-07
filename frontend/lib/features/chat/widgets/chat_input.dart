@@ -35,6 +35,7 @@ class _ChatInputState extends State<ChatInput> {
   static const _warnThreshold = 800;
   bool _aiMode = false;
   String _priority = 'ROUTINE';
+  bool _isSending = false; // Guard against Korean IME double-send
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -46,10 +47,14 @@ class _ChatInputState extends State<ChatInput> {
   ];
 
   Future<void> _send() async {
+    if (_isSending) return;
     final text = _controller.text.trim();
     if (text.isEmpty || !widget.isConnected) return;
+    _isSending = true;
+    // Reset value (not just clear) to also reset IME composing state,
+    // preventing Korean IME from re-injecting the in-flight syllable.
+    _controller.value = TextEditingValue.empty;
     if (_aiMode && widget.onAskAi != null) {
-      _controller.clear();
       _focusNode.requestFocus();
       try {
         await widget.onAskAi!(text);
@@ -62,10 +67,10 @@ class _ChatInputState extends State<ChatInput> {
       }
     } else {
       widget.onSend(text, priority: _priority);
-      _controller.clear();
       if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
       _focusNode.requestFocus();
     }
+    _isSending = false;
   }
 
   void _showEmojiSheet() {
@@ -167,6 +172,7 @@ class _ChatInputState extends State<ChatInput> {
       ),
       child: SafeArea(
         top: false,
+        bottom: false, // Scaffold's resizeToAvoidBottomInset handles keyboard; avoiding double inset on mobile web
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

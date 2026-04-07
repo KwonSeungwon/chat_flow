@@ -180,6 +180,7 @@ class _ParticipantBadge extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () => _showModal(context, ref),
+      behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
@@ -219,7 +220,7 @@ class _ParticipantsModal extends ConsumerStatefulWidget {
 }
 
 class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
-  List<Map<String, String>> _participants = [];
+  List<Map<String, dynamic>> _participants = [];
   bool _loading = true;
   String? _error;
 
@@ -244,7 +245,7 @@ class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
       if (mounted) {
         setState(() {
           _participants = list
-              .map((e) => Map<String, String>.from(e as Map))
+              .map((e) => Map<String, dynamic>.from(e as Map))
               .toList();
           _loading = false;
         });
@@ -284,7 +285,7 @@ class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
                 Icon(Icons.people_rounded, size: 20, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  '참가자 (${widget.count}명)',
+                  '참가자 (${_loading ? widget.count : _participants.length}명)',
                   style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

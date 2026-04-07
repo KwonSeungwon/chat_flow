@@ -203,36 +203,66 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 - `GET /api/search/rooms/{roomId}/messages?query=` - 채팅방 내 검색
 - `GET /api/search/rooms/{roomId}/time-range?start=&end=` - 시간 범위 검색
 
-## EC2 배포 (docker-compose.prod.yml)
+## K3s 배포 (자체 인스턴스)
 
+**호스트**: `node.chatflow.ai.kr` (User: `ksw`, SSH 키 인증)  
+**도메인**: https://app.chatflow.ai.kr (Cloudflare → K3s nginx)  
+**네임스페이스**: `chatflow`  
+**이미지 레지스트리**: `docker.io/chatflow` (pullPolicy: Never — containerd 직접 주입)
+
+### 전체 배포 (스크립트)
 ```bash
-# 1. 로컬에서 amd64 이미지 빌드 (EC2에서 빌드 불가)
-# Backend 서비스 예시
-docker buildx build --platform linux/amd64 \
-  --build-arg SERVICE_NAME=chat-service \
-  -t chatflow/chat-service:prod --load .
-
-# Frontend
-cd frontend
-flutter build web --release --web-renderer canvaskit
-cd ..
-docker buildx build --platform linux/amd64 \
-  -t chatflow-frontend:latest --load frontend/
-
-# 2. 이미지 저장 → EC2 전송
-docker save chatflow-frontend:latest | gzip > /tmp/frontend.tar.gz
-scp -i ~/web-app-key.pem /tmp/frontend.tar.gz ubuntu@43.201.22.86:~/
-
-# 3. EC2에서 로드 & 실행 (docker-compose.prod.yml, .env.prod 모두 ~/에 위치)
-ssh -i ~/web-app-key.pem ubuntu@43.201.22.86
-docker load < ~/frontend.tar.gz
-docker compose -f ~/docker-compose.prod.yml --env-file ~/.env.prod up --no-deps -d frontend
-docker compose -f ~/docker-compose.prod.yml --env-file ~/.env.prod ps
+./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
+./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import
+./scripts/deploy-k3s.sh helm     # Helm 배포만
 ```
 
-**도메인**: https://app.chatflow.ai.kr (Cloudflare → EC2 nginx)
-**EC2**: ubuntu@43.201.94.100 (키: ~/web-app-key.pem, t3.small)
-**디스크 관리**: `docker image prune -af` (공간 부족 시)
+### 개별 서비스 배포 (일부 변경 시)
+```bash
+# 1. 변경된 서비스 이미지 빌드 (amd64 크로스 빌드)
+# 백엔드:
+./gradlew :chat-service:bootJar --no-daemon
+docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=chat-service \
+  -t docker.io/chatflow/chat-service:latest --load .
+
+# 프론트엔드:
+cd frontend && flutter build web --release && cd ..
+docker buildx build --platform linux/amd64 \
+  -t docker.io/chatflow/frontend:latest --load frontend/
+
+# 2. 이미지 저장 → K3s 전송
+docker save docker.io/chatflow/chat-service:latest | gzip > /tmp/chat-service.tar.gz
+scp /tmp/chat-service.tar.gz ksw@node.chatflow.ai.kr:~/
+
+# 3. K3s containerd에 import
+ssh ksw@node.chatflow.ai.kr "sudo k3s ctr images import ~/chat-service.tar.gz"
+
+# 4. Helm upgrade (Pod 자동 재시작)
+tar czf /tmp/chatflow-helm.tar.gz -C helm chatflow
+scp /tmp/chatflow-helm.tar.gz ksw@node.chatflow.ai.kr:~/
+ssh ksw@node.chatflow.ai.kr "
+  rm -rf ~/chatflow-chart && mkdir ~/chatflow-chart &&
+  tar xzf ~/chatflow-helm.tar.gz -C ~/chatflow-chart &&
+  cd ~/chatflow-chart/chatflow &&
+  helm upgrade --install chatflow . -n chatflow -f values-k3s.yaml --wait --timeout 5m
+"
+```
+
+### 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/purge_cache" \
+  -H "Authorization: Bearer cfat_4B2ZpoeLGsPw7vAYxjBWgz6JhiEvY3pALR1BCttnd432aee9" \
+  -H "Content-Type: application/json" \
+  --data '{"purge_everything":true}'
+```
+
+### 배포 확인
+```bash
+ssh ksw@node.chatflow.ai.kr "kubectl get pods -n chatflow"
+ssh ksw@node.chatflow.ai.kr "kubectl logs -n chatflow -l app=chat-service --tail=20"
+```
+
+**디스크 관리**: `ssh ksw@node.chatflow.ai.kr "sudo k3s ctr images prune --all"` (공간 부족 시)
 
 ## Common Issues
 

@@ -122,6 +122,7 @@ class ChatMessagesState {
     bool? isSummaryLoading,
     Map<String, int>? readCounts,
     String? lastReadMessageId,
+    bool clearLastReadMessageId = false,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -130,7 +131,7 @@ class ChatMessagesState {
       isAiLoading: isAiLoading ?? this.isAiLoading,
       isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
       readCounts: readCounts ?? this.readCounts,
-      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
+      lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
     );
   }
 }
@@ -162,6 +163,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       messages: [],
       isConnected: false,
       isLoadingHistory: true,
+      clearLastReadMessageId: true,
     );
 
     // Load history
@@ -295,13 +297,13 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           : '';
       if (!mounted) return;
 
-      // Find how many messages are after the lastRead position
+      // Find how many CHAT messages are after the lastRead position (exclude JOIN/LEAVE/AI_SUMMARY)
       int unreadCount = 0;
       if (lastReadId.isNotEmpty) {
-        final msgs = state.messages;
-        final idx = msgs.indexWhere((m) => m.effectiveId == lastReadId);
-        if (idx >= 0 && idx < msgs.length - 1) {
-          unreadCount = msgs.length - idx - 1;
+        final chatMsgs = state.messages.where((m) => m.type == 'CHAT').toList();
+        final idx = chatMsgs.indexWhere((m) => m.effectiveId == lastReadId);
+        if (idx >= 0 && idx < chatMsgs.length - 1) {
+          unreadCount = chatMsgs.length - idx - 1;
         }
         state = state.copyWith(lastReadMessageId: lastReadId);
       }
@@ -315,11 +317,28 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  /// Called when user actively reads room (scrolled to bottom). Clears unread.
+  /// Called when user enters a room. Clears local unread count and persists last-read position.
   void markRoomRead(String roomId) {
     final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
     current[roomId] = 0;
     _ref.read(roomUnreadCountsProvider.notifier).state = current;
+
+    // Persist last-read position so it survives app restarts (best-effort)
+    final chatMsgs = state.messages.where((m) => m.type == 'CHAT').toList();
+    if (chatMsgs.isNotEmpty) {
+      _persistLastRead(roomId, chatMsgs.last.effectiveId);
+    }
+  }
+
+  Future<void> _persistLastRead(String roomId, String lastReadMessageId) async {
+    try {
+      await _dioClient.dio.put(
+        '/api/chat/rooms/$roomId/last-read',
+        data: {'lastReadMessageId': lastReadMessageId},
+      );
+    } catch (_) {
+      // Best-effort — failure must not interrupt room viewing
+    }
   }
 
   Future<String> requestSummary(String roomId) async {

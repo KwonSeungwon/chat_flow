@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -49,11 +48,11 @@ public class UserPresenceService {
 
         chatRoomService.incrementParticipantCount(message.getChatRoomId());
 
-        // Track participant in Redis SET (TTL 1h)
+        // Track participant in Redis SET (no TTL — rely on leave() for cleanup)
         String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
-        String entry = message.getUserId() + ":" + message.getUsername();
+        String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
+        String entry = safeUserId + ":" + message.getUsername();
         redisTemplate.opsForSet().add(participantKey, entry);
-        redisTemplate.expire(participantKey, 1, TimeUnit.HOURS);
 
         chatPersistenceService.saveOutboxEventAndPublish(message, CHAT_TOPIC, "USER_JOINED");
     }
