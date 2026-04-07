@@ -6,6 +6,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.common.util.MessageEncryptor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class ChatRoomService {
     private final ObjectMapper objectMapper;
     private final RedisHealthTracker redisHealth;
     private final MessageEncryptor messageEncryptor;
+    private final PasswordEncoder passwordEncoder;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -86,7 +88,8 @@ public class ChatRoomService {
                 .color(request.getColor() != null ? request.getColor() : "#6366f1")
                 .roomType(request.getRoomType() != null ? request.getRoomType() : com.chatflow.chat.entity.RoomType.GENERAL)
                 .isPrivate(request.isPrivate())
-                .password(request.getPassword())
+                .password(request.getPassword() != null && !request.getPassword().isBlank()
+                        ? passwordEncoder.encode(request.getPassword()) : null)
                 .allowedRoles(request.getAllowedRoles())
                 .allowInvites(request.isAllowInvites())
                 .participantCount(0)
@@ -145,8 +148,20 @@ public class ChatRoomService {
     public boolean verifyRoomPassword(String roomId, String password) {
         return chatRoomRepository.findById(roomId)
                 .map(room -> {
-                    if (room.getPassword() == null || room.getPassword().isEmpty()) return true;
-                    return room.getPassword().equals(password);
+                    String stored = room.getPassword();
+                    if (stored == null || stored.isEmpty()) return true;
+                    // BCrypt 해시 감지 ($2a$, $2b$, $2y$)
+                    if (stored.startsWith("$2")) {
+                        return passwordEncoder.matches(password, stored);
+                    }
+                    // 레거시 평문 비밀번호 — 일치 시 자동 재해시 (마이그레이션)
+                    if (stored.equals(password)) {
+                        room.setPassword(passwordEncoder.encode(password));
+                        chatRoomRepository.save(room);
+                        evictRoomCaches(roomId);
+                        return true;
+                    }
+                    return false;
                 })
                 .orElse(false);
     }
