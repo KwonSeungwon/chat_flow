@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_provider.dart';
 import '../auth/auth_provider.dart';
@@ -12,8 +13,9 @@ import 'widgets/create_room_dialog.dart';
 
 class ChatPage extends ConsumerWidget {
   final String? roomId;
+  final String? scrollToMessageId;
 
-  const ChatPage({super.key, this.roomId});
+  const ChatPage({super.key, this.roomId, this.scrollToMessageId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,6 +70,7 @@ class ChatPage extends ConsumerWidget {
                 _ParticipantBadge(
                   count: roomData.participantCount,
                   max: roomData.maxParticipants,
+                  roomId: effectiveRoomId,
                 ),
               ],
             ],
@@ -134,7 +137,11 @@ class ChatPage extends ConsumerWidget {
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
             child: effectiveRoomId != null
-                ? _ChatRoomContent(roomId: effectiveRoomId, username: auth.username)
+                ? _ChatRoomContent(
+                    roomId: effectiveRoomId,
+                    username: auth.username,
+                    scrollToMessageId: scrollToMessageId,
+                  )
                 : const _LobbyPlaceholder(),
           ),
         ],
@@ -145,34 +152,200 @@ class ChatPage extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Participant badge in AppBar
+// Participant badge in AppBar — tappable, shows participants modal
 // ---------------------------------------------------------------------------
-class _ParticipantBadge extends StatelessWidget {
+class _ParticipantBadge extends ConsumerWidget {
   final int count;
   final int max;
-  const _ParticipantBadge({required this.count, required this.max});
+  final String roomId;
+
+  const _ParticipantBadge({
+    required this.count,
+    required this.max,
+    required this.roomId,
+  });
+
+  void _showModal(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _ParticipantsModal(roomId: roomId, count: count),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () => _showModal(context, ref),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colorScheme.outline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.people_outline_rounded,
+                size: 13, color: colorScheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(
+              '$count/$max',
+              style: TextStyle(
+                  fontSize: 12, color: colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Participants bottom sheet modal
+// ---------------------------------------------------------------------------
+class _ParticipantsModal extends ConsumerStatefulWidget {
+  final String roomId;
+  final int count;
+
+  const _ParticipantsModal({required this.roomId, required this.count});
+
+  @override
+  ConsumerState<_ParticipantsModal> createState() => _ParticipantsModalState();
+}
+
+class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
+  List<Map<String, String>> _participants = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadParticipants();
+  }
+
+  Future<void> _loadParticipants() async {
+    try {
+      final dio = ref.read(dioClientProvider).dio;
+      final resp =
+          await dio.get('/api/chat/rooms/${widget.roomId}/participants');
+      final data = resp.data;
+      List<dynamic> list = [];
+      if (data is Map && data['data'] is List) {
+        list = data['data'] as List;
+      } else if (data is List) {
+        list = data;
+      }
+      if (mounted) {
+        setState(() {
+          _participants = list
+              .map((e) => Map<String, String>.from(e as Map))
+              .toList();
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '참가자 목록을 불러올 수 없습니다';
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colorScheme.outline),
-      ),
-      child: Row(
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 24),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.people_outline_rounded,
-              size: 13, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(
-            '$count/$max',
-            style: TextStyle(
-                fontSize: 12, color: colorScheme.onSurfaceVariant),
+          // Handle
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: cs.outline.withAlpha(80),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Icon(Icons.people_rounded, size: 20, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  '참가자 (${widget.count}명)',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text(_error!,
+                  style: TextStyle(color: cs.onSurfaceVariant)),
+            )
+          else if (_participants.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text('현재 참가자 정보를 찾을 수 없습니다',
+                  style: TextStyle(color: cs.onSurfaceVariant)),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: _participants.length,
+                itemBuilder: (context, index) {
+                  final p = _participants[index];
+                  final name = p['username'] ?? '알 수 없음';
+                  final color = AppColors.avatarPalette[
+                      name.hashCode.abs() % AppColors.avatarPalette.length];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: color.withAlpha(180),
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13),
+                      ),
+                    ),
+                    title: Text(name,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: cs.onSurface)),
+                    dense: true,
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -182,16 +355,42 @@ class _ParticipantBadge extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Active chat room content (messages + input)
 // ---------------------------------------------------------------------------
-class _ChatRoomContent extends ConsumerWidget {
+class _ChatRoomContent extends ConsumerStatefulWidget {
   final String roomId;
   final String username;
+  final String? scrollToMessageId;
 
-  const _ChatRoomContent({required this.roomId, required this.username});
+  const _ChatRoomContent({
+    required this.roomId,
+    required this.username,
+    this.scrollToMessageId,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final chatState = ref.watch(chatNotifierProvider(roomId));
-    final chatNotifier = ref.read(chatNotifierProvider(roomId).notifier);
+  ConsumerState<_ChatRoomContent> createState() => _ChatRoomContentState();
+}
+
+class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
+  @override
+  void initState() {
+    super.initState();
+    // Clear unread count when user enters a room
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chatNotifierProvider(widget.roomId).notifier)
+          .markRoomRead(widget.roomId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatState = ref.watch(chatNotifierProvider(widget.roomId));
+    final chatNotifier = ref.read(chatNotifierProvider(widget.roomId).notifier);
+
+    // Determine scroll target: explicit messageId from search > lastRead on entry
+    final scrollTarget = widget.scrollToMessageId ??
+        (chatState.lastReadMessageId?.isNotEmpty == true
+            ? chatState.lastReadMessageId
+            : null);
 
     return Column(
       children: [
@@ -199,23 +398,28 @@ class _ChatRoomContent extends ConsumerWidget {
         Expanded(
           child: ChatMessagesList(
             messages: chatState.messages,
-            currentUsername: username,
+            currentUsername: widget.username,
             isAiLoading: chatState.isAiLoading,
             readCounts: chatState.readCounts,
+            scrollToMessageId: scrollTarget,
+            highlightMessageId: widget.scrollToMessageId,
           ),
         ),
         ChatInput(
           isConnected: chatState.isConnected,
           isAiLoading: chatState.isAiLoading,
           isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
-            data: (rooms) => rooms.any((r) => r.id == roomId && r.isHandoff),
+            data: (rooms) =>
+                rooms.any((r) => r.id == widget.roomId && r.isHandoff),
             orElse: () => false,
           ),
           onSend: (content, {String priority = 'ROUTINE'}) {
-            chatNotifier.sendMessage(roomId: roomId, content: content, priority: priority);
+            chatNotifier.sendMessage(
+                roomId: widget.roomId, content: content, priority: priority);
           },
-          onAskAi: (question) => chatNotifier.askAi(roomId, question),
-          onSendPatientCard: (card) => chatNotifier.sendPatientCard(roomId, card),
+          onAskAi: (question) => chatNotifier.askAi(widget.roomId, question),
+          onSendPatientCard: (card) =>
+              chatNotifier.sendPatientCard(widget.roomId, card),
         ),
       ],
     );

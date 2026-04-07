@@ -12,6 +12,10 @@ class ChatMessagesList extends StatefulWidget {
   final bool isAiLoading;
   /// messageId → read count mapping (for read receipt display)
   final Map<String, int> readCounts;
+  /// If set, auto-scroll to this message after build
+  final String? scrollToMessageId;
+  /// If set, briefly highlight this message (search result)
+  final String? highlightMessageId;
 
   const ChatMessagesList({
     super.key,
@@ -19,6 +23,8 @@ class ChatMessagesList extends StatefulWidget {
     required this.currentUsername,
     this.isAiLoading = false,
     this.readCounts = const {},
+    this.scrollToMessageId,
+    this.highlightMessageId,
   });
 
   @override
@@ -27,8 +33,12 @@ class ChatMessagesList extends StatefulWidget {
 
 class _ChatMessagesListState extends State<ChatMessagesList> {
   final _scrollController = ScrollController();
+  final _targetKey = GlobalKey();
   bool _autoScroll = true;
   int _unreadCount = 0;
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
+  String? _lastScrollTarget;
 
   @override
   void initState() {
@@ -48,9 +58,45 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     });
   }
 
+  void _scheduleScrollToTarget() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _targetKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      // Flash highlight for search-navigated messages
+      if (widget.highlightMessageId != null) {
+        setState(() => _highlightedMessageId = widget.highlightMessageId);
+        _highlightTimer?.cancel();
+        _highlightTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _highlightedMessageId = null);
+        });
+      }
+    });
+  }
+
   @override
   void didUpdateWidget(covariant ChatMessagesList oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // When messages load and there's a scroll target, scroll to it once
+    final target = widget.scrollToMessageId;
+    if (target != null && target != _lastScrollTarget) {
+      final hasTarget = widget.messages.any((m) => m.effectiveId == target);
+      if (hasTarget) {
+        _lastScrollTarget = target;
+        _autoScroll = false; // don't auto-scroll to bottom when targeting a message
+        _scheduleScrollToTarget();
+        return;
+      }
+    }
+
     if (widget.messages.length > oldWidget.messages.length) {
       if (_autoScroll) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
@@ -82,6 +128,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
 
   @override
   void dispose() {
+    _highlightTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -136,36 +183,58 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             }
             final msg = widget.messages[index];
             final type = msg.type.toUpperCase();
+            final isTarget = msg.effectiveId == widget.scrollToMessageId;
+            final isHighlighted = msg.effectiveId == _highlightedMessageId;
 
+            Widget item;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
-              return _SystemBubble(msg: msg);
-            }
-            if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
-              return _AiSummaryCard(msg: msg);
-            }
-            if (type == 'PATIENT_CARD') {
+              item = _SystemBubble(msg: msg);
+            } else if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
+              item = _AiSummaryCard(msg: msg);
+            } else if (type == 'PATIENT_CARD') {
               final card = PatientCard.tryParseContent(msg.content);
               if (card != null) {
                 final isMine = msg.username == widget.currentUsername;
                 final readCount = widget.readCounts[msg.effectiveId] ?? 0;
-                return _PatientCardBubble(
+                item = _PatientCardBubble(
                   msg: msg,
                   card: card,
                   isMine: isMine,
                   time: _formatTime(msg.timestamp),
                   readCount: readCount,
                 );
+              } else {
+                item = const SizedBox.shrink();
               }
+            } else {
+              final isAiQuestion = msg.content.startsWith('[AI에게] ');
+              final readCount = widget.readCounts[msg.effectiveId] ?? 0;
+              item = _ChatBubble(
+                msg: msg,
+                isMine: msg.username == widget.currentUsername,
+                time: _formatTime(msg.timestamp),
+                isAiQuestion: isAiQuestion,
+                readCount: readCount,
+              );
             }
-            final isAiQuestion = msg.content.startsWith('[AI에게] ');
-            final readCount = widget.readCounts[msg.effectiveId] ?? 0;
-            return _ChatBubble(
-              msg: msg,
-              isMine: msg.username == widget.currentUsername,
-              time: _formatTime(msg.timestamp),
-              isAiQuestion: isAiQuestion,
-              readCount: readCount,
-            );
+
+            // Wrap with highlight overlay for search-navigated messages
+            if (isHighlighted) {
+              item = AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withAlpha(isHighlighted ? 45 : 0),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: item,
+              );
+            }
+
+            // Wrap with GlobalKey so we can scroll to this item
+            if (isTarget) {
+              return KeyedSubtree(key: _targetKey, child: item);
+            }
+            return item;
           },
         ),
 

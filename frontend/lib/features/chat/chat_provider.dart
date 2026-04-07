@@ -84,6 +84,12 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 }
 
 // ---------------------------------------------------------------------------
+// Global unread counts (per room) — updated by ChatNotifier, read by sidebar
+// ---------------------------------------------------------------------------
+
+final roomUnreadCountsProvider = StateProvider<Map<String, int>>((ref) => {});
+
+// ---------------------------------------------------------------------------
 // Chat Messages
 // ---------------------------------------------------------------------------
 
@@ -95,6 +101,8 @@ class ChatMessagesState {
   final bool isSummaryLoading;
   /// messageId → read count
   final Map<String, int> readCounts;
+  /// Last message the current user has read (fetched from backend on join)
+  final String? lastReadMessageId;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -103,6 +111,7 @@ class ChatMessagesState {
     this.isAiLoading = false,
     this.isSummaryLoading = false,
     this.readCounts = const {},
+    this.lastReadMessageId,
   });
 
   ChatMessagesState copyWith({
@@ -112,6 +121,7 @@ class ChatMessagesState {
     bool? isAiLoading,
     bool? isSummaryLoading,
     Map<String, int>? readCounts,
+    String? lastReadMessageId,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -120,12 +130,14 @@ class ChatMessagesState {
       isAiLoading: isAiLoading ?? this.isAiLoading,
       isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
       readCounts: readCounts ?? this.readCounts,
+      lastReadMessageId: lastReadMessageId ?? this.lastReadMessageId,
     );
   }
 }
 
 class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final DioClient _dioClient;
+  final Ref _ref;
   final StompService _stompService = StompService();
   final String _token;
   final String _username;
@@ -134,10 +146,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   ChatNotifier(
     this._dioClient, {
+    required Ref ref,
     required String token,
     required String username,
     required String userId,
-  })  : _token = token,
+  })  : _ref = ref,
+        _token = token,
         _username = username,
         _userId = userId,
         super(const ChatMessagesState());
@@ -188,6 +202,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
     // Load AI summaries and merge into history
     await _fetchSummaries(roomId);
+
+    // Fetch last-read position and compute unread count for this session
+    await _fetchLastReadAndUpdateUnread(roomId);
 
     // Connect WebSocket
     _stompService.connect(
@@ -267,6 +284,42 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (_) {
       // Best-effort — summary load must not interrupt chat
     }
+  }
+
+  Future<void> _fetchLastReadAndUpdateUnread(String roomId) async {
+    try {
+      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/last-read');
+      final data = resp.data;
+      final lastReadId = data is Map
+          ? ((data['data'] as Map?)?['lastReadMessageId']?.toString() ?? '')
+          : '';
+      if (!mounted) return;
+
+      // Find how many messages are after the lastRead position
+      int unreadCount = 0;
+      if (lastReadId.isNotEmpty) {
+        final msgs = state.messages;
+        final idx = msgs.indexWhere((m) => m.effectiveId == lastReadId);
+        if (idx >= 0 && idx < msgs.length - 1) {
+          unreadCount = msgs.length - idx - 1;
+        }
+        state = state.copyWith(lastReadMessageId: lastReadId);
+      }
+
+      // Update global unread counts map
+      final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
+      current[roomId] = unreadCount;
+      _ref.read(roomUnreadCountsProvider.notifier).state = current;
+    } catch (_) {
+      // Non-critical — best effort
+    }
+  }
+
+  /// Called when user actively reads room (scrolled to bottom). Clears unread.
+  void markRoomRead(String roomId) {
+    final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
+    current[roomId] = 0;
+    _ref.read(roomUnreadCountsProvider.notifier).state = current;
   }
 
   Future<String> requestSummary(String roomId) async {
@@ -374,6 +427,7 @@ final chatNotifierProvider =
     final auth = ref.watch(authProvider);
     final notifier = ChatNotifier(
       ref.watch(dioClientProvider),
+      ref: ref,
       token: auth.token ?? '',
       username: auth.username,
       userId: auth.userId ?? '',

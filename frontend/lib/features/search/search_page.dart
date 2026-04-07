@@ -239,7 +239,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 highlightedContent: _highlightedText(msg.content, _queryCtrl.text.trim()),
                 onTap: () {
                   if (msg.chatRoomId.isNotEmpty) {
-                    context.go('/chat/${msg.chatRoomId}');
+                    final msgId = msg.messageId ?? '';
+                    final uri = msgId.isNotEmpty
+                        ? '/chat/${msg.chatRoomId}?messageId=$msgId'
+                        : '/chat/${msg.chatRoomId}';
+                    context.go(uri);
                   }
                 },
               );

@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
-import '../chat_provider.dart';
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider;
 import 'create_room_dialog.dart';
 
 class ChatRoomSidebar extends ConsumerStatefulWidget {
@@ -72,40 +72,47 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                 onRetry: () =>
                     ref.read(chatRoomsProvider.notifier).fetchRooms(),
               ),
-              data: (rooms) => rooms.isEmpty
-                  ? _EmptyRoomState(
-                      onCreateTap: () => _showCreateDialog(context))
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 8),
-                      itemCount: rooms.length,
-                      itemBuilder: (context, index) {
-                        final room = rooms[index];
-                        return _RoomTile(
-                          room: room,
-                          color: _roomColor(room),
-                          isSelected: room.id == widget.currentRoomId,
-                          isFull: room.isFull,
-                          onTap: room.isFull &&
-                                  room.id != widget.currentRoomId
-                              ? () =>
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('이 채팅방은 만석입니다 (최대 10명)'),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  )
-                              : () {
-                                  if (room.isPrivate && room.id != widget.currentRoomId) {
-                                    _showPasswordDialog(context, room);
-                                  } else {
-                                    context.go('/chat/${room.id}');
-                                    widget.onRoomSelected?.call();
-                                  }
-                                },
-                        );
-                      },
-                    ),
+              data: (rooms) {
+                    final unreadCounts = ref.watch(roomUnreadCountsProvider);
+                    return rooms.isEmpty
+                        ? _EmptyRoomState(
+                            onCreateTap: () => _showCreateDialog(context))
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 8),
+                            itemCount: rooms.length,
+                            itemBuilder: (context, index) {
+                              final room = rooms[index];
+                              final unread = unreadCounts[room.id] ?? 0;
+                              return _RoomTile(
+                                room: room,
+                                color: _roomColor(room),
+                                isSelected: room.id == widget.currentRoomId,
+                                isFull: room.isFull,
+                                unreadCount: unread,
+                                onTap: room.isFull &&
+                                        room.id != widget.currentRoomId
+                                    ? () => ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                                '이 채팅방은 만석입니다 (최대 10명)'),
+                                            duration: Duration(seconds: 2),
+                                          ),
+                                        )
+                                    : () {
+                                        if (room.isPrivate &&
+                                            room.id != widget.currentRoomId) {
+                                          _showPasswordDialog(context, room);
+                                        } else {
+                                          context.go('/chat/${room.id}');
+                                          widget.onRoomSelected?.call();
+                                        }
+                                      },
+                              );
+                            },
+                          );
+                  },
             ),
           ),
         ],
@@ -245,6 +252,7 @@ class _RoomTile extends StatefulWidget {
   final Color color;
   final bool isSelected;
   final bool isFull;
+  final int unreadCount;
   final VoidCallback onTap;
 
   const _RoomTile({
@@ -252,6 +260,7 @@ class _RoomTile extends StatefulWidget {
     required this.color,
     required this.isSelected,
     required this.isFull,
+    required this.unreadCount,
     required this.onTap,
   });
 
@@ -436,7 +445,31 @@ class _RoomTileState extends State<_RoomTile> {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        if (widget.unreadCount > 0) ...[
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 18),
+                            height: 18,
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Center(
+                              child: Text(
+                                widget.unreadCount > 99
+                                    ? '99+'
+                                    : '${widget.unreadCount}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ] else
+                          const SizedBox(width: 8),
                       ],
                     ),
                   ),

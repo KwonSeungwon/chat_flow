@@ -4,11 +4,14 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -18,6 +21,7 @@ public class UserPresenceService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatPersistenceService chatPersistenceService;
     private final ChatRoomService chatRoomService;
+    private final StringRedisTemplate redisTemplate;
 
     private static final String CHAT_TOPIC = "chat-messages";
 
@@ -44,6 +48,13 @@ public class UserPresenceService {
         log.info("User {} joined chat room {}", message.getUsername(), message.getChatRoomId());
 
         chatRoomService.incrementParticipantCount(message.getChatRoomId());
+
+        // Track participant in Redis SET (TTL 1h)
+        String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
+        String entry = message.getUserId() + ":" + message.getUsername();
+        redisTemplate.opsForSet().add(participantKey, entry);
+        redisTemplate.expire(participantKey, 1, TimeUnit.HOURS);
+
         chatPersistenceService.saveOutboxEventAndPublish(message, CHAT_TOPIC, "USER_JOINED");
     }
 
@@ -57,6 +68,16 @@ public class UserPresenceService {
         leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
 
         chatRoomService.decrementParticipantCount(roomId);
+
+        String participantKey = "chatflow:room:participants:" + roomId;
+        // Remove entries where username matches (userId unknown at disconnect)
+        Set<String> members = redisTemplate.opsForSet().members(participantKey);
+        if (members != null) {
+            members.stream()
+                    .filter(e -> e.endsWith(":" + username))
+                    .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
+        }
+
         chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, CHAT_TOPIC, "USER_LEFT");
         log.info("User {} left chat room {}", username, roomId);
     }

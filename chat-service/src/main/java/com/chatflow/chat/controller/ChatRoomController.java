@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,9 +19,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @RestController
@@ -30,6 +33,7 @@ public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
     private final AuditService auditService;
+    private final StringRedisTemplate redisTemplate;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
@@ -106,6 +110,39 @@ public class ChatRoomController {
         }
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
+    }
+
+    @GetMapping("/{roomId}/participants")
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getParticipants(
+            @PathVariable String roomId) {
+        String key = "chatflow:room:participants:" + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(key);
+        List<Map<String, String>> result = new ArrayList<>();
+        if (members != null) {
+            for (String entry : members) {
+                int idx = entry.indexOf(':');
+                if (idx > 0) {
+                    Map<String, String> p = new LinkedHashMap<>();
+                    p.put("userId", entry.substring(0, idx));
+                    p.put("username", entry.substring(idx + 1));
+                    result.add(p);
+                }
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @GetMapping("/{roomId}/last-read")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getLastRead(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(Map.of("lastReadMessageId", "")));
+        }
+        String key = "chatflow:read:" + roomId + ":" + userId;
+        String lastReadId = redisTemplate.opsForValue().get(key);
+        return ResponseEntity.ok(ApiResponse.ok(
+                Map.of("lastReadMessageId", lastReadId != null ? lastReadId : "")));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}
