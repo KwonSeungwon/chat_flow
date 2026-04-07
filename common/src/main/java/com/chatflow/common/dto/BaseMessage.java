@@ -47,7 +47,11 @@ public abstract class BaseMessage {
     @lombok.Builder.Default
     private String priority = "ROUTINE";
 
+    private String fileUrl;
+    private String fileName;
+    private String fileContentType;
+
     public enum MessageType {
-        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD
+        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD, FILE
     }
 }

@@ -50,6 +50,9 @@ public class ChatPersistenceService {
                 .type(message.getType() != null ? message.getType().name() : "CHAT")
                 .priority(message.getPriority() != null ? message.getPriority() : "ROUTINE")
                 .isAiGenerated(message.isAiGenerated())
+                .fileUrl(message.getFileUrl())
+                .fileName(message.getFileName())
+                .fileContentType(message.getFileContentType())
                 .build();
         chatMessageRepository.save(entity);
 

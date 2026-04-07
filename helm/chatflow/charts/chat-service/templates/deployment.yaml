@@ -126,6 +126,8 @@ spec:
             - name: firebase-sa
               mountPath: /app/config/firebase
               readOnly: true
+            - name: file-uploads
+              mountPath: /app/uploads
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
@@ -135,3 +137,6 @@ spec:
           secret:
             secretName: chatflow-firebase-secret
             optional: true
+        - name: file-uploads
+          persistentVolumeClaim:
+            claimName: {{ include "chat-service.fullname" . }}-uploads

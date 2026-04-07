@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -426,6 +427,35 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'username': _username,
       'content': jsonEncode(card.toJson()),
       'type': 'PATIENT_CARD',
+      'priority': 'ROUTINE',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> uploadAndSendFile({
+    required String roomId,
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    final result = await _dioClient.uploadFile(
+      fileName: fileName,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
+    final fileUrl = result['fileUrl']?.toString() ?? '';
+    final storedName = result['fileName']?.toString() ?? fileName;
+    final contentType = result['fileContentType']?.toString() ?? mimeType;
+
+    _stompService.sendMessage({
+      'chatRoomId': roomId,
+      'userId': _userId,
+      'username': _username,
+      'content': '[파일] $storedName',
+      'type': 'FILE',
+      'fileUrl': fileUrl,
+      'fileName': storedName,
+      'fileContentType': contentType,
       'priority': 'ROUTINE',
       'timestamp': DateTime.now().toIso8601String(),
     });

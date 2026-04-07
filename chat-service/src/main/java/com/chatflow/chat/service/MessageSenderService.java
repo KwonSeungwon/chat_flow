@@ -52,10 +52,17 @@ public class MessageSenderService {
         if (MessageType.CHAT.equals(message.getType())) {
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), message.getContent());
+        } else if (MessageType.FILE.equals(message.getType())) {
+            String notifContent = message.getFileName() != null
+                    ? "파일을 보냈습니다: " + message.getFileName()
+                    : "파일을 보냈습니다";
+            fcmNotificationService.sendMessageNotification(
+                message.getChatRoomId(), message.getUsername(), notifContent);
         }
     }
 
     private boolean shouldRequestAISummary(ChatMessage message) {
+        if (MessageType.FILE.equals(message.getType())) return false;
         return message.getContent() != null && message.getContent().length() > 100;
     }
 }

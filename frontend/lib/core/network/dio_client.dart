@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -46,6 +47,30 @@ class DioClient {
   }
 
   Dio get dio => _dio;
+
+  Future<Map<String, dynamic>> uploadFile({
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: DioMediaType.parse(mimeType),
+      ),
+    });
+    final resp = await _dio.post(
+      '/api/files/upload',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+      onSendProgress: onProgress,
+    );
+    final data = resp.data;
+    if (data is Map && data['data'] is Map) return data['data'] as Map<String, dynamic>;
+    return data as Map<String, dynamic>;
+  }
 
   static String _webOrigin() {
     final uri = Uri.base;

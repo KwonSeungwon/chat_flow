@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "chat-service.fullname" . }}-uploads
+  labels:
+    {{- include "chat-service.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.fileStorage.size | default "5Gi" }}
+  storageClassName: {{ .Values.fileStorage.storageClass | default "local-path" }}

@@ -6,9 +6,12 @@ class ChatMessage {
   final String username;
   final String content;
   final String timestamp;
-  final String type; // CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY
+  final String type; // CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, FILE
   final String priority; // ROUTINE, URGENT, STAT
   final bool isAiGenerated;
+  final String? fileUrl;
+  final String? fileName;
+  final String? fileContentType;
 
   ChatMessage({
     this.id,
@@ -21,6 +24,9 @@ class ChatMessage {
     required this.type,
     this.priority = 'ROUTINE',
     this.isAiGenerated = false,
+    this.fileUrl,
+    this.fileName,
+    this.fileContentType,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -40,6 +46,9 @@ class ChatMessage {
       priority: json['priority']?.toString() ?? 'ROUTINE',
       isAiGenerated:
           json['isAiGenerated'] == true || json['aiGenerated'] == true,
+      fileUrl: json['fileUrl']?.toString(),
+      fileName: json['fileName']?.toString(),
+      fileContentType: json['fileContentType']?.toString(),
     );
   }
 
@@ -52,7 +61,12 @@ class ChatMessage {
     'type': type,
     'priority': priority,
     'isAiGenerated': isAiGenerated,
+    if (fileUrl != null) 'fileUrl': fileUrl,
+    if (fileName != null) 'fileName': fileName,
+    if (fileContentType != null) 'fileContentType': fileContentType,
   };
 
   String get effectiveId => messageId ?? id ?? '$timestamp-$username-${content.hashCode}';
+  bool get isFileMessage => type.toUpperCase() == 'FILE' && fileUrl != null;
+  bool get isImageFile => fileContentType != null && fileContentType!.startsWith('image/');
 }

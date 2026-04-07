@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
@@ -220,6 +223,15 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               } else {
                 item = const SizedBox.shrink();
               }
+            } else if (msg.isFileMessage) {
+              final isMine = msg.username == widget.currentUsername;
+              final readCount = widget.readCounts[msg.effectiveId] ?? 0;
+              item = _FileBubble(
+                msg: msg,
+                isMine: isMine,
+                time: _formatTime(msg.timestamp),
+                readCount: readCount,
+              );
             } else {
               final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
@@ -997,6 +1009,232 @@ class _Avatar extends StatelessWidget {
             color: Colors.white,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// File bubble (image preview or download button)
+// ─────────────────────────────────────────────────────────────────
+class _FileBubble extends StatelessWidget {
+  final ChatMessage msg;
+  final bool isMine;
+  final String time;
+  final int readCount;
+
+  const _FileBubble({
+    required this.msg,
+    required this.isMine,
+    required this.time,
+    this.readCount = 0,
+  });
+
+  Color _avatarColor(String name) =>
+      AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
+
+  String _buildFullUrl(String relativeUrl) {
+    if (kIsWeb) {
+      final uri = Uri.base;
+      final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
+      return '${uri.scheme}://${uri.host}$port$relativeUrl';
+    }
+    final base = dotenv.env['API_BASE_URL'] ?? 'http://43.201.94.100:8000';
+    return '$base$relativeUrl';
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final radius = BorderRadius.only(
+      topLeft: const Radius.circular(20),
+      topRight: const Radius.circular(20),
+      bottomLeft: Radius.circular(isMine ? 20 : 5),
+      bottomRight: Radius.circular(isMine ? 5 : 20),
+    );
+    final fullUrl = _buildFullUrl(msg.fileUrl!);
+
+    Widget content;
+    if (msg.isImageFile) {
+      content = GestureDetector(
+        onTap: () => _launchUrl(fullUrl),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Image.network(
+            fullUrl,
+            width: 220,
+            fit: BoxFit.cover,
+            loadingBuilder: (_, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                width: 220,
+                height: 160,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainer,
+                  borderRadius: radius,
+                ),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: progress.expectedTotalBytes != null
+                        ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                        : null,
+                    strokeWidth: 2,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (_, __, ___) => Container(
+              width: 220,
+              height: 80,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: radius,
+                border: Border.all(color: cs.outline.withAlpha(80)),
+              ),
+              child: Center(
+                child: Icon(Icons.broken_image_outlined, color: cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      content = Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isMine ? null : cs.surfaceContainer,
+          gradient: isMine ? AppColors.myBubbleGradient : null,
+          borderRadius: radius,
+          border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.insert_drive_file_outlined,
+              size: 28,
+              color: isMine ? Colors.white.withAlpha(220) : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    msg.fileName ?? '파일',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isMine ? Colors.white : cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: () => _launchUrl(fullUrl),
+                    child: Text(
+                      '다운로드',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isMine
+                            ? Colors.white.withAlpha(200)
+                            : cs.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMine) ...[
+            _Avatar(name: msg.username, color: _avatarColor(msg.username)),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                if (!isMine)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 3),
+                    child: Text(
+                      msg.username,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 5, bottom: 3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (readCount > 0)
+                              Text(
+                                '읽음 $readCount',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.primary.withAlpha(180),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    content,
+                    if (!isMine)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5, bottom: 3),
+                        child: Text(
+                          time,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (isMine) const SizedBox(width: 6),
+        ],
       ),
     );
   }

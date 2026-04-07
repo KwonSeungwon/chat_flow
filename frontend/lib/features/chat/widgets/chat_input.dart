@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/patient_card.dart';
 import 'patient_card_input_dialog.dart';
@@ -12,6 +13,7 @@ class ChatInput extends StatefulWidget {
   final void Function(String content, {String priority}) onSend;
   final Future<void> Function(String question)? onAskAi;
   final void Function(PatientCard card)? onSendPatientCard;
+  final Future<void> Function(String fileName, Uint8List bytes, String mimeType)? onFilePick;
 
   const ChatInput({
     super.key,
@@ -21,6 +23,7 @@ class ChatInput extends StatefulWidget {
     required this.onSend,
     this.onAskAi,
     this.onSendPatientCard,
+    this.onFilePick,
   });
 
   @override
@@ -36,6 +39,7 @@ class _ChatInputState extends State<ChatInput> {
   bool _aiMode = false;
   String _priority = 'ROUTINE';
   bool _isSending = false; // Guard against Korean IME double-send
+  bool _isUploading = false;
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -148,6 +152,47 @@ class _ChatInputState extends State<ChatInput> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickFile() async {
+    if (_isUploading || widget.onFilePick == null) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'docx', 'xlsx', 'zip'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null) return;
+
+      final ext = file.extension?.toLowerCase() ?? '';
+      final mimeType = _extToMime(ext);
+
+      setState(() => _isUploading = true);
+      try {
+        await widget.onFilePick!(file.name, bytes, mimeType);
+      } catch (e) {
+        if (!mounted) return;
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
+    } catch (_) {}
+  }
+
+  String _extToMime(String ext) {
+    const map = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+      'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
+      'pdf': 'application/pdf',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'zip': 'application/zip',
+    };
+    return map[ext] ?? 'application/octet-stream';
   }
 
   @override
@@ -333,6 +378,34 @@ class _ChatInputState extends State<ChatInput> {
                       }
                     },
                   ),
+                  const SizedBox(width: 6),
+                ],
+                // File attach button (hidden in AI mode)
+                if (!_aiMode && widget.onFilePick != null) ...[
+                  _isUploading
+                      ? Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Theme.of(context).colorScheme.surfaceContainer,
+                            border: Border.all(color: Theme.of(context).colorScheme.outline),
+                          ),
+                          child: Center(
+                            child: SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        )
+                      : _CircleIconBtn(
+                          icon: Icons.attach_file_rounded,
+                          enabled: widget.isConnected && !_isUploading,
+                          onTap: _pickFile,
+                        ),
                   const SizedBox(width: 6),
                 ],
                 // Emoji button (hidden in AI mode)

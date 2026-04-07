@@ -7,6 +7,8 @@ server:
     accept-count: 200
 
 spring:
+  codec:
+    max-in-memory-size: 25MB
   lifecycle:
     timeout-per-shutdown-phase: 30s
   cloud:
@@ -68,6 +70,15 @@ spring:
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
             - Path=/ws-native/**
+        - id: file-service
+          uri: ${CHAT_SERVICE_URL}
+          predicates:
+            - Path=/api/files/**
+          filters:
+            - name: Retry
+              args:
+                retries: 1
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
       globalcors:
         corsConfigurations:
           '[/**]':

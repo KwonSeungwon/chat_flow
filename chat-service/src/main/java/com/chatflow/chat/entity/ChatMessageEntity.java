@@ -56,6 +56,15 @@ public class ChatMessageEntity implements Persistable<String> {
     @Column(name = "is_ai_generated")
     private boolean isAiGenerated = false;
 
+    @Column(length = 512)
+    private String fileUrl;
+
+    @Column(length = 255)
+    private String fileName;
+
+    @Column(length = 100)
+    private String fileContentType;
+
     @Override
     public String getId() {
         return messageId;

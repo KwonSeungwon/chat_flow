@@ -37,6 +37,10 @@ dependencies:
   firebase_remote_config: ^5.1.5
   # Local notifications (foreground FCM display)
   flutter_local_notifications: ^18.0.0
+  # File picker (Web + Android)
+  file_picker: ^8.0.0
+  # URL launcher (file download)
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
