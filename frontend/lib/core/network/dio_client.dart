@@ -64,7 +64,6 @@ class DioClient {
     final resp = await _dio.post(
       '/api/files/upload',
       data: formData,
-      options: Options(contentType: 'multipart/form-data'),
       onSendProgress: onProgress,
     );
     final data = resp.data;

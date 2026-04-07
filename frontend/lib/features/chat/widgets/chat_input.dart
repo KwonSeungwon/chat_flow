@@ -180,7 +180,13 @@ class _ChatInputState extends State<ChatInput> {
       } finally {
         if (mounted) setState(() => _isUploading = false);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('파일 선택 오류: $msg')),
+      );
+    }
   }
 
   String _extToMime(String ext) {
@@ -460,9 +466,11 @@ class _ChatInputState extends State<ChatInput> {
                               : _aiMode
                                   ? 'AI에게 질문하세요...'
                                   : '메시지를 입력하세요...',
+                          hintMaxLines: 1,
                           hintStyle: TextStyle(
                               color: cs.onSurfaceVariant.withAlpha(130),
-                              fontSize: 14),
+                              fontSize: 14,
+                              overflow: TextOverflow.ellipsis),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
