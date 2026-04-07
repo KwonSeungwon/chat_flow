@@ -89,6 +89,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   @override
   Widget build(BuildContext context) {
     if (widget.messages.isEmpty) {
+      final colorScheme = Theme.of(context).colorScheme;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -98,24 +99,24 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               height: 64,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.surfaceHigh,
-                border: Border.all(color: AppColors.border),
+                color: colorScheme.surfaceContainer,
+                border: Border.all(color: colorScheme.outline),
               ),
-              child: const Icon(Icons.chat_bubble_outline_rounded,
-                  size: 30, color: AppColors.textMuted),
+              child: Icon(Icons.chat_bubble_outline_rounded,
+                  size: 30, color: colorScheme.onSurfaceVariant.withAlpha(100)),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               '아직 메시지가 없습니다',
               style: TextStyle(
-                  color: AppColors.textSecondary,
+                  color: colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w500,
                   fontSize: 15),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '첫 메시지를 보내보세요!',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(150), fontSize: 13),
             ),
           ],
         ),
@@ -308,8 +309,8 @@ class _AiSummaryCardState extends State<_AiSummaryCard> {
 
   void _startTyping() {
     const charsPerTick = 1;
-    _timer = Timer.periodic(const Duration(milliseconds: 30), (_) {
-      if (!mounted) return;
+    _timer = Timer.periodic(const Duration(milliseconds: 30), (timer) {
+      if (!mounted) { timer.cancel(); return; }
       if (_visibleLength < widget.msg.content.length) {
         setState(() {
           _visibleLength = (_visibleLength + charsPerTick)

@@ -31,8 +31,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   String _formatTimestamp(String timestamp) {
     try {
       final dt = DateTime.parse(timestamp);
-      final kst = dt.toUtc().add(const Duration(hours: 9));
-      return DateFormat('yyyy-MM-dd HH:mm').format(kst);
+      final local = dt.toLocal();
+      return DateFormat('yyyy-MM-dd HH:mm').format(local);
     } catch (_) {
       return '';
     }
@@ -102,38 +102,38 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       ),
       body: Column(
         children: [
-          // Search bar — hardcoded colors for dark/light visibility
+          // Search bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            color: const Color(0xFF1E2130),
+            color: colorScheme.surfaceContainer,
             child: Row(
               children: [
                 Expanded(
                   child: Container(
                     height: 48,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2A2E42),
+                      color: colorScheme.surfaceContainerHigh,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFF4A4E68), width: 1),
+                      border: Border.all(color: colorScheme.outline.withAlpha(80), width: 1),
                     ),
                     child: TextField(
                       controller: _queryCtrl,
                       autofocus: true,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: '검색어를 입력하세요...',
-                        hintStyle: TextStyle(color: Color(0xFF8890A8), fontSize: 15),
+                        hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(130), fontSize: 15),
                         prefixIcon: Padding(
-                          padding: EdgeInsets.only(left: 14, right: 8),
-                          child: Icon(Icons.search, size: 22, color: Color(0xFF8890A8)),
+                          padding: const EdgeInsets.only(left: 14, right: 8),
+                          child: Icon(Icons.search, size: 22, color: colorScheme.onSurfaceVariant.withAlpha(130)),
                         ),
-                        prefixIconConstraints: BoxConstraints(minWidth: 44, minHeight: 44),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 14),
                       ),
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                      cursorColor: Colors.white,
+                      style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
+                      cursorColor: colorScheme.onSurface,
                       textInputAction: TextInputAction.search,
                       onSubmitted: (_) => _doSearch(),
                     ),

@@ -154,23 +154,24 @@ class _ParticipantBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
+        color: colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people_outline_rounded,
-              size: 13, color: AppColors.textSecondary),
+          Icon(Icons.people_outline_rounded,
+              size: 13, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             '$count/$max',
-            style: const TextStyle(
-                fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(
+                fontSize: 12, color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -229,6 +230,7 @@ class _LobbyPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -255,20 +257,20 @@ class _LobbyPlaceholder extends StatelessWidget {
                   size: 40, color: AppColors.primary),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               '채팅을 시작하세요',
               style: TextStyle(
-                color: AppColors.textPrimary,
+                color: colorScheme.onSurface,
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '채팅방을 선택하거나 새로 만들어\n대화를 시작할 수 있습니다',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+                  color: colorScheme.onSurfaceVariant, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 28),
             FilledButton.icon(

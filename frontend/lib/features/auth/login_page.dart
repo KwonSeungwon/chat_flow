@@ -70,8 +70,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
       if (next.isAuthenticated) context.go('/chat');
     });
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: colorScheme.surfaceContainerLowest,
       body: Stack(
         children: [
           // Background: violet glow top-left
@@ -125,9 +127,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
                         child: Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceHigh.withAlpha(230),
+                            color: colorScheme.surfaceContainer.withAlpha(230),
                             borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: AppColors.border),
+                            border: Border.all(color: colorScheme.outline),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -136,7 +138,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                               Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.bg,
+                                  color: colorScheme.surfaceContainerLowest,
                                   borderRadius: BorderRadius.circular(13),
                                 ),
                                 child: TabBar(
@@ -144,14 +146,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                   onTap: (_) => setState(() {}),
                                   indicator: BoxDecoration(
                                     borderRadius: BorderRadius.circular(10),
-                                    color: AppColors.surfaceHigher,
+                                    color: colorScheme.surfaceContainerHigh,
                                     border: Border.all(
-                                        color: AppColors.border, width: 1),
+                                        color: colorScheme.outline, width: 1),
                                   ),
                                   indicatorSize: TabBarIndicatorSize.tab,
                                   dividerColor: Colors.transparent,
-                                  labelColor: AppColors.primary,
-                                  unselectedLabelColor: AppColors.textSecondary,
+                                  labelColor: colorScheme.primary,
+                                  unselectedLabelColor: colorScheme.onSurfaceVariant,
                                   labelStyle: const TextStyle(
                                       fontWeight: FontWeight.w600, fontSize: 14),
                                   unselectedLabelStyle: const TextStyle(
@@ -223,30 +225,30 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                         value: _selectedRole,
                                         decoration: InputDecoration(
                                           labelText: '역할',
-                                          prefixIcon: const Icon(
+                                          prefixIcon: Icon(
                                             Icons.badge_outlined,
                                             size: 20,
-                                            color: AppColors.textSecondary,
+                                            color: colorScheme.onSurfaceVariant,
                                           ),
                                           filled: true,
-                                          fillColor: AppColors.surfaceHigher,
+                                          fillColor: colorScheme.surfaceContainerHigh,
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(color: AppColors.border),
+                                            borderSide: BorderSide(color: colorScheme.outline),
                                           ),
                                           enabledBorder: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(color: AppColors.border),
+                                            borderSide: BorderSide(color: colorScheme.outline),
                                           ),
                                           focusedBorder: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
-                                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                                            borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
                                           ),
-                                          labelStyle: const TextStyle(color: AppColors.textSecondary),
+                                          labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                         ),
-                                        dropdownColor: AppColors.surfaceHigher,
-                                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                                        dropdownColor: colorScheme.surfaceContainerHigh,
+                                        style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
                                         items: const [
                                           DropdownMenuItem(value: 'DOCTOR',      child: Text('의사 (DOCTOR)')),
                                           DropdownMenuItem(value: 'NURSE',       child: Text('간호사 (NURSE)')),
@@ -348,6 +350,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
 class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         Container(
@@ -370,19 +373,19 @@ class _Logo extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'ChatFlow',
           style: TextStyle(
-            color: AppColors.textPrimary,
+            color: colorScheme.onSurface,
             fontSize: 28,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 5),
-        const Text(
+        Text(
           'AI 기반 실시간 채팅 플랫폼',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
         ),
       ],
     );
@@ -415,16 +418,17 @@ class _NebField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       textInputAction: action,
       onFieldSubmitted: onSubmit,
       validator: validator,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+      style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, size: 20, color: AppColors.textSecondary),
+        prefixIcon: Icon(icon, size: 20, color: colorScheme.onSurfaceVariant),
         suffixIcon: onToggleObscure != null
             ? IconButton(
                 icon: Icon(
@@ -432,30 +436,30 @@ class _NebField extends StatelessWidget {
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
                   size: 20,
-                  color: AppColors.textSecondary,
+                  color: colorScheme.onSurfaceVariant,
                 ),
                 onPressed: onToggleObscure,
               )
             : null,
         filled: true,
-        fillColor: AppColors.surfaceHigher,
+        fillColor: colorScheme.surfaceContainerHigh,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.error),
+          borderSide: BorderSide(color: colorScheme.error),
         ),
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),

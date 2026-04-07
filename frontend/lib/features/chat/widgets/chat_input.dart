@@ -30,6 +30,7 @@ class ChatInput extends StatefulWidget {
 class _ChatInputState extends State<ChatInput> {
   final _controller = TextEditingController();
   final _focusNode  = FocusNode();
+  final _keyboardFocusNode = FocusNode();
   static const _maxLength     = 1000;
   static const _warnThreshold = 800;
   bool _aiMode = false;
@@ -146,6 +147,7 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   void dispose() {
+    _keyboardFocusNode.dispose();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -347,7 +349,7 @@ class _ChatInputState extends State<ChatInput> {
                       border: Border.all(color: cs.outline.withAlpha(80)),
                     ),
                     child: KeyboardListener(
-                      focusNode: FocusNode(),
+                      focusNode: _keyboardFocusNode,
                       onKeyEvent: (event) {
                         if (kIsWeb &&
                             event is KeyDownEvent &&
