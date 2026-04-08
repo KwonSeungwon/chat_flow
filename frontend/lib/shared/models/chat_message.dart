@@ -69,4 +69,6 @@ class ChatMessage {
   String get effectiveId => messageId ?? id ?? '$timestamp-$username-${content.hashCode}';
   bool get isFileMessage => type.toUpperCase() == 'FILE' && fileUrl != null;
   bool get isImageFile => fileContentType != null && fileContentType!.startsWith('image/');
+  bool get isPdfFile => fileContentType == 'application/pdf' ||
+      (fileName != null && fileName!.toLowerCase().endsWith('.pdf'));
 }

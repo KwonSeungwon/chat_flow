@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import 'patient_card_widget.dart';
+import 'pdf_viewer_dialog.dart';
 
 class ChatMessagesList extends StatefulWidget {
   final List<ChatMessage> messages;
@@ -1138,6 +1139,68 @@ class _FileBubble extends StatelessWidget {
               ),
             ),
         ],
+      );
+    } else if (msg.isPdfFile) {
+      content = GestureDetector(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PdfViewerDialog(url: fullUrl, fileName: msg.fileName ?? 'PDF'),
+          ),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 260),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isMine ? null : cs.surfaceContainer,
+            gradient: isMine ? AppColors.myBubbleGradient : null,
+            borderRadius: radius,
+            border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      msg.fileName ?? 'PDF',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isMine ? Colors.white : cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'PDF 미리보기',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isMine ? Colors.white.withAlpha(200) : cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: isMine ? Colors.white.withAlpha(180) : cs.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
       );
     } else {
       content = Container(
