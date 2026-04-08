@@ -421,12 +421,13 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
           onAskAi: (question) => chatNotifier.askAi(widget.roomId, question),
           onSendPatientCard: (card) =>
               chatNotifier.sendPatientCard(widget.roomId, card),
-          onFilePick: (fileName, bytes, mimeType) =>
+          onFilePick: (fileName, bytes, mimeType, content) =>
               chatNotifier.uploadAndSendFile(
                 roomId: widget.roomId,
                 fileName: fileName,
                 bytes: bytes,
                 mimeType: mimeType,
+                content: content,
               ),
         ),
       ],

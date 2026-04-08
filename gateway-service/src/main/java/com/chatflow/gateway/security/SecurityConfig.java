@@ -37,6 +37,7 @@ public class SecurityConfig {
                         .pathMatchers("/ws/**").permitAll()
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
                         .pathMatchers("/actuator/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/files/**").permitAll()
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyExchange().authenticated()
                 )

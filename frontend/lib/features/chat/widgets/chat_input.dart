@@ -13,7 +13,7 @@ class ChatInput extends StatefulWidget {
   final void Function(String content, {String priority}) onSend;
   final Future<void> Function(String question)? onAskAi;
   final void Function(PatientCard card)? onSendPatientCard;
-  final Future<void> Function(String fileName, Uint8List bytes, String mimeType)? onFilePick;
+  final Future<void> Function(String fileName, Uint8List bytes, String mimeType, String content)? onFilePick;
 
   const ChatInput({
     super.key,
@@ -40,6 +40,10 @@ class _ChatInputState extends State<ChatInput> {
   String _priority = 'ROUTINE';
   bool _isSending = false; // Guard against Korean IME double-send
   bool _isUploading = false;
+  // Pending file attachment
+  String? _pendingFileName;
+  Uint8List? _pendingFileBytes;
+  String? _pendingFileMimeType;
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -53,23 +57,42 @@ class _ChatInputState extends State<ChatInput> {
   Future<void> _send() async {
     if (_isSending) return;
     final text = _controller.text.trim();
-    if (text.isEmpty || !widget.isConnected) return;
+    final hasFile = _pendingFileName != null && _pendingFileBytes != null;
+    if (text.isEmpty && !hasFile) return;
+    if (!widget.isConnected) return;
     _isSending = true;
-    // Reset value (not just clear) to also reset IME composing state,
-    // preventing Korean IME from re-injecting the in-flight syllable.
     _controller.value = TextEditingValue.empty;
-    if (_aiMode && widget.onAskAi != null) {
+
+    if (_aiMode && widget.onAskAi != null && text.isNotEmpty) {
       _focusNode.requestFocus();
       try {
         await widget.onAskAi!(text);
       } catch (e) {
-        if (!mounted) return;
+        if (!mounted) { _isSending = false; return; }
         final msg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
-    } else {
+    } else if (hasFile && widget.onFilePick != null) {
+      // Upload file + send message with text
+      setState(() => _isUploading = true);
+      try {
+        await widget.onFilePick!(
+          _pendingFileName!, _pendingFileBytes!, _pendingFileMimeType ?? 'application/octet-stream', text,
+        );
+      } catch (e) {
+        if (!mounted) { _isSending = false; return; }
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      } finally {
+        if (mounted) setState(() {
+          _isUploading = false;
+          _pendingFileName = null;
+          _pendingFileBytes = null;
+          _pendingFileMimeType = null;
+        });
+      }
+      _focusNode.requestFocus();
+    } else if (text.isNotEmpty) {
       widget.onSend(text, priority: _priority);
       if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
       _focusNode.requestFocus();
@@ -170,16 +193,12 @@ class _ChatInputState extends State<ChatInput> {
       final ext = file.extension?.toLowerCase() ?? '';
       final mimeType = _extToMime(ext);
 
-      setState(() => _isUploading = true);
-      try {
-        await widget.onFilePick!(file.name, bytes, mimeType);
-      } catch (e) {
-        if (!mounted) return;
-        final msg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      } finally {
-        if (mounted) setState(() => _isUploading = false);
-      }
+      setState(() {
+        _pendingFileName = file.name;
+        _pendingFileBytes = bytes;
+        _pendingFileMimeType = mimeType;
+      });
+      _focusNode.requestFocus();
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '');
@@ -252,6 +271,44 @@ class _ChatInputState extends State<ChatInput> {
                 );
               },
             ),
+
+            // Pending file attachment preview
+            if (_pendingFileName != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cs.secondaryContainer,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _pendingFileMimeType?.startsWith('image/') == true
+                          ? Icons.image_outlined : Icons.attach_file_rounded,
+                      size: 16, color: cs.onSecondaryContainer,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        _pendingFileName!,
+                        style: TextStyle(fontSize: 12, color: cs.onSecondaryContainer),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _pendingFileName = null;
+                        _pendingFileBytes = null;
+                        _pendingFileMimeType = null;
+                      }),
+                      child: Icon(Icons.close, size: 16, color: cs.onSecondaryContainer),
+                    ),
+                  ],
+                ),
+              ),
 
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -489,8 +546,9 @@ class _ChatInputState extends State<ChatInput> {
                   valueListenable: _controller,
                   builder: (_, value, __) {
                     final canSend = widget.isConnected &&
-                        value.text.trim().isNotEmpty &&
-                        !(_aiMode && widget.isAiLoading);
+                        (value.text.trim().isNotEmpty || _pendingFileName != null) &&
+                        !(_aiMode && widget.isAiLoading) &&
+                        !_isUploading;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       width: 40,

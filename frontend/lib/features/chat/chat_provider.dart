@@ -437,6 +437,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     required String fileName,
     required Uint8List bytes,
     required String mimeType,
+    String content = '',
   }) async {
     final result = await _dioClient.uploadFile(
       fileName: fileName,
@@ -447,11 +448,13 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     final storedName = result['fileName']?.toString() ?? fileName;
     final contentType = result['fileContentType']?.toString() ?? mimeType;
 
+    final msgContent = content.isNotEmpty ? content : '[파일] $storedName';
+
     _stompService.sendMessage({
       'chatRoomId': roomId,
       'userId': _userId,
       'username': _username,
-      'content': '[파일] $storedName',
+      'content': msgContent,
       'type': 'FILE',
       'fileUrl': fileUrl,
       'fileName': storedName,
