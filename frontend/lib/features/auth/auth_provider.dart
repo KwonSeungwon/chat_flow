@@ -8,6 +8,7 @@ class AuthState {
   final String? userId;
   final String username;
   final String role;
+  final String? profileImageUrl;
   final bool isLoading;
   final String? error;
 
@@ -16,6 +17,7 @@ class AuthState {
     this.userId,
     this.username = '',
     this.role = 'NURSE',
+    this.profileImageUrl,
     this.isLoading = false,
     this.error,
   });
@@ -27,6 +29,7 @@ class AuthState {
     String? userId,
     String? username,
     String? role,
+    String? profileImageUrl,
     bool? isLoading,
     String? error,
   }) {
@@ -35,6 +38,7 @@ class AuthState {
       userId: userId ?? this.userId,
       username: username ?? this.username,
       role: role ?? this.role,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -57,11 +61,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final username = await _storage.read(key: 'chatflow-username');
       if (token != null) {
         final role = await _storage.read(key: 'chatflow-role');
+        final profileImageUrl = await _storage.read(key: 'chatflow-profileImage');
         state = AuthState(
           token: token,
           userId: userId,
           username: username ?? '',
           role: role ?? 'NURSE',
+          profileImageUrl: profileImageUrl,
         );
       }
     } catch (_) {
@@ -80,8 +86,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
       final role = resp.data['role']?.toString() ?? 'NURSE';
-      await _saveCredentials(token: token, userId: userId, username: username, role: role);
-      state = AuthState(token: token, userId: userId, username: username, role: role);
+      final profileImageUrl = resp.data['profileImageUrl']?.toString();
+      await _saveCredentials(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 401
@@ -106,8 +113,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
       final respRole = resp.data['role']?.toString() ?? role;
-      await _saveCredentials(token: token, userId: userId, username: username, role: respRole);
-      state = AuthState(token: token, userId: userId, username: username, role: respRole);
+      final profileImageUrl = resp.data['profileImageUrl']?.toString();
+      await _saveCredentials(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 400
@@ -129,7 +137,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.delete(key: 'chatflow-token');
     await _storage.delete(key: 'chatflow-userId');
     await _storage.delete(key: 'chatflow-username');
+    await _storage.delete(key: 'chatflow-profileImage');
     state = const AuthState();
+  }
+
+  Future<void> updateProfileImage(String profileImageUrl) async {
+    try {
+      await _dioClient.dio.put('/api/auth/profile', data: {
+        'username': state.username,
+        'profileImageUrl': profileImageUrl,
+      });
+      await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
+      state = state.copyWith(profileImageUrl: profileImageUrl);
+    } catch (_) {}
   }
 
   Future<void> _saveCredentials({
@@ -137,11 +157,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String userId,
     required String username,
     String role = 'NURSE',
+    String? profileImageUrl,
   }) async {
     await _storage.write(key: 'chatflow-token', value: token);
     await _storage.write(key: 'chatflow-userId', value: userId);
     await _storage.write(key: 'chatflow-username', value: username);
     await _storage.write(key: 'chatflow-role', value: role);
+    if (profileImageUrl != null) {
+      await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
+    }
   }
 }
 

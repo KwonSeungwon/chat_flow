@@ -31,7 +31,7 @@ public class KoreanSearchService {
             // Multi-match query with Korean analyzer
             Query multiMatchQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content^3", "content.ngram^0.3")
+                    .fields("content^3", "content.ngram^0.3", "fileName^2", "fileName.ngram^0.5")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
                     .minimumShouldMatch("75%")
             )._toQuery();
@@ -106,7 +106,7 @@ public class KoreanSearchService {
             // N-gram based search for partial matching
             Query ngramQuery = MultiMatchQuery.of(m -> m
                     .query(query)
-                    .fields("content.ngram^2")
+                    .fields("content.ngram^2", "fileName.ngram^1.5")
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
             )._toQuery();
 

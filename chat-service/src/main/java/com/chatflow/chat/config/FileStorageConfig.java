@@ -22,7 +22,7 @@ public class FileStorageConfig {
 
     private String uploadDir = "./uploads";
 
-    private long maxFileSize = 20 * 1024 * 1024L; // 20MB
+    private long maxFileSize = 50 * 1024 * 1024L; // 50MB
 
     private List<String> allowedMimeTypes = List.of(
             "image/jpeg",

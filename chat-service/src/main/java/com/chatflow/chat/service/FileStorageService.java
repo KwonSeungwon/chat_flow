@@ -36,7 +36,7 @@ public class FileStorageService {
             throw new IllegalArgumentException("빈 파일은 업로드할 수 없습니다.");
         }
         if (file.getSize() > config.getMaxFileSize()) {
-            throw new IllegalArgumentException("파일 크기가 제한을 초과합니다 (최대 20MB).");
+            throw new IllegalArgumentException("파일 크기가 제한을 초과합니다 (최대 50MB).");
         }
 
         String detectedType;

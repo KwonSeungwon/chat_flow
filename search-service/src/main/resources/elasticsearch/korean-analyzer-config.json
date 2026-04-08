@@ -131,6 +131,26 @@
       },
       "isAiGenerated": {
         "type": "boolean"
+      },
+      "fileName": {
+        "type": "text",
+        "analyzer": "korean_analyzer",
+        "search_analyzer": "korean_search_analyzer",
+        "fields": {
+          "ngram": {
+            "type": "text",
+            "analyzer": "ngram_analyzer"
+          },
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "fileUrl": {
+        "type": "keyword"
+      },
+      "fileContentType": {
+        "type": "keyword"
       }
     }
   }

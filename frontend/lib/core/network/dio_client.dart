@@ -76,7 +76,7 @@ class DioClient {
       } else if (e.response?.statusCode == 401) {
         throw Exception('로그인이 필요합니다.');
       } else if (e.response?.statusCode == 413) {
-        throw Exception('파일 크기가 너무 큽니다 (최대 20MB).');
+        throw Exception('파일 크기가 너무 큽니다 (최대 50MB).');
       }
       throw Exception('파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }

@@ -62,7 +62,10 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
       color: cs.surface,
       child: Column(
         children: [
-          _SidebarHeader(onCreateTap: () => _showCreateDialog(context)),
+          _SidebarHeader(
+            onCreateTap: () => _showCreateDialog(context),
+            onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
+          ),
           Divider(height: 1, color: cs.outline.withAlpha(60), thickness: 1),
           Expanded(
             child: roomsAsync.when(
@@ -193,7 +196,8 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
 // ─────────────────────────────────────────────────────────────────
 class _SidebarHeader extends StatelessWidget {
   final VoidCallback onCreateTap;
-  const _SidebarHeader({required this.onCreateTap});
+  final VoidCallback? onRefresh;
+  const _SidebarHeader({required this.onCreateTap, this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -204,19 +208,27 @@ class _SidebarHeader extends StatelessWidget {
       color: cs.surface,
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset('assets/app_icon.png', width: 32, height: 32,
-              errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble, size: 20, color: Colors.white)),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'ChatFlow',
-            style: TextStyle(
-              color: cs.onSurface,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
+          GestureDetector(
+            onTap: onRefresh,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset('assets/app_icon.png', width: 32, height: 32,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble, size: 20, color: Colors.white)),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'ChatFlow',
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ],
             ),
           ),
           const Spacer(),

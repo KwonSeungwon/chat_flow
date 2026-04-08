@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,15 @@ import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
+
+String _buildProfileUrl(String relativeUrl) {
+  if (kIsWeb) {
+    final uri = Uri.base;
+    final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
+    return '${uri.scheme}://${uri.host}$port$relativeUrl';
+  }
+  return relativeUrl;
+}
 
 class ChatPage extends ConsumerWidget {
   final String? roomId;
@@ -85,7 +95,15 @@ class ChatPage extends ConsumerWidget {
             onPressed: () => context.push('/search'),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
+            icon: CircleAvatar(
+              radius: 16,
+              backgroundImage: auth.profileImageUrl != null
+                  ? NetworkImage(_buildProfileUrl(auth.profileImageUrl!))
+                  : null,
+              child: auth.profileImageUrl == null
+                  ? const Icon(Icons.person, size: 18)
+                  : null,
+            ),
             onSelected: (value) async {
               if (value == 'theme') {
                 ref.read(themeModeProvider.notifier).state =

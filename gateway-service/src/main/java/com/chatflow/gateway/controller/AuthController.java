@@ -7,10 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -34,6 +32,23 @@ public class AuthController {
                 .map(ResponseEntity::ok)
                 .onErrorResume(IllegalArgumentException.class,
                         e -> Mono.just(ResponseEntity.status(401).build()));
+    }
+
+    @PutMapping("/profile")
+    public Mono<ResponseEntity<Map<String, String>>> updateProfile(
+            @RequestBody Map<String, String> body, ServerHttpRequest request) {
+        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearerToken == null || !bearerToken.startsWith("Bearer ")) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+        String username = body.get("username");
+        String profileImageUrl = body.get("profileImageUrl");
+        if (username == null || profileImageUrl == null) {
+            return Mono.just(ResponseEntity.badRequest().build());
+        }
+        return authService.updateProfileImage(username, profileImageUrl)
+                .then(Mono.just(ResponseEntity.ok(Map.of("profileImageUrl", profileImageUrl))))
+                .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
     }
 
     @PostMapping("/logout")

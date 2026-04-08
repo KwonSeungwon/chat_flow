@@ -25,9 +25,9 @@ public class AuthService {
 
     private static final String USER_KEY_PREFIX = "chatflow:user:";
 
-    public record UserRecord(String userId, String username, String encodedPassword, String role) {}
+    public record UserRecord(String userId, String username, String encodedPassword, String role, String profileImageUrl) {}
     public record AuthRequest(String username, String password, String role) {}
-    public record AuthResponse(String token, String userId, String username, String role) {}
+    public record AuthResponse(String token, String userId, String username, String role, String profileImageUrl) {}
 
     public Mono<AuthResponse> register(AuthRequest request) {
         String key = USER_KEY_PREFIX + request.username();
@@ -38,7 +38,7 @@ public class AuthService {
                     String userId = UUID.randomUUID().toString();
                     String encoded = passwordEncoder.encode(request.password());
                     String role = request.role() != null ? request.role() : "NURSE";
-                    UserRecord user = new UserRecord(userId, request.username(), encoded, role);
+                    UserRecord user = new UserRecord(userId, request.username(), encoded, role, null);
                     String json;
                     try {
                         json = objectMapper.writeValueAsString(user);
@@ -48,7 +48,7 @@ public class AuthService {
                     return redisTemplate.opsForValue().set(key, json)
                             .then(Mono.fromCallable(() -> {
                                 String token = jwtUtil.generateToken(userId, request.username(), role);
-                                return new AuthResponse(token, userId, request.username(), role);
+                                return new AuthResponse(token, userId, request.username(), role, null);
                             }));
                 }));
     }
@@ -69,7 +69,29 @@ public class AuthService {
                     }
                     String role = user.role() != null ? user.role() : "NURSE";
                     String token = jwtUtil.generateToken(user.userId(), user.username(), role);
-                    return Mono.just(new AuthResponse(token, user.userId(), user.username(), role));
+                    return Mono.just(new AuthResponse(token, user.userId(), user.username(), role, user.profileImageUrl()));
+                });
+    }
+
+    public Mono<Void> updateProfileImage(String username, String profileImageUrl) {
+        String key = USER_KEY_PREFIX + username;
+        return redisTemplate.opsForValue().get(key)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
+                .flatMap(json -> {
+                    UserRecord user;
+                    try {
+                        user = objectMapper.readValue(json, UserRecord.class);
+                    } catch (JsonProcessingException e) {
+                        return Mono.error(e);
+                    }
+                    UserRecord updated = new UserRecord(user.userId(), user.username(), user.encodedPassword(), user.role(), profileImageUrl);
+                    String updatedJson;
+                    try {
+                        updatedJson = objectMapper.writeValueAsString(updated);
+                    } catch (JsonProcessingException e) {
+                        return Mono.error(e);
+                    }
+                    return redisTemplate.opsForValue().set(key, updatedJson).then();
                 });
     }
 

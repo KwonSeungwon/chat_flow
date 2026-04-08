@@ -46,4 +46,13 @@ public class ChatMessageDocument {
     
     @Field(type = FieldType.Boolean)
     private boolean isAiGenerated;
+
+    @Field(type = FieldType.Text, analyzer = "korean_analyzer", searchAnalyzer = "korean_search_analyzer")
+    private String fileName;
+
+    @Field(type = FieldType.Keyword)
+    private String fileUrl;
+
+    @Field(type = FieldType.Keyword)
+    private String fileContentType;
 }

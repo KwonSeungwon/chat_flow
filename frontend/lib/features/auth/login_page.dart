@@ -1,8 +1,12 @@
 import 'dart:ui';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/apk_downloader.dart';
 import 'auth_provider.dart';
@@ -24,6 +28,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
   bool _obscurePassword = true;
   bool _obscureConfirm  = true;
   String _selectedRole = 'NURSE';
+  Uint8List? _profileImageBytes;
+  String? _profileImageName;
 
   @override
   void initState() {
@@ -50,6 +56,23 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
   bool get _isRegister => _tabController.index == 1;
 
+  Future<void> _pickProfileImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      withData: true,
+    );
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.first;
+      if (file.bytes != null) {
+        setState(() {
+          _profileImageBytes = file.bytes;
+          _profileImageName = file.name;
+        });
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final username = _usernameCtrl.text.trim();
@@ -57,6 +80,25 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final notifier = ref.read(authProvider.notifier);
     if (_isRegister) {
       await notifier.register(username, password, role: _selectedRole);
+      // Upload profile image after successful registration
+      if (_profileImageBytes != null && _profileImageName != null) {
+        try {
+          final dioClient = ref.read(dioClientProvider);
+          final formData = FormData.fromMap({
+            'file': MultipartFile.fromBytes(
+              _profileImageBytes!,
+              filename: _profileImageName,
+            ),
+          });
+          final resp = await dioClient.dio.post('/api/files/upload', data: formData);
+          final fileUrl = resp.data['url']?.toString() ?? resp.data['fileUrl']?.toString();
+          if (fileUrl != null) {
+            await notifier.updateProfileImage(fileUrl);
+          }
+        } catch (_) {
+          // Profile image upload failure is non-fatal
+        }
+      }
     } else {
       await notifier.login(username, password);
     }
@@ -170,6 +212,48 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                 key: _formKey,
                                 child: Column(
                                   children: [
+                                    if (_isRegister) ...[
+                                      GestureDetector(
+                                        onTap: _pickProfileImage,
+                                        child: Stack(
+                                          alignment: Alignment.bottomRight,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 44,
+                                              backgroundColor: colorScheme.surfaceContainerHigh,
+                                              backgroundImage: _profileImageBytes != null
+                                                  ? MemoryImage(_profileImageBytes!)
+                                                  : null,
+                                              child: _profileImageBytes == null
+                                                  ? Icon(
+                                                      Icons.person,
+                                                      size: 44,
+                                                      color: colorScheme.onSurfaceVariant,
+                                                    )
+                                                  : null,
+                                            ),
+                                            Container(
+                                              width: 26,
+                                              height: 26,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: colorScheme.primary,
+                                                border: Border.all(
+                                                  color: colorScheme.surfaceContainer,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: const Icon(
+                                                Icons.camera_alt,
+                                                size: 14,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                    ],
                                     _NebField(
                                       controller: _usernameCtrl,
                                       label: '아이디',
@@ -222,7 +306,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                       ),
                                       const SizedBox(height: 12),
                                       DropdownButtonFormField<String>(
-                                        value: _selectedRole,
+                                        initialValue: _selectedRole,
                                         decoration: InputDecoration(
                                           labelText: '역할',
                                           prefixIcon: Icon(

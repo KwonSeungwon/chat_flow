@@ -495,7 +495,8 @@ class _ChatInputState extends State<ChatInput> {
                         if (kIsWeb &&
                             event is KeyDownEvent &&
                             event.logicalKey == LogicalKeyboardKey.enter &&
-                            !HardwareKeyboard.instance.isShiftPressed) {
+                            !HardwareKeyboard.instance.isShiftPressed &&
+                            !_controller.value.composing.isValid) {
                           _send();
                         }
                       },

@@ -76,6 +76,9 @@ public class SearchService {
                 .timestamp(message.getTimestamp())
                 .messageType(message.getType().toString())
                 .isAiGenerated(message.isAiGenerated())
+                .fileName(message.getFileName())
+                .fileUrl(message.getFileUrl())
+                .fileContentType(message.getFileContentType())
                 .build();
 
         bufferLock.lock();
