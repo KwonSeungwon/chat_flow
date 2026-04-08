@@ -81,7 +81,10 @@ class _ChatInputState extends State<ChatInput> {
         );
       } catch (e) {
         if (!mounted) { _isSending = false; return; }
-        final msg = e.toString().replaceFirst('Exception: ', '');
+        final raw = e.toString().replaceFirst('Exception: ', '');
+        final msg = raw.contains('DioException') || raw.contains('SocketException')
+            ? '파일 업로드에 실패했습니다.'
+            : raw;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       } finally {
         if (mounted) setState(() {
