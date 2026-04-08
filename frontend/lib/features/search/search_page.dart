@@ -87,7 +87,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     ref.listen<SearchState>(searchProvider, (prev, next) {
       if (next.error != null && next.error != prev?.error) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next.error!), duration: const Duration(seconds: 3)),
+          const SnackBar(content: Text('검색에 실패했습니다. 잠시 후 다시 시도해주세요.'), duration: Duration(seconds: 3)),
         );
       }
     });

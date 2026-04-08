@@ -98,7 +98,7 @@ public class FileStorageService {
     public FileResource loadAsResource(String uuid) throws MalformedURLException, IOException {
         Path uuidDir = resolveUuidDir(uuid);
         if (!Files.exists(uuidDir) || !Files.isDirectory(uuidDir)) {
-            throw new IOException("파일을 찾을 수 없습니다: " + uuid);
+            throw new IOException("파일을 찾을 수 없습니다.");
         }
 
         Path filePath;
@@ -111,7 +111,7 @@ public class FileStorageService {
 
         Resource resource = new UrlResource(filePath.toUri());
         if (!resource.exists() || !resource.isReadable()) {
-            throw new IOException("파일을 읽을 수 없습니다: " + uuid);
+            throw new IOException("파일을 읽을 수 없습니다.");
         }
 
         String contentType = Files.probeContentType(filePath);

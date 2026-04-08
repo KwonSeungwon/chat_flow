@@ -47,7 +47,7 @@ public class ChatRoomController {
         return chatRoomService.getRoom(id)
                 .map(room -> ResponseEntity.ok(ApiResponse.ok(room)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("채팅방을 찾을 수 없습니다: " + id)));
+                        .body(ApiResponse.error("채팅방을 찾을 수 없습니다.")));
     }
 
     @PostMapping

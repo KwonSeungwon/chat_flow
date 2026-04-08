@@ -67,10 +67,10 @@ class _ChatInputState extends State<ChatInput> {
       _focusNode.requestFocus();
       try {
         await widget.onAskAi!(text);
-      } catch (e) {
+      } catch (_) {
         if (!mounted) { _isSending = false; return; }
-        final msg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('AI 요청에 실패했습니다. 잠시 후 다시 시도해주세요.')));
       }
     } else if (hasFile && widget.onFilePick != null) {
       // Upload file + send message with text
@@ -79,13 +79,10 @@ class _ChatInputState extends State<ChatInput> {
         await widget.onFilePick!(
           _pendingFileName!, _pendingFileBytes!, _pendingFileMimeType ?? 'application/octet-stream', text,
         );
-      } catch (e) {
+      } catch (_) {
         if (!mounted) { _isSending = false; return; }
-        final raw = e.toString().replaceFirst('Exception: ', '');
-        final msg = raw.contains('DioException') || raw.contains('SocketException')
-            ? '파일 업로드에 실패했습니다.'
-            : raw;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.')));
       } finally {
         if (mounted) setState(() {
           _isUploading = false;
@@ -202,11 +199,10 @@ class _ChatInputState extends State<ChatInput> {
         _pendingFileMimeType = mimeType;
       });
       _focusNode.requestFocus();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      final msg = e.toString().replaceFirst('Exception: ', '');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('파일 선택 오류: $msg')),
+        const SnackBar(content: Text('파일을 선택할 수 없습니다.')),
       );
     }
   }

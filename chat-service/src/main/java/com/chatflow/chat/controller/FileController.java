@@ -44,7 +44,7 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             log.warn("파일 업로드 검증 실패: {}", e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage()));
+                    .body(ApiResponse.error("지원하지 않는 파일 형식이거나 파일 크기를 초과했습니다."));
         } catch (IOException e) {
             log.error("파일 저장 실패", e);
             return ResponseEntity.internalServerError()

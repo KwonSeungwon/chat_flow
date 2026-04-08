@@ -62,7 +62,7 @@ public class FhirMockController {
                 .findFirst()
                 .map(p -> ResponseEntity.ok(ApiResponse.ok(p)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(ApiResponse.error("환자를 찾을 수 없습니다: " + id)));
+                        .body(ApiResponse.error("환자를 찾을 수 없습니다.")));
     }
 
     @GetMapping("/MedicationRequest")

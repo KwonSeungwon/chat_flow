@@ -39,7 +39,7 @@ public class OrderEventMockProducer {
             return ResponseEntity.ok(ApiResponse.ok(event, "처방 이벤트가 발행되었습니다."));
         } catch (JsonProcessingException e) {
             log.error("OrderEvent 직렬화 실패", e);
-            return ResponseEntity.internalServerError().body(ApiResponse.error("이벤트 직렬화 실패: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("이벤트 처리에 실패했습니다."));
         }
     }
 }
