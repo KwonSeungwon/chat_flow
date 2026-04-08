@@ -1061,49 +1061,83 @@ class _FileBubble extends StatelessWidget {
     );
     final fullUrl = _buildFullUrl(msg.fileUrl!);
 
+    // Text content that user typed (not default [파일] prefix)
+    final hasTextContent = msg.content.isNotEmpty &&
+        !msg.content.startsWith('[파일]');
+
     Widget content;
     if (msg.isImageFile) {
-      content = GestureDetector(
-        onTap: () => _launchUrl(fullUrl),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: Image.network(
-            fullUrl,
-            width: 220,
-            fit: BoxFit.cover,
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return Container(
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => _launchUrl(fullUrl),
+            child: ClipRRect(
+              borderRadius: hasTextContent
+                  ? BorderRadius.only(topLeft: radius.topLeft, topRight: radius.topRight)
+                  : radius,
+              child: Image.network(
+                fullUrl,
                 width: 220,
-                height: 160,
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainer,
-                  borderRadius: radius,
-                ),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                        : null,
-                    strokeWidth: 2,
+                fit: BoxFit.cover,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    width: 220,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainer,
+                      borderRadius: radius,
+                    ),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: progress.expectedTotalBytes != null
+                            ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                            : null,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (_, __, ___) => Container(
+                  width: 220,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainer,
+                    borderRadius: radius,
+                    border: Border.all(color: cs.outline.withAlpha(80)),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.broken_image_outlined, color: cs.onSurfaceVariant),
                   ),
                 ),
-              );
-            },
-            errorBuilder: (_, __, ___) => Container(
-              width: 220,
-              height: 80,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainer,
-                borderRadius: radius,
-                border: Border.all(color: cs.outline.withAlpha(80)),
-              ),
-              child: Center(
-                child: Icon(Icons.broken_image_outlined, color: cs.onSurfaceVariant),
               ),
             ),
           ),
-        ),
+          if (hasTextContent)
+            Container(
+              width: 220,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isMine ? null : cs.surfaceContainer,
+                gradient: isMine ? AppColors.myBubbleGradient : null,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: radius.bottomLeft,
+                  bottomRight: radius.bottomRight,
+                ),
+                border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
+              ),
+              child: Text(
+                msg.content,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isMine ? Colors.white : cs.onSurface,
+                  height: 1.4,
+                ),
+              ),
+            ),
+        ],
       );
     } else {
       content = Container(
