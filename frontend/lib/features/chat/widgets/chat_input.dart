@@ -188,7 +188,13 @@ class _ChatInputState extends State<ChatInput> {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       final bytes = file.bytes;
-      if (bytes == null) return;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('파일을 읽을 수 없습니다. 다른 파일을 선택해주세요.')));
+        }
+        return;
+      }
 
       final ext = file.extension?.toLowerCase() ?? '';
       final mimeType = _extToMime(ext);
