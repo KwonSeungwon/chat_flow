@@ -97,7 +97,7 @@ public class KoreanSearchService {
 
         } catch (Exception e) {
             log.error("Error performing Korean search for query: {}", query, e);
-            throw new SearchException("한국어 검색 중 오류가 발생했습니다: " + query, e);
+            throw new SearchException("검색 중 오류가 발생했습니다.", e);
         }
     }
 
@@ -166,7 +166,7 @@ public class KoreanSearchService {
 
         } catch (Exception e) {
             log.error("Error performing N-gram search for query: {}", query, e);
-            throw new SearchException("N-gram 검색 중 오류가 발생했습니다: " + query, e);
+            throw new SearchException("검색 중 오류가 발생했습니다.", e);
         }
     }
 }

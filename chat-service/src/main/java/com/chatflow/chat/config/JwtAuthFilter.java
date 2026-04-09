@@ -14,7 +14,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -27,6 +29,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        // Gateway가 주입한 X-User-Id 헤더로 인증 (Bearer 토큰 파싱 전 처리)
+        String xUserId = request.getHeader("X-User-Id");
+        String xUsername = request.getHeader("X-Username");
+        if (xUserId != null && xUsername != null) {
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                    xUserId, null, Collections.emptyList());
+            auth.setDetails(Map.of("userId", xUserId, "username", xUsername));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String token = extractToken(request);
 
         if (token != null) {

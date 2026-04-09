@@ -94,12 +94,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final msg = code == 401
           ? '아이디 또는 비밀번호가 올바르지 않습니다.'
           : '로그인 실패. 잠시 후 다시 시도해주세요.';
-      state = state.copyWith(isLoading: false, error: msg);
+      state = AuthState(isLoading: false, error: msg);
     } catch (_) {
-      state = state.copyWith(
-        isLoading: false,
-        error: '로그인 실패. 네트워크를 확인해주세요.',
-      );
+      state = AuthState(isLoading: false, error: '로그인 실패. 네트워크를 확인해주세요.');
     }
   }
 
@@ -121,12 +118,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final msg = code == 400
           ? '이미 사용 중인 아이디입니다.'
           : '회원가입 실패. 잠시 후 다시 시도해주세요.';
-      state = state.copyWith(isLoading: false, error: msg);
+      state = AuthState(isLoading: false, error: msg);
     } catch (_) {
-      state = state.copyWith(
-        isLoading: false,
-        error: '회원가입 실패. 네트워크를 확인해주세요.',
-      );
+      state = AuthState(isLoading: false, error: '회원가입 실패. 네트워크를 확인해주세요.');
     }
   }
 
@@ -137,6 +131,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.delete(key: 'chatflow-token');
     await _storage.delete(key: 'chatflow-userId');
     await _storage.delete(key: 'chatflow-username');
+    await _storage.delete(key: 'chatflow-role');
     await _storage.delete(key: 'chatflow-profileImage');
     state = const AuthState();
   }

@@ -31,8 +31,17 @@ public class SecurityConfig {
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized"))
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/ws/**", "/ws-native/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/files/upload").authenticated()
-                        .anyRequest().permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/chat/rooms/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/chat/rooms/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/chat/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/chat/auth/**").permitAll()
+                        .requestMatchers("/api/fhir/**").permitAll()
+                        .requestMatchers("/api/fcm/**").authenticated()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();

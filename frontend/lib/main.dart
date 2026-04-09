@@ -12,7 +12,7 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  try { await dotenv.load(fileName: '.env'); } catch (_) {}
 
   // Firebase init — wrapped in try-catch so the app loads even if Firebase fails (e.g., on web)
   try {

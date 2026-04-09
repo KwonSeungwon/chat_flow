@@ -30,6 +30,9 @@ public class AuthService {
     public record AuthResponse(String token, String userId, String username, String role, String profileImageUrl) {}
 
     public Mono<AuthResponse> register(AuthRequest request) {
+        if (request.password() == null || request.password().length() < 8) {
+            return Mono.error(new IllegalArgumentException("비밀번호는 8자 이상이어야 합니다."));
+        }
         String key = USER_KEY_PREFIX + request.username();
         return redisTemplate.opsForValue().get(key)
                 .flatMap(existing -> Mono.<AuthResponse>error(

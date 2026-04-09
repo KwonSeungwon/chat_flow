@@ -280,8 +280,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                       onToggleObscure: () => setState(
                                           () => _obscurePassword = !_obscurePassword),
                                       validator: (v) {
-                                        if (v == null || v.length < 4) {
-                                          return '비밀번호는 4자 이상이어야 합니다';
+                                        if (v == null || v.length < 8) {
+                                          return '비밀번호는 8자 이상이어야 합니다';
                                         }
                                         return null;
                                       },

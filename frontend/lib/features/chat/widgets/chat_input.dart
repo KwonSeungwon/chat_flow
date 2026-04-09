@@ -61,47 +61,49 @@ class _ChatInputState extends State<ChatInput> {
     if (text.isEmpty && !hasFile) return;
     if (!widget.isConnected) return;
     _isSending = true;
-
-    if (_aiMode && widget.onAskAi != null && text.isNotEmpty) {
-      _controller.value = TextEditingValue.empty;
-      _focusNode.requestFocus();
-      try {
-        await widget.onAskAi!(text);
-      } catch (_) {
-        if (!mounted) { _isSending = false; return; }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('AI 요청에 실패했습니다. 잠시 후 다시 시도해주세요.')));
-      }
-    } else if (hasFile && widget.onFilePick != null) {
-      setState(() => _isUploading = true);
-      try {
-        await widget.onFilePick!(
-          _pendingFileName!, _pendingFileBytes!, _pendingFileMimeType ?? 'application/octet-stream', text,
-        );
-        // 성공 후에만 입력 클리어
-        if (mounted) {
-          _controller.value = TextEditingValue.empty;
-          setState(() {
-            _pendingFileName = null;
-            _pendingFileBytes = null;
-            _pendingFileMimeType = null;
-          });
+    try {
+      if (_aiMode && widget.onAskAi != null && text.isNotEmpty) {
+        _controller.value = TextEditingValue.empty;
+        _focusNode.requestFocus();
+        try {
+          await widget.onAskAi!(text);
+        } catch (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('AI 요청에 실패했습니다. 잠시 후 다시 시도해주세요.')));
         }
-      } catch (_) {
-        if (!mounted) { _isSending = false; return; }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.')));
-      } finally {
-        if (mounted) setState(() => _isUploading = false);
+      } else if (hasFile && widget.onFilePick != null) {
+        setState(() => _isUploading = true);
+        try {
+          await widget.onFilePick!(
+            _pendingFileName!, _pendingFileBytes!, _pendingFileMimeType ?? 'application/octet-stream', text,
+          );
+          // 성공 후에만 입력 클리어
+          if (mounted) {
+            _controller.value = TextEditingValue.empty;
+            setState(() {
+              _pendingFileName = null;
+              _pendingFileBytes = null;
+              _pendingFileMimeType = null;
+            });
+          }
+        } catch (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('파일 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.')));
+        } finally {
+          if (mounted) setState(() => _isUploading = false);
+        }
+        _focusNode.requestFocus();
+      } else if (text.isNotEmpty) {
+        _controller.value = TextEditingValue.empty;
+        widget.onSend(text, priority: _priority);
+        if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
+        _focusNode.requestFocus();
       }
-      _focusNode.requestFocus();
-    } else if (text.isNotEmpty) {
-      _controller.value = TextEditingValue.empty;
-      widget.onSend(text, priority: _priority);
-      if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
-      _focusNode.requestFocus();
+    } finally {
+      _isSending = false;
     }
-    _isSending = false;
   }
 
   void _showEmojiSheet() {

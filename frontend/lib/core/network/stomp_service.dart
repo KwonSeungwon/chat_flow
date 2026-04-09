@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
@@ -86,7 +86,9 @@ class StompService {
           try {
             final msg = jsonDecode(frame.body!) as Map<String, dynamic>;
             _onMessage?.call(msg);
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('[STOMP] JSON parse error: $e');
+          }
         }
       },
     );

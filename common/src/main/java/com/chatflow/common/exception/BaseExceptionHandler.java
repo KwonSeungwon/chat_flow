@@ -42,7 +42,7 @@ public abstract class BaseExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("Bad request: {}", e.getMessage());
         return ResponseEntity.badRequest()
-                .body(ErrorResponse.of(400, "BAD_REQUEST", e.getMessage()));
+                .body(ErrorResponse.of(400, "BAD_REQUEST", "잘못된 요청입니다."));
     }
 
     @ExceptionHandler(Exception.class)

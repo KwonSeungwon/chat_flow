@@ -61,26 +61,30 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     String? password,
     String? allowedRoles,
   }) async {
-    final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
-      'name': name,
-      if (description != null) 'description': description,
-      if (color != null) 'color': color,
-      'roomType': roomType,
-      'isPrivate': isPrivate,
-      if (password != null) 'password': password,
-      if (allowedRoles != null) 'allowedRoles': allowedRoles,
-    });
-    // Extract room ID first — fetchRooms failure must not mask successful creation
-    final data = resp.data;
-    final roomId = data is Map
-        ? (data['data']?['id'] ?? data['id'])?.toString()
-        : null;
     try {
-      await fetchRooms();
-    } catch (_) {
-      // Best-effort refresh — room was created regardless
+      final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
+        'name': name,
+        if (description != null) 'description': description,
+        if (color != null) 'color': color,
+        'roomType': roomType,
+        'isPrivate': isPrivate,
+        if (password != null) 'password': password,
+        if (allowedRoles != null) 'allowedRoles': allowedRoles,
+      });
+      // Extract room ID first — fetchRooms failure must not mask successful creation
+      final data = resp.data;
+      final roomId = data is Map
+          ? (data['data']?['id'] ?? data['id'])?.toString()
+          : null;
+      try {
+        await fetchRooms();
+      } catch (_) {
+        // Best-effort refresh — room was created regardless
+      }
+      return roomId;
+    } on DioException {
+      return null;
     }
-    return roomId;
   }
 }
 
