@@ -269,29 +269,35 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       actions: [
-        Expanded(
-          child: TextButton(
-            onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton(
-            onPressed: _isCreating ? null : _create,
-            child:
-                _isCreating
-                    ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                    : const Text('생성'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: TextButton(
+                onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
+                child: const Text('취소'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton(
+                onPressed: _isCreating ? null : _create,
+                child:
+                    _isCreating
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                        : const Text('생성'),
+              ),
+            ),
+          ],
         ),
       ],
     );

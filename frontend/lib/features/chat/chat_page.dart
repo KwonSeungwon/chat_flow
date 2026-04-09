@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,40 @@ String _buildProfileUrl(String relativeUrl) {
     return '${uri.scheme}://${uri.host}$port$relativeUrl';
   }
   return relativeUrl;
+}
+
+Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
+  try {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final ext = file.extension?.toLowerCase() ?? 'jpg';
+    const mimeMap = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'};
+    final mimeType = mimeMap[ext] ?? 'image/jpeg';
+
+    final dioClient = ref.read(dioClientProvider);
+    final uploadResult = await dioClient.uploadFile(fileName: file.name, bytes: bytes, mimeType: mimeType);
+    final fileUrl = uploadResult['fileUrl']?.toString() ?? '';
+    if (fileUrl.isNotEmpty) {
+      await ref.read(authProvider.notifier).updateProfileImage(fileUrl);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프로필 이미지가 변경되었습니다.')));
+      }
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('프로필 이미지 변경에 실패했습니다.')));
+    }
+  }
 }
 
 class ChatPage extends ConsumerWidget {
@@ -108,6 +144,8 @@ class ChatPage extends ConsumerWidget {
               if (value == 'theme') {
                 ref.read(themeModeProvider.notifier).state =
                     themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+              } else if (value == 'profile') {
+                await _changeProfileImage(context, ref);
               } else if (value == 'logout') {
                 await ref.read(authProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
@@ -116,12 +154,41 @@ class ChatPage extends ConsumerWidget {
             itemBuilder: (context) => [
               PopupMenuItem(
                 enabled: false,
-                child: Text(
-                  auth.username.isNotEmpty ? auth.username : '사용자',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundImage: auth.profileImageUrl != null
+                          ? NetworkImage(_buildProfileUrl(auth.profileImageUrl!))
+                          : null,
+                      child: auth.profileImageUrl == null
+                          ? const Icon(Icons.person, size: 30)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      auth.username.isNotEmpty ? auth.username : '사용자',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    Text(
+                      auth.role,
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                 ),
               ),
               const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.camera_alt_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('프로필 이미지 변경'),
+                  ],
+                ),
+              ),
               PopupMenuItem(
                 value: 'theme',
                 child: Row(
