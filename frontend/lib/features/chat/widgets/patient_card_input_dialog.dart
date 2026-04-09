@@ -237,15 +237,26 @@ class _PatientCardInputDialogState extends State<PatientCardInputDialog> {
           ),
         ),
       ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
-        ),
-        FilledButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.send_rounded, size: 16),
-          label: const Text('전송'),
+        Row(
+          children: [
+            Expanded(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('취소'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.send_rounded, size: 16),
+                label: const Text('전송'),
+              ),
+            ),
+          ],
         ),
       ],
     );

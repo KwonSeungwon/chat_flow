@@ -417,38 +417,57 @@ class _ChatInputState extends State<ChatInput> {
                   ),
                   const SizedBox(width: 6),
                 ],
-                // SBAR template button (handoff rooms only)
+                // Handoff tools (SBAR + Patient card) — combined menu
                 if (widget.isHandoff && !_aiMode) ...[
-                  _CircleIconBtn(
-                    icon: Icons.assignment_outlined,
+                  PopupMenuButton<String>(
                     enabled: widget.isConnected,
-                    active: false,
-                    onTap: () {
-                      final template = buildSbarTemplate();
-                      _controller.text = template;
-                      _controller.selection = TextSelection.collapsed(
-                        offset: template.length,
-                      );
-                      _focusNode.requestFocus();
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                // Patient card button (handoff rooms only)
-                if (widget.isHandoff && !_aiMode) ...[
-                  _CircleIconBtn(
-                    icon: Icons.person_add_outlined,
-                    enabled: widget.isConnected,
-                    active: false,
-                    onTap: () async {
-                      final card = await showDialog<PatientCard>(
-                        context: context,
-                        builder: (_) => const PatientCardInputDialog(),
-                      );
-                      if (card != null && widget.onSendPatientCard != null) {
-                        widget.onSendPatientCard!(card);
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      size: 22,
+                      color: widget.isConnected
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80),
+                    ),
+                    onSelected: (value) async {
+                      if (value == 'sbar') {
+                        final template = buildSbarTemplate();
+                        _controller.text = template;
+                        _controller.selection = TextSelection.collapsed(offset: template.length);
+                        _focusNode.requestFocus();
+                      } else if (value == 'patient_card') {
+                        final card = await showDialog<PatientCard>(
+                          context: context,
+                          builder: (_) => const PatientCardInputDialog(),
+                        );
+                        if (card != null && widget.onSendPatientCard != null) {
+                          widget.onSendPatientCard!(card);
+                        }
                       }
                     },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'sbar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.assignment_outlined, size: 20),
+                            SizedBox(width: 8),
+                            Text('SBAR 인수인계'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'patient_card',
+                        child: Row(
+                          children: [
+                            Icon(Icons.person_add_outlined, size: 20),
+                            SizedBox(width: 8),
+                            Text('환자 카드 전송'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 6),
                 ],
