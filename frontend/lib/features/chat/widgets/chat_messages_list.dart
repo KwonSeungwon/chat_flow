@@ -1142,11 +1142,7 @@ class _FileBubble extends StatelessWidget {
       );
     } else if (msg.isPdfFile) {
       content = GestureDetector(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PdfViewerDialog(url: fullUrl, fileName: msg.fileName ?? 'PDF'),
-          ),
-        ),
+        onTap: () => PdfViewerDialog.open(context, fullUrl, msg.fileName ?? 'PDF'),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 260),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

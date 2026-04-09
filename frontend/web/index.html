@@ -150,15 +150,6 @@
   </style>
 </head>
 <body>
-  <script type='module'>
-    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs';
-    globalThis.pdfjsLib = pdfjsLib;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs';
-    globalThis.pdfRenderOptions = {
-      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
-      cMapPacked: true,
-    };
-  </script>
   <div id="chatflow-loader">
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
