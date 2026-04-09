@@ -205,10 +205,11 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
 ## K3s 배포 (자체 인스턴스)
 
-**호스트**: `node.chatflow.ai.kr` (User: `ksw`, SSH 키 인증)  
-**도메인**: https://app.chatflow.ai.kr (Cloudflare → K3s nginx)  
+**도메인**: https://app.chatflow.ai.kr (Cloudflare → K3s)  
 **네임스페이스**: `chatflow`  
 **이미지 레지스트리**: `docker.io/chatflow` (pullPolicy: Never — containerd 직접 주입)
+
+> 배포 서버 접속 정보, Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md` (로컬 전용) 참고.
 
 ### 전체 배포 (스크립트)
 ```bash
@@ -230,39 +231,18 @@ cd frontend && flutter build web --release && cd ..
 docker buildx build --platform linux/amd64 \
   -t docker.io/chatflow/frontend:latest --load frontend/
 
-# 2. 이미지 저장 → K3s 전송
-docker save docker.io/chatflow/chat-service:latest | gzip > /tmp/chat-service.tar.gz
-scp /tmp/chat-service.tar.gz ksw@node.chatflow.ai.kr:~/
-
-# 3. K3s containerd에 import
-ssh ksw@node.chatflow.ai.kr "sudo k3s ctr images import ~/chat-service.tar.gz"
-
-# 4. Helm upgrade (Pod 자동 재시작)
-tar czf /tmp/chatflow-helm.tar.gz -C helm chatflow
-scp /tmp/chatflow-helm.tar.gz ksw@node.chatflow.ai.kr:~/
-ssh ksw@node.chatflow.ai.kr "
-  rm -rf ~/chatflow-chart && mkdir ~/chatflow-chart &&
-  tar xzf ~/chatflow-helm.tar.gz -C ~/chatflow-chart &&
-  cd ~/chatflow-chart/chatflow &&
-  helm upgrade --install chatflow . -n chatflow -f values-k3s.yaml --wait --timeout 5m
-"
+# 2~4. 이미지 전송 → K3s import → Helm upgrade
+# 상세 명령은 .claude/CLAUDE.md 참고
 ```
 
 ### 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 ```bash
-curl -X POST "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/purge_cache" \
-  -H "Authorization: Bearer cfat_4B2ZpoeLGsPw7vAYxjBWgz6JhiEvY3pALR1BCttnd432aee9" \
+# 토큰/Zone ID는 .claude/CLAUDE.md 참고
+curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CLOUDFLARE_PURGE_TOKEN" \
   -H "Content-Type: application/json" \
   --data '{"purge_everything":true}'
 ```
-
-### 배포 확인
-```bash
-ssh ksw@node.chatflow.ai.kr "kubectl get pods -n chatflow"
-ssh ksw@node.chatflow.ai.kr "kubectl logs -n chatflow -l app=chat-service --tail=20"
-```
-
-**디스크 관리**: `ssh ksw@node.chatflow.ai.kr "sudo k3s ctr images prune --all"` (공간 부족 시)
 
 ## Common Issues
 
