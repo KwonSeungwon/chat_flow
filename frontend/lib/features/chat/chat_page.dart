@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -15,6 +14,10 @@ import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
 
 String _buildProfileUrl(String relativeUrl) {
+  // If already an absolute URL, return as-is
+  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
+    return relativeUrl;
+  }
   if (kIsWeb) {
     final uri = Uri.base;
     final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';

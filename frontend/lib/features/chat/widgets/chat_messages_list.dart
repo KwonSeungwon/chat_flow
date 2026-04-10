@@ -927,7 +927,7 @@ class _ChatBubble extends StatelessWidget {
                 ),
                 if (onReply != null)
                   Align(
-                    alignment: isMine ? Alignment.centerLeft : Alignment.centerRight,
+                    alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
                     child: GestureDetector(
                       onTap: onReply,
                       child: Padding(
