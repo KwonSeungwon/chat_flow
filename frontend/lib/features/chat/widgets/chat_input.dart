@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import 'patient_card_input_dialog.dart';
 
@@ -14,6 +15,8 @@ class ChatInput extends StatefulWidget {
   final Future<void> Function(String question)? onAskAi;
   final void Function(PatientCard card)? onSendPatientCard;
   final Future<void> Function(String fileName, Uint8List bytes, String mimeType, String content)? onFilePick;
+  final ChatMessage? replyTarget;
+  final VoidCallback? onCancelReply;
 
   const ChatInput({
     super.key,
@@ -24,6 +27,8 @@ class ChatInput extends StatefulWidget {
     this.onAskAi,
     this.onSendPatientCard,
     this.onFilePick,
+    this.replyTarget,
+    this.onCancelReply,
   });
 
   @override
@@ -257,6 +262,48 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Reply target banner
+            if (widget.replyTarget != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withAlpha(60),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left: BorderSide(color: AppColors.primary, width: 3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.reply_rounded, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.replyTarget!.username,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                          ),
+                          Text(
+                            widget.replyTarget!.content,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: widget.onCancelReply,
+                      child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+
             // Character counter (shows only near limit)
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _controller,

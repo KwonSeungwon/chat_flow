@@ -12,6 +12,16 @@ spring:
       host: localhost
       port: 6379
 
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration
+      - org.springframework.boot.autoconfigure.r2dbc.R2dbcTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.sql.init.SqlInitializationAutoConfiguration
+
+  sql:
+    init:
+      mode: never
+
 jwt:
   secret: test-jwt-secret-key-must-be-at-least-32-bytes-long-for-hmac
   expiration-ms: 86400000

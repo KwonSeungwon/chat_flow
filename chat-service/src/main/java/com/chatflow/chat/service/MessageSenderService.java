@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
 import io.micrometer.core.instrument.Counter;
@@ -17,15 +18,18 @@ public class MessageSenderService {
     private final ChatPersistenceService chatPersistenceService;
     private final ChatRoomService chatRoomService;
     private final FcmNotificationService fcmNotificationService;
+    private final ChatMessageRepository chatMessageRepository;
     private final Counter messageCounter;
 
     public MessageSenderService(ChatPersistenceService chatPersistenceService,
                                 ChatRoomService chatRoomService,
                                 FcmNotificationService fcmNotificationService,
+                                ChatMessageRepository chatMessageRepository,
                                 MeterRegistry registry) {
         this.chatPersistenceService = chatPersistenceService;
         this.chatRoomService = chatRoomService;
         this.fcmNotificationService = fcmNotificationService;
+        this.chatMessageRepository = chatMessageRepository;
         this.messageCounter = Counter.builder("chatflow.messages.processed")
                 .description("Total chat messages processed")
                 .register(registry);
@@ -37,6 +41,27 @@ public class MessageSenderService {
     public void send(ChatMessage message) {
         message.setMessageId(UUID.randomUUID().toString());
         message.setTimestamp(LocalDateTime.now());
+
+        // Reply validation & preview generation
+        if (message.getParentMessageId() != null && !message.getParentMessageId().isBlank()) {
+            chatMessageRepository.findById(message.getParentMessageId())
+                    .ifPresentOrElse(parent -> {
+                        // Enforce 1-level depth: reply-to-reply redirects to root
+                        if (parent.getParentMessageId() != null) {
+                            message.setParentMessageId(parent.getParentMessageId());
+                            chatMessageRepository.findById(parent.getParentMessageId())
+                                    .ifPresent(root -> message.setParentMessagePreview(
+                                            buildPreview(root.getUsername(), root.getContent())));
+                        } else {
+                            message.setParentMessagePreview(
+                                    buildPreview(parent.getUsername(), parent.getContent()));
+                        }
+                    }, () -> {
+                        // Parent not found — clear reference
+                        message.setParentMessageId(null);
+                        message.setParentMessagePreview(null);
+                    });
+        }
 
         // Enrich message with room metadata
         chatRoomService.getRoom(message.getChatRoomId()).ifPresent(room -> {
@@ -64,5 +89,13 @@ public class MessageSenderService {
     private boolean shouldRequestAISummary(ChatMessage message) {
         if (MessageType.FILE.equals(message.getType())) return false;
         return message.getContent() != null && message.getContent().length() > 100;
+    }
+
+    private String buildPreview(String username, String content) {
+        if (content == null) content = "";
+        String truncated = content.length() > 50
+                ? content.substring(0, 50) + "..."
+                : content;
+        return username + ": " + truncated;
     }
 }

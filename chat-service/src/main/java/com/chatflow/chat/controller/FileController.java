@@ -56,8 +56,9 @@ public class FileController {
     public ResponseEntity<Resource> download(@PathVariable String uuid) {
         try {
             FileResource fr = fileStorageService.loadAsResource(uuid);
-            boolean isImage = fr.contentType().startsWith("image/");
-            String disposition = isImage
+            boolean isInline = fr.contentType().startsWith("image/")
+                    || fr.contentType().equals("application/pdf");
+            String disposition = isInline
                     ? "inline; filename=\"" + encodeFilename(fr.fileName()) + "\""
                     : "attachment; filename=\"" + encodeFilename(fr.fileName()) + "\"";
 

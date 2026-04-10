@@ -18,7 +18,8 @@ import java.time.LocalDateTime;
 @Table(name = "chat_messages", indexes = {
     @Index(name = "idx_chat_room_id", columnList = "chatRoomId"),
     @Index(name = "idx_timestamp", columnList = "timestamp"),
-    @Index(name = "idx_chat_room_timestamp", columnList = "chatRoomId, timestamp DESC")
+    @Index(name = "idx_chat_room_timestamp", columnList = "chatRoomId, timestamp DESC"),
+    @Index(name = "idx_parent_message_id", columnList = "parentMessageId")
 })
 public class ChatMessageEntity implements Persistable<String> {
 
@@ -64,6 +65,12 @@ public class ChatMessageEntity implements Persistable<String> {
 
     @Column(length = 100)
     private String fileContentType;
+
+    @Column(length = 36)
+    private String parentMessageId;
+
+    @Column(length = 150)
+    private String parentMessagePreview;
 
     @Override
     public String getId() {

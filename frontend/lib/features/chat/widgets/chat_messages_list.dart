@@ -20,6 +20,7 @@ class ChatMessagesList extends StatefulWidget {
   final String? scrollToMessageId;
   /// If set, briefly highlight this message (search result)
   final String? highlightMessageId;
+  final void Function(ChatMessage)? onReplySelected;
 
   const ChatMessagesList({
     super.key,
@@ -29,6 +30,7 @@ class ChatMessagesList extends StatefulWidget {
     this.readCounts = const {},
     this.scrollToMessageId,
     this.highlightMessageId,
+    this.onReplySelected,
   });
 
   @override
@@ -242,6 +244,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 time: _formatTime(msg.timestamp),
                 isAiQuestion: isAiQuestion,
                 readCount: readCount,
+                onReply: widget.onReplySelected != null
+                    ? () => widget.onReplySelected!(msg)
+                    : null,
               );
             }
 
@@ -647,6 +652,7 @@ class _ChatBubble extends StatelessWidget {
   final String time;
   final bool isAiQuestion;
   final int readCount;
+  final VoidCallback? onReply;
 
   const _ChatBubble({
     required this.msg,
@@ -654,6 +660,7 @@ class _ChatBubble extends StatelessWidget {
     required this.time,
     this.isAiQuestion = false,
     this.readCount = 0,
+    this.onReply,
   });
 
   Color _avatarColor(String name) =>
@@ -810,6 +817,32 @@ class _ChatBubble extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (msg.isReply) ...[
+                                    GestureDetector(
+                                      onTap: () {},
+                                      child: Container(
+                                        margin: const EdgeInsets.only(bottom: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withAlpha(25),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border(
+                                            left: BorderSide(color: Colors.white.withAlpha(120), width: 3),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          msg.parentMessagePreview ?? '원본 메시지',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.white.withAlpha(180),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   if (isAiQuestion)
                                     Padding(
                                       padding: const EdgeInsets.only(bottom: 4),
@@ -843,12 +876,43 @@ class _ChatBubble extends StatelessWidget {
                                 border: Border.all(
                                     color: Theme.of(context).colorScheme.outline.withAlpha(80), width: 1),
                               ),
-                              child: Text(
-                                msg.content,
-                                style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface,
-                                    fontSize: 14,
-                                    height: 1.4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (msg.isReply) ...[
+                                    GestureDetector(
+                                      onTap: () {},
+                                      child: Container(
+                                        margin: const EdgeInsets.only(bottom: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.primary.withAlpha(15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border(
+                                            left: BorderSide(color: AppColors.primary, width: 3),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          msg.parentMessagePreview ?? '원본 메시지',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  Text(
+                                    msg.content,
+                                    style: TextStyle(
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                        fontSize: 14,
+                                        height: 1.4),
+                                  ),
+                                ],
                               ),
                             ),
                     ),
@@ -861,6 +925,21 @@ class _ChatBubble extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (onReply != null)
+                  Align(
+                    alignment: isMine ? Alignment.centerLeft : Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: onReply,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.reply_rounded,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

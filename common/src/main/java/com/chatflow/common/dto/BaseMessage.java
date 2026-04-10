@@ -51,6 +51,9 @@ public abstract class BaseMessage {
     private String fileName;
     private String fileContentType;
 
+    private String parentMessageId;
+    private String parentMessagePreview;  // "username: truncated content"
+
     public enum MessageType {
         CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD, FILE
     }

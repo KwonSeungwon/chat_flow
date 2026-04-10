@@ -68,6 +68,32 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.externalSecrets.valkey.secretName }}
                   key: VALKEY_PASSWORD
+            # PostgreSQL (외부 Secret — 유저 DB)
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.postgresql.secretName }}
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.postgresql.secretName }}
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.postgresql.secretName }}
+                  key: DB_NAME
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.postgresql.secretName }}
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.postgresql.secretName }}
+                  key: DB_PASSWORD
           envFrom:
             - configMapRef:
                 name: {{ include "gateway-service.fullname" . }}

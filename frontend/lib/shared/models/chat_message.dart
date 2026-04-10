@@ -12,6 +12,8 @@ class ChatMessage {
   final String? fileUrl;
   final String? fileName;
   final String? fileContentType;
+  final String? parentMessageId;
+  final String? parentMessagePreview;
 
   ChatMessage({
     this.id,
@@ -27,6 +29,8 @@ class ChatMessage {
     this.fileUrl,
     this.fileName,
     this.fileContentType,
+    this.parentMessageId,
+    this.parentMessagePreview,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -49,6 +53,8 @@ class ChatMessage {
       fileUrl: json['fileUrl']?.toString(),
       fileName: json['fileName']?.toString(),
       fileContentType: json['fileContentType']?.toString(),
+      parentMessageId: json['parentMessageId']?.toString(),
+      parentMessagePreview: json['parentMessagePreview']?.toString(),
     );
   }
 
@@ -64,9 +70,12 @@ class ChatMessage {
     if (fileUrl != null) 'fileUrl': fileUrl,
     if (fileName != null) 'fileName': fileName,
     if (fileContentType != null) 'fileContentType': fileContentType,
+    if (parentMessageId != null) 'parentMessageId': parentMessageId,
+    if (parentMessagePreview != null) 'parentMessagePreview': parentMessagePreview,
   };
 
   String get effectiveId => messageId ?? id ?? '$timestamp-$username-${content.hashCode}';
+  bool get isReply => parentMessageId != null && parentMessageId!.isNotEmpty;
   bool get isFileMessage => type.toUpperCase() == 'FILE' && fileUrl != null;
   bool get isImageFile => fileContentType != null && fileContentType!.startsWith('image/');
   bool get isPdfFile => fileContentType == 'application/pdf' ||

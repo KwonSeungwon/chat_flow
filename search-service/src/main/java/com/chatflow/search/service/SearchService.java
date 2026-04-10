@@ -79,6 +79,8 @@ public class SearchService {
                 .fileName(message.getFileName())
                 .fileUrl(message.getFileUrl())
                 .fileContentType(message.getFileContentType())
+                .parentMessageId(message.getParentMessageId())
+                .parentMessagePreview(message.getParentMessagePreview())
                 .build();
 
         bufferLock.lock();

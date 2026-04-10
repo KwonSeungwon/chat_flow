@@ -55,4 +55,10 @@ public class ChatMessageDocument {
 
     @Field(type = FieldType.Keyword)
     private String fileContentType;
+
+    @Field(type = FieldType.Keyword)
+    private String parentMessageId;
+
+    @Field(type = FieldType.Text, analyzer = "korean_analyzer", searchAnalyzer = "korean_search_analyzer")
+    private String parentMessagePreview;
 }

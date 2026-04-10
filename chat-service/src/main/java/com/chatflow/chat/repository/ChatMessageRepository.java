@@ -31,4 +31,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
 
     @Query("SELECT m FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId ORDER BY m.timestamp DESC")
     List<ChatMessageEntity> findLatestByChatRoomId(@Param("roomId") String roomId, Pageable pageable);
+
+    List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
 }

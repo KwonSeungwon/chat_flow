@@ -108,6 +108,7 @@ class ChatMessagesState {
   final Map<String, int> readCounts;
   /// Last message the current user has read (fetched from backend on join)
   final String? lastReadMessageId;
+  final ChatMessage? replyTarget;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -117,6 +118,7 @@ class ChatMessagesState {
     this.isSummaryLoading = false,
     this.readCounts = const {},
     this.lastReadMessageId,
+    this.replyTarget,
   });
 
   ChatMessagesState copyWith({
@@ -128,6 +130,8 @@ class ChatMessagesState {
     Map<String, int>? readCounts,
     String? lastReadMessageId,
     bool clearLastReadMessageId = false,
+    ChatMessage? replyTarget,
+    bool clearReplyTarget = false,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -137,6 +141,7 @@ class ChatMessagesState {
       isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
       readCounts: readCounts ?? this.readCounts,
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
+      replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
     );
   }
 }
@@ -412,7 +417,16 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  void setReplyTarget(ChatMessage message) {
+    state = state.copyWith(replyTarget: message);
+  }
+
+  void clearReplyTarget() {
+    state = state.copyWith(clearReplyTarget: true);
+  }
+
   void sendMessage({required String roomId, required String content, String priority = 'ROUTINE'}) {
+    final reply = state.replyTarget;
     _stompService.sendMessage({
       'chatRoomId': roomId,
       'userId': _userId,
@@ -421,7 +435,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'type': 'CHAT',
       'priority': priority,
       'timestamp': DateTime.now().toIso8601String(),
+      if (reply != null) 'parentMessageId': reply.effectiveId,
     });
+    if (reply != null) clearReplyTarget();
   }
 
   void sendPatientCard(String roomId, PatientCard card) {

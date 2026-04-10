@@ -489,6 +489,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             readCounts: chatState.readCounts,
             scrollToMessageId: scrollTarget,
             highlightMessageId: widget.scrollToMessageId,
+            onReplySelected: (msg) => chatNotifier.setReplyTarget(msg),
           ),
         ),
         ChatInput(
@@ -499,6 +500,8 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                 rooms.any((r) => r.id == widget.roomId && r.isHandoff),
             orElse: () => false,
           ),
+          replyTarget: chatState.replyTarget,
+          onCancelReply: () => chatNotifier.clearReplyTarget(),
           onSend: (content, {String priority = 'ROUTINE'}) {
             chatNotifier.sendMessage(
                 roomId: widget.roomId, content: content, priority: priority);

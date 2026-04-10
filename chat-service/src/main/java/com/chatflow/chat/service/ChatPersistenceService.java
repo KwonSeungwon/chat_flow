@@ -53,6 +53,8 @@ public class ChatPersistenceService {
                 .fileUrl(message.getFileUrl())
                 .fileName(message.getFileName())
                 .fileContentType(message.getFileContentType())
+                .parentMessageId(message.getParentMessageId())
+                .parentMessagePreview(message.getParentMessagePreview())
                 .build();
         chatMessageRepository.save(entity);
 

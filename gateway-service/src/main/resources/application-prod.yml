@@ -124,6 +124,14 @@ spring:
           max-idle: 4
           min-idle: 1
           max-wait: 2000ms
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:postgresql}:${DB_PORT:5432}/${DB_NAME:chatflow}
+    username: ${DB_USERNAME:chatflow}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
 
 management:
   endpoints:
