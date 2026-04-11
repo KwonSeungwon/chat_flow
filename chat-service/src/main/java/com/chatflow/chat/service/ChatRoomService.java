@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -293,6 +294,84 @@ public class ChatRoomService {
             log.info("Message deleted: {} by user {}", messageId, requestingUserId);
             return true;
         }).orElse(false);
+    }
+
+    @Transactional
+    public boolean editMessage(String messageId, String requestingUserId, String newContent) {
+        return chatMessageRepository.findById(messageId).map(entity -> {
+            if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
+                return false;
+            }
+            if (entity.isDeleted()) return false;
+            entity.setContent(messageEncryptor.isEnabled() ? messageEncryptor.encrypt(newContent) : newContent);
+            entity.setEdited(true);
+            entity.setEditedAt(LocalDateTime.now());
+            chatMessageRepository.save(entity);
+
+            Map<String, Object> broadcast = new LinkedHashMap<>();
+            broadcast.put("type", "MESSAGE_EDITED");
+            broadcast.put("messageId", messageId);
+            broadcast.put("chatRoomId", entity.getChatRoomId());
+            broadcast.put("content", newContent);
+            broadcast.put("username", entity.getUsername());
+            broadcast.put("userId", entity.getUserId());
+            broadcast.put("timestamp", entity.getTimestamp().toString());
+            broadcast.put("editedAt", entity.getEditedAt().toString());
+            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
+            log.info("Message edited: {} by user {}", messageId, requestingUserId);
+            return true;
+        }).orElse(false);
+    }
+
+    public void leaveRoom(String roomId, String username) {
+        // Redis SET에서 해당 유저의 모든 세션 제거
+        String participantKey = "chatflow:room:participants:" + roomId;
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                Set<String> members = redisTemplate.opsForSet().members(participantKey);
+                if (members != null) {
+                    members.stream()
+                        .filter(e -> e.endsWith(":" + username))
+                        .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
+                }
+                redisHealth.recordSuccess();
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
+            }
+        }
+        // 퇴장 시스템 메시지 브로드캐스트
+        Map<String, Object> leaveMsg = new LinkedHashMap<>();
+        leaveMsg.put("type", "LEAVE");
+        leaveMsg.put("chatRoomId", roomId);
+        leaveMsg.put("username", username);
+        leaveMsg.put("messageId", UUID.randomUUID().toString());
+        leaveMsg.put("timestamp", LocalDateTime.now().toString());
+        leaveMsg.put("content", username + "님이 채팅방을 나갔습니다.");
+        messagingTemplate.convertAndSend("/topic/chat/" + roomId, leaveMsg);
+        // 참가자 수 동기화
+        decrementParticipantCount(roomId);
+        evictRoomCaches(roomId);
+        log.info("User {} left room {} via REST API", username, roomId);
+    }
+
+    public Map<String, Long> getUnreadCounts(String userId, List<String> roomIds) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        for (String roomId : roomIds) {
+            try {
+                String atKey = "chatflow:readat:" + roomId + ":" + userId;
+                String readAtStr = redisTemplate.opsForValue().get(atKey);
+                if (readAtStr == null) {
+                    // 읽은 기록 없음 — 전체 메시지 카운트
+                    result.put(roomId, chatMessageRepository.countNewChatMessages(roomId, LocalDateTime.of(2000, 1, 1, 0, 0)));
+                } else {
+                    LocalDateTime readAt = LocalDateTime.parse(readAtStr);
+                    result.put(roomId, chatMessageRepository.countNewChatMessages(roomId, readAt));
+                }
+            } catch (Exception e) {
+                result.put(roomId, 0L);
+            }
+        }
+        return result;
     }
 
     private <T> void cacheValue(String key, T value, Duration ttl) {

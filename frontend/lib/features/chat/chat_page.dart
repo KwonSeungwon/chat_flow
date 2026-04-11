@@ -446,6 +446,57 @@ class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
                 },
               ),
             ),
+          // Leave room button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.exit_to_app, size: 18, color: Colors.red),
+                label: const Text('채팅방 나가기', style: TextStyle(color: Colors.red)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.red, width: 0.8),
+                ),
+                onPressed: () => _showLeaveConfirm(context, ref, widget.roomId),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLeaveConfirm(BuildContext context, WidgetRef ref, String roomId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('채팅방 나가기'),
+        content: const Text('채팅방에서 나가시겠습니까?\n언제든 다시 입장할 수 있습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.of(ctx).pop(); // close confirm dialog
+              Navigator.of(context).pop(); // close participants modal
+              final ok = await ref
+                  .read(chatNotifierProvider(roomId).notifier)
+                  .leaveRoom(roomId);
+              if (context.mounted) {
+                if (ok) {
+                  context.go('/chat');
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('채팅방 나가기에 실패했습니다.')),
+                  );
+                }
+              }
+            },
+            child: const Text('나가기'),
+          ),
         ],
       ),
     );
@@ -506,6 +557,8 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             onReplySelected: (msg) => chatNotifier.setReplyTarget(msg),
             onDeleteMessage: (messageId) =>
                 chatNotifier.deleteMessage(widget.roomId, messageId),
+            onEditMessage: (messageId, currentContent) =>
+                _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
           ),
         ),
         ChatInput(
@@ -535,6 +588,48 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
               ),
         ),
       ],
+    );
+  }
+
+  void _showEditDialog(BuildContext context, WidgetRef ref, String roomId, String messageId, String currentContent) {
+    final ctrl = TextEditingController(text: currentContent);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('메시지 수정'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 5,
+          minLines: 1,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '수정할 내용을 입력하세요',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newContent = ctrl.text.trim();
+              if (newContent.isEmpty) return;
+              Navigator.of(ctx).pop();
+              final ok = await ref
+                  .read(chatNotifierProvider(roomId).notifier)
+                  .editMessage(roomId, messageId, newContent);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('메시지 수정에 실패했습니다.')),
+                );
+              }
+            },
+            child: const Text('수정'),
+          ),
+        ],
+      ),
     );
   }
 }

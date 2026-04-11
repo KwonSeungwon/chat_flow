@@ -34,6 +34,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
 
     List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
 
+    @Query("SELECT COUNT(m) FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp > :after AND m.type = 'CHAT' AND m.deleted = false")
+    long countNewChatMessages(@Param("roomId") String roomId, @Param("after") LocalDateTime after);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId")

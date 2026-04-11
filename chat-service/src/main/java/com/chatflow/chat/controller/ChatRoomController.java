@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -40,6 +41,18 @@ public class ChatRoomController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
         return ResponseEntity.ok(ApiResponse.ok(chatRoomService.getAllRooms()));
+    }
+
+    @GetMapping("/unread-counts")
+    public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCounts(
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(Map.of()));
+        }
+        List<ChatRoom> rooms = chatRoomService.getAllRooms();
+        List<String> roomIds = rooms.stream().map(ChatRoom::getId).collect(Collectors.toList());
+        Map<String, Long> counts = chatRoomService.getUnreadCounts(userId, roomIds);
+        return ResponseEntity.ok(ApiResponse.ok(counts));
     }
 
     @GetMapping("/{id}")
@@ -223,6 +236,44 @@ public class ChatRoomController {
                     .body(ApiResponse.error("삭제 권한이 없거나 메시지를 찾을 수 없습니다."));
         }
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 삭제되었습니다."));
+    }
+
+    @PutMapping("/{roomId}/messages/{messageId}")
+    public ResponseEntity<ApiResponse<Void>> editMessage(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        String newContent = body.get("content");
+        if (newContent == null || newContent.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("수정할 내용이 필요합니다."));
+        }
+        boolean edited = chatRoomService.editMessage(messageId, userId, newContent.trim());
+        if (!edited) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("수정 권한이 없거나 메시지를 찾을 수 없습니다."));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 수정되었습니다."));
+    }
+
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<ApiResponse<Void>> leaveRoom(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        if (username == null || username.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+        }
+        chatRoomService.leaveRoom(roomId, username);
+        return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
     }
 
     @GetMapping("/{roomId}/last-read")

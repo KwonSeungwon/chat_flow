@@ -61,6 +61,18 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     }
   }
 
+  Future<Map<String, int>> fetchUnreadCounts() async {
+    try {
+      final resp = await _dioClient.dio.get('/api/chat/rooms/unread-counts');
+      final data = resp.data;
+      if (data is Map && data['data'] is Map) {
+        final raw = data['data'] as Map;
+        return raw.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      }
+    } catch (_) {}
+    return {};
+  }
+
   /// Creates a room and returns its ID for navigation.
   Future<String?> createRoom({
     required String name,
@@ -297,6 +309,27 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       return;
     }
 
+    if (type == 'MESSAGE_EDITED') {
+      final editedId = rawMsg['messageId']?.toString();
+      final newContent = rawMsg['content']?.toString();
+      final editedAt = rawMsg['editedAt']?.toString();
+      if (editedId == null || newContent == null) return;
+      final updated = state.messages.map((m) {
+        if (m.effectiveId == editedId || m.messageId == editedId) {
+          return ChatMessage(
+            id: m.id, messageId: m.messageId,
+            chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
+            content: newContent, timestamp: m.timestamp, type: m.type,
+            priority: m.priority, isAiGenerated: m.isAiGenerated,
+            deleted: m.deleted, edited: true, editedAt: editedAt,
+          );
+        }
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated);
+      return;
+    }
+
     final msg = ChatMessage.fromJson(rawMsg);
     final existing = state.messages;
     // Dedup by effectiveId
@@ -331,6 +364,46 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (_) {
       // Rollback on failure — restore original message list
       state = state.copyWith(messages: originalMessages);
+      return false;
+    }
+  }
+
+  Future<bool> editMessage(String roomId, String messageId, String newContent) async {
+    final originalMessages = List<ChatMessage>.from(state.messages);
+    // Optimistic update
+    final updated = state.messages.map((m) {
+      if (m.effectiveId == messageId || m.messageId == messageId) {
+        return ChatMessage(
+          id: m.id, messageId: m.messageId,
+          chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
+          content: newContent, timestamp: m.timestamp, type: m.type,
+          priority: m.priority, isAiGenerated: m.isAiGenerated,
+          deleted: m.deleted, edited: true, editedAt: DateTime.now().toIso8601String(),
+        );
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+
+    try {
+      await _dioClient.dio.put(
+        '/api/chat/rooms/$roomId/messages/$messageId',
+        data: {'content': newContent},
+      );
+      return true;
+    } catch (_) {
+      state = state.copyWith(messages: originalMessages);
+      return false;
+    }
+  }
+
+  Future<bool> leaveRoom(String roomId) async {
+    try {
+      await _dioClient.dio.delete('/api/chat/rooms/$roomId/members/me');
+      _stompService.disconnect();
+      state = const ChatMessagesState();
+      return true;
+    } catch (_) {
       return false;
     }
   }

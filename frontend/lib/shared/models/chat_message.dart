@@ -15,6 +15,8 @@ class ChatMessage {
   final String? parentMessageId;
   final String? parentMessagePreview;
   final bool deleted;
+  final bool edited;
+  final String? editedAt;
 
   ChatMessage({
     this.id,
@@ -33,6 +35,8 @@ class ChatMessage {
     this.parentMessageId,
     this.parentMessagePreview,
     this.deleted = false,
+    this.edited = false,
+    this.editedAt,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,8 @@ class ChatMessage {
       parentMessageId: json['parentMessageId']?.toString(),
       parentMessagePreview: json['parentMessagePreview']?.toString(),
       deleted: json['deleted'] == true,
+      edited: json['edited'] == true,
+      editedAt: json['editedAt']?.toString(),
     );
   }
 

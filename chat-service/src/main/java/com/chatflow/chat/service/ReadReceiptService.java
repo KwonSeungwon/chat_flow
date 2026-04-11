@@ -24,6 +24,9 @@ public class ReadReceiptService {
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
         String key = READ_KEY_PREFIX + roomId + ":" + userId;
         redisTemplate.opsForValue().set(key, lastReadMessageId, READ_TTL_HOURS, TimeUnit.HOURS);
+        // 미읽은 카운트 계산에 사용할 타임스탬프 저장
+        String atKey = "chatflow:readat:" + roomId + ":" + userId;
+        redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
 
         ReadReceipt receipt = ReadReceipt.builder()
                 .userId(userId)

@@ -22,6 +22,7 @@ class ChatMessagesList extends StatefulWidget {
   final String? highlightMessageId;
   final void Function(ChatMessage)? onReplySelected;
   final void Function(String messageId)? onDeleteMessage;
+  final void Function(String messageId, String currentContent)? onEditMessage;
 
   const ChatMessagesList({
     super.key,
@@ -33,6 +34,7 @@ class ChatMessagesList extends StatefulWidget {
     this.highlightMessageId,
     this.onReplySelected,
     this.onDeleteMessage,
+    this.onEditMessage,
   });
 
   @override
@@ -148,6 +150,37 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     }
   }
 
+  String _formatDate(String timestamp) {
+    try {
+      final dt = DateTime.parse(timestamp).toLocal();
+      final now = DateTime.now();
+      if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+        return '오늘';
+      }
+      final yesterday = now.subtract(const Duration(days: 1));
+      if (dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day) {
+        return '어제';
+      }
+      return '${dt.year}년 ${dt.month}월 ${dt.day}일';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  List<Object> _buildItemsWithDividers(List<ChatMessage> messages) {
+    final items = <Object>[];
+    String? lastDate;
+    for (final msg in messages) {
+      final date = _formatDate(msg.timestamp);
+      if (date.isNotEmpty && date != lastDate) {
+        items.add(date);
+        lastDate = date;
+      }
+      items.add(msg);
+    }
+    return items;
+  }
+
   @override
   void dispose() {
     _highlightTimer?.cancel();
@@ -192,33 +225,43 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
       );
     }
 
+    final items = _buildItemsWithDividers(widget.messages);
+    final totalCount = items.length + (widget.isAiLoading ? 1 : 0);
+
     return Stack(
       children: [
         ListView.builder(
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          itemCount: widget.messages.length + (widget.isAiLoading ? 1 : 0),
+          itemCount: totalCount,
           itemBuilder: (context, index) {
             // AI loading indicator at the bottom
-            if (index == widget.messages.length && widget.isAiLoading) {
+            if (index == items.length && widget.isAiLoading) {
               return const _AiLoadingBubble();
             }
-            final msg = widget.messages[index];
+            final item = items[index];
+
+            // Date divider
+            if (item is String) {
+              return _DateDivider(date: item);
+            }
+
+            final msg = item as ChatMessage;
             final type = msg.type.toUpperCase();
             final isTarget = msg.effectiveId == widget.scrollToMessageId;
             final isHighlighted = msg.effectiveId == _highlightedMessageId;
 
-            Widget item;
+            Widget bubble;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
-              item = _SystemBubble(msg: msg);
+              bubble = _SystemBubble(msg: msg);
             } else if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
-              item = _AiSummaryCard(msg: msg);
+              bubble = _AiSummaryCard(msg: msg);
             } else if (type == 'PATIENT_CARD') {
               final card = PatientCard.tryParseContent(msg.content);
               if (card != null) {
                 final isMine = msg.username == widget.currentUsername;
                 final readCount = widget.readCounts[msg.effectiveId] ?? 0;
-                item = _PatientCardBubble(
+                bubble = _PatientCardBubble(
                   msg: msg,
                   card: card,
                   isMine: isMine,
@@ -226,12 +269,12 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                   readCount: readCount,
                 );
               } else {
-                item = const SizedBox.shrink();
+                bubble = const SizedBox.shrink();
               }
             } else if (msg.isFileMessage) {
               final isMine = msg.username == widget.currentUsername;
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
-              item = _FileBubble(
+              bubble = _FileBubble(
                 msg: msg,
                 isMine: isMine,
                 time: _formatTime(msg.timestamp),
@@ -241,7 +284,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
               final isMine = msg.username == widget.currentUsername;
-              item = _ChatBubble(
+              bubble = _ChatBubble(
                 msg: msg,
                 isMine: isMine,
                 time: _formatTime(msg.timestamp),
@@ -253,26 +296,29 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 onDelete: (isMine && !msg.deleted && widget.onDeleteMessage != null)
                     ? () => widget.onDeleteMessage!(msg.effectiveId)
                     : null,
+                onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
+                    ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
+                    : null,
               );
             }
 
             // Wrap with highlight overlay for search-navigated messages
             if (isHighlighted) {
-              item = AnimatedContainer(
+              bubble = AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 decoration: BoxDecoration(
                   color: Colors.amber.withAlpha(isHighlighted ? 45 : 0),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: item,
+                child: bubble,
               );
             }
 
             // Wrap with GlobalKey so we can scroll to this item
             if (isTarget) {
-              return KeyedSubtree(key: _targetKey, child: item);
+              return KeyedSubtree(key: _targetKey, child: bubble);
             }
-            return item;
+            return bubble;
           },
         ),
 
@@ -660,6 +706,7 @@ class _ChatBubble extends StatelessWidget {
   final int readCount;
   final VoidCallback? onReply;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
 
   const _ChatBubble({
     required this.msg,
@@ -669,6 +716,7 @@ class _ChatBubble extends StatelessWidget {
     this.readCount = 0,
     this.onReply,
     this.onDelete,
+    this.onEdit,
   });
 
   Color _avatarColor(String name) =>
@@ -692,14 +740,24 @@ class _ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.of(context).pop();
-                onDelete?.call();
-              },
-            ),
+            if (onEdit != null)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('메시지 수정'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onEdit?.call();
+                },
+              ),
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onDelete?.call();
+                },
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -758,7 +816,7 @@ class _ChatBubble extends StatelessWidget {
     }
 
     return GestureDetector(
-      onLongPress: onDelete != null ? () => _showDeleteSheet(context) : null,
+      onLongPress: (onDelete != null || onEdit != null) ? () => _showDeleteSheet(context) : null,
       child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -864,6 +922,14 @@ class _ChatBubble extends StatelessWidget {
                                   fontSize: 10,
                                   color: Theme.of(context).colorScheme.primary.withAlpha(180),
                                   fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            if (msg.edited)
+                              Text(
+                                '수정됨',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
                                 ),
                               ),
                             Text(
@@ -1003,9 +1069,23 @@ class _ChatBubble extends StatelessWidget {
                     if (!isMine)
                       Padding(
                         padding: const EdgeInsets.only(left: 5, bottom: 3),
-                        child: Text(time,
-                            style: TextStyle(
-                                fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (msg.edited)
+                              Text(
+                                '수정됨',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
+                                ),
+                              ),
+                            Text(time,
+                                style: TextStyle(
+                                    fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -1032,6 +1112,47 @@ class _ChatBubble extends StatelessWidget {
       ),
     ),  // Padding
     ); // GestureDetector
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Date divider
+// ─────────────────────────────────────────────────────────────────
+class _DateDivider extends StatelessWidget {
+  final String date;
+  const _DateDivider({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: cs.outline.withAlpha(60), height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outline.withAlpha(60)),
+              ),
+              child: Text(
+                date,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant.withAlpha(180),
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: cs.outline.withAlpha(60), height: 1)),
+        ],
+      ),
+    );
   }
 }
 

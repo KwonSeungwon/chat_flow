@@ -76,6 +76,13 @@ public class ChatMessageEntity implements Persistable<String> {
     @Column(name = "is_deleted")
     private boolean deleted = false;
 
+    @Builder.Default
+    @Column(name = "is_edited")
+    private boolean edited = false;
+
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
     @Override
     public String getId() {
         return messageId;

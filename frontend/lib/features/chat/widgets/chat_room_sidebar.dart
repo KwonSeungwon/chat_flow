@@ -30,9 +30,24 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
   @override
   void initState() {
     super.initState();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (!_disposed) ref.read(chatRoomsProvider.notifier).fetchRooms();
+    _loadInitialUnreadCounts();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      if (_disposed) return;
+      ref.read(chatRoomsProvider.notifier).fetchRooms();
+      final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
+      if (!_disposed && counts.isNotEmpty) {
+        final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
+        current.addAll(counts);
+        ref.read(roomUnreadCountsProvider.notifier).state = current;
+      }
     });
+  }
+
+  Future<void> _loadInitialUnreadCounts() async {
+    final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
+    if (!_disposed && counts.isNotEmpty) {
+      ref.read(roomUnreadCountsProvider.notifier).state = Map<String, int>.from(counts);
+    }
   }
 
   @override
