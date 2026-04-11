@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -675,7 +676,7 @@ class _ProfileAvatar extends StatelessWidget {
       radius: radius,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       child: ClipOval(
-        child: url != null
+        child: (url != null && url!.isNotEmpty)
             ? Image.network(
                 url!,
                 width: radius * 2,
@@ -710,9 +711,11 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
   bool _searching = false;
   String? _error;
   String? _inviting;
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -845,7 +848,10 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 isDense: true,
               ),
-              onChanged: (v) => _search(v),
+              onChanged: (v) {
+                _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 300), () => _search(v));
+              },
             ),
             const SizedBox(height: 8),
             if (_error != null)

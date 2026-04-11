@@ -58,9 +58,17 @@ public class ChatController {
     @MessageMapping("/chat.addUser")
     public void addUser(@Payload ChatMessage chatMessage,
                        SimpMessageHeaderAccessor headerAccessor) {
-        headerAccessor.getSessionAttributes().put("username", chatMessage.getUsername());
-        headerAccessor.getSessionAttributes().put("chatRoomId", chatMessage.getChatRoomId());
-        headerAccessor.getSessionAttributes().put("userId", chatMessage.getUserId());
+        Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+        // 핸드셰이크 시 Gateway가 주입한 인증 정보를 우선 사용 (클라이언트 위조 방지)
+        if (sessionAttrs != null) {
+            String verifiedUserId = (String) sessionAttrs.get("userId");
+            String verifiedUsername = (String) sessionAttrs.get("username");
+            if (verifiedUserId != null) {
+                chatMessage.setUserId(verifiedUserId);
+                chatMessage.setUsername(verifiedUsername);
+            }
+            sessionAttrs.put("chatRoomId", chatMessage.getChatRoomId());
+        }
         String sessionId = headerAccessor.getSessionId();
         chatService.addUser(chatMessage, sessionId);
     }
@@ -77,8 +85,10 @@ public class ChatController {
         Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
         String userId = sessionAttrs != null ? (String) sessionAttrs.get("userId") : null;
         String username = sessionAttrs != null ? (String) sessionAttrs.get("username") : null;
-        if (userId == null) userId = payload.get("userId");
-        if (username == null) username = payload.get("username");
+        if (userId == null) {
+            log.warn("markRead: 세션에 userId 없음 — 거부 (roomId={})", roomId);
+            return;
+        }
         readReceiptService.markRead(roomId, userId, username, lastReadMessageId);
     }
 }

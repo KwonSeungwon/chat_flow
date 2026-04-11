@@ -24,7 +24,7 @@ public class UserController {
     @GetMapping("/search")
     public Mono<ResponseEntity<Map<String, Object>>> searchUsers(
             @RequestParam(defaultValue = "") String q) {
-        if (q.isBlank()) {
+        if (q.isBlank() || q.trim().length() < 2) {
             return Mono.just(ResponseEntity.ok(Map.of("data", List.of())));
         }
         return userRepository

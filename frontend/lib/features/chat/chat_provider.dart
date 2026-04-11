@@ -271,6 +271,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (!mounted) return;
     final type = rawMsg['type']?.toString().toUpperCase();
 
+    if (type == 'ROOM_DELETED') {
+      // 채팅방 삭제됨 — 상태 초기화
+      state = const ChatMessagesState();
+      return;
+    }
+
     // Handle soft-deleted message broadcast
     if (type == 'MESSAGE_DELETED') {
       final deletedId = rawMsg['messageId']?.toString();
@@ -303,6 +309,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   Future<bool> deleteMessage(String roomId, String messageId) async {
+    final originalMessages = List<ChatMessage>.from(state.messages);
     // Optimistic update
     final updated = state.messages.map((m) {
       if (m.effectiveId == messageId || m.messageId == messageId) {
@@ -322,8 +329,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       await _dioClient.dio.delete('/api/chat/rooms/$roomId/messages/$messageId');
       return true;
     } catch (_) {
-      // Rollback on failure — reload from server
-      await joinRoom(roomId);
+      // Rollback on failure — restore original message list
+      state = state.copyWith(messages: originalMessages);
       return false;
     }
   }

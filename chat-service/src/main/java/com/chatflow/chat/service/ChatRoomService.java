@@ -159,7 +159,9 @@ public class ChatRoomService {
                         return passwordEncoder.matches(password, stored);
                     }
                     // 레거시 평문 비밀번호 — 일치 시 자동 재해시 (마이그레이션)
-                    if (stored.equals(password)) {
+                    if (java.security.MessageDigest.isEqual(
+                            stored.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                            password.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
                         room.setPassword(passwordEncoder.encode(password));
                         chatRoomRepository.save(room);
                         evictRoomCaches(roomId);
@@ -196,7 +198,8 @@ public class ChatRoomService {
         try {
             return chatRoomRepository.isRoomFull(roomId);
         } catch (Exception e) {
-            return false;
+            log.warn("isRoomFull 조회 실패 — 안전을 위해 만석으로 처리: {}", roomId, e);
+            return true;
         }
     }
 
@@ -248,6 +251,12 @@ public class ChatRoomService {
 
     @Transactional
     public void deleteRoom(String id) {
+        // 삭제 전 STOMP 브로드캐스트 — 연결된 클라이언트가 퇴장 처리
+        Map<String, Object> deletedEvent = new LinkedHashMap<>();
+        deletedEvent.put("type", "ROOM_DELETED");
+        deletedEvent.put("chatRoomId", id);
+        messagingTemplate.convertAndSend("/topic/chat/" + id, deletedEvent);
+
         chatMessageRepository.deleteAllByChatRoomId(id);
         chatRoomRepository.deleteById(id);
         if (!redisHealth.isCircuitOpen()) {

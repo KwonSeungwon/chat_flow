@@ -20,7 +20,7 @@ import java.util.Map;
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Value("${chatflow.allowed-origins:*}")
+    @Value("${chatflow.allowed-origins:https://app.chatflow.ai.kr,http://localhost:*,http://127.0.0.1:*}")
     private String allowedOrigins;
 
     @Override

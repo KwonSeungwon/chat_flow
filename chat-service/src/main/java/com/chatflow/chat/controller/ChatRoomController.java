@@ -147,7 +147,19 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Void>> inviteUser(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String inviterId,
             @RequestHeader(value = "X-Username", required = false) String inviterName) {
+        // 채팅방 존재 여부 확인
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        // 초대 허용 여부 확인
+        if (!room.isAllowInvites()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("이 채팅방은 초대가 비활성화되어 있습니다."));
+        }
         if (chatRoomService.isRoomFull(roomId)) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
@@ -155,6 +167,18 @@ public class ChatRoomController {
         String targetUsername = body.get("targetUsername");
         if (targetUsername == null || targetUsername.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("targetUsername이 필요합니다."));
+        }
+        // 이미 참여 중인 멤버 중복 초대 방지
+        String participantKey = "chatflow:room:participants:" + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(participantKey);
+        if (members != null) {
+            final String target = targetUsername.toLowerCase();
+            boolean alreadyPresent = members.stream()
+                    .anyMatch(e -> e.toLowerCase().endsWith(":" + target));
+            if (alreadyPresent) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error(targetUsername + "님은 이미 채팅방에 참여 중입니다."));
+            }
         }
         chatRoomService.sendInviteMessage(roomId, inviterName, targetUsername);
         return ResponseEntity.ok(ApiResponse.ok(null, "초대 메시지를 보냈습니다."));
@@ -164,6 +188,10 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Void>> deleteRoom(
             @PathVariable String id,
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
         chatRoomService.deleteRoom(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
     }
