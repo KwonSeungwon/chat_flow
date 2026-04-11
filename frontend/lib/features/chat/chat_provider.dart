@@ -51,6 +51,16 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     }
   }
 
+  Future<bool> deleteRoom(String id) async {
+    try {
+      await _dioClient.dio.delete('/api/chat/rooms/$id');
+      await fetchRooms();
+      return true;
+    } on DioException {
+      return false;
+    }
+  }
+
   /// Creates a room and returns its ID for navigation.
   Future<String?> createRoom({
     required String name,
@@ -259,6 +269,28 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   void _onMessage(Map<String, dynamic> rawMsg) {
     if (!mounted) return;
+    final type = rawMsg['type']?.toString().toUpperCase();
+
+    // Handle soft-deleted message broadcast
+    if (type == 'MESSAGE_DELETED') {
+      final deletedId = rawMsg['messageId']?.toString();
+      if (deletedId == null) return;
+      final updated = state.messages.map((m) {
+        if (m.effectiveId == deletedId || m.messageId == deletedId) {
+          return ChatMessage(
+            id: m.id, messageId: m.messageId,
+            chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
+            content: '삭제된 메시지입니다.', timestamp: m.timestamp, type: m.type,
+            priority: m.priority, isAiGenerated: m.isAiGenerated,
+            deleted: true,
+          );
+        }
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated);
+      return;
+    }
+
     final msg = ChatMessage.fromJson(rawMsg);
     final existing = state.messages;
     // Dedup by effectiveId
@@ -268,6 +300,32 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     final capped =
         updated.length > 500 ? updated.sublist(updated.length - 500) : updated;
     state = state.copyWith(messages: capped);
+  }
+
+  Future<bool> deleteMessage(String roomId, String messageId) async {
+    // Optimistic update
+    final updated = state.messages.map((m) {
+      if (m.effectiveId == messageId || m.messageId == messageId) {
+        return ChatMessage(
+          id: m.id, messageId: m.messageId,
+          chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
+          content: '삭제된 메시지입니다.', timestamp: m.timestamp, type: m.type,
+          priority: m.priority, isAiGenerated: m.isAiGenerated,
+          deleted: true,
+        );
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+
+    try {
+      await _dioClient.dio.delete('/api/chat/rooms/$roomId/messages/$messageId');
+      return true;
+    } catch (_) {
+      // Rollback on failure — reload from server
+      await joinRoom(roomId);
+      return false;
+    }
   }
 
   Future<void> _fetchSummaries(String roomId) async {

@@ -33,4 +33,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     List<ChatMessageEntity> findLatestByChatRoomId(@Param("roomId") String roomId, Pageable pageable);
 
     List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId")
+    int deleteAllByChatRoomId(@Param("roomId") String roomId);
 }

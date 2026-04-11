@@ -14,6 +14,7 @@ class ChatMessage {
   final String? fileContentType;
   final String? parentMessageId;
   final String? parentMessagePreview;
+  final bool deleted;
 
   ChatMessage({
     this.id,
@@ -31,6 +32,7 @@ class ChatMessage {
     this.fileContentType,
     this.parentMessageId,
     this.parentMessagePreview,
+    this.deleted = false,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -55,6 +57,7 @@ class ChatMessage {
       fileContentType: json['fileContentType']?.toString(),
       parentMessageId: json['parentMessageId']?.toString(),
       parentMessagePreview: json['parentMessagePreview']?.toString(),
+      deleted: json['deleted'] == true,
     );
   }
 

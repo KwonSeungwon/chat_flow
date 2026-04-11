@@ -15,12 +15,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -43,6 +46,7 @@ public class ChatRoomService {
     private final RedisHealthTracker redisHealth;
     private final MessageEncryptor messageEncryptor;
     private final PasswordEncoder passwordEncoder;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -227,6 +231,58 @@ public class ChatRoomService {
         evictRoomCaches(saved.getId());
         log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
         return saved;
+    }
+
+    public void sendInviteMessage(String roomId, String inviterName, String targetUsername) {
+        Map<String, Object> msg = new LinkedHashMap<>();
+        msg.put("type", "SYSTEM");
+        msg.put("chatRoomId", roomId);
+        msg.put("username", "SYSTEM");
+        msg.put("messageId", UUID.randomUUID().toString());
+        msg.put("timestamp", LocalDateTime.now().toString());
+        msg.put("content", (inviterName != null ? inviterName : "누군가") +
+                "님이 " + targetUsername + "님을 채팅방에 초대했습니다.");
+        messagingTemplate.convertAndSend("/topic/chat/" + roomId, msg);
+        log.info("Invite message sent: {} invited {} to room {}", inviterName, targetUsername, roomId);
+    }
+
+    @Transactional
+    public void deleteRoom(String id) {
+        chatMessageRepository.deleteAllByChatRoomId(id);
+        chatRoomRepository.deleteById(id);
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                redisTemplate.delete("chatflow:room:participants:" + id);
+                redisHealth.recordSuccess();
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
+            }
+        }
+        evictRoomCaches(id);
+        log.info("Chat room deleted: {}", id);
+    }
+
+    @Transactional
+    public boolean deleteMessage(String messageId, String requestingUserId) {
+        return chatMessageRepository.findById(messageId).map(entity -> {
+            if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
+                return false;
+            }
+            entity.setDeleted(true);
+            entity.setContent("삭제된 메시지입니다.");
+            chatMessageRepository.save(entity);
+            Map<String, Object> broadcast = new LinkedHashMap<>();
+            broadcast.put("type", "MESSAGE_DELETED");
+            broadcast.put("messageId", messageId);
+            broadcast.put("chatRoomId", entity.getChatRoomId());
+            broadcast.put("content", "삭제된 메시지입니다.");
+            broadcast.put("username", entity.getUsername());
+            broadcast.put("userId", entity.getUserId());
+            broadcast.put("timestamp", entity.getTimestamp().toString());
+            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
+            log.info("Message deleted: {} by user {}", messageId, requestingUserId);
+            return true;
+        }).orElse(false);
     }
 
     private <T> void cacheValue(String key, T value, Duration ttl) {

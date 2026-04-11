@@ -8,6 +8,7 @@ import '../../../shared/models/chat_room.dart';
 import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider;
 import 'create_room_dialog.dart';
 
+
 class ChatRoomSidebar extends ConsumerStatefulWidget {
   final String currentRoomId;
   final VoidCallback? onRoomSelected;
@@ -112,6 +113,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                                           widget.onRoomSelected?.call();
                                         }
                                       },
+                                onDelete: () => _showDeleteRoomDialog(context, room),
                               );
                             },
                           );
@@ -163,6 +165,40 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
               if (ok && ctx.mounted) Navigator.of(ctx).pop();
             },
             child: const Text('입장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteRoomDialog(BuildContext context, ChatRoom room) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('채팅방 삭제'),
+        content: Text('"${room.name}" 채팅방을 삭제하시겠습니까?\n모든 메시지가 함께 삭제됩니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final ok = await ref.read(chatRoomsProvider.notifier).deleteRoom(room.id);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('채팅방 삭제에 실패했습니다.')),
+                );
+                return;
+              }
+              // Navigate away if currently in the deleted room
+              if (context.mounted && room.id == widget.currentRoomId) {
+                context.go('/chat');
+              }
+            },
+            child: const Text('삭제'),
           ),
         ],
       ),
@@ -266,6 +302,7 @@ class _RoomTile extends StatefulWidget {
   final bool isFull;
   final int unreadCount;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   const _RoomTile({
     required this.room,
@@ -274,6 +311,7 @@ class _RoomTile extends StatefulWidget {
     required this.isFull,
     required this.unreadCount,
     required this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -298,6 +336,7 @@ class _RoomTileState extends State<_RoomTile> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onDelete,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.only(bottom: 2),

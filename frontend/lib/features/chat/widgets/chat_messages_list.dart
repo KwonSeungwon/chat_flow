@@ -21,6 +21,7 @@ class ChatMessagesList extends StatefulWidget {
   /// If set, briefly highlight this message (search result)
   final String? highlightMessageId;
   final void Function(ChatMessage)? onReplySelected;
+  final void Function(String messageId)? onDeleteMessage;
 
   const ChatMessagesList({
     super.key,
@@ -31,6 +32,7 @@ class ChatMessagesList extends StatefulWidget {
     this.scrollToMessageId,
     this.highlightMessageId,
     this.onReplySelected,
+    this.onDeleteMessage,
   });
 
   @override
@@ -238,14 +240,18 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             } else {
               final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
+              final isMine = msg.username == widget.currentUsername;
               item = _ChatBubble(
                 msg: msg,
-                isMine: msg.username == widget.currentUsername,
+                isMine: isMine,
                 time: _formatTime(msg.timestamp),
                 isAiQuestion: isAiQuestion,
                 readCount: readCount,
-                onReply: widget.onReplySelected != null
+                onReply: (!msg.deleted && widget.onReplySelected != null)
                     ? () => widget.onReplySelected!(msg)
+                    : null,
+                onDelete: (isMine && !msg.deleted && widget.onDeleteMessage != null)
+                    ? () => widget.onDeleteMessage!(msg.effectiveId)
                     : null,
               );
             }
@@ -653,6 +659,7 @@ class _ChatBubble extends StatelessWidget {
   final bool isAiQuestion;
   final int readCount;
   final VoidCallback? onReply;
+  final VoidCallback? onDelete;
 
   const _ChatBubble({
     required this.msg,
@@ -661,10 +668,44 @@ class _ChatBubble extends StatelessWidget {
     this.isAiQuestion = false,
     this.readCount = 0,
     this.onReply,
+    this.onDelete,
   });
 
   Color _avatarColor(String name) =>
       AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
+
+  void _showDeleteSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha(80),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.of(context).pop();
+                onDelete?.call();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -675,7 +716,50 @@ class _ChatBubble extends StatelessWidget {
       bottomRight: Radius.circular(isMine ? 5 : 20),
     );
 
-    return Padding(
+    // Deleted message — compact tombstone bubble
+    if (msg.deleted) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            if (!isMine) ...[
+              _Avatar(name: msg.username, color: _avatarColor(msg.username)),
+              const SizedBox(width: 8),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: radius,
+                border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.not_interested, size: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '삭제된 메시지입니다.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isMine) const SizedBox(width: 6),
+          ],
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onLongPress: onDelete != null ? () => _showDeleteSheet(context) : null,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment:
@@ -946,7 +1030,8 @@ class _ChatBubble extends StatelessWidget {
           if (isMine) const SizedBox(width: 6),
         ],
       ),
-    );
+    ),  // Padding
+    ); // GestureDetector
   }
 }
 

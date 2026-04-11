@@ -119,19 +119,70 @@ public class ChatRoomController {
             @PathVariable String roomId) {
         String key = "chatflow:room:participants:" + roomId;
         Set<String> members = redisTemplate.opsForSet().members(key);
-        List<Map<String, String>> result = new ArrayList<>();
+        // Deduplicate by userId — same user may have multiple sessions
+        Map<String, String> seen = new LinkedHashMap<>();
         if (members != null) {
             for (String entry : members) {
-                int idx = entry.indexOf(':');
-                if (idx > 0) {
-                    Map<String, String> p = new LinkedHashMap<>();
-                    p.put("userId", entry.substring(0, idx));
-                    p.put("username", entry.substring(idx + 1));
-                    result.add(p);
+                // Format: userId:sessionId:username (3 parts, split on first and last colon)
+                int firstIdx = entry.indexOf(':');
+                int lastIdx = entry.lastIndexOf(':');
+                if (firstIdx > 0 && lastIdx > firstIdx) {
+                    String userId = entry.substring(0, firstIdx);
+                    String username = entry.substring(lastIdx + 1);
+                    seen.putIfAbsent(userId, username);
                 }
             }
         }
+        List<Map<String, String>> result = new ArrayList<>();
+        seen.forEach((uid, uname) -> {
+            Map<String, String> p = new LinkedHashMap<>();
+            p.put("userId", uid);
+            p.put("username", uname);
+            result.add(p);
+        });
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @PostMapping("/{roomId}/invite")
+    public ResponseEntity<ApiResponse<Void>> inviteUser(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-Username", required = false) String inviterName) {
+        if (chatRoomService.isRoomFull(roomId)) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
+        }
+        String targetUsername = body.get("targetUsername");
+        if (targetUsername == null || targetUsername.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("targetUsername이 필요합니다."));
+        }
+        chatRoomService.sendInviteMessage(roomId, inviterName, targetUsername);
+        return ResponseEntity.ok(ApiResponse.ok(null, "초대 메시지를 보냈습니다."));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteRoom(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        chatRoomService.deleteRoom(id);
+        return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
+    }
+
+    @DeleteMapping("/{roomId}/messages/{messageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteMessage(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        boolean deleted = chatRoomService.deleteMessage(messageId, userId);
+        if (!deleted) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("삭제 권한이 없거나 메시지를 찾을 수 없습니다."));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 삭제되었습니다."));
     }
 
     @GetMapping("/{roomId}/last-read")
