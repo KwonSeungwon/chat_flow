@@ -84,7 +84,7 @@ public class ChatRoomService {
         return room;
     }
 
-    public ChatRoom createRoom(ChatRoom request) {
+    public ChatRoom createRoom(ChatRoom request, String creatorId) {
         ChatRoom room = ChatRoom.builder()
                 .id("room_" + UUID.randomUUID().toString().substring(0, 8))
                 .name(request.getName().trim())
@@ -98,6 +98,7 @@ public class ChatRoomService {
                 .allowInvites(request.isAllowInvites())
                 .participantCount(0)
                 .maxParticipants(MAX_PARTICIPANTS)
+                .createdBy(creatorId)
                 .createdAt(LocalDateTime.now())
                 .build();
 

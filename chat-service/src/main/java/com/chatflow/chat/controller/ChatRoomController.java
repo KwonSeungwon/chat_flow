@@ -51,8 +51,10 @@ public class ChatRoomController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<ChatRoom>> createRoom(@Valid @RequestBody ChatRoom request) {
-        ChatRoom saved = chatRoomService.createRoom(request);
+    public ResponseEntity<ApiResponse<ChatRoom>> createRoom(
+            @Valid @RequestBody ChatRoom request,
+            @RequestHeader(value = "X-User-Id", required = false) String creatorId) {
+        ChatRoom saved = chatRoomService.createRoom(request, creatorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(saved, "채팅방이 생성되었습니다."));
     }
 
@@ -191,6 +193,16 @@ public class ChatRoomController {
         if (userId == null || userId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        ChatRoom room = chatRoomService.getRoom(id).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        // createdBy가 설정된 방은 방장만 삭제 가능 (null이면 레거시 방 — 제한 없음)
+        if (room.getCreatedBy() != null && !room.getCreatedBy().equals(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("채팅방 삭제 권한이 없습니다. 방장만 삭제할 수 있습니다."));
         }
         chatRoomService.deleteRoom(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));

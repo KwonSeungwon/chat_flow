@@ -49,6 +49,9 @@ step_secrets() {
       --dry-run=client -o yaml | kubectl apply -f - &&
     kubectl -n $NAMESPACE create secret generic chatflow-gemini-secret \
       --from-literal=GEMINI_API_KEY=AIzaSyAmRdi4rvzNqXCzXq1k7RroI4pszCietE4 \
+      --dry-run=client -o yaml | kubectl apply -f - &&
+    kubectl -n $NAMESPACE create secret generic chatflow-jwt-secret \
+      --from-literal=JWT_SECRET=vqeDsIwa8tGm/tgB11tiza+8Zbw390s9eic5pV0AHjSj6saiUDKBQibgTKgW3md6 \
       --dry-run=client -o yaml | kubectl apply -f -
   "
   echo "Secrets created."

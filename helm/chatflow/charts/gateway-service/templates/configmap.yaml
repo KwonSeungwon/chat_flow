@@ -6,5 +6,4 @@ metadata:
     {{- include "gateway-service.labels" . | nindent 4 }}
 data:
   JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
-  JWT_SECRET: {{ .Values.jwtSecret | default "change-me-to-a-random-secret-at-least-32-chars" | quote }}
   JWT_EXPIRATION_MS: {{ .Values.jwtExpirationMs | default "3600000" | quote }}

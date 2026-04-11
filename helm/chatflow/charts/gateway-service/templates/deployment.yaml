@@ -43,6 +43,12 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.global.springProfile | quote }}
+            # JWT Secret (K8s Secret)
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.externalSecrets.jwt.secretName }}
+                  key: JWT_SECRET
             # K8s 내부 서비스 디스커버리
             - name: CHAT_SERVICE_URL
               value: "http://{{ .Release.Name }}-chat-service:8080"

@@ -68,6 +68,9 @@ public class ChatRoom {
     @Column(name = "max_participants")
     private Integer maxParticipants = 10;
 
+    @Column(name = "created_by", length = 100)
+    private String createdBy;
+
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
