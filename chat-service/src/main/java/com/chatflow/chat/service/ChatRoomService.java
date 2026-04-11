@@ -178,6 +178,15 @@ public class ChatRoomService {
         evictRoomCaches(roomId);
     }
 
+    @Transactional
+    public void setParticipantCount(String roomId, int count) {
+        chatRoomRepository.findById(roomId).ifPresent(room -> {
+            room.setParticipantCount(count);
+            chatRoomRepository.save(room);
+        });
+        evictRoomCaches(roomId);
+    }
+
     @Transactional(readOnly = true)
     public boolean isRoomFull(String roomId) {
         try {

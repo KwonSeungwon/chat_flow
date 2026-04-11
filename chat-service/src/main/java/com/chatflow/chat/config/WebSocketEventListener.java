@@ -37,10 +37,11 @@ public class WebSocketEventListener {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
         String username = (String) accessor.getSessionAttributes().get("username");
         String roomId = (String) accessor.getSessionAttributes().get("chatRoomId");
+        String sessionId = accessor.getSessionId();
 
         if (username != null && roomId != null) {
-            log.info("WebSocket disconnected: user={}, room={}", username, roomId);
-            chatService.removeUser(roomId, username);
+            log.info("WebSocket disconnected: user={}, room={}, session={}", username, roomId, sessionId);
+            chatService.removeUser(roomId, username, sessionId);
         }
     }
 }

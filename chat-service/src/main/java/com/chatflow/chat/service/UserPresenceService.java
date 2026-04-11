@@ -24,7 +24,7 @@ public class UserPresenceService {
 
     private static final String CHAT_TOPIC = "chat-messages";
 
-    public void join(ChatMessage message) {
+    public void join(ChatMessage message, String sessionId) {
         if (chatRoomService.isRoomFull(message.getChatRoomId())) {
             ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
             String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
@@ -46,38 +46,83 @@ public class UserPresenceService {
 
         log.info("User {} joined chat room {}", message.getUsername(), message.getChatRoomId());
 
-        chatRoomService.incrementParticipantCount(message.getChatRoomId());
-
-        // Track participant in Redis SET (no TTL — rely on leave() for cleanup)
+        // Track participant in Redis SET using sessionId for multi-tab deduplication
         String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
         String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
-        String entry = safeUserId + ":" + message.getUsername();
+        String safeSessionId = sessionId != null ? sessionId : "unknown";
+        String entry = safeUserId + ":" + safeSessionId + ":" + message.getUsername();
         redisTemplate.opsForSet().add(participantKey, entry);
+
+        // Sync DB participantCount from Redis SET (unique user count)
+        syncParticipantCount(message.getChatRoomId());
 
         chatPersistenceService.saveOutboxEventAndPublish(message, CHAT_TOPIC, "USER_JOINED");
     }
 
-    public void leave(String roomId, String username) {
-        ChatMessage leaveMessage = new ChatMessage();
-        leaveMessage.setChatRoomId(roomId);
-        leaveMessage.setUsername(username);
-        leaveMessage.setType(ChatMessage.MessageType.LEAVE);
-        leaveMessage.setTimestamp(LocalDateTime.now());
-        leaveMessage.setMessageId(UUID.randomUUID().toString());
-        leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
+    public void join(ChatMessage message) {
+        join(message, null);
+    }
 
-        chatRoomService.decrementParticipantCount(roomId);
-
+    public void leave(String roomId, String username, String sessionId) {
         String participantKey = "chatflow:room:participants:" + roomId;
-        // Remove entries where username matches (userId unknown at disconnect)
-        Set<String> members = redisTemplate.opsForSet().members(participantKey);
-        if (members != null) {
-            members.stream()
-                    .filter(e -> e.endsWith(":" + username))
-                    .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
+
+        if (sessionId != null) {
+            // Remove only the specific session entry
+            Set<String> members = redisTemplate.opsForSet().members(participantKey);
+            if (members != null) {
+                members.stream()
+                        .filter(e -> e.contains(":" + sessionId + ":"))
+                        .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
+            }
+        } else {
+            // Fallback: remove all entries for this username
+            Set<String> members = redisTemplate.opsForSet().members(participantKey);
+            if (members != null) {
+                members.stream()
+                        .filter(e -> e.endsWith(":" + username))
+                        .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
+            }
         }
 
-        chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, CHAT_TOPIC, "USER_LEFT");
-        log.info("User {} left chat room {}", username, roomId);
+        // Send LEAVE message only if the user has no remaining sessions in this room
+        Set<String> remaining = redisTemplate.opsForSet().members(participantKey);
+        boolean userStillPresent = remaining != null && remaining.stream()
+                .anyMatch(e -> e.endsWith(":" + username));
+
+        if (!userStillPresent) {
+            ChatMessage leaveMessage = new ChatMessage();
+            leaveMessage.setChatRoomId(roomId);
+            leaveMessage.setUsername(username);
+            leaveMessage.setType(ChatMessage.MessageType.LEAVE);
+            leaveMessage.setTimestamp(LocalDateTime.now());
+            leaveMessage.setMessageId(UUID.randomUUID().toString());
+            leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
+
+            chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, CHAT_TOPIC, "USER_LEFT");
+            log.info("User {} left chat room {}", username, roomId);
+        } else {
+            log.info("User {} closed a tab in room {} (still has active sessions)", username, roomId);
+        }
+
+        syncParticipantCount(roomId);
+    }
+
+    public void leave(String roomId, String username) {
+        leave(roomId, username, null);
+    }
+
+    private void syncParticipantCount(String roomId) {
+        String participantKey = "chatflow:room:participants:" + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(participantKey);
+
+        long uniqueUsers = 0;
+        if (members != null) {
+            uniqueUsers = members.stream()
+                    .map(e -> e.split(":")[0])  // extract userId
+                    .distinct()
+                    .count();
+        }
+
+        chatRoomService.setParticipantCount(roomId, (int) uniqueUsers);
     }
 }

@@ -23,7 +23,15 @@ public class ChatService {
         userPresenceService.join(message);
     }
 
+    public void addUser(ChatMessage message, String sessionId) {
+        userPresenceService.join(message, sessionId);
+    }
+
     public void removeUser(String roomId, String username) {
         userPresenceService.leave(roomId, username);
+    }
+
+    public void removeUser(String roomId, String username, String sessionId) {
+        userPresenceService.leave(roomId, username, sessionId);
     }
 }

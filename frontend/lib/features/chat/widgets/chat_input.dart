@@ -59,6 +59,14 @@ class _ChatInputState extends State<ChatInput> {
     '☕', '🍕', '🎵', '📝', '⏰', '🌟',
   ];
 
+  void _clearController() {
+    _controller.value = const TextEditingValue(
+      text: '',
+      selection: TextSelection.collapsed(offset: 0),
+      composing: TextRange.empty,
+    );
+  }
+
   Future<void> _send() async {
     if (_isSending) return;
     final text = _controller.text.trim();
@@ -68,7 +76,7 @@ class _ChatInputState extends State<ChatInput> {
     _isSending = true;
     try {
       if (_aiMode && widget.onAskAi != null && text.isNotEmpty) {
-        _controller.value = TextEditingValue.empty;
+        _clearController();
         _focusNode.requestFocus();
         try {
           await widget.onAskAi!(text);
@@ -85,7 +93,7 @@ class _ChatInputState extends State<ChatInput> {
           );
           // 성공 후에만 입력 클리어
           if (mounted) {
-            _controller.value = TextEditingValue.empty;
+            _clearController();
             setState(() {
               _pendingFileName = null;
               _pendingFileBytes = null;
@@ -101,7 +109,7 @@ class _ChatInputState extends State<ChatInput> {
         }
         _focusNode.requestFocus();
       } else if (text.isNotEmpty) {
-        _controller.value = TextEditingValue.empty;
+        _clearController();
         widget.onSend(text, priority: _priority);
         if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
         _focusNode.requestFocus();
@@ -169,6 +177,7 @@ class _ChatInputState extends State<ChatInput> {
                           text: newText,
                           selection: TextSelection.collapsed(
                               offset: insertAt + _emojiList[i].length),
+                          composing: TextRange.empty,
                         );
                       }
                       Navigator.of(ctx).pop();
