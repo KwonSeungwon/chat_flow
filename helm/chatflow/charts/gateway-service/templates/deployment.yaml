@@ -49,6 +49,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.externalSecrets.jwt.secretName }}
                   key: JWT_SECRET
+            # Gateway 내부 시크릿 — 다운스트림 서비스가 Gateway 경유 요청 검증에 사용
+            - name: GATEWAY_INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-gateway-internal-secret
+                  key: GATEWAY_INTERNAL_SECRET
             # K8s 내부 서비스 디스커버리
             - name: CHAT_SERVICE_URL
               value: "http://{{ .Release.Name }}-chat-service:8080"

@@ -37,6 +37,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/files/upload").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/chat/rooms/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/chat/rooms/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/chat/rooms/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/chat/rooms/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/chat/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat/auth/**").permitAll()
                         .requestMatchers("/api/fhir/**").permitAll()

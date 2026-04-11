@@ -288,7 +288,6 @@ public class ChatRoomService {
             broadcast.put("chatRoomId", entity.getChatRoomId());
             broadcast.put("content", "삭제된 메시지입니다.");
             broadcast.put("username", entity.getUsername());
-            broadcast.put("userId", entity.getUserId());
             broadcast.put("timestamp", entity.getTimestamp().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
             log.info("Message deleted: {} by user {}", messageId, requestingUserId);
@@ -314,7 +313,6 @@ public class ChatRoomService {
             broadcast.put("chatRoomId", entity.getChatRoomId());
             broadcast.put("content", newContent);
             broadcast.put("username", entity.getUsername());
-            broadcast.put("userId", entity.getUserId());
             broadcast.put("timestamp", entity.getTimestamp().toString());
             broadcast.put("editedAt", entity.getEditedAt().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
@@ -323,15 +321,15 @@ public class ChatRoomService {
         }).orElse(false);
     }
 
-    public void leaveRoom(String roomId, String username) {
-        // Redis SET에서 해당 유저의 모든 세션 제거
+    public void leaveRoom(String roomId, String userId, String username) {
+        // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 — 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {
             try {
                 Set<String> members = redisTemplate.opsForSet().members(participantKey);
                 if (members != null) {
                     members.stream()
-                        .filter(e -> e.endsWith(":" + username))
+                        .filter(e -> e.startsWith(userId + ":"))
                         .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
                 }
                 redisHealth.recordSuccess();

@@ -252,6 +252,9 @@ public class ChatRoomController {
         if (newContent == null || newContent.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("수정할 내용이 필요합니다."));
         }
+        if (newContent.length() > 10_000) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("메시지는 10,000자를 초과할 수 없습니다."));
+        }
         boolean edited = chatRoomService.editMessage(messageId, userId, newContent.trim());
         if (!edited) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -272,7 +275,7 @@ public class ChatRoomController {
         if (username == null || username.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
         }
-        chatRoomService.leaveRoom(roomId, username);
+        chatRoomService.leaveRoom(roomId, userId, username);
         return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
     }
 

@@ -53,6 +53,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.global.externalSecrets.jwt.secretName }}
                   key: JWT_SECRET
+            # Gateway 내부 시크릿 — X-Gateway-Secret 헤더 검증용
+            - name: GATEWAY_INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-gateway-internal-secret
+                  key: GATEWAY_INTERNAL_SECRET
             # PostgreSQL (외부 Secret)
             - name: DB_HOST
               valueFrom:

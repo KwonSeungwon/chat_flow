@@ -56,10 +56,11 @@ frontend/.flutter-plugins-dependencies
 ehthumbs.db
 Thumbs.db
 
-# Docker
+# Docker / Deploy
 *.env
 .env.local
 .env.*.local
+scripts/.env.deploy
 
 # Logs
 logs/

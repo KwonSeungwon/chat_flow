@@ -4,18 +4,37 @@ set -euo pipefail
 # ChatFlow K3s 배포 스크립트
 # 사용법: ./scripts/deploy-k3s.sh [step]
 # Steps: infra, secrets, images, helm, all
+#
+# 필수 환경 변수 (scripts/.env.deploy 또는 환경에서 주입):
+#   DEPLOY_DB_PASSWORD, DEPLOY_GEMINI_API_KEY, DEPLOY_JWT_SECRET
+# 선택 환경 변수:
+#   DEPLOY_GATEWAY_SECRET (미설정 시 자동 생성)
 
 K3S_HOST="node.chatflow.ai.kr"
 K3S_USER="ksw"
 NAMESPACE="chatflow"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# .env.deploy 파일이 있으면 소스 (gitignored)
+ENV_FILE="$PROJECT_ROOT/scripts/.env.deploy"
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+fi
+
+# 필수 시크릿 환경 변수 검증
+: "${DEPLOY_DB_PASSWORD:?DEPLOY_DB_PASSWORD 환경 변수를 설정하세요 (scripts/.env.deploy 참고)}"
+: "${DEPLOY_GEMINI_API_KEY:?DEPLOY_GEMINI_API_KEY 환경 변수를 설정하세요}"
+: "${DEPLOY_JWT_SECRET:?DEPLOY_JWT_SECRET 환경 변수를 설정하세요}"
+# 게이트웨이 내부 시크릿 (미설정 시 자동 생성)
+DEPLOY_GATEWAY_SECRET="${DEPLOY_GATEWAY_SECRET:-$(openssl rand -base64 32)}"
+
 ssh_k3s() {
-  ssh -o StrictHostKeyChecking=no "$K3S_USER@$K3S_HOST" "$@"
+  ssh -o StrictHostKeyChecking=yes "$K3S_USER@$K3S_HOST" "$@"
 }
 
 scp_k3s() {
-  scp -o StrictHostKeyChecking=no "$@" "$K3S_USER@$K3S_HOST:~/"
+  scp -o StrictHostKeyChecking=yes "$@" "$K3S_USER@$K3S_HOST:~/"
 }
 
 step_infra() {
@@ -30,30 +49,32 @@ step_infra() {
 
 step_secrets() {
   echo "=== Step 2: Create Secrets ==="
-  ssh_k3s "
-    kubectl -n $NAMESPACE create secret generic chatflow-postgresql-secret \
-      --from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
-      --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
-      --from-literal=DB_PASSWORD=wVlv/80p34Yr6tfsINH1CYwCeIwI0V7N \
-      --dry-run=client -o yaml | kubectl apply -f - &&
-    kubectl -n $NAMESPACE create secret generic chatflow-kafka-secret \
-      --from-literal=KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
-      --dry-run=client -o yaml | kubectl apply -f - &&
-    kubectl -n $NAMESPACE create secret generic chatflow-valkey-secret \
-      --from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 \
-      --from-literal=VALKEY_PASSWORD= \
-      --dry-run=client -o yaml | kubectl apply -f - &&
-    kubectl -n $NAMESPACE create secret generic chatflow-elasticsearch-secret \
-      --from-literal=ELASTICSEARCH_URIS=http://elasticsearch:9200 \
-      --from-literal=ELASTICSEARCH_USERNAME= --from-literal=ELASTICSEARCH_PASSWORD= \
-      --dry-run=client -o yaml | kubectl apply -f - &&
-    kubectl -n $NAMESPACE create secret generic chatflow-gemini-secret \
-      --from-literal=GEMINI_API_KEY=AIzaSyAmRdi4rvzNqXCzXq1k7RroI4pszCietE4 \
-      --dry-run=client -o yaml | kubectl apply -f - &&
-    kubectl -n $NAMESPACE create secret generic chatflow-jwt-secret \
-      --from-literal=JWT_SECRET=vqeDsIwa8tGm/tgB11tiza+8Zbw390s9eic5pV0AHjSj6saiUDKBQibgTKgW3md6 \
-      --dry-run=client -o yaml | kubectl apply -f -
-  "
+  # 시크릿 값을 로컬에서 참조하여 SSH heredoc 없이 개별 명령으로 전달
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-postgresql-secret \
+    --from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
+    --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
+    --from-literal=DB_PASSWORD='$DEPLOY_DB_PASSWORD' \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-kafka-secret \
+    --from-literal=KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-valkey-secret \
+    --from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 \
+    --from-literal=VALKEY_PASSWORD= \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-elasticsearch-secret \
+    --from-literal=ELASTICSEARCH_URIS=http://elasticsearch:9200 \
+    --from-literal=ELASTICSEARCH_USERNAME= --from-literal=ELASTICSEARCH_PASSWORD= \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-gemini-secret \
+    --from-literal=GEMINI_API_KEY='$DEPLOY_GEMINI_API_KEY' \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-jwt-secret \
+    --from-literal=JWT_SECRET='$DEPLOY_JWT_SECRET' \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-gateway-internal-secret \
+    --from-literal=GATEWAY_INTERNAL_SECRET='$DEPLOY_GATEWAY_SECRET' \
+    --dry-run=client -o yaml | kubectl apply -f -"
   echo "Secrets created."
   ssh_k3s "kubectl get secrets -n $NAMESPACE"
 }

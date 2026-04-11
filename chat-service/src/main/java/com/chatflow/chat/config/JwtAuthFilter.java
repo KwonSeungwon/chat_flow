@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -25,18 +27,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
 
+    @Value("${GATEWAY_INTERNAL_SECRET:}")
+    private String gatewayInternalSecret;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        // Gateway가 주입한 X-User-Id 헤더로 인증 (Bearer 토큰 파싱 전 처리)
+        // Gateway가 주입한 X-User-Id 헤더로 인증 — X-Gateway-Secret으로 게이트웨이 경유 검증
         String xUserId = request.getHeader("X-User-Id");
         String xUsername = request.getHeader("X-Username");
         if (xUserId != null && xUsername != null) {
-            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                    xUserId, null, Collections.emptyList());
-            auth.setDetails(Map.of("userId", xUserId, "username", xUsername));
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            if (isGatewaySecretValid(request)) {
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        xUserId, null, Collections.emptyList());
+                auth.setDetails(Map.of("userId", xUserId, "username", xUsername));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } else {
+                log.warn("X-User-Id 헤더 존재하지만 X-Gateway-Secret 검증 실패 — 헤더 스푸핑 의심: uri={}", request.getRequestURI());
+            }
             filterChain.doFilter(request, response);
             return;
         }
@@ -58,6 +67,23 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * X-Gateway-Secret 헤더를 상수 시간 비교로 검증.
+     * 시크릿이 미설정(빈 문자열)이면 검증 우회 — 로컬/테스트 환경 호환성 유지.
+     */
+    private boolean isGatewaySecretValid(HttpServletRequest request) {
+        if (gatewayInternalSecret == null || gatewayInternalSecret.isBlank()) {
+            return true; // 미설정 시 검증 스킵 (로컬/테스트)
+        }
+        String incoming = request.getHeader("X-Gateway-Secret");
+        if (incoming == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                gatewayInternalSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                incoming.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private String extractToken(HttpServletRequest request) {

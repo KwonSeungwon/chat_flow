@@ -3,6 +3,7 @@ package com.chatflow.gateway.security;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,6 +23,9 @@ public class JwtAuthenticationWebFilter implements WebFilter {
 
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
+
+    @Value("${GATEWAY_INTERNAL_SECRET:}")
+    private String gatewayInternalSecret;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -67,10 +71,14 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                 new UsernamePasswordAuthenticationToken(userId, null, List.of());
 
         // 다운스트림 서비스에 사용자 정보 헤더 주입
-        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+        ServerHttpRequest.Builder reqBuilder = exchange.getRequest().mutate()
                 .header("X-User-Id", userId)
-                .header("X-Username", username)
-                .build();
+                .header("X-Username", username);
+        // 내부 시크릿 헤더 추가 — 다운스트림이 Gateway 경유 요청임을 검증할 수 있도록
+        if (gatewayInternalSecret != null && !gatewayInternalSecret.isBlank()) {
+            reqBuilder.header("X-Gateway-Secret", gatewayInternalSecret);
+        }
+        ServerHttpRequest mutatedRequest = reqBuilder.build();
 
         ServerWebExchange mutatedExchange = exchange.mutate()
                 .request(mutatedRequest)
