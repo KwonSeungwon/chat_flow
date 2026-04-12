@@ -137,14 +137,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> updateProfileImage(String profileImageUrl) async {
-    try {
-      await _dioClient.dio.put('/api/auth/profile', data: {
-        'username': state.username,
-        'profileImageUrl': profileImageUrl,
-      });
-      await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
-      state = state.copyWith(profileImageUrl: profileImageUrl);
-    } catch (_) {}
+    await _dioClient.dio.put('/api/auth/profile', data: {
+      'username': state.username,
+      'profileImageUrl': profileImageUrl,
+    });
+    await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
+    state = state.copyWith(profileImageUrl: profileImageUrl);
   }
 
   Future<void> _saveCredentials({

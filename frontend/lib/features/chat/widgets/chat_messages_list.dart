@@ -21,6 +21,7 @@ class ChatMessagesList extends StatefulWidget {
   /// If set, briefly highlight this message (search result)
   final String? highlightMessageId;
   final void Function(ChatMessage)? onReplySelected;
+  final void Function(String parentMessageId)? onScrollToParentMessage;
   final void Function(String messageId)? onDeleteMessage;
   final void Function(String messageId, String currentContent)? onEditMessage;
 
@@ -33,6 +34,7 @@ class ChatMessagesList extends StatefulWidget {
     this.scrollToMessageId,
     this.highlightMessageId,
     this.onReplySelected,
+    this.onScrollToParentMessage,
     this.onDeleteMessage,
     this.onEditMessage,
   });
@@ -258,9 +260,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               bubble = _AiSummaryCard(msg: msg);
             } else if (type == 'PATIENT_CARD') {
               final card = PatientCard.tryParseContent(msg.content);
+              final isMine = msg.username == widget.currentUsername;
+              final readCount = widget.readCounts[msg.effectiveId] ?? 0;
               if (card != null) {
-                final isMine = msg.username == widget.currentUsername;
-                final readCount = widget.readCounts[msg.effectiveId] ?? 0;
                 bubble = _PatientCardBubble(
                   msg: msg,
                   card: card,
@@ -269,7 +271,26 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                   readCount: readCount,
                 );
               } else {
-                bubble = const SizedBox.shrink();
+                // Malformed JSON — fall back to plain text bubble so the
+                // message is not silently hidden.
+                bubble = _ChatBubble(
+                  msg: msg,
+                  isMine: isMine,
+                  time: _formatTime(msg.timestamp),
+                  readCount: readCount,
+                  onReply: (!msg.deleted && widget.onReplySelected != null)
+                      ? () => widget.onReplySelected!(msg)
+                      : null,
+                  onScrollToParent: (msg.isReply && msg.parentMessageId != null && widget.onScrollToParentMessage != null)
+                      ? () => widget.onScrollToParentMessage!(msg.parentMessageId!)
+                      : null,
+                  onDelete: (isMine && !msg.deleted && widget.onDeleteMessage != null)
+                      ? () => widget.onDeleteMessage!(msg.effectiveId)
+                      : null,
+                  onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
+                      ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
+                      : null,
+                );
               }
             } else if (msg.isFileMessage) {
               final isMine = msg.username == widget.currentUsername;
@@ -292,6 +313,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 readCount: readCount,
                 onReply: (!msg.deleted && widget.onReplySelected != null)
                     ? () => widget.onReplySelected!(msg)
+                    : null,
+                onScrollToParent: (msg.isReply && msg.parentMessageId != null && widget.onScrollToParentMessage != null)
+                    ? () => widget.onScrollToParentMessage!(msg.parentMessageId!)
                     : null,
                 onDelete: (isMine && !msg.deleted && widget.onDeleteMessage != null)
                     ? () => widget.onDeleteMessage!(msg.effectiveId)
@@ -705,6 +729,7 @@ class _ChatBubble extends StatelessWidget {
   final bool isAiQuestion;
   final int readCount;
   final VoidCallback? onReply;
+  final VoidCallback? onScrollToParent;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
 
@@ -715,6 +740,7 @@ class _ChatBubble extends StatelessWidget {
     this.isAiQuestion = false,
     this.readCount = 0,
     this.onReply,
+    this.onScrollToParent,
     this.onDelete,
     this.onEdit,
   });
@@ -969,7 +995,7 @@ class _ChatBubble extends StatelessWidget {
                                 children: [
                                   if (msg.isReply) ...[
                                     GestureDetector(
-                                      onTap: () {},
+                                      onTap: onScrollToParent,
                                       child: Container(
                                         margin: const EdgeInsets.only(bottom: 6),
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1031,7 +1057,7 @@ class _ChatBubble extends StatelessWidget {
                                 children: [
                                   if (msg.isReply) ...[
                                     GestureDetector(
-                                      onTap: () {},
+                                      onTap: onScrollToParent,
                                       child: Container(
                                         margin: const EdgeInsets.only(bottom: 6),
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

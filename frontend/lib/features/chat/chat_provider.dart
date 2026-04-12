@@ -131,6 +131,7 @@ class ChatMessagesState {
   /// Last message the current user has read (fetched from backend on join)
   final String? lastReadMessageId;
   final ChatMessage? replyTarget;
+  final bool roomDeleted;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -141,6 +142,7 @@ class ChatMessagesState {
     this.readCounts = const {},
     this.lastReadMessageId,
     this.replyTarget,
+    this.roomDeleted = false,
   });
 
   ChatMessagesState copyWith({
@@ -154,6 +156,7 @@ class ChatMessagesState {
     bool clearLastReadMessageId = false,
     ChatMessage? replyTarget,
     bool clearReplyTarget = false,
+    bool? roomDeleted,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -164,6 +167,7 @@ class ChatMessagesState {
       readCounts: readCounts ?? this.readCounts,
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
       replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
+      roomDeleted: roomDeleted ?? this.roomDeleted,
     );
   }
 }
@@ -284,8 +288,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     final type = rawMsg['type']?.toString().toUpperCase();
 
     if (type == 'ROOM_DELETED') {
-      // 채팅방 삭제됨 — 상태 초기화
-      state = const ChatMessagesState();
+      state = state.copyWith(roomDeleted: true);
       return;
     }
 

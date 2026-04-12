@@ -480,19 +480,21 @@ class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
+              // Capture router/messenger before any pops — context may be
+              // unmounted by the time the async leaveRoom call completes.
+              final router = GoRouter.of(context);
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.of(ctx).pop(); // close confirm dialog
               Navigator.of(context).pop(); // close participants modal
               final ok = await ref
                   .read(chatNotifierProvider(roomId).notifier)
                   .leaveRoom(roomId);
-              if (context.mounted) {
-                if (ok) {
-                  context.go('/chat');
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('채팅방 나가기에 실패했습니다.')),
-                  );
-                }
+              if (ok) {
+                router.go('/chat');
+              } else {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('채팅방 나가기에 실패했습니다.')),
+                );
               }
             },
             child: const Text('나가기'),
@@ -522,6 +524,8 @@ class _ChatRoomContent extends ConsumerStatefulWidget {
 }
 
 class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
+  String? _replyScrollTarget;
+
   @override
   void initState() {
     super.initState();
@@ -533,12 +537,29 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
   }
 
   @override
+  void didUpdateWidget(_ChatRoomContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Clear reply-scroll override when an explicit search target arrives
+    if (widget.scrollToMessageId != oldWidget.scrollToMessageId &&
+        widget.scrollToMessageId != null) {
+      _replyScrollTarget = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatNotifierProvider(widget.roomId));
     final chatNotifier = ref.read(chatNotifierProvider(widget.roomId).notifier);
 
-    // Determine scroll target: explicit messageId from search > lastRead on entry
-    final scrollTarget = widget.scrollToMessageId ??
+    // Route away when the room is deleted server-side
+    ref.listen(chatNotifierProvider(widget.roomId), (_, next) {
+      if (next.roomDeleted && context.mounted) {
+        context.go('/chat');
+      }
+    });
+
+    // Determine scroll target: reply-tap > explicit search > lastRead on entry
+    final scrollTarget = _replyScrollTarget ?? widget.scrollToMessageId ??
         (chatState.lastReadMessageId?.isNotEmpty == true
             ? chatState.lastReadMessageId
             : null);
@@ -555,6 +576,8 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             scrollToMessageId: scrollTarget,
             highlightMessageId: widget.scrollToMessageId,
             onReplySelected: (msg) => chatNotifier.setReplyTarget(msg),
+            onScrollToParentMessage: (parentId) =>
+                setState(() => _replyScrollTarget = parentId),
             onDeleteMessage: (messageId) =>
                 chatNotifier.deleteMessage(widget.roomId, messageId),
             onEditMessage: (messageId, currentContent) =>
