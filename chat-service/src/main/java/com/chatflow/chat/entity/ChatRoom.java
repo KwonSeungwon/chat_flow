@@ -75,6 +75,12 @@ public class ChatRoom {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "last_message_at")
+    private LocalDateTime lastMessageAt;
+
+    @Column(name = "pinned_message_id", length = 36)
+    private String pinnedMessageId;
+
     public boolean isFull() {
         int count = participantCount != null ? participantCount : 0;
         int max = maxParticipants != null ? maxParticipants : 10;

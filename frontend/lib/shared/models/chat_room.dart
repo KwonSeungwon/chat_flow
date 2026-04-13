@@ -9,6 +9,8 @@ class ChatRoom {
   final int participantCount;
   final int maxParticipants;
   final String? createdAt;
+  final String? lastMessageAt;
+  final String? pinnedMessageId;
 
   ChatRoom({
     required this.id,
@@ -21,6 +23,8 @@ class ChatRoom {
     required this.participantCount,
     this.maxParticipants = 10,
     this.createdAt,
+    this.lastMessageAt,
+    this.pinnedMessageId,
   });
 
   factory ChatRoom.fromJson(Map<String, dynamic> json) {
@@ -35,6 +39,8 @@ class ChatRoom {
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
       maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? 10,
       createdAt: json['createdAt']?.toString(),
+      lastMessageAt: json['lastMessageAt']?.toString(),
+      pinnedMessageId: json['pinnedMessageId']?.toString(),
     );
   }
 

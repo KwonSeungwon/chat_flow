@@ -379,6 +379,35 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       return;
     }
 
+    if (type == 'REACTION_UPDATED') {
+      final msgId = rawMsg['messageId']?.toString();
+      if (msgId == null) return;
+      final reactions = ChatMessage.parseReactions(rawMsg['reactions']);
+      final updated = state.messages.map((m) {
+        if (m.effectiveId == msgId || m.messageId == msgId) {
+          return ChatMessage(
+            id: m.id, messageId: m.messageId, chatRoomId: m.chatRoomId,
+            userId: m.userId, username: m.username, content: m.content,
+            timestamp: m.timestamp, type: m.type, priority: m.priority,
+            isAiGenerated: m.isAiGenerated, deleted: m.deleted,
+            edited: m.edited, editedAt: m.editedAt, pinned: m.pinned,
+            reactions: reactions,
+            fileUrl: m.fileUrl, fileName: m.fileName, fileContentType: m.fileContentType,
+            parentMessageId: m.parentMessageId, parentMessagePreview: m.parentMessagePreview,
+          );
+        }
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated);
+      return;
+    }
+
+    if (type == 'MESSAGE_PINNED' || type == 'MESSAGE_UNPINNED') {
+      // Refresh room list to update pinnedMessageId
+      _ref.read(chatRoomsProvider.notifier).fetchRooms();
+      return;
+    }
+
     final msg = ChatMessage.fromJson(rawMsg);
     final existing = state.messages;
     // Dedup by effectiveId
@@ -666,6 +695,25 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'fileUrl': fileUrl,
       'fileName': storedName,
       'fileContentType': contentType,
+      'priority': 'ROUTINE',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> toggleReaction(String roomId, String messageId, String emoji) async {
+    try {
+      await _dioClient.dio.post('/api/chat/rooms/$roomId/messages/$messageId/reactions',
+          data: {'emoji': emoji});
+    } catch (_) {}
+  }
+
+  Future<void> forwardMessage(String targetRoomId, ChatMessage msg) async {
+    _stompService.sendMessage({
+      'chatRoomId': targetRoomId,
+      'userId': _userId,
+      'username': _username,
+      'content': '[전달] ${msg.username}: ${msg.content}',
+      'type': 'CHAT',
       'priority': 'ROUTINE',
       'timestamp': DateTime.now().toIso8601String(),
     });

@@ -62,7 +62,7 @@ public class ChatRoomService {
             }
         }
 
-        List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
+        List<ChatRoom> rooms = chatRoomRepository.findAllOrderByLastActivity();
         cacheValue(ROOMS_LIST_KEY, rooms, LIST_TTL);
         return rooms;
     }
@@ -380,6 +380,100 @@ public class ChatRoomService {
         } catch (Exception e) {
             redisHealth.recordFailure(e);
         }
+    }
+
+    @Transactional
+    public void updateLastMessageAt(String roomId) {
+        chatRoomRepository.findById(roomId).ifPresent(room -> {
+            room.setLastMessageAt(LocalDateTime.now());
+            chatRoomRepository.save(room);
+            evictRoomCaches(roomId);
+        });
+    }
+
+    @Transactional
+    public boolean toggleReaction(String messageId, String emoji, String userId) {
+        return chatMessageRepository.findById(messageId).map(entity -> {
+            Map<String, List<String>> map;
+            try {
+                map = entity.getReactions() != null
+                        ? objectMapper.readValue(entity.getReactions(), new TypeReference<>() {})
+                        : new LinkedHashMap<>();
+            } catch (Exception e) {
+                map = new LinkedHashMap<>();
+            }
+            List<String> users = map.computeIfAbsent(emoji, k -> new java.util.ArrayList<>());
+            if (users.contains(userId)) {
+                users.remove(userId);
+                if (users.isEmpty()) map.remove(emoji);
+            } else {
+                users.add(userId);
+            }
+            try {
+                entity.setReactions(map.isEmpty() ? null : objectMapper.writeValueAsString(map));
+            } catch (Exception e) {
+                return false;
+            }
+            chatMessageRepository.save(entity);
+            // Broadcast reaction update
+            Map<String, Object> broadcast = new LinkedHashMap<>();
+            broadcast.put("type", "REACTION_UPDATED");
+            broadcast.put("messageId", messageId);
+            broadcast.put("reactions", map);
+            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
+            return true;
+        }).orElse(false);
+    }
+
+    @Transactional
+    public boolean pinMessage(String roomId, String messageId) {
+        return chatRoomRepository.findById(roomId).map(room -> {
+            room.setPinnedMessageId(messageId);
+            chatRoomRepository.save(room);
+            chatMessageRepository.findById(messageId).ifPresent(msg -> {
+                msg.setPinned(true);
+                chatMessageRepository.save(msg);
+            });
+            evictRoomCaches(roomId);
+            Map<String, Object> broadcast = new LinkedHashMap<>();
+            broadcast.put("type", "MESSAGE_PINNED");
+            broadcast.put("messageId", messageId);
+            broadcast.put("chatRoomId", roomId);
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId, broadcast);
+            return true;
+        }).orElse(false);
+    }
+
+    @Transactional
+    public boolean unpinMessage(String roomId) {
+        return chatRoomRepository.findById(roomId).map(room -> {
+            String oldPin = room.getPinnedMessageId();
+            room.setPinnedMessageId(null);
+            chatRoomRepository.save(room);
+            if (oldPin != null) {
+                chatMessageRepository.findById(oldPin).ifPresent(msg -> {
+                    msg.setPinned(false);
+                    chatMessageRepository.save(msg);
+                });
+            }
+            evictRoomCaches(roomId);
+            Map<String, Object> broadcast = new LinkedHashMap<>();
+            broadcast.put("type", "MESSAGE_UNPINNED");
+            broadcast.put("chatRoomId", roomId);
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId, broadcast);
+            return true;
+        }).orElse(false);
+    }
+
+    @Transactional
+    public boolean updateRoomSettings(String roomId, String name, String description) {
+        return chatRoomRepository.findById(roomId).map(room -> {
+            if (name != null && !name.isBlank()) room.setName(name);
+            if (description != null) room.setDescription(description);
+            chatRoomRepository.save(room);
+            evictRoomCaches(roomId);
+            return true;
+        }).orElse(false);
     }
 
     private void evictRoomCaches(String roomId) {

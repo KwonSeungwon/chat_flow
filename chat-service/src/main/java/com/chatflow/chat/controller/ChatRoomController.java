@@ -286,6 +286,40 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(positions));
     }
 
+    @PostMapping("/{roomId}/messages/{messageId}/reactions")
+    public ResponseEntity<ApiResponse<Boolean>> toggleReaction(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        String emoji = body.get("emoji");
+        if (emoji == null || userId == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji와 userId가 필요합니다."));
+        boolean ok = chatRoomService.toggleReaction(messageId, emoji, userId);
+        return ResponseEntity.ok(ApiResponse.ok(ok));
+    }
+
+    @PutMapping("/{roomId}/pin")
+    public ResponseEntity<ApiResponse<Boolean>> pinMessage(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body) {
+        String messageId = body.get("messageId");
+        if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.pinMessage(roomId, messageId)));
+    }
+
+    @DeleteMapping("/{roomId}/pin")
+    public ResponseEntity<ApiResponse<Boolean>> unpinMessage(@PathVariable String roomId) {
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.unpinMessage(roomId)));
+    }
+
+    @PutMapping("/{roomId}/settings")
+    public ResponseEntity<ApiResponse<Boolean>> updateRoomSettings(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                chatRoomService.updateRoomSettings(roomId, body.get("name"), body.get("description"))));
+    }
+
     @GetMapping("/{roomId}/last-read")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLastRead(
             @PathVariable String roomId,

@@ -25,6 +25,9 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(String messageId)? onDeleteMessage;
   final void Function(String messageId, String currentContent)? onEditMessage;
   final void Function(String messageId)? onReadCountTap;
+  final void Function(String messageId, String emoji)? onReaction;
+  final void Function(ChatMessage msg)? onForward;
+  final void Function(String messageId)? onPin;
   final String? lastReadMessageId;
 
   const ChatMessagesList({
@@ -40,6 +43,9 @@ class ChatMessagesList extends StatefulWidget {
     this.onDeleteMessage,
     this.onEditMessage,
     this.onReadCountTap,
+    this.onReaction,
+    this.onForward,
+    this.onPin,
     this.lastReadMessageId,
   });
 
@@ -344,6 +350,18 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                     : null,
                 onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
                     ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
+                    : null,
+                onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
+                    ? () => widget.onReadCountTap!(msg.effectiveId)
+                    : null,
+                onReaction: (!msg.deleted && widget.onReaction != null)
+                    ? (emoji) => widget.onReaction!(msg.effectiveId, emoji)
+                    : null,
+                onForward: (!msg.deleted && widget.onForward != null)
+                    ? () => widget.onForward!(msg)
+                    : null,
+                onPin: (!msg.deleted && widget.onPin != null)
+                    ? () => widget.onPin!(msg.effectiveId)
                     : null,
               );
             }
@@ -755,6 +773,9 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onReadCountTap;
+  final void Function(String emoji)? onReaction;
+  final VoidCallback? onForward;
+  final VoidCallback? onPin;
 
   const _ChatBubble({
     required this.msg,
@@ -767,10 +788,15 @@ class _ChatBubble extends StatelessWidget {
     this.onDelete,
     this.onEdit,
     this.onReadCountTap,
+    this.onReaction,
+    this.onForward,
+    this.onPin,
   });
 
   Color _avatarColor(String name) =>
       AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
+
+  static const _quickReactions = ['👍', '❤️', '😂', '😮', '😢', '✅'];
 
   void _showDeleteSheet(BuildContext context) {
     showModalBottomSheet(
@@ -790,32 +816,46 @@ class _ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
+            if (onReaction != null && !msg.deleted)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: _quickReactions.map((e) => GestureDetector(
+                    onTap: () { Navigator.of(context).pop(); onReaction!(e); },
+                    child: Text(e, style: const TextStyle(fontSize: 24)),
+                  )).toList(),
+                ),
+              ),
             if (onReply != null)
               ListTile(
                 leading: const Icon(Icons.reply),
                 title: const Text('답글'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onReply?.call();
-                },
+                onTap: () { Navigator.of(context).pop(); onReply?.call(); },
+              ),
+            if (onForward != null)
+              ListTile(
+                leading: const Icon(Icons.forward_outlined),
+                title: const Text('전달'),
+                onTap: () { Navigator.of(context).pop(); onForward?.call(); },
+              ),
+            if (onPin != null)
+              ListTile(
+                leading: Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+                title: Text(msg.pinned ? '고정 해제' : '메시지 고정'),
+                onTap: () { Navigator.of(context).pop(); onPin?.call(); },
               ),
             if (onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('메시지 수정'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onEdit?.call();
-                },
+                onTap: () { Navigator.of(context).pop(); onEdit?.call(); },
               ),
             if (onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onDelete?.call();
-                },
+                onTap: () { Navigator.of(context).pop(); onDelete?.call(); },
               ),
             const SizedBox(height: 8),
           ],
@@ -826,8 +866,27 @@ class _ChatBubble extends StatelessWidget {
 
   void _showContextMenu(BuildContext context, Offset position) {
     final items = <PopupMenuEntry<String>>[];
+    if (onReaction != null && !msg.deleted) {
+      items.add(PopupMenuItem(
+        enabled: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: _quickReactions.map((e) => GestureDetector(
+            onTap: () { Navigator.of(context).pop('react_$e'); },
+            child: Text(e, style: const TextStyle(fontSize: 20)),
+          )).toList(),
+        ),
+      ));
+      items.add(const PopupMenuDivider());
+    }
     if (onReply != null) {
       items.add(const PopupMenuItem(value: 'reply', child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('답글')])));
+    }
+    if (onForward != null) {
+      items.add(const PopupMenuItem(value: 'forward', child: Row(children: [Icon(Icons.forward_outlined, size: 18), SizedBox(width: 8), Text('전달')])));
+    }
+    if (onPin != null) {
+      items.add(PopupMenuItem(value: 'pin', child: Row(children: [Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18), const SizedBox(width: 8), Text(msg.pinned ? '고정 해제' : '고정')])));
     }
     if (onEdit != null) {
       items.add(const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('수정')])));
@@ -841,7 +900,11 @@ class _ChatBubble extends StatelessWidget {
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: items,
     ).then((value) {
+      if (value == null) return;
+      if (value.startsWith('react_')) { onReaction?.call(value.substring(6)); return; }
       if (value == 'reply') onReply?.call();
+      if (value == 'forward') onForward?.call();
+      if (value == 'pin') onPin?.call();
       if (value == 'edit') onEdit?.call();
       if (value == 'delete') onDelete?.call();
     });
@@ -899,9 +962,11 @@ class _ChatBubble extends StatelessWidget {
 
     final isUrgent = msg.priority.toUpperCase() == 'URGENT' || msg.priority.toUpperCase() == 'STAT';
 
-    return GestureDetector(
-      onLongPress: (onDelete != null || onEdit != null || onReply != null) ? () => _showDeleteSheet(context) : null,
-      onSecondaryTapUp: (onDelete != null || onEdit != null || onReply != null)
+    final hasActions = onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null;
+
+    final bubble = GestureDetector(
+      onLongPress: hasActions ? () => _showDeleteSheet(context) : null,
+      onSecondaryTapUp: hasActions
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
       child: Padding(
@@ -1225,6 +1290,40 @@ class _ChatBubble extends StatelessWidget {
       ),
     ),  // Padding
     ); // GestureDetector
+
+    // Reaction chips below bubble
+    if (msg.reactions.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(left: isMine ? 0 : 54, right: isMine ? 6 : 0, top: 2),
+            child: Wrap(
+              spacing: 4,
+              children: msg.reactions.entries.map((e) {
+                final emoji = e.key;
+                final users = e.value;
+                return GestureDetector(
+                  onTap: () => onReaction?.call(emoji),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
+                    ),
+                    child: Text('$emoji ${users.length}', style: const TextStyle(fontSize: 12)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      );
+    }
+    return bubble;
   }
 }
 
@@ -1477,6 +1576,42 @@ class _FileBubble extends StatelessWidget {
     }
   }
 
+  void _showFullscreenImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.network(url, fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white54, size: 64)),
+              ),
+            ),
+            Positioned(
+              top: 16, right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            Positioned(
+              bottom: 16, right: 16,
+              child: IconButton(
+                icon: const Icon(Icons.open_in_new, color: Colors.white70, size: 24),
+                tooltip: '브라우저에서 열기',
+                onPressed: () => _launchUrl(url),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1499,7 +1634,7 @@ class _FileBubble extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
-            onTap: () => _launchUrl(fullUrl),
+            onTap: () => _showFullscreenImage(context, fullUrl),
             child: ClipRRect(
               borderRadius: hasTextContent
                   ? BorderRadius.only(topLeft: radius.topLeft, topRight: radius.topRight)

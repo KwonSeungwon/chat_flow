@@ -73,6 +73,7 @@ public class MessageSenderService {
         String aiTopic = shouldRequestAISummary(message) ? AI_SUMMARY_TOPIC : null;
         chatPersistenceService.persistMessageAndPublish(message, CHAT_TOPIC, "MESSAGE_SENT", aiTopic);
         messageCounter.increment();
+        chatRoomService.updateLastMessageAt(message.getChatRoomId());
 
         if (MessageType.CHAT.equals(message.getType())) {
             fcmNotificationService.sendMessageNotification(

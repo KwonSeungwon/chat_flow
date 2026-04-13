@@ -83,6 +83,14 @@ public class ChatMessageEntity implements Persistable<String> {
     @Column(name = "edited_at")
     private LocalDateTime editedAt;
 
+    @Builder.Default
+    @Column(name = "pinned")
+    private boolean pinned = false;
+
+    /// JSON map: {"emoji": ["userId1","userId2"]}
+    @Column(name = "reactions", columnDefinition = "TEXT")
+    private String reactions;
+
     @Override
     public String getId() {
         return messageId;

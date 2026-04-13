@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class ChatMessage {
   final String? id;
   final String? messageId;
@@ -17,6 +19,9 @@ class ChatMessage {
   final bool deleted;
   final bool edited;
   final String? editedAt;
+  final bool pinned;
+  /// JSON map: {"emoji": ["userId1","userId2"]}
+  final Map<String, List<String>> reactions;
 
   ChatMessage({
     this.id,
@@ -37,6 +42,8 @@ class ChatMessage {
     this.deleted = false,
     this.edited = false,
     this.editedAt,
+    this.pinned = false,
+    this.reactions = const {},
   });
 
   /// Server uses LocalDateTime (no timezone). K3s runs in UTC, so treat
@@ -73,7 +80,26 @@ class ChatMessage {
       deleted: json['deleted'] == true,
       edited: json['edited'] == true,
       editedAt: json['editedAt']?.toString(),
+      pinned: json['pinned'] == true,
+      reactions: parseReactions(json['reactions']),
     );
+  }
+
+  static Map<String, List<String>> parseReactions(dynamic raw) {
+    if (raw == null) return const {};
+    try {
+      Map<String, dynamic> map;
+      if (raw is String) {
+        map = (jsonDecode(raw) as Map).cast<String, dynamic>();
+      } else if (raw is Map) {
+        map = raw.cast<String, dynamic>();
+      } else {
+        return const {};
+      }
+      return map.map((k, v) => MapEntry(k, (v as List).map((e) => e.toString()).toList()));
+    } catch (_) {
+      return const {};
+    }
   }
 
   Map<String, dynamic> toJson() => {

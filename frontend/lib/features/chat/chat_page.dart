@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/network/dio_client.dart';
@@ -10,6 +11,7 @@ import '../../core/theme/theme_provider.dart';
 import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
 import '../../shared/models/chat_message.dart';
+import '../../shared/models/chat_room.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
@@ -115,6 +117,139 @@ void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
           )),
         ]),
       ],
+    ),
+  );
+}
+
+void _showProfileDialog(BuildContext context, WidgetRef ref) {
+  final auth = ref.read(authProvider);
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('프로필 관리'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ProfileAvatar(
+            url: auth.profileImageUrl != null ? _buildProfileUrl(auth.profileImageUrl!) : null,
+            radius: 40,
+          ),
+          const SizedBox(height: 12),
+          Text(auth.username.isNotEmpty ? auth.username : '사용자',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 4),
+          Text(auth.role, style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          if (auth.userId != null)
+            Text('ID: ${auth.userId}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      actions: [
+        Row(children: [
+          Expanded(child: OutlinedButton.icon(
+            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+            label: const Text('이미지 변경'),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await _changeProfileImage(context, ref);
+            },
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton.icon(
+            icon: const Icon(Icons.lock_outline, size: 18),
+            label: const Text('비밀번호'),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _showChangePasswordDialog(context, ref);
+            },
+          )),
+        ]),
+      ],
+    ),
+  );
+}
+
+void _showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, ChatRoom room) {
+  final nameCtrl = TextEditingController(text: room.name);
+  final descCtrl = TextEditingController(text: room.description ?? '');
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('채팅방 설정'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '채팅방 이름')),
+          const SizedBox(height: 8),
+          TextField(controller: descCtrl, decoration: const InputDecoration(labelText: '설명'), maxLines: 3),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      actions: [
+        Row(children: [
+          Expanded(child: TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('취소'))),
+          const SizedBox(width: 8),
+          Expanded(child: FilledButton(
+            onPressed: () async {
+              try {
+                await ref.read(dioClientProvider).dio.put('/api/chat/rooms/$roomId/settings', data: {
+                  'name': nameCtrl.text.trim(),
+                  'description': descCtrl.text.trim(),
+                });
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                ref.read(chatRoomsProvider.notifier).fetchRooms();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('채팅방 설정이 변경되었습니다.')));
+                }
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('설정 변경에 실패했습니다.')));
+                }
+              }
+            },
+            child: const Text('저장'),
+          )),
+        ]),
+      ],
+    ),
+  );
+}
+
+void _showForwardDialog(BuildContext context, WidgetRef ref, ChatMessage msg) {
+  final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('메시지 전달'),
+      content: SizedBox(
+        width: 280,
+        height: 300,
+        child: rooms.isEmpty
+            ? const Center(child: Text('채팅방이 없습니다.'))
+            : ListView.builder(
+                itemCount: rooms.length,
+                itemBuilder: (_, i) {
+                  final room = rooms[i];
+                  return ListTile(
+                    leading: CircleAvatar(radius: 16, child: Text(room.name.isNotEmpty ? room.name[0].toUpperCase() : '#')),
+                    title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      final notifier = ref.read(chatNotifierProvider(room.id).notifier);
+                      await notifier.forwardMessage(room.id, msg);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('"${room.name}"에 메시지를 전달했습니다.')),
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+      ),
     ),
   );
 }
@@ -245,6 +380,12 @@ class ChatPage extends ConsumerWidget {
           ],
         ),
         actions: [
+          if (effectiveRoomId != null && roomData != null)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, size: 20),
+              tooltip: '채팅방 설정',
+              onPressed: () => _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
+            ),
           if (effectiveRoomId != null)
             _AiSummaryButton(roomId: effectiveRoomId),
           IconButton(
@@ -264,7 +405,7 @@ class ChatPage extends ConsumerWidget {
                 ref.read(themeModeProvider.notifier).state =
                     themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
               } else if (value == 'profile') {
-                await _changeProfileImage(context, ref);
+                if (context.mounted) _showProfileDialog(context, ref);
               } else if (value == 'password') {
                 if (context.mounted) _showChangePasswordDialog(context, ref);
               } else if (value == 'logout') {
@@ -301,9 +442,9 @@ class ChatPage extends ConsumerWidget {
                 value: 'profile',
                 child: Row(
                   children: [
-                    Icon(Icons.camera_alt_outlined, size: 20),
+                    Icon(Icons.person_outline, size: 20),
                     SizedBox(width: 8),
-                    Text('프로필 이미지 변경'),
+                    Text('프로필 관리'),
                   ],
                 ),
               ),
@@ -656,6 +797,37 @@ class _ChatRoomContent extends ConsumerStatefulWidget {
 
 class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
   String? _replyScrollTarget;
+  bool _showSearch = false;
+  final _searchCtrl = TextEditingController();
+  List<ChatMessage> _searchResults = [];
+  bool _searching = false;
+
+  Future<void> _doSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final resp = await ref.read(dioClientProvider).dio.get(
+        '/api/search/rooms/${widget.roomId}/messages',
+        queryParameters: {'query': query.trim()},
+      );
+      final data = resp.data;
+      List<dynamic> items = [];
+      if (data is Map && data['data'] is List) {
+        items = data['data'] as List;
+      } else if (data is List) {
+        items = data;
+      }
+      setState(() {
+        _searchResults = items.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>)).toList();
+        _searching = false;
+      });
+    } catch (_) {
+      setState(() => _searching = false);
+    }
+  }
 
   @override
   void initState() {
@@ -695,8 +867,86 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             ? chatState.lastReadMessageId
             : null);
 
-    return Column(
+    return KeyboardListener(
+      focusNode: FocusNode(),
+      autofocus: false,
+      onKeyEvent: (event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.keyF &&
+            HardwareKeyboard.instance.isControlPressed) {
+          setState(() => _showSearch = !_showSearch);
+        }
+      },
+      child: Column(
       children: [
+        // Inline room search (Ctrl+F or tap search icon)
+        if (!_showSearch && !chatState.isLoadingHistory)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8, top: 2),
+              child: IconButton(
+                icon: Icon(Icons.find_in_page_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
+                tooltip: '이 채팅방에서 검색 (Ctrl+F)',
+                onPressed: () => setState(() => _showSearch = true),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ),
+          ),
+        if (_showSearch)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: '이 채팅방에서 검색...',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        suffixIcon: _searching
+                            ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                            : IconButton(icon: const Icon(Icons.search, size: 20), onPressed: () => _doSearch(_searchCtrl.text)),
+                      ),
+                      onSubmitted: _doSearch,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => setState(() { _showSearch = false; _searchResults = []; _searchCtrl.clear(); })),
+                ]),
+                if (_searchResults.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _searchResults.length,
+                      itemBuilder: (_, i) {
+                        final r = _searchResults[i];
+                        return ListTile(
+                          dense: true,
+                          title: Text(r.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                          subtitle: Text('${r.username} · ${r.timestamp.substring(0, 10)}', style: const TextStyle(fontSize: 11)),
+                          onTap: () => setState(() {
+                            _replyScrollTarget = r.effectiveId;
+                            _showSearch = false;
+                            _searchResults = [];
+                            _searchCtrl.clear();
+                          }),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         if (chatState.isLoadingHistory) const LinearProgressIndicator(),
         Expanded(
           child: ChatMessagesList(
@@ -715,6 +965,16 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                 _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
             onReadCountTap: (messageId) =>
                 _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
+            onReaction: (messageId, emoji) =>
+                chatNotifier.toggleReaction(widget.roomId, messageId, emoji),
+            onForward: (msg) =>
+                _showForwardDialog(context, ref, msg),
+            onPin: (messageId) async {
+              await ref.read(dioClientProvider).dio.put(
+                '/api/chat/rooms/${widget.roomId}/pin',
+                data: {'messageId': messageId},
+              );
+            },
             lastReadMessageId: chatState.lastReadMessageId,
           ),
         ),
@@ -761,6 +1021,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
               ),
         ),
       ],
+    ),
     );
   }
 
