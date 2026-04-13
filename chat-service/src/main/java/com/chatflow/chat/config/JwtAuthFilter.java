@@ -37,6 +37,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // Gateway가 주입한 X-User-Id 헤더로 인증 — X-Gateway-Secret으로 게이트웨이 경유 검증
         String xUserId = request.getHeader("X-User-Id");
         String xUsername = request.getHeader("X-Username");
+        // URL-decode username (gateway URL-encodes Korean chars for HTTP header safety)
+        if (xUsername != null) {
+            try { xUsername = java.net.URLDecoder.decode(xUsername, java.nio.charset.StandardCharsets.UTF_8); } catch (Exception ignored) {}
+        }
         if (xUserId != null && xUsername != null) {
             if (isGatewaySecretValid(request)) {
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
@@ -46,7 +50,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             } else {
                 log.warn("X-User-Id 헤더 존재하지만 X-Gateway-Secret 검증 실패 — 헤더 스푸핑 의심: uri={}", request.getRequestURI());
             }
-            filterChain.doFilter(request, response);
+            // Wrap request so @RequestHeader("X-Username") also gets decoded value
+            final String decodedUsername = xUsername;
+            filterChain.doFilter(new jakarta.servlet.http.HttpServletRequestWrapper(request) {
+                @Override
+                public String getHeader(String name) {
+                    if ("X-Username".equalsIgnoreCase(name)) return decodedUsername;
+                    return super.getHeader(name);
+                }
+            }, response);
             return;
         }
 

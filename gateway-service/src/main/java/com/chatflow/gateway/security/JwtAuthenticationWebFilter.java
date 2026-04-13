@@ -73,7 +73,7 @@ public class JwtAuthenticationWebFilter implements WebFilter {
         // 다운스트림 서비스에 사용자 정보 헤더 주입
         ServerHttpRequest.Builder reqBuilder = exchange.getRequest().mutate()
                 .header("X-User-Id", userId)
-                .header("X-Username", username);
+                .header("X-Username", java.net.URLEncoder.encode(username, java.nio.charset.StandardCharsets.UTF_8));
         // 내부 시크릿 헤더 추가 — 다운스트림이 Gateway 경유 요청임을 검증할 수 있도록
         if (gatewayInternalSecret != null && !gatewayInternalSecret.isBlank()) {
             reqBuilder.header("X-Gateway-Secret", gatewayInternalSecret);

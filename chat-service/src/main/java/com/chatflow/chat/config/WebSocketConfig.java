@@ -48,6 +48,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 if (request instanceof ServletServerHttpRequest servletRequest) {
                     String userId = servletRequest.getServletRequest().getHeader("X-User-Id");
                     String username = servletRequest.getServletRequest().getHeader("X-Username");
+                    if (username != null) {
+                        try { username = java.net.URLDecoder.decode(username, java.nio.charset.StandardCharsets.UTF_8); } catch (Exception ignored) {}
+                    }
                     if (userId != null) {
                         attributes.put("userId", userId);
                         attributes.put("username", username);
