@@ -98,7 +98,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                     return rooms.isEmpty
                         ? _EmptyRoomState(
                             onCreateTap: () => _showCreateDialog(context))
-                        : ListView.builder(
+                        : RefreshIndicator(
+                            onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
+                            child: ListView.builder(
                             padding: const EdgeInsets.symmetric(
                                 vertical: 8, horizontal: 8),
                             itemCount: rooms.length,
@@ -136,6 +138,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                                 onDelete: () => _showDeleteRoomDialog(context, room),
                               );
                             },
+                          ),
                           );
                   },
             ),

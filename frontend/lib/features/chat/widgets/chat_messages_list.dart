@@ -278,6 +278,31 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             final isTarget = msg.effectiveId == widget.scrollToMessageId;
             final isHighlighted = msg.effectiveId == _highlightedMessageId;
 
+            // Grouping: check prev/next items for same user + same minute
+            ChatMessage? prevMsg;
+            ChatMessage? nextMsg;
+            for (int p = index - 1; p >= 0; p--) {
+              if (items[p] is ChatMessage) { prevMsg = items[p] as ChatMessage; break; }
+            }
+            for (int n = index + 1; n < items.length; n++) {
+              if (items[n] is ChatMessage) { nextMsg = items[n] as ChatMessage; break; }
+            }
+            final bool isFirstInGroup = prevMsg == null ||
+                prevMsg.username != msg.username ||
+                prevMsg.type.toUpperCase() != type;
+            final bool isLastInGroup = nextMsg == null ||
+                nextMsg.username != msg.username ||
+                nextMsg.type.toUpperCase() != type;
+            // Show time only if last in group OR next message is in a different minute
+            bool showTime = isLastInGroup;
+            if (!showTime && nextMsg != null) {
+              try {
+                final t1 = DateTime.parse(msg.timestamp);
+                final t2 = DateTime.parse(nextMsg.timestamp);
+                showTime = t1.minute != t2.minute || t1.hour != t2.hour;
+              } catch (_) { showTime = true; }
+            }
+
             Widget bubble;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
               bubble = _SystemBubble(msg: msg);
@@ -363,6 +388,8 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 onPin: (!msg.deleted && widget.onPin != null)
                     ? () => widget.onPin!(msg.effectiveId)
                     : null,
+                showAvatar: isFirstInGroup,
+                showTime: showTime,
               );
             }
 
@@ -776,6 +803,8 @@ class _ChatBubble extends StatelessWidget {
   final void Function(String emoji)? onReaction;
   final VoidCallback? onForward;
   final VoidCallback? onPin;
+  final bool showAvatar;
+  final bool showTime;
 
   const _ChatBubble({
     required this.msg,
@@ -791,6 +820,8 @@ class _ChatBubble extends StatelessWidget {
     this.onReaction,
     this.onForward,
     this.onPin,
+    this.showAvatar = true,
+    this.showTime = true,
   });
 
   Color _avatarColor(String name) =>
@@ -970,14 +1001,17 @@ class _ChatBubble extends StatelessWidget {
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
       child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: EdgeInsets.only(top: showAvatar ? 3 : 1, bottom: showAvatar ? 3 : 1),
       child: Row(
         mainAxisAlignment:
             isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            _Avatar(name: msg.username, color: _avatarColor(msg.username)),
+            if (showAvatar)
+              _Avatar(name: msg.username, color: _avatarColor(msg.username))
+            else
+              const SizedBox(width: 32), // placeholder for alignment
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -1008,7 +1042,7 @@ class _ChatBubble extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (!isMine)
+                if (!isMine && showAvatar)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 3),
                     child: Row(
@@ -1102,7 +1136,7 @@ class _ChatBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            if (msg.edited)
+                            if (msg.edited && showTime)
                               Text(
                                 '수정됨',
                                 style: TextStyle(
@@ -1110,13 +1144,14 @@ class _ChatBubble extends StatelessWidget {
                                   color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
                                 ),
                               ),
-                            Text(
-                              time,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                            if (showTime)
+                              Text(
+                                time,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -1244,7 +1279,7 @@ class _ChatBubble extends StatelessWidget {
                               ),
                             ),
                     ),
-                    if (!isMine)
+                    if (!isMine && showTime)
                       Padding(
                         padding: const EdgeInsets.only(left: 5, bottom: 3),
                         child: Column(
@@ -1291,13 +1326,31 @@ class _ChatBubble extends StatelessWidget {
     ),  // Padding
     ); // GestureDetector
 
-    // Reaction chips below bubble
+    // Swipe to reply + Reaction chips
+    Widget result = bubble;
+
+    if (onReply != null && !msg.deleted) {
+      result = Dismissible(
+        key: ValueKey('swipe-${msg.effectiveId}'),
+        direction: DismissDirection.startToEnd,
+        confirmDismiss: (_) async { onReply!(); return false; },
+        background: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Icon(Icons.reply, color: Theme.of(context).colorScheme.primary.withAlpha(150)),
+          ),
+        ),
+        child: result,
+      );
+    }
+
     if (msg.reactions.isNotEmpty) {
       return Column(
         crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          bubble,
+          result,
           Padding(
             padding: EdgeInsets.only(left: isMine ? 0 : 54, right: isMine ? 6 : 0, top: 2),
             child: Wrap(
@@ -1323,7 +1376,7 @@ class _ChatBubble extends StatelessWidget {
         ],
       );
     }
-    return bubble;
+    return result;
   }
 }
 

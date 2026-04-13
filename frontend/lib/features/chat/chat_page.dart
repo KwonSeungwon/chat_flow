@@ -977,19 +977,25 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             lastReadMessageId: chatState.lastReadMessageId,
           ),
         ),
-        // Typing indicator
+        // Typing indicator with animated dots
         if (chatState.typingUsers.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              chatState.typingUsers.length == 1
-                  ? '${chatState.typingUsers.first}님이 입력 중...'
-                  : '${chatState.typingUsers.join(", ")}님이 입력 중...',
-              style: TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(160),
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  chatState.typingUsers.length == 1
+                      ? '${chatState.typingUsers.first}님이 입력 중'
+                      : '${chatState.typingUsers.join(", ")}님이 입력 중',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(160),
+                  ),
+                ),
+                const _BouncingDots(),
+              ],
             ),
           ),
         ChatInput(
@@ -1471,6 +1477,61 @@ class _ConnectionDot extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Animated typing dots ("···")
+// ---------------------------------------------------------------------------
+class _BouncingDots extends StatefulWidget {
+  const _BouncingDots();
+  @override
+  State<_BouncingDots> createState() => _BouncingDotsState();
+}
+
+class _BouncingDotsState extends State<_BouncingDots> with TickerProviderStateMixin {
+  late final List<AnimationController> _controllers;
+  late final List<Animation<double>> _animations;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = List.generate(3, (i) => AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 400),
+    ));
+    _animations = _controllers.map((c) =>
+      Tween(begin: 0.0, end: -4.0).animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)),
+    ).toList();
+    for (int i = 0; i < 3; i++) {
+      Future.delayed(Duration(milliseconds: i * 150), () {
+        if (mounted) _controllers[i].repeat(reverse: true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(160);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) => AnimatedBuilder(
+        animation: _animations[i],
+        builder: (_, child) => Transform.translate(
+          offset: Offset(0, _animations[i].value),
+          child: child,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: Text('·', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+        ),
+      )),
     );
   }
 }
