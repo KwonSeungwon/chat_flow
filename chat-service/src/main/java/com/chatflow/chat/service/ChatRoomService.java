@@ -19,6 +19,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -49,6 +50,7 @@ public class ChatRoomService {
     private final MessageEncryptor messageEncryptor;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RestClient restClient;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -408,19 +410,12 @@ public class ChatRoomService {
     public Map<String, String> fetchLinkPreview(String url) {
         Map<String, String> result = new LinkedHashMap<>();
         try {
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 ChatFlow-Bot");
-            conn.setConnectTimeout(3000);
-            conn.setReadTimeout(3000);
-            conn.setInstanceFollowRedirects(true);
-            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
-                StringBuilder sb = new StringBuilder();
-                String line;
-                int lines = 0;
-                while ((line = reader.readLine()) != null && lines++ < 200) {
-                    sb.append(line);
-                }
-                String html = sb.toString();
+            String html = restClient.get()
+                    .uri(url)
+                    .header("User-Agent", "Mozilla/5.0 ChatFlow-Bot")
+                    .retrieve()
+                    .body(String.class);
+            if (html != null) {
                 result.put("url", url);
                 extractOg(html, "og:title", result, "title");
                 extractOg(html, "og:description", result, "description");
