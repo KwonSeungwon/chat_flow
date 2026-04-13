@@ -24,6 +24,8 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(String parentMessageId)? onScrollToParentMessage;
   final void Function(String messageId)? onDeleteMessage;
   final void Function(String messageId, String currentContent)? onEditMessage;
+  final void Function(String messageId)? onReadCountTap;
+  final String? lastReadMessageId;
 
   const ChatMessagesList({
     super.key,
@@ -37,6 +39,8 @@ class ChatMessagesList extends StatefulWidget {
     this.onScrollToParentMessage,
     this.onDeleteMessage,
     this.onEditMessage,
+    this.onReadCountTap,
+    this.lastReadMessageId,
   });
 
   @override
@@ -169,9 +173,12 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     }
   }
 
+  static const _unreadDividerMarker = '__UNREAD_DIVIDER__';
+
   List<Object> _buildItemsWithDividers(List<ChatMessage> messages) {
     final items = <Object>[];
     String? lastDate;
+    bool unreadInserted = false;
     for (final msg in messages) {
       final date = _formatDate(msg.timestamp);
       if (date.isNotEmpty && date != lastDate) {
@@ -179,6 +186,15 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
         lastDate = date;
       }
       items.add(msg);
+      // Insert unread divider right after the last-read message
+      if (!unreadInserted &&
+          widget.lastReadMessageId != null &&
+          widget.lastReadMessageId!.isNotEmpty &&
+          msg.effectiveId == widget.lastReadMessageId &&
+          msg != messages.last) {
+        items.add(_unreadDividerMarker);
+        unreadInserted = true;
+      }
     }
     return items;
   }
@@ -243,8 +259,11 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             }
             final item = items[index];
 
-            // Date divider
+            // Date divider or unread divider
             if (item is String) {
+              if (item == _unreadDividerMarker) {
+                return _UnreadDivider();
+              }
               return _DateDivider(date: item);
             }
 
@@ -289,6 +308,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                       : null,
                   onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
                       ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
+                      : null,
+                  onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
+                      ? () => widget.onReadCountTap!(msg.effectiveId)
                       : null,
                 );
               }
@@ -732,6 +754,7 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onScrollToParent;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
+  final VoidCallback? onReadCountTap;
 
   const _ChatBubble({
     required this.msg,
@@ -743,6 +766,7 @@ class _ChatBubble extends StatelessWidget {
     this.onScrollToParent,
     this.onDelete,
     this.onEdit,
+    this.onReadCountTap,
   });
 
   Color _avatarColor(String name) =>
@@ -873,6 +897,8 @@ class _ChatBubble extends StatelessWidget {
       );
     }
 
+    final isUrgent = msg.priority.toUpperCase() == 'URGENT' || msg.priority.toUpperCase() == 'STAT';
+
     return GestureDetector(
       onLongPress: (onDelete != null || onEdit != null || onReply != null) ? () => _showDeleteSheet(context) : null,
       onSecondaryTapUp: (onDelete != null || onEdit != null || onReply != null)
@@ -894,6 +920,29 @@ class _ChatBubble extends StatelessWidget {
               crossAxisAlignment:
                   isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                if (isUrgent)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withAlpha(25),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.red.withAlpha(120), width: 0.5),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.priority_high, size: 12, color: Colors.red),
+                          const SizedBox(width: 2),
+                          Text(
+                            msg.priority.toUpperCase(),
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.red),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (!isMine)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 3),
@@ -977,12 +1026,15 @@ class _ChatBubble extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (readCount > 0)
-                              Text(
-                                '읽음 $readCount',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context).colorScheme.primary.withAlpha(180),
-                                  fontWeight: FontWeight.w500,
+                              GestureDetector(
+                                onTap: onReadCountTap,
+                                child: Text(
+                                  '읽음 $readCount',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Theme.of(context).colorScheme.primary.withAlpha(180),
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             if (msg.edited)
@@ -1177,6 +1229,34 @@ class _ChatBubble extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Unread divider — "여기까지 읽었습니다"
+// ─────────────────────────────────────────────────────────────────
+class _UnreadDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: Colors.red.withAlpha(120), height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              '여기까지 읽었습니다',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.red.withAlpha(180),
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: Colors.red.withAlpha(120), height: 1)),
+        ],
+      ),
+    );
+  }
+}
+
 // Date divider
 // ─────────────────────────────────────────────────────────────────
 class _DateDivider extends StatelessWidget {

@@ -73,6 +73,17 @@ public class ChatController {
         chatService.addUser(chatMessage, sessionId);
     }
 
+    @MessageMapping("/chat.typing")
+    public void typing(@Payload Map<String, String> payload,
+                       SimpMessageHeaderAccessor headerAccessor) {
+        String roomId = payload.get("chatRoomId");
+        if (roomId == null) return;
+        Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+        String username = sessionAttrs != null ? (String) sessionAttrs.get("username") : payload.get("username");
+        messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/typing",
+                Map.of("username", username != null ? username : "", "timestamp", java.time.LocalDateTime.now().toString()));
+    }
+
     @MessageMapping("/chat.markRead")
     public void markRead(@Payload Map<String, String> payload,
                          SimpMessageHeaderAccessor headerAccessor) {

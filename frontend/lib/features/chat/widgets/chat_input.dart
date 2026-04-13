@@ -17,6 +17,7 @@ class ChatInput extends StatefulWidget {
   final Future<void> Function(String fileName, Uint8List bytes, String mimeType, String content)? onFilePick;
   final ChatMessage? replyTarget;
   final VoidCallback? onCancelReply;
+  final VoidCallback? onTyping;
 
   const ChatInput({
     super.key,
@@ -29,6 +30,7 @@ class ChatInput extends StatefulWidget {
     this.onFilePick,
     this.replyTarget,
     this.onCancelReply,
+    this.onTyping,
   });
 
   @override
@@ -591,6 +593,7 @@ class _ChatInputState extends State<ChatInput> {
                         controller: _controller,
                         focusNode: _focusNode,
                         enabled: widget.isConnected,
+                        onChanged: (_) => widget.onTyping?.call(),
                         maxLines: 5,
                         minLines: 1,
                         inputFormatters: [

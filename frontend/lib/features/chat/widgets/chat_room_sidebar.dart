@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider;
 import 'create_room_dialog.dart';
 
 
@@ -93,6 +93,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
               ),
               data: (rooms) {
                     final unreadCounts = ref.watch(roomUnreadCountsProvider);
+                    final mutedRooms = ref.watch(mutedRoomsProvider);
                     return rooms.isEmpty
                         ? _EmptyRoomState(
                             onCreateTap: () => _showCreateDialog(context))
@@ -103,11 +104,13 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                             itemBuilder: (context, index) {
                               final room = rooms[index];
                               final unread = unreadCounts[room.id] ?? 0;
+                              final isMuted = mutedRooms.contains(room.id);
                               return _RoomTile(
                                 room: room,
                                 color: _roomColor(room),
                                 isSelected: room.id == widget.currentRoomId,
                                 isFull: room.isFull,
+                                isMuted: isMuted,
                                 unreadCount: unread,
                                 onTap: room.isFull &&
                                         room.id != widget.currentRoomId
@@ -128,6 +131,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                                           widget.onRoomSelected?.call();
                                         }
                                       },
+                                onMuteToggle: () => ref.read(mutedRoomsProvider.notifier).toggle(room.id),
                                 onDelete: () => _showDeleteRoomDialog(context, room),
                               );
                             },
@@ -325,18 +329,22 @@ class _RoomTile extends StatefulWidget {
   final Color color;
   final bool isSelected;
   final bool isFull;
+  final bool isMuted;
   final int unreadCount;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
+  final VoidCallback? onMuteToggle;
 
   const _RoomTile({
     required this.room,
     required this.color,
     required this.isSelected,
     required this.isFull,
+    this.isMuted = false,
     required this.unreadCount,
     required this.onTap,
     this.onDelete,
+    this.onMuteToggle,
   });
 
   @override
@@ -345,6 +353,58 @@ class _RoomTile extends StatefulWidget {
 
 class _RoomTileState extends State<_RoomTile> {
   bool _hovered = false;
+
+  void _showRoomMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(widget.isMuted ? Icons.notifications_active : Icons.notifications_off),
+              title: Text(widget.isMuted ? '알림 켜기' : '알림 끄기'),
+              onTap: () { Navigator.of(context).pop(); widget.onMuteToggle?.call(); },
+            ),
+            if (widget.onDelete != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('채팅방 삭제', style: TextStyle(color: Colors.red)),
+                onTap: () { Navigator.of(context).pop(); widget.onDelete?.call(); },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRoomContextMenu(BuildContext context, Offset position) {
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      items: [
+        PopupMenuItem(value: 'mute', child: Row(children: [
+          Icon(widget.isMuted ? Icons.notifications_active : Icons.notifications_off, size: 18),
+          const SizedBox(width: 8),
+          Text(widget.isMuted ? '알림 켜기' : '알림 끄기'),
+        ])),
+        if (widget.onDelete != null)
+          const PopupMenuItem(value: 'delete', child: Row(children: [
+            Icon(Icons.delete_outline, size: 18, color: Colors.red),
+            SizedBox(width: 8),
+            Text('채팅방 삭제', style: TextStyle(color: Colors.red)),
+          ])),
+      ],
+    ).then((value) {
+      if (value == 'mute') widget.onMuteToggle?.call();
+      if (value == 'delete') widget.onDelete?.call();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -361,8 +421,8 @@ class _RoomTileState extends State<_RoomTile> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        onLongPress: widget.onDelete,
-        onSecondaryTap: widget.onDelete,
+        onLongPress: () => _showRoomMenu(context),
+        onSecondaryTapUp: (details) => _showRoomContextMenu(context, details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.only(bottom: 2),
@@ -522,7 +582,13 @@ class _RoomTileState extends State<_RoomTile> {
                             ],
                           ),
                         ),
-                        if (widget.unreadCount > 0) ...[
+                        if (widget.isMuted)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(Icons.notifications_off, size: 14,
+                                color: cs.onSurfaceVariant.withAlpha(120)),
+                          ),
+                        if (widget.unreadCount > 0 && !widget.isMuted) ...[
                           Container(
                             constraints: const BoxConstraints(minWidth: 18),
                             height: 18,

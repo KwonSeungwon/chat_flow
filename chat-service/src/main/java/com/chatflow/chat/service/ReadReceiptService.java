@@ -8,6 +8,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -20,6 +22,26 @@ public class ReadReceiptService {
 
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+
+    /**
+     * 특정 채팅방에서 각 사용자의 마지막 읽은 메시지 ID를 반환한다.
+     */
+    public Map<String, String> getRoomReadPositions(String roomId) {
+        String pattern = READ_KEY_PREFIX + roomId + ":*";
+        Set<String> keys = redisTemplate.keys(pattern);
+        Map<String, String> positions = new java.util.LinkedHashMap<>();
+        if (keys != null) {
+            for (String key : keys) {
+                // key = chatflow:read:{roomId}:{userId}
+                String userId = key.substring(key.lastIndexOf(':') + 1);
+                String lastReadMsgId = redisTemplate.opsForValue().get(key);
+                if (lastReadMsgId != null) {
+                    positions.put(userId, lastReadMsgId);
+                }
+            }
+        }
+        return positions;
+    }
 
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
         String key = READ_KEY_PREFIX + roomId + ":" + userId;

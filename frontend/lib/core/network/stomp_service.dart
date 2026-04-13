@@ -7,6 +7,7 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 typedef MessageCallback = void Function(Map<String, dynamic> message);
 typedef ConnectionCallback = void Function(bool connected);
 typedef ReadReceiptCallback = void Function(String messageId, int readCount);
+typedef TypingCallback = void Function(String username);
 
 class StompService {
   StompClient? _client;
@@ -24,6 +25,7 @@ class StompService {
   MessageCallback? _onMessage;
   ConnectionCallback? _onConnectionChanged;
   ReadReceiptCallback? _onReadReceipt;
+  TypingCallback? _onTyping;
 
   bool get isConnected => _connected;
 
@@ -36,6 +38,7 @@ class StompService {
     required ConnectionCallback onConnectionChanged,
     Future<String?> Function()? tokenProvider,
     ReadReceiptCallback? onReadReceipt,
+    TypingCallback? onTyping,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -45,6 +48,7 @@ class StompService {
     _onMessage = onMessage;
     _onConnectionChanged = onConnectionChanged;
     _onReadReceipt = onReadReceipt;
+    _onTyping = onTyping;
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -118,6 +122,22 @@ class StompService {
       },
     );
 
+    // Subscribe to typing indicators
+    _client!.subscribe(
+      destination: '/topic/chat/$_currentRoomId/typing',
+      callback: (frame) {
+        if (frame.body != null && _onTyping != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final username = data['username']?.toString();
+            if (username != null && username != _currentUsername) {
+              _onTyping!(username);
+            }
+          } catch (_) {}
+        }
+      },
+    );
+
     // Send JOIN via /app/chat.addUser
     _client!.send(
       destination: '/app/chat.addUser',
@@ -166,6 +186,18 @@ class StompService {
       _client!.send(
         destination: '/app/chat.sendMessage',
         body: jsonEncode(message),
+      );
+    }
+  }
+
+  void sendTyping(String roomId) {
+    if (_connected && _client != null) {
+      _client!.send(
+        destination: '/app/chat.typing',
+        body: jsonEncode({
+          'chatRoomId': roomId,
+          'username': _currentUsername ?? '',
+        }),
       );
     }
   }

@@ -119,6 +119,31 @@ public class AuthService {
                 .then();
     }
 
+    public Mono<Void> changePassword(String username, String currentPassword, String newPassword) {
+        if (newPassword == null || newPassword.length() < 8) {
+            return Mono.error(new IllegalArgumentException("새 비밀번호는 8자 이상이어야 합니다."));
+        }
+        return getUserRecord(username)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
+                .flatMap(user -> {
+                    if (!passwordEncoder.matches(currentPassword, user.encodedPassword())) {
+                        return Mono.error(new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다."));
+                    }
+                    String newEncoded = passwordEncoder.encode(newPassword);
+                    return userRepository.findByUsername(username)
+                            .flatMap(entity -> {
+                                entity.setEncodedPassword(newEncoded);
+                                return userRepository.save(entity);
+                            })
+                            .flatMap(saved -> {
+                                UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
+                                        saved.getEncodedPassword(), saved.getRole(), saved.getProfileImageUrl());
+                                return cacheUser(saved.getUsername(), record);
+                            })
+                            .then();
+                });
+    }
+
     public Mono<Void> logout(String token) {
         String jti = jwtUtil.getJti(token);
         long remainingMs = jwtUtil.getRemainingTtlMs(token);

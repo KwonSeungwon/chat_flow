@@ -279,6 +279,13 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
     }
 
+    @GetMapping("/{roomId}/readers")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getRoomReaders(
+            @PathVariable String roomId) {
+        Map<String, String> positions = readReceiptService.getRoomReadPositions(roomId);
+        return ResponseEntity.ok(ApiResponse.ok(positions));
+    }
+
     @GetMapping("/{roomId}/last-read")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLastRead(
             @PathVariable String roomId,

@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_provider.dart';
 import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
+import '../../shared/models/chat_message.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
@@ -59,6 +60,123 @@ Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
         const SnackBar(content: Text('프로필 이미지 변경에 실패했습니다.')));
     }
   }
+}
+
+void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
+  final currentCtrl = TextEditingController();
+  final newCtrl = TextEditingController();
+  final confirmCtrl = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('비밀번호 변경'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(controller: currentCtrl, obscureText: true, decoration: const InputDecoration(labelText: '현재 비밀번호')),
+          const SizedBox(height: 8),
+          TextField(controller: newCtrl, obscureText: true, decoration: const InputDecoration(labelText: '새 비밀번호 (8자 이상)')),
+          const SizedBox(height: 8),
+          TextField(controller: confirmCtrl, obscureText: true, decoration: const InputDecoration(labelText: '새 비밀번호 확인')),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      actions: [
+        Row(children: [
+          Expanded(child: TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('취소'))),
+          const SizedBox(width: 8),
+          Expanded(child: FilledButton(
+            onPressed: () async {
+              if (newCtrl.text != confirmCtrl.text) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('새 비밀번호가 일치하지 않습니다.')));
+                return;
+              }
+              if (newCtrl.text.length < 8) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호는 8자 이상이어야 합니다.')));
+                return;
+              }
+              try {
+                await ref.read(dioClientProvider).dio.put('/api/auth/password', data: {
+                  'currentPassword': currentCtrl.text,
+                  'newPassword': newCtrl.text,
+                });
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호가 변경되었습니다.')));
+                }
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호 변경에 실패했습니다. 현재 비밀번호를 확인해주세요.')));
+                }
+              }
+            },
+            child: const Text('변경'),
+          )),
+        ]),
+      ],
+    ),
+  );
+}
+
+void _showReadersSheet(BuildContext context, WidgetRef ref, String roomId, String messageId, List<ChatMessage> messages) async {
+  try {
+    final resp = await ref.read(dioClientProvider).dio.get('/api/chat/rooms/$roomId/readers');
+    final data = resp.data;
+    // positions: {userId: lastReadMessageId}
+    Map<String, String> positions = {};
+    if (data is Map && data['data'] is Map) {
+      positions = Map<String, String>.from(data['data'] as Map);
+    }
+
+    // Find the index of target message to compare read positions
+    final targetIdx = messages.indexWhere((m) => m.effectiveId == messageId);
+    if (targetIdx < 0) return;
+
+    // Users who have read at or past the target message
+    final readers = <String>[];
+    for (final entry in positions.entries) {
+      final readerLastReadId = entry.value;
+      final readerIdx = messages.indexWhere((m) => m.effectiveId == readerLastReadId);
+      if (readerIdx >= targetIdx) {
+        // Find username from messages sent by this userId
+        String? username;
+        for (final m in messages) {
+          if (m.userId == entry.key) { username = m.username; break; }
+        }
+        readers.add(username ?? entry.key);
+      }
+    }
+
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.withAlpha(80), borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('읽은 사람 (${readers.length}명)', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            ),
+            if (readers.isEmpty)
+              const Padding(padding: EdgeInsets.all(16), child: Text('읽은 사용자가 없습니다.'))
+            else
+              ...readers.map((name) => ListTile(
+                leading: CircleAvatar(radius: 16, child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(fontSize: 14))),
+                title: Text(name),
+              )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  } catch (_) {}
 }
 
 class ChatPage extends ConsumerWidget {
@@ -147,6 +265,8 @@ class ChatPage extends ConsumerWidget {
                     themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
               } else if (value == 'profile') {
                 await _changeProfileImage(context, ref);
+              } else if (value == 'password') {
+                if (context.mounted) _showChangePasswordDialog(context, ref);
               } else if (value == 'logout') {
                 await ref.read(authProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
@@ -199,6 +319,17 @@ class ChatPage extends ConsumerWidget {
                   ],
                 ),
               ),
+              const PopupMenuItem(
+                value: 'password',
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline, size: 20),
+                    SizedBox(width: 8),
+                    Text('비밀번호 변경'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               const PopupMenuItem(value: 'logout', child: Text('로그아웃')),
             ],
           ),
@@ -582,8 +713,26 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                 chatNotifier.deleteMessage(widget.roomId, messageId),
             onEditMessage: (messageId, currentContent) =>
                 _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
+            onReadCountTap: (messageId) =>
+                _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
+            lastReadMessageId: chatState.lastReadMessageId,
           ),
         ),
+        // Typing indicator
+        if (chatState.typingUsers.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              chatState.typingUsers.length == 1
+                  ? '${chatState.typingUsers.first}님이 입력 중...'
+                  : '${chatState.typingUsers.join(", ")}님이 입력 중...',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(160),
+              ),
+            ),
+          ),
         ChatInput(
           isConnected: chatState.isConnected,
           isAiLoading: chatState.isAiLoading,
@@ -594,6 +743,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
           ),
           replyTarget: chatState.replyTarget,
           onCancelReply: () => chatNotifier.clearReplyTarget(),
+          onTyping: () => chatNotifier.notifyTyping(widget.roomId),
           onSend: (content, {String priority = 'ROUTINE'}) {
             chatNotifier.sendMessage(
                 roomId: widget.roomId, content: content, priority: priority);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -117,6 +118,41 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 final roomUnreadCountsProvider = StateProvider<Map<String, int>>((ref) => {});
 
 // ---------------------------------------------------------------------------
+// Muted Rooms (local-only, persisted to FlutterSecureStorage)
+// ---------------------------------------------------------------------------
+
+const _mutedKey = 'chatflow-muted-rooms';
+const _muteStorage = FlutterSecureStorage();
+
+final mutedRoomsProvider = StateNotifierProvider<MutedRoomsNotifier, Set<String>>((ref) {
+  return MutedRoomsNotifier();
+});
+
+class MutedRoomsNotifier extends StateNotifier<Set<String>> {
+  MutedRoomsNotifier() : super({}) { _load(); }
+
+  Future<void> _load() async {
+    final raw = await _muteStorage.read(key: _mutedKey);
+    if (raw != null && raw.isNotEmpty) {
+      state = Set<String>.from(jsonDecode(raw) as List);
+    }
+  }
+
+  Future<void> toggle(String roomId) async {
+    final updated = Set<String>.from(state);
+    if (updated.contains(roomId)) {
+      updated.remove(roomId);
+    } else {
+      updated.add(roomId);
+    }
+    state = updated;
+    await _muteStorage.write(key: _mutedKey, value: jsonEncode(updated.toList()));
+  }
+
+  bool isMuted(String roomId) => state.contains(roomId);
+}
+
+// ---------------------------------------------------------------------------
 // Chat Messages
 // ---------------------------------------------------------------------------
 
@@ -132,6 +168,7 @@ class ChatMessagesState {
   final String? lastReadMessageId;
   final ChatMessage? replyTarget;
   final bool roomDeleted;
+  final Set<String> typingUsers;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -143,6 +180,7 @@ class ChatMessagesState {
     this.lastReadMessageId,
     this.replyTarget,
     this.roomDeleted = false,
+    this.typingUsers = const {},
   });
 
   ChatMessagesState copyWith({
@@ -157,6 +195,7 @@ class ChatMessagesState {
     ChatMessage? replyTarget,
     bool clearReplyTarget = false,
     bool? roomDeleted,
+    Set<String>? typingUsers,
   }) {
     return ChatMessagesState(
       messages: messages ?? this.messages,
@@ -168,6 +207,7 @@ class ChatMessagesState {
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
       replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
       roomDeleted: roomDeleted ?? this.roomDeleted,
+      typingUsers: typingUsers ?? this.typingUsers,
     );
   }
 }
@@ -180,6 +220,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final String _username;
   final String _userId;
   static const _storage = FlutterSecureStorage();
+  Timer? _typingDebounce;
+  final Map<String, Timer> _typingTimers = {};
 
   ChatNotifier(
     this._dioClient, {
@@ -263,6 +305,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         final updated = Map<String, int>.from(state.readCounts);
         updated[messageId] = readCount;
         state = state.copyWith(readCounts: updated);
+      },
+      onTyping: (username) {
+        if (!mounted) return;
+        _onTypingReceived(username);
       },
     );
 
@@ -625,10 +671,31 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     });
   }
 
+  void notifyTyping(String roomId) {
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(const Duration(milliseconds: 500), () {
+      _stompService.sendTyping(roomId);
+    });
+  }
+
+  void _onTypingReceived(String username) {
+    final users = Set<String>.from(state.typingUsers)..add(username);
+    state = state.copyWith(typingUsers: users);
+    _typingTimers[username]?.cancel();
+    _typingTimers[username] = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      final updated = Set<String>.from(state.typingUsers)..remove(username);
+      state = state.copyWith(typingUsers: updated);
+      _typingTimers.remove(username);
+    });
+  }
+
   void disconnect() => _stompService.disconnect();
 
   @override
   void dispose() {
+    _typingDebounce?.cancel();
+    for (final t in _typingTimers.values) { t.cancel(); }
     _stompService.dispose();
     super.dispose();
   }

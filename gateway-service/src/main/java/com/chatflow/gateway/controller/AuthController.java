@@ -54,6 +54,26 @@ public class AuthController {
                 .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
     }
 
+    @PutMapping("/password")
+    public Mono<ResponseEntity<Map<String, String>>> changePassword(
+            @RequestBody Map<String, String> body, ServerHttpRequest request) {
+        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearerToken == null || !bearerToken.startsWith("Bearer ")) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+        String token = bearerToken.substring(7);
+        String username = jwtUtil.getUsername(token);
+        String currentPassword = body.get("currentPassword");
+        String newPassword = body.get("newPassword");
+        if (username == null || currentPassword == null || newPassword == null) {
+            return Mono.just(ResponseEntity.badRequest().build());
+        }
+        return authService.changePassword(username, currentPassword, newPassword)
+                .then(Mono.just(ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."))))
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
+    }
+
     @PostMapping("/logout")
     public Mono<ResponseEntity<Void>> logout(ServerHttpRequest request) {
         String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
