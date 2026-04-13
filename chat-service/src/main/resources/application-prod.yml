@@ -7,6 +7,9 @@ server:
     accept-count: 20
 
 spring:
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
   lifecycle:
     timeout-per-shutdown-phase: 30s
   # Production PostgreSQL with connection pooling

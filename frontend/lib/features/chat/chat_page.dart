@@ -218,7 +218,7 @@ void _showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId,
   );
 }
 
-void _showForwardDialog(BuildContext context, WidgetRef ref, ChatMessage msg) {
+void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier currentNotifier, ChatMessage msg) {
   final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
   showDialog(
     context: context,
@@ -238,8 +238,8 @@ void _showForwardDialog(BuildContext context, WidgetRef ref, ChatMessage msg) {
                     title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                     onTap: () async {
                       Navigator.of(ctx).pop();
-                      final notifier = ref.read(chatNotifierProvider(room.id).notifier);
-                      await notifier.forwardMessage(room.id, msg);
+                      // Use current room's STOMP connection — server routes by chatRoomId
+                      await currentNotifier.forwardMessage(room.id, msg);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('"${room.name}"에 메시지를 전달했습니다.')),
@@ -752,15 +752,14 @@ class _ParticipantsModalState extends ConsumerState<_ParticipantsModal> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              // Capture router/messenger before any pops — context may be
-              // unmounted by the time the async leaveRoom call completes.
+              // Capture everything before pops — context/ref become invalid
+              // after modal widgets are disposed.
               final router = GoRouter.of(context);
               final messenger = ScaffoldMessenger.of(context);
+              final notifier = ref.read(chatNotifierProvider(roomId).notifier);
               Navigator.of(ctx).pop(); // close confirm dialog
               Navigator.of(context).pop(); // close participants modal
-              final ok = await ref
-                  .read(chatNotifierProvider(roomId).notifier)
-                  .leaveRoom(roomId);
+              final ok = await notifier.leaveRoom(roomId);
               if (ok) {
                 router.go('/chat');
               } else {
@@ -968,7 +967,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             onReaction: (messageId, emoji) =>
                 chatNotifier.toggleReaction(widget.roomId, messageId, emoji),
             onForward: (msg) =>
-                _showForwardDialog(context, ref, msg),
+                _showForwardDialog(context, ref, chatNotifier, msg),
             onPin: (messageId) async {
               await ref.read(dioClientProvider).dio.put(
                 '/api/chat/rooms/${widget.roomId}/pin',

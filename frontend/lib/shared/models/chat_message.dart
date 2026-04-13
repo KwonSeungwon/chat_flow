@@ -50,6 +50,16 @@ class ChatMessage {
   /// timezone-less timestamps as UTC so .toLocal() converts to KST correctly.
   static String _normalizeTimestamp(String? raw) {
     if (raw == null || raw.isEmpty) return DateTime.now().toUtc().toIso8601String();
+    // Jackson array format: [2026, 4, 13, 12, 30, 45, 123456789]
+    if (raw.startsWith('[')) {
+      try {
+        final parts = raw.replaceAll(RegExp(r'[\[\]\s]'), '').split(',').map(int.parse).toList();
+        if (parts.length >= 6) {
+          return DateTime.utc(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]).toIso8601String();
+        }
+      } catch (_) {}
+      return DateTime.now().toUtc().toIso8601String();
+    }
     if (raw.endsWith('Z') || RegExp(r'[+-]\d{2}(:\d{2})?$').hasMatch(raw)) {
       return raw;
     }

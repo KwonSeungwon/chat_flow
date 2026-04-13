@@ -182,10 +182,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                         leading: CircleAvatar(radius: 16, child: Text((u['username'] ?? '?')[0].toUpperCase())),
                         title: Text(u['username'] ?? ''),
                         onTap: () async {
+                          final dio = ref.read(dioClientProvider).dio;
                           Navigator.of(ctx).pop();
                           try {
-                            final auth = ref.read(chatRoomsProvider.notifier);
-                            final dio = ref.read(dioClientProvider).dio;
                             final resp = await dio.post('/api/chat/rooms/dm', data: {
                               'targetUserId': u['userId'],
                               'targetUsername': u['username'],
