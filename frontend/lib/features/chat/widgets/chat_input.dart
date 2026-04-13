@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import 'patient_card_input_dialog.dart';
+import 'sbar_input_dialog.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
@@ -18,6 +19,7 @@ class ChatInput extends StatefulWidget {
   final ChatMessage? replyTarget;
   final VoidCallback? onCancelReply;
   final VoidCallback? onTyping;
+  final Future<List<Map<String, dynamic>>> Function(String query)? onMentionSearch;
 
   const ChatInput({
     super.key,
@@ -31,6 +33,7 @@ class ChatInput extends StatefulWidget {
     this.replyTarget,
     this.onCancelReply,
     this.onTyping,
+    this.onMentionSearch,
   });
 
   @override
@@ -51,6 +54,10 @@ class _ChatInputState extends State<ChatInput> {
   String? _pendingFileName;
   Uint8List? _pendingFileBytes;
   String? _pendingFileMimeType;
+  // Mention autocomplete
+  List<Map<String, dynamic>> _mentionSuggestions = [];
+  bool _showMentions = false;
+  String _mentionQuery = '';
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -60,6 +67,45 @@ class _ChatInputState extends State<ChatInput> {
     '👀', '💬', '📌', '🚀', '💡', '🎯',
     '☕', '🍕', '🎵', '📝', '⏰', '🌟',
   ];
+
+  void _checkMention(String text) {
+    final cursor = _controller.selection.baseOffset;
+    if (cursor <= 0) { setState(() => _showMentions = false); return; }
+    final before = text.substring(0, cursor);
+    final atIdx = before.lastIndexOf('@');
+    if (atIdx < 0 || (atIdx > 0 && before[atIdx - 1] != ' ' && before[atIdx - 1] != '\n')) {
+      setState(() => _showMentions = false);
+      return;
+    }
+    final query = before.substring(atIdx + 1);
+    if (query.contains(' ') || query.length > 20) {
+      setState(() => _showMentions = false);
+      return;
+    }
+    _mentionQuery = query;
+    if (query.length >= 1 && widget.onMentionSearch != null) {
+      widget.onMentionSearch!(query).then((results) {
+        if (mounted) setState(() { _mentionSuggestions = results; _showMentions = results.isNotEmpty; });
+      });
+    } else {
+      setState(() => _showMentions = false);
+    }
+  }
+
+  void _insertMention(String username) {
+    final text = _controller.text;
+    final cursor = _controller.selection.baseOffset;
+    final before = text.substring(0, cursor);
+    final atIdx = before.lastIndexOf('@');
+    if (atIdx < 0) return;
+    final after = text.substring(cursor);
+    final newText = '${text.substring(0, atIdx)}@$username $after';
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: atIdx + username.length + 2),
+    );
+    setState(() => _showMentions = false);
+  }
 
   void _clearController() {
     _controller.value = const TextEditingValue(
@@ -273,6 +319,30 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Mention suggestions
+            if (_showMentions && _mentionSuggestions.isNotEmpty)
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: cs.outline.withAlpha(80)),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _mentionSuggestions.length,
+                  itemBuilder: (_, i) {
+                    final user = _mentionSuggestions[i];
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(radius: 14, child: Text((user['username'] ?? '?')[0].toUpperCase(), style: const TextStyle(fontSize: 12))),
+                      title: Text(user['username'] ?? '', style: const TextStyle(fontSize: 13)),
+                      onTap: () => _insertMention(user['username'] ?? ''),
+                    );
+                  },
+                ),
+              ),
             // Reply target banner
             if (widget.replyTarget != null)
               Container(
@@ -492,10 +562,14 @@ class _ChatInputState extends State<ChatInput> {
                     ),
                     onSelected: (value) async {
                       if (value == 'sbar') {
-                        final template = buildSbarTemplate();
-                        _controller.text = template;
-                        _controller.selection = TextSelection.collapsed(offset: template.length);
-                        _focusNode.requestFocus();
+                        showDialog(
+                          context: context,
+                          builder: (_) => SbarInputDialog(
+                            onSend: (content) {
+                              widget.onSend(content, priority: _priority);
+                            },
+                          ),
+                        );
                       } else if (value == 'patient_card') {
                         final card = await showDialog<PatientCard>(
                           context: context,
@@ -593,7 +667,10 @@ class _ChatInputState extends State<ChatInput> {
                         controller: _controller,
                         focusNode: _focusNode,
                         enabled: widget.isConnected,
-                        onChanged: (_) => widget.onTyping?.call(),
+                        onChanged: (text) {
+                          widget.onTyping?.call();
+                          _checkMention(text);
+                        },
                         maxLines: 5,
                         minLines: 1,
                         inputFormatters: [

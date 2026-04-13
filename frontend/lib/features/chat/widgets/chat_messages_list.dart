@@ -1356,6 +1356,57 @@ class _UnreadDivider extends StatelessWidget {
   }
 }
 
+// Link preview card
+// ─────────────────────────────────────────────────────────────────
+class _LinkPreviewCard extends StatefulWidget {
+  final String url;
+  const _LinkPreviewCard({required this.url});
+
+  @override
+  State<_LinkPreviewCard> createState() => _LinkPreviewCardState();
+}
+
+class _LinkPreviewCardState extends State<_LinkPreviewCard> {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final host = Uri.tryParse(widget.url)?.host ?? widget.url;
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.parse(widget.url);
+        if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        constraints: const BoxConstraints(maxWidth: 300),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainer,
+          borderRadius: BorderRadius.circular(8),
+          border: Border(left: BorderSide(color: cs.primary, width: 3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.link, size: 16, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(host, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+                  Text(widget.url, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            Icon(Icons.open_in_new, size: 14, color: cs.onSurfaceVariant.withAlpha(120)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // Date divider
 // ─────────────────────────────────────────────────────────────────
 class _DateDivider extends StatelessWidget {

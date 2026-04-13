@@ -312,6 +312,28 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(chatRoomService.unpinMessage(roomId)));
     }
 
+    @PostMapping("/dm")
+    public ResponseEntity<ApiResponse<ChatRoom>> createDm(
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        String targetUserId = body.get("targetUserId");
+        String targetUsername = body.get("targetUsername");
+        if (userId == null || targetUserId == null || targetUsername == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("userId, targetUserId, targetUsername이 필요합니다."));
+        }
+        ChatRoom dm = chatRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
+        return ResponseEntity.ok(ApiResponse.ok(dm));
+    }
+
+    @GetMapping("/link-preview")
+    public ResponseEntity<ApiResponse<Map<String, String>>> linkPreview(@RequestParam String url) {
+        if (url == null || url.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("url이 필요합니다."));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.fetchLinkPreview(url)));
+    }
+
     @PutMapping("/{roomId}/settings")
     public ResponseEntity<ApiResponse<Boolean>> updateRoomSettings(
             @PathVariable String roomId,

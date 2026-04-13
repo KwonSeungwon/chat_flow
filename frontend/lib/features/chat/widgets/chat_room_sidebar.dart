@@ -80,6 +80,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
         children: [
           _SidebarHeader(
             onCreateTap: () => _showCreateDialog(context),
+            onDmTap: () => _showDmDialog(context),
             onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
           ),
           Divider(height: 1, color: cs.outline.withAlpha(60), thickness: 1),
@@ -140,6 +141,78 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showDmDialog(BuildContext context) {
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> results = [];
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('새 DM'),
+          content: SizedBox(
+            width: 280,
+            height: 300,
+            child: Column(
+              children: [
+                TextField(
+                  controller: searchCtrl,
+                  decoration: const InputDecoration(hintText: '사용자 검색 (2자 이상)', prefixIcon: Icon(Icons.search)),
+                  onChanged: (q) async {
+                    if (q.length < 2) { setDialogState(() => results = []); return; }
+                    try {
+                      final resp = await ref.read(dioClientProvider).dio.get('/api/users/search', queryParameters: {'q': q});
+                      if (resp.data is Map && resp.data['data'] is List) {
+                        setDialogState(() => results = (resp.data['data'] as List).cast<Map<String, dynamic>>());
+                      }
+                    } catch (_) {}
+                  },
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: results.length,
+                    itemBuilder: (_, i) {
+                      final u = results[i];
+                      return ListTile(
+                        dense: true,
+                        leading: CircleAvatar(radius: 16, child: Text((u['username'] ?? '?')[0].toUpperCase())),
+                        title: Text(u['username'] ?? ''),
+                        onTap: () async {
+                          Navigator.of(ctx).pop();
+                          try {
+                            final auth = ref.read(chatRoomsProvider.notifier);
+                            final dio = ref.read(dioClientProvider).dio;
+                            final resp = await dio.post('/api/chat/rooms/dm', data: {
+                              'targetUserId': u['userId'],
+                              'targetUsername': u['username'],
+                            });
+                            final roomData = resp.data;
+                            String? roomId;
+                            if (roomData is Map && roomData['data'] is Map) {
+                              roomId = roomData['data']['id']?.toString();
+                            }
+                            if (roomId != null && context.mounted) {
+                              await ref.read(chatRoomsProvider.notifier).fetchRooms();
+                              context.go('/chat/$roomId');
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('DM 생성에 실패했습니다.')));
+                            }
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -261,8 +334,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
 // ─────────────────────────────────────────────────────────────────
 class _SidebarHeader extends StatelessWidget {
   final VoidCallback onCreateTap;
+  final VoidCallback? onDmTap;
   final VoidCallback? onRefresh;
-  const _SidebarHeader({required this.onCreateTap, this.onRefresh});
+  const _SidebarHeader({required this.onCreateTap, this.onDmTap, this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -297,6 +371,26 @@ class _SidebarHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onDmTap != null)
+            Tooltip(
+              message: '새 DM',
+              child: InkWell(
+                onTap: onDmTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: cs.surfaceContainer,
+                    border: Border.all(color: cs.outline.withAlpha(80)),
+                  ),
+                  child: Icon(Icons.person_add_outlined,
+                      size: 16, color: cs.onSurfaceVariant),
+                ),
+              ),
+            ),
+          const SizedBox(width: 6),
           Tooltip(
             message: '새 채팅방',
             child: InkWell(

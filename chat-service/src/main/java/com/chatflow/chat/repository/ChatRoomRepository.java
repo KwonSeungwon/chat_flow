@@ -28,4 +28,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
 
     @Query("SELECT CASE WHEN r.participantCount >= r.maxParticipants THEN true ELSE false END FROM ChatRoom r WHERE r.id = :roomId")
     boolean isRoomFull(@Param("roomId") String roomId);
+
+    @Query("SELECT r FROM ChatRoom r WHERE r.roomType = 'DIRECT' AND r.name IN (:name1, :name2)")
+    List<ChatRoom> findDmRoom(@Param("name1") String name1, @Param("name2") String name2);
 }

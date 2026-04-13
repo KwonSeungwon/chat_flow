@@ -3,6 +3,7 @@ package com.chatflow.chat.service;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.common.util.MessageEncryptor;
@@ -380,6 +381,67 @@ public class ChatRoomService {
         } catch (Exception e) {
             redisHealth.recordFailure(e);
         }
+    }
+
+    @Transactional
+    public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
+        // DM room name is canonical: sorted usernames
+        String name1 = "DM:" + username1 + "," + username2;
+        String name2 = "DM:" + username2 + "," + username1;
+        List<ChatRoom> existing = chatRoomRepository.findDmRoom(name1, name2);
+        if (!existing.isEmpty()) return existing.get(0);
+
+        ChatRoom dm = ChatRoom.builder()
+                .id(UUID.randomUUID().toString())
+                .name(name1)
+                .description(username1 + "님과 " + username2 + "님의 대화")
+                .roomType(RoomType.DIRECT)
+                .maxParticipants(2)
+                .participantCount(0)
+                .createdAt(LocalDateTime.now())
+                .build();
+        ChatRoom saved = chatRoomRepository.save(dm);
+        evictRoomCaches(saved.getId());
+        return saved;
+    }
+
+    public Map<String, String> fetchLinkPreview(String url) {
+        Map<String, String> result = new LinkedHashMap<>();
+        try {
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 ChatFlow-Bot");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            conn.setInstanceFollowRedirects(true);
+            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                int lines = 0;
+                while ((line = reader.readLine()) != null && lines++ < 200) {
+                    sb.append(line);
+                }
+                String html = sb.toString();
+                result.put("url", url);
+                extractOg(html, "og:title", result, "title");
+                extractOg(html, "og:description", result, "description");
+                extractOg(html, "og:image", result, "image");
+                if (!result.containsKey("title")) {
+                    var m = java.util.regex.Pattern.compile("<title[^>]*>([^<]+)</title>", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html);
+                    if (m.find()) result.put("title", m.group(1).trim());
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Link preview fetch failed: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    private void extractOg(String html, String property, Map<String, String> result, String key) {
+        var pattern = java.util.regex.Pattern.compile(
+                "meta[^>]+property=[\"']" + property + "[\"'][^>]+content=[\"']([^\"']+)[\"']",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        var m = pattern.matcher(html);
+        if (m.find()) result.put(key, m.group(1));
     }
 
     @Transactional

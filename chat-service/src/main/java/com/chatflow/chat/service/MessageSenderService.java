@@ -78,6 +78,17 @@ public class MessageSenderService {
         if (MessageType.CHAT.equals(message.getType())) {
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), message.getContent());
+            // Parse @mentions and send targeted notifications
+            var mentionPattern = java.util.regex.Pattern.compile("@(\\S+)");
+            var matcher = mentionPattern.matcher(message.getContent());
+            while (matcher.find()) {
+                String mentionedUser = matcher.group(1);
+                if (!mentionedUser.equals(message.getUsername())) {
+                    fcmNotificationService.sendMessageNotification(
+                        "mention-" + mentionedUser, message.getUsername(),
+                        message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
+                }
+            }
         } else if (MessageType.FILE.equals(message.getType())) {
             String notifContent = message.getFileName() != null
                     ? "파일을 보냈습니다: " + message.getFileName()

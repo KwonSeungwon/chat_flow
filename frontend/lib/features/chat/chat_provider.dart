@@ -222,6 +222,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   static const _storage = FlutterSecureStorage();
   Timer? _typingDebounce;
   final Map<String, Timer> _typingTimers = {};
+  final List<Map<String, dynamic>> _offlineQueue = [];
 
   ChatNotifier(
     this._dioClient, {
@@ -298,6 +299,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onConnectionChanged: (connected) {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
+          if (connected) _flushOfflineQueue();
         }
       },
       onReadReceipt: (messageId, readCount) {
@@ -643,7 +645,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   void sendMessage({required String roomId, required String content, String priority = 'ROUTINE'}) {
     final reply = state.replyTarget;
-    _stompService.sendMessage({
+    final msg = {
       'chatRoomId': roomId,
       'userId': _userId,
       'username': _username,
@@ -652,8 +654,25 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'priority': priority,
       'timestamp': DateTime.now().toIso8601String(),
       if (reply != null) 'parentMessageId': reply.effectiveId,
-    });
+    };
+    if (_stompService.isConnected) {
+      _stompService.sendMessage(msg);
+    } else {
+      _offlineQueue.add(msg);
+      // Show as pending local message
+      final localMsg = ChatMessage.fromJson(msg.cast<String, dynamic>());
+      state = state.copyWith(messages: [...state.messages, localMsg]);
+    }
     if (reply != null) clearReplyTarget();
+  }
+
+  void _flushOfflineQueue() {
+    if (_offlineQueue.isEmpty) return;
+    final queued = List<Map<String, dynamic>>.from(_offlineQueue);
+    _offlineQueue.clear();
+    for (final msg in queued) {
+      _stompService.sendMessage(msg);
+    }
   }
 
   void sendPatientCard(String roomId, PatientCard card) {
