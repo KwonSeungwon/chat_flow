@@ -192,28 +192,38 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
       builder: (ctx) => AlertDialog(
         title: const Text('채팅방 삭제'),
         content: Text('"${room.name}" 채팅방을 삭제하시겠습니까?\n모든 메시지가 함께 삭제됩니다.'),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final ok = await ref.read(chatRoomsProvider.notifier).deleteRoom(room.id);
-              if (!ok && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('채팅방 삭제에 실패했습니다.')),
-                );
-                return;
-              }
-              // Navigate away if currently in the deleted room
-              if (context.mounted && room.id == widget.currentRoomId) {
-                context.go('/chat');
-              }
-            },
-            child: const Text('삭제'),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('취소'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await ref.read(chatRoomsProvider.notifier).deleteRoom(room.id);
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('채팅방 삭제에 실패했습니다.')),
+                      );
+                      return;
+                    }
+                    if (context.mounted && room.id == widget.currentRoomId) {
+                      context.go('/chat');
+                    }
+                  },
+                  child: const Text('삭제'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -352,6 +362,7 @@ class _RoomTileState extends State<_RoomTile> {
       child: GestureDetector(
         onTap: widget.onTap,
         onLongPress: widget.onDelete,
+        onSecondaryTap: widget.onDelete,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.only(bottom: 2),

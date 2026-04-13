@@ -766,6 +766,15 @@ class _ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
+            if (onReply != null)
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('답글'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onReply?.call();
+                },
+              ),
             if (onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -789,6 +798,29 @@ class _ChatBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  void _showContextMenu(BuildContext context, Offset position) {
+    final items = <PopupMenuEntry<String>>[];
+    if (onReply != null) {
+      items.add(const PopupMenuItem(value: 'reply', child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('답글')])));
+    }
+    if (onEdit != null) {
+      items.add(const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('수정')])));
+    }
+    if (onDelete != null) {
+      items.add(const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('삭제', style: TextStyle(color: Colors.red))])));
+    }
+    if (items.isEmpty) return;
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      items: items,
+    ).then((value) {
+      if (value == 'reply') onReply?.call();
+      if (value == 'edit') onEdit?.call();
+      if (value == 'delete') onDelete?.call();
+    });
   }
 
   @override
@@ -842,7 +874,10 @@ class _ChatBubble extends StatelessWidget {
     }
 
     return GestureDetector(
-      onLongPress: (onDelete != null || onEdit != null) ? () => _showDeleteSheet(context) : null,
+      onLongPress: (onDelete != null || onEdit != null || onReply != null) ? () => _showDeleteSheet(context) : null,
+      onSecondaryTapUp: (onDelete != null || onEdit != null || onReply != null)
+          ? (details) => _showContextMenu(context, details.globalPosition)
+          : null,
       child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(

@@ -39,6 +39,16 @@ class ChatMessage {
     this.editedAt,
   });
 
+  /// Server uses LocalDateTime (no timezone). K3s runs in UTC, so treat
+  /// timezone-less timestamps as UTC so .toLocal() converts to KST correctly.
+  static String _normalizeTimestamp(String? raw) {
+    if (raw == null || raw.isEmpty) return DateTime.now().toUtc().toIso8601String();
+    if (raw.endsWith('Z') || RegExp(r'[+-]\d{2}(:\d{2})?$').hasMatch(raw)) {
+      return raw;
+    }
+    return '${raw}Z';
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
       id: json['id']?.toString(),
@@ -47,8 +57,7 @@ class ChatMessage {
       userId: json['userId']?.toString() ?? '',
       username: json['username']?.toString() ?? '',
       content: json['content']?.toString() ?? '',
-      timestamp:
-          json['timestamp']?.toString() ?? DateTime.now().toIso8601String(),
+      timestamp: _normalizeTimestamp(json['timestamp']?.toString()),
       type:
           json['type']?.toString() ??
           json['messageType']?.toString() ??

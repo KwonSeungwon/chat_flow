@@ -635,7 +635,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 }
 
 final chatNotifierProvider =
-    StateNotifierProvider.family<ChatNotifier, ChatMessagesState, String>(
+    StateNotifierProvider.autoDispose.family<ChatNotifier, ChatMessagesState, String>(
   (ref, roomId) {
     final auth = ref.watch(authProvider);
     final notifier = ChatNotifier(
