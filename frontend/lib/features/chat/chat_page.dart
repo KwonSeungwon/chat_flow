@@ -953,6 +953,42 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
               ],
             ),
           ),
+        // Pin banner
+        Builder(builder: (context) {
+          final roomData = ref.watch(chatRoomsProvider).whenOrNull(
+            data: (rooms) => rooms.where((r) => r.id == widget.roomId).firstOrNull,
+          );
+          if (roomData?.pinnedMessageId == null) return const SizedBox.shrink();
+          final pinnedMsg = chatState.messages.where((m) => m.effectiveId == roomData!.pinnedMessageId).firstOrNull;
+          if (pinnedMsg == null) return const SizedBox.shrink();
+          return GestureDetector(
+            onTap: () => setState(() => _replyScrollTarget = pinnedMsg.effectiveId),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Theme.of(context).colorScheme.primaryContainer.withAlpha(60),
+              child: Row(
+                children: [
+                  const Icon(Icons.push_pin, size: 14),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(
+                    pinnedMsg.content, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  )),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 14),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    onPressed: () async {
+                      await ref.read(dioClientProvider).dio.delete('/api/chat/rooms/${widget.roomId}/pin');
+                      ref.read(chatRoomsProvider.notifier).fetchRooms();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
         if (chatState.isLoadingHistory) const LinearProgressIndicator(),
         Expanded(
           child: ChatMessagesList(

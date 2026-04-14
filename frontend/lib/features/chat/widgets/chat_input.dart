@@ -389,21 +389,19 @@ class _ChatInputState extends State<ChatInput> {
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _controller,
               builder: (_, value, __) {
-                if (value.text.length < _warnThreshold) {
-                  return const SizedBox.shrink();
-                }
-                final remaining = _maxLength - value.text.length;
+                final len = value.text.length;
+                if (len == 0) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '$remaining자 남음',
+                      '$len/$_maxLength',
                       style: TextStyle(
                         fontSize: 11,
-                        color: remaining <= 0
-                            ? AppColors.error
-                            : cs.onSurfaceVariant.withAlpha(150),
+                        color: len >= _warnThreshold
+                            ? (len >= _maxLength ? AppColors.error : const Color(0xFFF57C00))
+                            : cs.onSurfaceVariant.withAlpha(120),
                       ),
                     ),
                   ),

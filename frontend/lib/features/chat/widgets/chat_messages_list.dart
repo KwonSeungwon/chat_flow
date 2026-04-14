@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -355,9 +357,40 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 readCount: readCount,
               );
             } else {
+              // SBAR structured message detection
+              Map<String, dynamic>? sbarData;
+              if (msg.content.startsWith('{') && msg.content.contains('"type":"SBAR"')) {
+                try { sbarData = jsonDecode(msg.content) as Map<String, dynamic>; } catch (_) {}
+              }
+
               final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
               final isMine = msg.username == widget.currentUsername;
+
+              if (sbarData != null) {
+                bubble = Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!isMine) ...[
+                        _Avatar(name: msg.username, color: AppColors.avatarPalette[msg.username.hashCode.abs() % AppColors.avatarPalette.length]),
+                        const SizedBox(width: 8),
+                      ],
+                      Flexible(child: Column(
+                        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        children: [
+                          if (!isMine && isFirstInGroup)
+                            Padding(padding: const EdgeInsets.only(left: 4, bottom: 3), child: Text(msg.username, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+                          _SbarCardWidget(sbar: sbarData),
+                          if (showTime) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_formatTime(msg.timestamp), style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)))),
+                        ],
+                      )),
+                      if (isMine) const SizedBox(width: 6),
+                    ],
+                  ),
+                );
+              } else {
               bubble = _ChatBubble(
                 msg: msg,
                 isMine: isMine,
@@ -391,6 +424,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 showAvatar: isFirstInGroup,
                 showTime: showTime,
               );
+              } // end non-SBAR else
             }
 
             // Wrap with highlight overlay for search-navigated messages
@@ -876,6 +910,17 @@ class _ChatBubble extends StatelessWidget {
                 title: Text(msg.pinned ? '고정 해제' : '메시지 고정'),
                 onTap: () { Navigator.of(context).pop(); onPin?.call(); },
               ),
+            if (!msg.deleted)
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('복사'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Clipboard.setData(ClipboardData(text: msg.content));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('메시지가 복사되었습니다.'), duration: Duration(seconds: 1)));
+                },
+              ),
             if (onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -919,6 +964,9 @@ class _ChatBubble extends StatelessWidget {
     if (onPin != null) {
       items.add(PopupMenuItem(value: 'pin', child: Row(children: [Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18), const SizedBox(width: 8), Text(msg.pinned ? '고정 해제' : '고정')])));
     }
+    if (!msg.deleted) {
+      items.add(const PopupMenuItem(value: 'copy', child: Row(children: [Icon(Icons.copy_outlined, size: 18), SizedBox(width: 8), Text('복사')])));
+    }
     if (onEdit != null) {
       items.add(const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('수정')])));
     }
@@ -933,6 +981,12 @@ class _ChatBubble extends StatelessWidget {
     ).then((value) {
       if (value == null) return;
       if (value.startsWith('react_')) { onReaction?.call(value.substring(6)); return; }
+      if (value == 'copy') {
+        Clipboard.setData(ClipboardData(text: msg.content));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('메시지가 복사되었습니다.'), duration: Duration(seconds: 1)));
+        return;
+      }
       if (value == 'reply') onReply?.call();
       if (value == 'forward') onForward?.call();
       if (value == 'pin') onPin?.call();
@@ -1403,6 +1457,72 @@ class _UnreadDivider extends StatelessWidget {
             ),
           ),
           Expanded(child: Divider(color: Colors.red.withAlpha(120), height: 1)),
+        ],
+      ),
+    );
+  }
+}
+
+// SBAR structured card
+// ─────────────────────────────────────────────────────────────────
+class _SbarCardWidget extends StatelessWidget {
+  final Map<String, dynamic> sbar;
+  const _SbarCardWidget({required this.sbar});
+
+  static const _sections = [
+    ('S', 'Situation', Color(0xFF1976D2)),
+    ('B', 'Background', Color(0xFF388E3C)),
+    ('A', 'Assessment', Color(0xFFF57C00)),
+    ('R', 'Recommendation', Color(0xFFD32F2F)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(80)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer.withAlpha(80),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.assignment_outlined, size: 16),
+                SizedBox(width: 6),
+                Text('SBAR 인수인계', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              ],
+            ),
+          ),
+          for (final sec in _sections)
+            if ((sbar[sec.$1.toLowerCase() == 's' ? 'situation' : sec.$1.toLowerCase() == 'b' ? 'background' : sec.$1.toLowerCase() == 'a' ? 'assessment' : 'recommendation'] ?? '').toString().isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border(left: BorderSide(color: sec.$3, width: 3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${sec.$1} - ${sec.$2}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: sec.$3)),
+                    const SizedBox(height: 2),
+                    Text(
+                      sbar[sec.$1.toLowerCase() == 's' ? 'situation' : sec.$1.toLowerCase() == 'b' ? 'background' : sec.$1.toLowerCase() == 'a' ? 'assessment' : 'recommendation']?.toString() ?? '',
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+          const SizedBox(height: 6),
         ],
       ),
     );

@@ -503,6 +503,14 @@ class _RoomTileState extends State<_RoomTile> {
     });
   }
 
+  bool get _isDm => widget.room.roomType == 'DIRECT' || widget.room.name.startsWith('DM:');
+  String get _displayName {
+    if (!_isDm) return widget.room.name;
+    // "DM:user1,user2" → show the other user's name
+    final raw = widget.room.name.replaceFirst('DM:', '');
+    return raw.split(',').map((s) => s.trim()).join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -571,9 +579,11 @@ class _RoomTileState extends State<_RoomTile> {
                             ),
                           ),
                           child: Center(
-                            child: Text(
-                              widget.room.name.isNotEmpty
-                                  ? widget.room.name[0].toUpperCase()
+                            child: _isDm
+                                ? const Icon(Icons.person, color: Colors.white, size: 20)
+                                : Text(
+                              _displayName.isNotEmpty
+                                  ? _displayName[0].toUpperCase()
                                   : '#',
                               style: const TextStyle(
                                 color: Colors.white,
@@ -612,7 +622,7 @@ class _RoomTileState extends State<_RoomTile> {
                                   ],
                                   Expanded(
                                     child: Text(
-                                widget.room.name,
+                                _displayName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
