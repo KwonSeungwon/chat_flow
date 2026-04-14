@@ -670,6 +670,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (_offlineQueue.isEmpty) return;
     final queued = List<Map<String, dynamic>>.from(_offlineQueue);
     _offlineQueue.clear();
+    // Remove locally-added messages to prevent duplicates when server broadcasts them back
+    final queuedIds = queued.map((m) =>
+        '${m['timestamp']}-${m['username']}-${m['content'].hashCode}').toSet();
+    final cleaned = state.messages.where((m) => !queuedIds.contains(m.effectiveId)).toList();
+    state = state.copyWith(messages: cleaned);
     for (final msg in queued) {
       _stompService.sendMessage(msg);
     }
@@ -726,7 +731,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (_) {}
   }
 
-  Future<void> forwardMessage(String targetRoomId, ChatMessage msg) async {
+  Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
+    if (!_stompService.isConnected) return false;
     _stompService.sendMessage({
       'chatRoomId': targetRoomId,
       'userId': _userId,
@@ -736,6 +742,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'priority': 'ROUTINE',
       'timestamp': DateTime.now().toIso8601String(),
     });
+    return true;
   }
 
   void notifyTyping(String roomId) {

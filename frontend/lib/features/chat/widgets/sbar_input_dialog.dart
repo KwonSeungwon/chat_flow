@@ -16,6 +16,15 @@ class _SbarInputDialogState extends State<SbarInputDialog> {
   final _rCtrl = TextEditingController();
 
   @override
+  void dispose() {
+    _sCtrl.dispose();
+    _bCtrl.dispose();
+    _aCtrl.dispose();
+    _rCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Row(

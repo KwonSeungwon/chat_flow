@@ -237,13 +237,13 @@ void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier curren
                     leading: CircleAvatar(radius: 16, child: Text(room.name.isNotEmpty ? room.name[0].toUpperCase() : '#')),
                     title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                     onTap: () async {
+                      final messenger = ScaffoldMessenger.of(context);
                       Navigator.of(ctx).pop();
-                      // Use current room's STOMP connection — server routes by chatRoomId
-                      await currentNotifier.forwardMessage(room.id, msg);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('"${room.name}"에 메시지를 전달했습니다.')),
-                        );
+                      final ok = await currentNotifier.forwardMessage(room.id, msg);
+                      if (ok) {
+                        messenger.showSnackBar(SnackBar(content: Text('"${room.name}"에 메시지를 전달했습니다.')));
+                      } else {
+                        messenger.showSnackBar(const SnackBar(content: Text('연결이 끊겨 전달에 실패했습니다.')));
                       }
                     },
                   );
@@ -980,8 +980,10 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                     onPressed: () async {
-                      await ref.read(dioClientProvider).dio.delete('/api/chat/rooms/${widget.roomId}/pin');
-                      ref.read(chatRoomsProvider.notifier).fetchRooms();
+                      try {
+                        await ref.read(dioClientProvider).dio.delete('/api/chat/rooms/${widget.roomId}/pin');
+                        ref.read(chatRoomsProvider.notifier).fetchRooms();
+                      } catch (_) {}
                     },
                   ),
                 ],
