@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
@@ -264,12 +265,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       } else {
         items = [];
       }
-      final history =
-          items
-              .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-              .toList()
-              .reversed
-              .toList();
+      final history = <ChatMessage>[];
+      for (final e in items) {
+        try {
+          history.add(ChatMessage.fromJson(e as Map<String, dynamic>));
+        } catch (parseErr) {
+          debugPrint('[ChatNotifier] Message parse error: $parseErr');
+        }
+      }
+      history.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       // Merge history with any live STOMP messages already received
       final live = state.messages;
       final merged = [...history, ...live];
@@ -277,7 +281,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
       deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       state = state.copyWith(messages: deduped, isLoadingHistory: false);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ChatNotifier] joinRoom error: $e');
       state = state.copyWith(isLoadingHistory: false);
     }
 
