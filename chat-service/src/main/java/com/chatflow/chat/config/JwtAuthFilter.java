@@ -58,6 +58,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     if ("X-Username".equalsIgnoreCase(name)) return decodedUsername;
                     return super.getHeader(name);
                 }
+                @Override
+                public java.util.Enumeration<String> getHeaders(String name) {
+                    if ("X-Username".equalsIgnoreCase(name)) {
+                        return java.util.Collections.enumeration(java.util.List.of(decodedUsername));
+                    }
+                    return super.getHeaders(name);
+                }
             }, response);
             return;
         }
