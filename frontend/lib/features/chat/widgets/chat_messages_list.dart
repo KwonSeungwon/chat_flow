@@ -1356,6 +1356,30 @@ class _ChatBubble extends StatelessWidget {
                       ),
                   ],
                 ),
+                // Reaction chips inside bubble area
+                if (msg.reactions.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Wrap(
+                      spacing: 4,
+                      children: msg.reactions.entries.map((e) {
+                        final emoji = e.key;
+                        final users = e.value;
+                        return GestureDetector(
+                          onTap: () => onReaction?.call(emoji),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surfaceContainer,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
+                            ),
+                            child: Text('$emoji ${users.length}', style: const TextStyle(fontSize: 12)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 if (onReply != null)
                   Align(
                     alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -1399,37 +1423,7 @@ class _ChatBubble extends StatelessWidget {
       );
     }
 
-    if (msg.reactions.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          result,
-          Padding(
-            padding: EdgeInsets.only(left: isMine ? 0 : 54, right: isMine ? 6 : 0, top: 2),
-            child: Wrap(
-              spacing: 4,
-              children: msg.reactions.entries.map((e) {
-                final emoji = e.key;
-                final users = e.value;
-                return GestureDetector(
-                  onTap: () => onReaction?.call(emoji),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
-                    ),
-                    child: Text('$emoji ${users.length}', style: const TextStyle(fontSize: 12)),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      );
-    }
+    // Reactions now rendered inside the bubble column
     return result;
   }
 }
