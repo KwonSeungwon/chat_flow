@@ -55,7 +55,8 @@ class ChatMessage {
       try {
         final parts = raw.replaceAll(RegExp(r'[\[\]\s]'), '').split(',').map(int.parse).toList();
         if (parts.length >= 6) {
-          return DateTime.utc(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]).toIso8601String();
+          final ms = parts.length >= 7 ? parts[6] ~/ 1000000 : 0;
+          return DateTime.utc(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], ms).toIso8601String();
         }
       } catch (_) {}
       return DateTime.now().toUtc().toIso8601String();

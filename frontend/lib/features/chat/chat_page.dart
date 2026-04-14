@@ -798,6 +798,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
   String? _replyScrollTarget;
   bool _showSearch = false;
   final _searchCtrl = TextEditingController();
+  final _keyboardFocusNode = FocusNode();
   List<ChatMessage> _searchResults = [];
   bool _searching = false;
 
@@ -831,11 +832,17 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
   @override
   void initState() {
     super.initState();
-    // Clear unread count when user enters a room
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(chatNotifierProvider(widget.roomId).notifier)
           .markRoomRead(widget.roomId);
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _keyboardFocusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -867,7 +874,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             : null);
 
     return KeyboardListener(
-      focusNode: FocusNode(),
+      focusNode: _keyboardFocusNode,
       autofocus: false,
       onKeyEvent: (event) {
         if (event is KeyDownEvent &&

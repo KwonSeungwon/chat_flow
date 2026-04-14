@@ -660,7 +660,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } else {
       _offlineQueue.add(msg);
       // Show as pending local message
-      final localMsg = ChatMessage.fromJson(msg.cast<String, dynamic>());
+      final localMsg = ChatMessage.fromJson(Map<String, dynamic>.from(msg));
       state = state.copyWith(messages: [...state.messages, localMsg]);
     }
     if (reply != null) clearReplyTarget();

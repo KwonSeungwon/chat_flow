@@ -186,6 +186,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                         title: Text(u['username'] ?? ''),
                         onTap: () async {
                           final dio = ref.read(dioClientProvider).dio;
+                          final roomsNotifier = ref.read(chatRoomsProvider.notifier);
+                          final router = GoRouter.of(context);
+                          final messenger = ScaffoldMessenger.of(context);
                           Navigator.of(ctx).pop();
                           try {
                             final resp = await dio.post('/api/chat/rooms/dm', data: {
@@ -197,14 +200,12 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
                             if (roomData is Map && roomData['data'] is Map) {
                               roomId = roomData['data']['id']?.toString();
                             }
-                            if (roomId != null && context.mounted) {
-                              await ref.read(chatRoomsProvider.notifier).fetchRooms();
-                              context.go('/chat/$roomId');
+                            if (roomId != null) {
+                              await roomsNotifier.fetchRooms();
+                              router.go('/chat/$roomId');
                             }
                           } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('DM 생성에 실패했습니다.')));
-                            }
+                            messenger.showSnackBar(const SnackBar(content: Text('DM 생성에 실패했습니다.')));
                           }
                         },
                       );
