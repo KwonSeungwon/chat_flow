@@ -11,6 +11,7 @@ import '../../core/services/fcm_service.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/chat_room.dart';
 import '../../shared/models/patient_card.dart';
+import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -122,7 +123,7 @@ final roomUnreadCountsProvider = StateProvider<Map<String, int>>((ref) => {});
 // Muted Rooms (local-only, persisted to FlutterSecureStorage)
 // ---------------------------------------------------------------------------
 
-const _mutedKey = 'chatflow-muted-rooms';
+const _mutedKey = StorageKeys.mutedRooms;
 const _muteStorage = FlutterSecureStorage();
 
 final mutedRoomsProvider = StateNotifierProvider<MutedRoomsNotifier, Set<String>>((ref) {
@@ -157,57 +158,78 @@ class MutedRoomsNotifier extends StateNotifier<Set<String>> {
 // Chat Messages
 // ---------------------------------------------------------------------------
 
+enum ChatExitReason { none, deleted, full }
+
 class ChatMessagesState {
   final List<ChatMessage> messages;
   final bool isConnected;
+  final bool wasEverConnected;
   final bool isLoadingHistory;
   final bool isAiLoading;
   final bool isSummaryLoading;
+  final bool hasMoreHistory;
+  final String? errorMessage;
   /// messageId → read count
   final Map<String, int> readCounts;
   /// Last message the current user has read (fetched from backend on join)
   final String? lastReadMessageId;
   final ChatMessage? replyTarget;
-  final bool roomDeleted;
+  final ChatExitReason exitReason;
+  /// For ROOM_FULL: redirectTo room ID
+  final String? redirectTo;
   final Set<String> typingUsers;
 
   const ChatMessagesState({
     this.messages = const [],
     this.isConnected = false,
+    this.wasEverConnected = false,
     this.isLoadingHistory = false,
     this.isAiLoading = false,
     this.isSummaryLoading = false,
+    this.hasMoreHistory = true,
+    this.errorMessage,
     this.readCounts = const {},
     this.lastReadMessageId,
     this.replyTarget,
-    this.roomDeleted = false,
+    this.exitReason = ChatExitReason.none,
+    this.redirectTo,
     this.typingUsers = const {},
   });
 
   ChatMessagesState copyWith({
     List<ChatMessage>? messages,
     bool? isConnected,
+    bool? wasEverConnected,
     bool? isLoadingHistory,
     bool? isAiLoading,
     bool? isSummaryLoading,
+    bool? hasMoreHistory,
+    String? errorMessage,
+    bool clearErrorMessage = false,
     Map<String, int>? readCounts,
     String? lastReadMessageId,
     bool clearLastReadMessageId = false,
     ChatMessage? replyTarget,
     bool clearReplyTarget = false,
-    bool? roomDeleted,
+    ChatExitReason? exitReason,
+    String? redirectTo,
     Set<String>? typingUsers,
   }) {
+    final newConnected = isConnected ?? this.isConnected;
     return ChatMessagesState(
       messages: messages ?? this.messages,
-      isConnected: isConnected ?? this.isConnected,
+      isConnected: newConnected,
+      wasEverConnected: (wasEverConnected ?? this.wasEverConnected) || newConnected,
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
       isAiLoading: isAiLoading ?? this.isAiLoading,
       isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
+      hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
+      errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       readCounts: readCounts ?? this.readCounts,
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
       replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
-      roomDeleted: roomDeleted ?? this.roomDeleted,
+      exitReason: exitReason ?? this.exitReason,
+      redirectTo: redirectTo ?? this.redirectTo,
       typingUsers: typingUsers ?? this.typingUsers,
     );
   }
@@ -224,6 +246,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Timer? _typingDebounce;
   final Map<String, Timer> _typingTimers = {};
   final List<Map<String, dynamic>> _offlineQueue = [];
+  String? _currentRoomId;
 
   ChatNotifier(
     this._dioClient, {
@@ -243,6 +266,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       messages: [],
       isConnected: false,
       isLoadingHistory: true,
+      hasMoreHistory: true,
+      clearErrorMessage: true,
+      readCounts: {},
       clearLastReadMessageId: true,
     );
 
@@ -280,10 +306,14 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final seen = <String>{};
       final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
       deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      state = state.copyWith(messages: deduped, isLoadingHistory: false);
+      state = state.copyWith(
+        messages: deduped,
+        isLoadingHistory: false,
+        hasMoreHistory: history.length >= 50,
+      );
     } catch (e) {
       debugPrint('[ChatNotifier] joinRoom error: $e');
-      state = state.copyWith(isLoadingHistory: false);
+      state = state.copyWith(isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
     }
 
     // Load AI summaries and merge into history
@@ -292,6 +322,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Fetch last-read position and compute unread count for this session
     await _fetchLastReadAndUpdateUnread(roomId);
 
+    // Set roomId before connect — _onMessage may fire before connect() returns
+    _currentRoomId = roomId;
+
     // Connect WebSocket
     _stompService.connect(
       roomId: roomId,
@@ -299,7 +332,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       userId: _userId,
       token: _token,
       tokenProvider: () async =>
-          await _storage.read(key: 'chatflow-token') ?? _token,
+          await _storage.read(key: StorageKeys.token) ?? _token,
       onMessage: (msg) => _onMessage(msg),
       onConnectionChanged: (connected) {
         if (mounted) {
@@ -316,6 +349,14 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onTyping: (username) {
         if (!mounted) return;
         _onTypingReceived(username);
+      },
+      onRoomFull: (redirectTo, roomName) {
+        if (mounted) {
+          state = state.copyWith(
+            exitReason: ChatExitReason.full,
+            redirectTo: redirectTo,
+          );
+        }
       },
     );
 
@@ -336,12 +377,63 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  Future<void> loadMoreHistory(String roomId) async {
+    if (state.isLoadingHistory || !state.hasMoreHistory) return;
+    state = state.copyWith(isLoadingHistory: true);
+    try {
+      final oldestTimestamp = state.messages.isNotEmpty ? state.messages.first.timestamp : null;
+      final resp = await _dioClient.dio.get(
+        '/api/chat/rooms/$roomId/messages/cursor',
+        queryParameters: {
+          'size': 50,
+          if (oldestTimestamp != null) 'before': oldestTimestamp,
+        },
+      );
+      final data = resp.data;
+      // Response: { data: { messages: [...], nextCursor: ..., hasMore: bool } }
+      List<dynamic> items;
+      bool? serverHasMore;
+      if (data is Map && data['data'] is Map) {
+        final inner = data['data'] as Map;
+        items = (inner['messages'] as List?) ?? [];
+        serverHasMore = inner['hasMore'] as bool?;
+      } else if (data is Map && data['messages'] is List) {
+        items = data['messages'] as List;
+        serverHasMore = data['hasMore'] as bool?;
+      } else {
+        items = [];
+      }
+      final newMessages = <ChatMessage>[];
+      for (final e in items) {
+        try {
+          newMessages.add(ChatMessage.fromJson(e as Map<String, dynamic>));
+        } catch (parseErr) {
+          debugPrint('[ChatNotifier] loadMoreHistory parse error: $parseErr');
+        }
+      }
+      newMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      final merged = [...newMessages, ...state.messages];
+      final seen = <String>{};
+      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
+      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      if (!mounted) return;
+      state = state.copyWith(
+        messages: deduped,
+        isLoadingHistory: false,
+        hasMoreHistory: serverHasMore ?? newMessages.length >= 50,
+      );
+    } catch (e) {
+      debugPrint('[ChatNotifier] loadMoreHistory error: $e');
+      if (mounted) state = state.copyWith(isLoadingHistory: false);
+    }
+  }
+
   void _onMessage(Map<String, dynamic> rawMsg) {
     if (!mounted) return;
     final type = rawMsg['type']?.toString().toUpperCase();
 
     if (type == 'ROOM_DELETED') {
-      state = state.copyWith(roomDeleted: true);
+      state = state.copyWith(exitReason: ChatExitReason.deleted);
       return;
     }
 
@@ -417,6 +509,17 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
     final msg = ChatMessage.fromJson(rawMsg);
     final existing = state.messages;
+    // Replace local 'sending' message with server-confirmed version
+    final sendingIdx = existing.indexWhere((m) =>
+        m.deliveryStatus == MessageDeliveryStatus.sending &&
+        m.userId == msg.userId &&
+        m.content == msg.content);
+    if (sendingIdx >= 0) {
+      final replaced = List<ChatMessage>.from(existing);
+      replaced[sendingIdx] = msg;
+      state = state.copyWith(messages: replaced);
+      return;
+    }
     // Dedup by effectiveId
     if (existing.any((m) => m.effectiveId == msg.effectiveId)) return;
     final updated = [...existing, msg];
@@ -424,6 +527,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     final capped =
         updated.length > 500 ? updated.sublist(updated.length - 500) : updated;
     state = state.copyWith(messages: capped);
+    // Auto read-receipt: mark as read when message arrives (user is viewing room)
+    if (msg.userId != _userId && _currentRoomId != null) {
+      _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
+    }
   }
 
   Future<bool> deleteMessage(String roomId, String messageId) async {
@@ -660,13 +767,19 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'timestamp': DateTime.now().toIso8601String(),
       if (reply != null) 'parentMessageId': reply.effectiveId,
     };
+    // Show local message immediately with 'sending' status
+    final localMsg = ChatMessage(
+      chatRoomId: roomId, userId: _userId, username: _username,
+      content: content, type: 'CHAT', priority: priority,
+      timestamp: msg['timestamp']!,
+      parentMessageId: reply?.effectiveId,
+      deliveryStatus: MessageDeliveryStatus.sending,
+    );
+    state = state.copyWith(messages: [...state.messages, localMsg]);
     if (_stompService.isConnected) {
       _stompService.sendMessage(msg);
     } else {
       _offlineQueue.add(msg);
-      // Show as pending local message
-      final localMsg = ChatMessage.fromJson(Map<String, dynamic>.from(msg));
-      state = state.copyWith(messages: [...state.messages, localMsg]);
     }
     if (reply != null) clearReplyTarget();
   }
@@ -769,7 +882,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     });
   }
 
-  void disconnect() => _stompService.disconnect();
+  void disconnect() {
+    _currentRoomId = null;
+    _stompService.disconnect();
+  }
 
   @override
   void dispose() {

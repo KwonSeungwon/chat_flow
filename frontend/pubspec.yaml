@@ -41,6 +41,8 @@ dependencies:
   file_picker: ^8.0.0
   # URL launcher (file download)
   url_launcher: ^6.3.0
+  # Preferences storage (non-sensitive, e.g. theme)
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:

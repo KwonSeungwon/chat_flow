@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../core/constants/storage_keys.dart';
 import '../../core/network/dio_client.dart';
 
 class AuthState {
@@ -56,12 +58,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _hydrate() async {
     try {
-      final token = await _storage.read(key: 'chatflow-token');
-      final userId = await _storage.read(key: 'chatflow-userId');
-      final username = await _storage.read(key: 'chatflow-username');
+      final token = await _storage.read(key: StorageKeys.token);
+      final userId = await _storage.read(key: StorageKeys.userId);
+      final username = await _storage.read(key: StorageKeys.username);
       if (token != null) {
-        final role = await _storage.read(key: 'chatflow-role');
-        final profileImageUrl = await _storage.read(key: 'chatflow-profileImage');
+        final role = await _storage.read(key: StorageKeys.role);
+        final profileImageUrl = await _storage.read(key: StorageKeys.profileImage);
         state = AuthState(
           token: token,
           userId: userId,
@@ -70,8 +72,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           profileImageUrl: profileImageUrl,
         );
       }
-    } catch (_) {
+    } catch (e) {
       // Corrupted or locked secure storage — fall back to logged-out state
+      debugPrint('[AuthNotifier] _hydrate error: $e');
       state = const AuthState();
     }
   }
@@ -95,7 +98,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ? '아이디 또는 비밀번호가 올바르지 않습니다.'
           : '로그인 실패. 잠시 후 다시 시도해주세요.';
       state = AuthState(isLoading: false, error: msg);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AuthNotifier] login error: $e');
       state = AuthState(isLoading: false, error: '로그인 실패. 네트워크를 확인해주세요.');
     }
   }
@@ -119,7 +123,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ? '이미 사용 중인 아이디입니다.'
           : '회원가입 실패. 잠시 후 다시 시도해주세요.';
       state = AuthState(isLoading: false, error: msg);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[AuthNotifier] register error: $e');
       state = AuthState(isLoading: false, error: '회원가입 실패. 네트워크를 확인해주세요.');
     }
   }
@@ -127,12 +132,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     try {
       await _dioClient.dio.post('/api/auth/logout');
-    } catch (_) {}
-    await _storage.delete(key: 'chatflow-token');
-    await _storage.delete(key: 'chatflow-userId');
-    await _storage.delete(key: 'chatflow-username');
-    await _storage.delete(key: 'chatflow-role');
-    await _storage.delete(key: 'chatflow-profileImage');
+    } catch (e) {
+      debugPrint('[AuthNotifier] logout error: $e');
+    }
+    await _storage.delete(key: StorageKeys.token);
+    await _storage.delete(key: StorageKeys.userId);
+    await _storage.delete(key: StorageKeys.username);
+    await _storage.delete(key: StorageKeys.role);
+    await _storage.delete(key: StorageKeys.profileImage);
     state = const AuthState();
   }
 
@@ -141,7 +148,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       'username': state.username,
       'profileImageUrl': profileImageUrl,
     });
-    await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
+    await _storage.write(key: StorageKeys.profileImage, value: profileImageUrl);
     state = state.copyWith(profileImageUrl: profileImageUrl);
   }
 
@@ -152,12 +159,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String role = 'NURSE',
     String? profileImageUrl,
   }) async {
-    await _storage.write(key: 'chatflow-token', value: token);
-    await _storage.write(key: 'chatflow-userId', value: userId);
-    await _storage.write(key: 'chatflow-username', value: username);
-    await _storage.write(key: 'chatflow-role', value: role);
+    await _storage.write(key: StorageKeys.token, value: token);
+    await _storage.write(key: StorageKeys.userId, value: userId);
+    await _storage.write(key: StorageKeys.username, value: username);
+    await _storage.write(key: StorageKeys.role, value: role);
     if (profileImageUrl != null) {
-      await _storage.write(key: 'chatflow-profileImage', value: profileImageUrl);
+      await _storage.write(key: StorageKeys.profileImage, value: profileImageUrl);
     }
   }
 }

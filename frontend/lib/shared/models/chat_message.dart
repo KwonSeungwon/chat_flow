@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+enum MessageDeliveryStatus { sending, sent, failed }
+
 class ChatMessage {
   final String? id;
   final String? messageId;
@@ -22,6 +24,7 @@ class ChatMessage {
   final bool pinned;
   /// JSON map: {"emoji": ["userId1","userId2"]}
   final Map<String, List<String>> reactions;
+  final MessageDeliveryStatus deliveryStatus;
 
   ChatMessage({
     this.id,
@@ -44,6 +47,7 @@ class ChatMessage {
     this.editedAt,
     this.pinned = false,
     this.reactions = const {},
+    this.deliveryStatus = MessageDeliveryStatus.sent,
   });
 
   /// Server uses LocalDateTime (no timezone). K3s runs in UTC, so treat
@@ -93,6 +97,7 @@ class ChatMessage {
       editedAt: json['editedAt']?.toString(),
       pinned: json['pinned'] == true,
       reactions: parseReactions(json['reactions']),
+      deliveryStatus: MessageDeliveryStatus.sent,
     );
   }
 

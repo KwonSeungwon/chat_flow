@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../constants/storage_keys.dart';
 
 final dioClientProvider = Provider<DioClient>((ref) => DioClient());
 
@@ -18,7 +19,7 @@ class DioClient {
   DioClient() {
     final baseUrl = kIsWeb
         ? _webOrigin()
-        : (dotenv.env['API_BASE_URL'] ?? 'http://43.201.94.100:8000');
+        : (dotenv.env['API_BASE_URL'] ?? 'https://app.chatflow.ai.kr');
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -28,7 +29,7 @@ class DioClient {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final token = await _storage.read(key: 'chatflow-token');
+        final token = await _storage.read(key: StorageKeys.token);
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
@@ -36,9 +37,9 @@ class DioClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          await _storage.delete(key: 'chatflow-token');
-          await _storage.delete(key: 'chatflow-userId');
-          await _storage.delete(key: 'chatflow-username');
+          await _storage.delete(key: StorageKeys.token);
+          await _storage.delete(key: StorageKeys.userId);
+          await _storage.delete(key: StorageKeys.username);
           onUnauthorized?.call();
         }
         return handler.next(error);

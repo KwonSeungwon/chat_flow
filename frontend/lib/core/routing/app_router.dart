@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../constants/storage_keys.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/search/search_page.dart';
@@ -11,7 +12,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/chat',
     redirect: (context, state) async {
       const storage = FlutterSecureStorage();
-      final token = await storage.read(key: 'chatflow-token');
+      final token = await storage.read(key: StorageKeys.token);
       final isLoginPage = state.matchedLocation == '/login';
       if (token == null && !isLoginPage) return '/login';
       if (token != null && isLoginPage) return '/chat';

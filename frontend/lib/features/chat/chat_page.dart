@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_provider.dart';
+import '../../core/utils/url_helper.dart';
 import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
 import '../../shared/models/chat_message.dart';
@@ -17,18 +17,6 @@ import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
 
-String _buildProfileUrl(String relativeUrl) {
-  // If already an absolute URL, return as-is
-  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
-    return relativeUrl;
-  }
-  if (kIsWeb) {
-    final uri = Uri.base;
-    final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
-    return '${uri.scheme}://${uri.host}$port$relativeUrl';
-  }
-  return relativeUrl;
-}
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
   try {
@@ -131,7 +119,7 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
         mainAxisSize: MainAxisSize.min,
         children: [
           _ProfileAvatar(
-            url: auth.profileImageUrl != null ? _buildProfileUrl(auth.profileImageUrl!) : null,
+            url: auth.profileImageUrl != null ? buildFullUrl(auth.profileImageUrl!) : null,
             radius: 40,
           ),
           const SizedBox(height: 12),
@@ -396,14 +384,13 @@ class ChatPage extends ConsumerWidget {
           PopupMenuButton<String>(
             icon: _ProfileAvatar(
               url: auth.profileImageUrl != null
-                  ? _buildProfileUrl(auth.profileImageUrl!)
+                  ? buildFullUrl(auth.profileImageUrl!)
                   : null,
               radius: 16,
             ),
             onSelected: (value) async {
               if (value == 'theme') {
-                ref.read(themeModeProvider.notifier).state =
-                    themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+                ref.read(themeModeProvider.notifier).toggle();
               } else if (value == 'profile') {
                 if (context.mounted) _showProfileDialog(context, ref);
               } else if (value == 'password') {
@@ -421,7 +408,7 @@ class ChatPage extends ConsumerWidget {
                   children: [
                     _ProfileAvatar(
                       url: auth.profileImageUrl != null
-                          ? _buildProfileUrl(auth.profileImageUrl!)
+                          ? buildFullUrl(auth.profileImageUrl!)
                           : null,
                       radius: 30,
                     ),
@@ -860,10 +847,21 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
     final chatState = ref.watch(chatNotifierProvider(widget.roomId));
     final chatNotifier = ref.read(chatNotifierProvider(widget.roomId).notifier);
 
-    // Route away when the room is deleted server-side
+    // Route away on room exit (deleted or full)
     ref.listen(chatNotifierProvider(widget.roomId), (_, next) {
-      if (next.roomDeleted && context.mounted) {
+      if (!context.mounted) return;
+      if (next.exitReason == ChatExitReason.deleted) {
         context.go('/chat');
+      } else if (next.exitReason == ChatExitReason.full) {
+        final redirectTo = next.redirectTo;
+        if (redirectTo != null && redirectTo.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('채팅방이 가득 찼습니다. 새 방으로 이동합니다.')),
+          );
+          context.go('/chat/$redirectTo');
+        } else {
+          context.go('/chat');
+        }
       }
     });
 
@@ -991,37 +989,78 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             ),
           );
         }),
-        if (chatState.isLoadingHistory) const LinearProgressIndicator(),
-        Expanded(
-          child: ChatMessagesList(
-            messages: chatState.messages,
-            currentUsername: widget.username,
-            isAiLoading: chatState.isAiLoading,
-            readCounts: chatState.readCounts,
-            scrollToMessageId: scrollTarget,
-            highlightMessageId: widget.scrollToMessageId,
-            onReplySelected: (msg) => chatNotifier.setReplyTarget(msg),
-            onScrollToParentMessage: (parentId) =>
-                setState(() => _replyScrollTarget = parentId),
-            onDeleteMessage: (messageId) =>
-                chatNotifier.deleteMessage(widget.roomId, messageId),
-            onEditMessage: (messageId, currentContent) =>
-                _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
-            onReadCountTap: (messageId) =>
-                _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
-            onReaction: (messageId, emoji) =>
-                chatNotifier.toggleReaction(widget.roomId, messageId, emoji),
-            onForward: (msg) =>
-                _showForwardDialog(context, ref, chatNotifier, msg),
-            onPin: (messageId) async {
-              await ref.read(dioClientProvider).dio.put(
-                '/api/chat/rooms/${widget.roomId}/pin',
-                data: {'messageId': messageId},
-              );
-            },
-            lastReadMessageId: chatState.lastReadMessageId,
+        // Offline / reconnecting banner (only after initial connection succeeded once)
+        if (!chatState.isConnected && chatState.wasEverConnected && chatState.messages.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+            color: Colors.orange.shade800,
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 8),
+                Text('서버에 재연결 중...', style: TextStyle(color: Colors.white, fontSize: 13)),
+              ],
+            ),
           ),
-        ),
+        // Error state with retry button (only when messages could not be loaded)
+        if (chatState.errorMessage != null && chatState.messages.isEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(chatState.errorMessage!),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => chatNotifier.joinRoom(widget.roomId),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('다시 시도'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ChatMessagesList(
+              messages: chatState.messages,
+              currentUsername: widget.username,
+              isAiLoading: chatState.isAiLoading,
+              isLoadingHistory: chatState.isLoadingHistory,
+              hasMoreHistory: chatState.hasMoreHistory,
+              onLoadMoreHistory: () => chatNotifier.loadMoreHistory(widget.roomId),
+              readCounts: chatState.readCounts,
+              scrollToMessageId: scrollTarget,
+              highlightMessageId: widget.scrollToMessageId,
+              onReplySelected: (msg) => chatNotifier.setReplyTarget(msg),
+              onScrollToParentMessage: (parentId) =>
+                  setState(() => _replyScrollTarget = parentId),
+              onDeleteMessage: (messageId) =>
+                  chatNotifier.deleteMessage(widget.roomId, messageId),
+              onEditMessage: (messageId, currentContent) =>
+                  _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
+              onReadCountTap: (messageId) =>
+                  _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
+              onReaction: (messageId, emoji) =>
+                  chatNotifier.toggleReaction(widget.roomId, messageId, emoji),
+              onForward: (msg) =>
+                  _showForwardDialog(context, ref, chatNotifier, msg),
+              onPin: (messageId) async {
+                await ref.read(dioClientProvider).dio.put(
+                  '/api/chat/rooms/${widget.roomId}/pin',
+                  data: {'messageId': messageId},
+                );
+              },
+              lastReadMessageId: chatState.lastReadMessageId,
+            ),
+          ),
         // Typing indicator with animated dots
         if (chatState.typingUsers.isNotEmpty)
           Padding(

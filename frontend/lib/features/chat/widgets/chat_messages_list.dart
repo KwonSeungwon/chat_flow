@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/url_helper.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import 'patient_card_widget.dart';
@@ -22,6 +21,9 @@ class ChatMessagesList extends StatefulWidget {
   final String? scrollToMessageId;
   /// If set, briefly highlight this message (search result)
   final String? highlightMessageId;
+  final bool isLoadingHistory;
+  final bool hasMoreHistory;
+  final void Function()? onLoadMoreHistory;
   final void Function(ChatMessage)? onReplySelected;
   final void Function(String parentMessageId)? onScrollToParentMessage;
   final void Function(String messageId)? onDeleteMessage;
@@ -38,6 +40,9 @@ class ChatMessagesList extends StatefulWidget {
     required this.currentUsername,
     this.isAiLoading = false,
     this.readCounts = const {},
+    this.isLoadingHistory = false,
+    this.hasMoreHistory = true,
+    this.onLoadMoreHistory,
     this.scrollToMessageId,
     this.highlightMessageId,
     this.onReplySelected,
@@ -63,14 +68,18 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   String? _lastScrollTarget;
+  List<Object>? _cachedItems;
+  List<ChatMessage>? _lastMessages;
+  String? _lastReadMessageIdCache;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(() {
       if (!_scrollController.hasClients) return;
-      final atBottom = _scrollController.offset >=
-          _scrollController.position.maxScrollExtent - 80;
+      final offset = _scrollController.offset;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      final atBottom = offset >= maxExtent - 80;
       if (atBottom && !_autoScroll) {
         setState(() {
           _autoScroll = true;
@@ -78,6 +87,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
         });
       } else if (!atBottom && _autoScroll) {
         _autoScroll = false;
+      }
+      // Trigger history load when near the top
+      if (offset < 100 && widget.hasMoreHistory && !widget.isLoadingHistory) {
+        widget.onLoadMoreHistory?.call();
       }
     });
     // If messages are already loaded when widget mounts (e.g. provider still alive),
@@ -251,8 +264,16 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
       );
     }
 
-    final items = _buildItemsWithDividers(widget.messages);
-    final totalCount = items.length + (widget.isAiLoading ? 1 : 0);
+    if (!identical(_lastMessages, widget.messages) ||
+        _lastReadMessageIdCache != widget.lastReadMessageId) {
+      _cachedItems = _buildItemsWithDividers(widget.messages);
+      _lastMessages = widget.messages;
+      _lastReadMessageIdCache = widget.lastReadMessageId;
+    }
+    final items = _cachedItems!;
+    final hasTopLoader = widget.isLoadingHistory && widget.messages.isNotEmpty;
+    final topOffset = hasTopLoader ? 1 : 0;
+    final totalCount = items.length + topOffset + (widget.isAiLoading ? 1 : 0);
 
     return Stack(
       children: [
@@ -261,11 +282,19 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           itemCount: totalCount,
           itemBuilder: (context, index) {
+            // History loading indicator at the top
+            if (hasTopLoader && index == 0) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+              );
+            }
+            final adjustedIndex = index - topOffset;
             // AI loading indicator at the bottom
-            if (index == items.length && widget.isAiLoading) {
+            if (adjustedIndex == items.length && widget.isAiLoading) {
               return const _AiLoadingBubble();
             }
-            final item = items[index];
+            final item = items[adjustedIndex];
 
             // Date divider or unread divider
             if (item is String) {
@@ -283,10 +312,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             // Grouping: check prev/next items for same user + same minute
             ChatMessage? prevMsg;
             ChatMessage? nextMsg;
-            for (int p = index - 1; p >= 0; p--) {
+            for (int p = adjustedIndex - 1; p >= 0; p--) {
               if (items[p] is ChatMessage) { prevMsg = items[p] as ChatMessage; break; }
             }
-            for (int n = index + 1; n < items.length; n++) {
+            for (int n = adjustedIndex + 1; n < items.length; n++) {
               if (items[n] is ChatMessage) { nextMsg = items[n] as ChatMessage; break; }
             }
             final bool isFirstInGroup = prevMsg == null ||
@@ -1351,6 +1380,10 @@ class _ChatBubble extends StatelessWidget {
                             Text(time,
                                 style: TextStyle(
                                     fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                            if (isMine && msg.deliveryStatus == MessageDeliveryStatus.sending)
+                              Padding(padding: const EdgeInsets.only(left: 3), child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
+                            if (isMine && msg.deliveryStatus == MessageDeliveryStatus.failed)
+                              const Padding(padding: EdgeInsets.only(left: 3), child: Icon(Icons.error_outline, size: 11, color: Colors.red)),
                           ],
                         ),
                       ),
@@ -1777,15 +1810,6 @@ class _FileBubble extends StatelessWidget {
   Color _avatarColor(String name) =>
       AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
 
-  String _buildFullUrl(String relativeUrl) {
-    if (kIsWeb) {
-      final uri = Uri.base;
-      final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
-      return '${uri.scheme}://${uri.host}$port$relativeUrl';
-    }
-    final base = dotenv.env['API_BASE_URL'] ?? 'http://43.201.94.100:8000';
-    return '$base$relativeUrl';
-  }
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
@@ -1839,7 +1863,7 @@ class _FileBubble extends StatelessWidget {
       bottomLeft: Radius.circular(isMine ? 20 : 5),
       bottomRight: Radius.circular(isMine ? 5 : 20),
     );
-    final fullUrl = _buildFullUrl(msg.fileUrl!);
+    final fullUrl = buildFullUrl(msg.fileUrl!);
 
     // Text content that user typed (not default [파일] prefix)
     final hasTextContent = msg.content.isNotEmpty &&

@@ -26,6 +26,7 @@ class StompService {
   ConnectionCallback? _onConnectionChanged;
   ReadReceiptCallback? _onReadReceipt;
   TypingCallback? _onTyping;
+  void Function(String? redirectTo, String? roomName)? _onRoomFull;
 
   bool get isConnected => _connected;
 
@@ -39,6 +40,7 @@ class StompService {
     Future<String?> Function()? tokenProvider,
     ReadReceiptCallback? onReadReceipt,
     TypingCallback? onTyping,
+    void Function(String? redirectTo, String? roomName)? onRoomFull,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -49,6 +51,7 @@ class StompService {
     _onConnectionChanged = onConnectionChanged;
     _onReadReceipt = onReadReceipt;
     _onTyping = onTyping;
+    _onRoomFull = onRoomFull;
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -60,7 +63,7 @@ class StompService {
 
     final wsUrl = kIsWeb
         ? _webWsUrl()
-        : (dotenv.env['WS_URL'] ?? 'ws://43.201.94.100/ws-native');
+        : (dotenv.env['WS_URL'] ?? 'wss://app.chatflow.ai.kr/ws-native');
 
     _client = StompClient(
       config: StompConfig(
@@ -101,7 +104,16 @@ class StompService {
     _client!.subscribe(
       destination: '/topic/chat/$_currentRoomId/errors',
       callback: (frame) {
-        // Server errors (rate limit, banned word, etc.) — currently logged only
+        if (frame.body == null) return;
+        try {
+          final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+          final type = data['type']?.toString();
+          if (type == 'ROOM_FULL') {
+            _onRoomFull?.call(data['redirectTo']?.toString(), data['roomName']?.toString());
+          } else {
+            debugPrint('[STOMP] Server error: $data');
+          }
+        } catch (_) {}
       },
     );
 
@@ -222,6 +234,11 @@ class StompService {
     _client?.deactivate();
     _connected = false;
     _currentRoomId = null;
+    _onMessage = null;
+    _onConnectionChanged = null;
+    _onReadReceipt = null;
+    _onTyping = null;
+    _onRoomFull = null;
   }
 
   void dispose() {

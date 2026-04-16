@@ -7,7 +7,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -28,16 +32,21 @@ public class ReadReceiptService {
      */
     public Map<String, String> getRoomReadPositions(String roomId) {
         String pattern = READ_KEY_PREFIX + roomId + ":*";
-        Set<String> keys = redisTemplate.keys(pattern);
+        Set<String> keys = new HashSet<>();
+        // SCAN 대신 KEYS O(N) 블로킹 방지 — SCAN으로 순회
+        try (Cursor<String> cursor = redisTemplate.scan(
+                ScanOptions.scanOptions().match(pattern).count(100).build())) {
+            cursor.forEachRemaining(keys::add);
+        } catch (Exception e) {
+            log.warn("Redis SCAN failed for pattern {}: {}", pattern, e.getMessage());
+        }
         Map<String, String> positions = new java.util.LinkedHashMap<>();
-        if (keys != null) {
-            for (String key : keys) {
-                // key = chatflow:read:{roomId}:{userId}
-                String userId = key.substring(key.lastIndexOf(':') + 1);
-                String lastReadMsgId = redisTemplate.opsForValue().get(key);
-                if (lastReadMsgId != null) {
-                    positions.put(userId, lastReadMsgId);
-                }
+        for (String key : keys) {
+            // key = chatflow:read:{roomId}:{userId}
+            String userId = key.substring(key.lastIndexOf(':') + 1);
+            String lastReadMsgId = redisTemplate.opsForValue().get(key);
+            if (lastReadMsgId != null) {
+                positions.put(userId, lastReadMsgId);
             }
         }
         return positions;
