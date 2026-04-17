@@ -193,10 +193,9 @@ public class ChatRoomService {
 
     @Transactional
     public void setParticipantCount(String roomId, int count) {
-        chatRoomRepository.findById(roomId).ifPresent(room -> {
-            room.setParticipantCount(count);
-            chatRoomRepository.save(room);
-        });
+        chatRoomRepository.findById(roomId).ifPresent(room ->
+            room.setParticipantCount(count)
+        );
         evictRoomCaches(roomId);
     }
 
