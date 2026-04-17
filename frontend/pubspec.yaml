@@ -43,6 +43,7 @@ dependencies:
   url_launcher: ^6.3.0
   # Preferences storage (non-sensitive, e.g. theme)
   shared_preferences: ^2.3.0
+  uuid: ^4.5.3
 
 dev_dependencies:
   flutter_test:

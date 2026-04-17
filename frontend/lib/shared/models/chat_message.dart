@@ -24,6 +24,7 @@ class ChatMessage {
   final bool pinned;
   /// JSON map: {"emoji": ["userId1","userId2"]}
   final Map<String, List<String>> reactions;
+  final String? localId;
   final MessageDeliveryStatus deliveryStatus;
 
   ChatMessage({
@@ -47,6 +48,7 @@ class ChatMessage {
     this.editedAt,
     this.pinned = false,
     this.reactions = const {},
+    this.localId,
     this.deliveryStatus = MessageDeliveryStatus.sent,
   });
 

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/stomp_service.dart';
@@ -764,6 +765,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   void sendMessage({required String roomId, required String content, String priority = 'ROUTINE'}) {
     final reply = state.replyTarget;
+    final localId = const Uuid().v4();
     final msg = {
       'chatRoomId': roomId,
       'userId': _userId,
@@ -773,6 +775,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       'priority': priority,
       'timestamp': DateTime.now().toIso8601String(),
       if (reply != null) 'parentMessageId': reply.effectiveId,
+      '_localId': localId,
     };
     // Show local message immediately with 'sending' status
     final localMsg = ChatMessage(
@@ -780,6 +783,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       content: content, type: 'CHAT', priority: priority,
       timestamp: msg['timestamp']!,
       parentMessageId: reply?.effectiveId,
+      localId: localId,
       deliveryStatus: MessageDeliveryStatus.sending,
     );
     state = state.copyWith(messages: [...state.messages, localMsg]);
@@ -795,10 +799,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (_offlineQueue.isEmpty) return;
     final queued = List<Map<String, dynamic>>.from(_offlineQueue);
     _offlineQueue.clear();
-    // Remove locally-added messages to prevent duplicates when server broadcasts them back
-    final queuedIds = queued.map((m) =>
-        '${m['timestamp']}-${m['username']}-${m['content'].hashCode}').toSet();
-    final cleaned = state.messages.where((m) => !queuedIds.contains(m.effectiveId)).toList();
+    // Remove locally-added messages by their UUID localId to prevent duplicates
+    // when server broadcasts them back
+    final queuedLocalIds = queued
+        .map((m) => m['_localId']?.toString())
+        .whereType<String>()
+        .toSet();
+    final cleaned = state.messages
+        .where((m) => m.localId == null || !queuedLocalIds.contains(m.localId))
+        .toList();
     state = state.copyWith(messages: cleaned);
     for (final msg in queued) {
       _stompService.sendMessage(msg);
