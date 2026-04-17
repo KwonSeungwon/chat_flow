@@ -1,23 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../constants/storage_keys.dart';
+import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/search/search_page.dart';
 
+class _RouterNotifier extends ChangeNotifier {
+  final Ref _ref;
+  late final ProviderSubscription<AuthState> _sub;
+
+  _RouterNotifier(this._ref) {
+    _sub = _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _sub.close();
+    super.dispose();
+  }
+
+  String? redirect(BuildContext context, GoRouterState state) {
+    final auth = _ref.read(authProvider);
+    if (!auth.isHydrated) return null;
+    final isLoginPage = state.matchedLocation == '/login';
+    if (!auth.isAuthenticated && !isLoginPage) return '/login';
+    if (auth.isAuthenticated && isLoginPage) return '/chat';
+    return null;
+  }
+}
+
+final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
+  final notifier = _RouterNotifier(ref);
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final appRouterProvider = Provider<GoRouter>((ref) {
+  final notifier = ref.watch(_routerNotifierProvider);
   return GoRouter(
     initialLocation: '/chat',
-    redirect: (context, state) async {
-      const storage = FlutterSecureStorage();
-      final token = await storage.read(key: StorageKeys.token);
-      final isLoginPage = state.matchedLocation == '/login';
-      if (token == null && !isLoginPage) return '/login';
-      if (token != null && isLoginPage) return '/chat';
-      return null;
-    },
+    refreshListenable: notifier,
+    redirect: notifier.redirect,
     routes: [
       GoRoute(
         path: '/login',

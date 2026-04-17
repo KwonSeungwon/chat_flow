@@ -13,6 +13,7 @@ class AuthState {
   final String? profileImageUrl;
   final bool isLoading;
   final String? error;
+  final bool isHydrated;
 
   const AuthState({
     this.token,
@@ -22,6 +23,7 @@ class AuthState {
     this.profileImageUrl,
     this.isLoading = false,
     this.error,
+    this.isHydrated = false,
   });
 
   bool get isAuthenticated => token != null;
@@ -34,6 +36,7 @@ class AuthState {
     String? profileImageUrl,
     bool? isLoading,
     String? error,
+    bool? isHydrated,
   }) {
     return AuthState(
       token: token ?? this.token,
@@ -43,6 +46,7 @@ class AuthState {
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      isHydrated: isHydrated ?? this.isHydrated,
     );
   }
 }
@@ -52,7 +56,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _storage = FlutterSecureStorage();
 
   AuthNotifier(this._dioClient) : super(const AuthState()) {
-    _dioClient.onUnauthorized = () => state = const AuthState();
+    _dioClient.onUnauthorized = () => state = const AuthState(isHydrated: true);
     _hydrate();
   }
 
@@ -70,12 +74,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
           username: username ?? '',
           role: role ?? 'NURSE',
           profileImageUrl: profileImageUrl,
+          isHydrated: true,
         );
+      } else {
+        state = const AuthState(isHydrated: true);
       }
     } catch (e) {
       // Corrupted or locked secure storage — fall back to logged-out state
       debugPrint('[AuthNotifier] _hydrate error: $e');
-      state = const AuthState();
+      state = const AuthState(isHydrated: true);
     }
   }
 
@@ -91,16 +98,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final role = resp.data['role']?.toString() ?? 'NURSE';
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
       await _saveCredentials(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
-      state = AuthState(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl, isHydrated: true);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 401
           ? '아이디 또는 비밀번호가 올바르지 않습니다.'
           : '로그인 실패. 잠시 후 다시 시도해주세요.';
-      state = AuthState(isLoading: false, error: msg);
+      state = AuthState(isLoading: false, error: msg, isHydrated: true);
     } catch (e) {
       debugPrint('[AuthNotifier] login error: $e');
-      state = AuthState(isLoading: false, error: '로그인 실패. 네트워크를 확인해주세요.');
+      state = AuthState(isLoading: false, error: '로그인 실패. 네트워크를 확인해주세요.', isHydrated: true);
     }
   }
 
@@ -116,16 +123,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final respRole = resp.data['role']?.toString() ?? role;
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
       await _saveCredentials(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
-      state = AuthState(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl, isHydrated: true);
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 400
           ? '이미 사용 중인 아이디입니다.'
           : '회원가입 실패. 잠시 후 다시 시도해주세요.';
-      state = AuthState(isLoading: false, error: msg);
+      state = AuthState(isLoading: false, error: msg, isHydrated: true);
     } catch (e) {
       debugPrint('[AuthNotifier] register error: $e');
-      state = AuthState(isLoading: false, error: '회원가입 실패. 네트워크를 확인해주세요.');
+      state = AuthState(isLoading: false, error: '회원가입 실패. 네트워크를 확인해주세요.', isHydrated: true);
     }
   }
 
@@ -140,7 +147,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.delete(key: StorageKeys.username);
     await _storage.delete(key: StorageKeys.role);
     await _storage.delete(key: StorageKeys.profileImage);
-    state = const AuthState();
+    state = const AuthState(isHydrated: true);
   }
 
   Future<void> updateProfileImage(String profileImageUrl) async {
