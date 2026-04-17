@@ -31,4 +31,10 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
 
     @Query("SELECT r FROM ChatRoom r WHERE r.roomType = 'DIRECT' AND r.name IN (:name1, :name2)")
     List<ChatRoom> findDmRoom(@Param("name1") String name1, @Param("name2") String name2);
+
+    @Query("SELECT r FROM ChatRoom r WHERE r.name = :baseName OR r.name LIKE CONCAT(:escapedPattern, '-%') ORDER BY r.createdAt ASC")
+    List<ChatRoom> findByBaseName(@Param("baseName") String baseName, @Param("escapedPattern") String escapedPattern);
+
+    @Query("SELECT r FROM ChatRoom r WHERE (r.name = :baseName OR r.name LIKE CONCAT(:escapedPattern, '-%')) AND r.participantCount < r.maxParticipants ORDER BY r.createdAt ASC")
+    List<ChatRoom> findAvailableByBaseName(@Param("baseName") String baseName, @Param("escapedPattern") String escapedPattern);
 }

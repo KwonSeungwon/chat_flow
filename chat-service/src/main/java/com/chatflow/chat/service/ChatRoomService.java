@@ -211,20 +211,14 @@ public class ChatRoomService {
     }
 
     public ChatRoom findOrCreateAvailableRoom(String baseName) {
-        List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
+        String escapedPattern = baseName.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        List<ChatRoom> available = chatRoomRepository.findAvailableByBaseName(baseName, escapedPattern);
 
-        Optional<ChatRoom> available = rooms.stream()
-                .filter(r -> r.getName().equals(baseName) || r.getName().matches(java.util.regex.Pattern.quote(baseName) + "-\\d+"))
-                .filter(r -> !r.isFull())
-                .findFirst();
-
-        if (available.isPresent()) {
-            return available.get();
+        if (!available.isEmpty()) {
+            return available.get(0);
         }
 
-        long count = rooms.stream()
-                .filter(r -> r.getName().equals(baseName) || r.getName().matches(java.util.regex.Pattern.quote(baseName) + "-\\d+"))
-                .count();
+        long count = (long) chatRoomRepository.findByBaseName(baseName, escapedPattern).size();
 
         String newName = ChatRoom.nextOverflowName(baseName, count);
         ChatRoom newRoom = ChatRoom.builder()
