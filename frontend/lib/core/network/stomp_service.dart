@@ -234,6 +234,10 @@ class StompService {
     _client?.deactivate();
     _connected = false;
     _currentRoomId = null;
+    _currentToken = null;
+    _tokenProvider = null;
+    _currentUsername = null;
+    _currentUserId = null;
     _onMessage = null;
     _onConnectionChanged = null;
     _onReadReceipt = null;
