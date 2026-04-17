@@ -90,11 +90,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     /**
      * X-Gateway-Secret 헤더를 상수 시간 비교로 검증.
-     * 시크릿이 미설정(빈 문자열)이면 검증 우회 — 로컬/테스트 환경 호환성 유지.
+     * 시크릿이 미설정(빈 문자열)이면 fail-closed — 모든 요청 거부.
      */
     private boolean isGatewaySecretValid(HttpServletRequest request) {
         if (gatewayInternalSecret == null || gatewayInternalSecret.isBlank()) {
-            return true; // 미설정 시 검증 스킵 (로컬/테스트)
+            log.error("GATEWAY_INTERNAL_SECRET이 설정되지 않음 — 모든 요청 거부 (fail-closed)");
+            return false;
         }
         String incoming = request.getHeader("X-Gateway-Secret");
         if (incoming == null) {

@@ -33,7 +33,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/ws/**", "/ws-native/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/files/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/files/upload").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/chat/rooms/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/chat/rooms/**").authenticated()
@@ -41,7 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/chat/rooms/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/chat/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat/auth/**").permitAll()
-                        .requestMatchers("/api/fhir/**").permitAll()
+                        .requestMatchers("/api/fhir/**").authenticated()
                         .requestMatchers("/api/fcm/**").authenticated()
                         .anyRequest().authenticated()
                 )

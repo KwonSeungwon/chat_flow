@@ -23,12 +23,23 @@ public class MessageRetentionService {
     @Value("${chatflow.message-retention-days:7}")
     private int retentionDays;
 
+    private static final int BATCH_SIZE = 5000;
+
     @Scheduled(cron = "0 0 18 * * *") // 03:00 KST = 18:00 UTC
     public void purgeOldMessages() {
         final LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
         log.info("Message retention: deleting messages older than {} ({}d)", cutoff, retentionDays);
 
-        final int deleted = chatMessageRepository.deleteMessagesOlderThan(cutoff);
-        log.info("Message retention: deleted {} messages", deleted);
+        int totalDeleted = 0;
+        int deleted;
+        do {
+            deleted = chatMessageRepository.deleteBatchOlderThan(cutoff, BATCH_SIZE);
+            totalDeleted += deleted;
+            if (deleted > 0) {
+                log.info("Message retention: batch deleted {} messages (total: {})", deleted, totalDeleted);
+            }
+        } while (deleted == BATCH_SIZE);
+
+        log.info("Message retention: completed, total deleted {} messages", totalDeleted);
     }
 }

@@ -21,6 +21,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Transactional
     @Query("DELETE FROM ChatMessageEntity m WHERE m.timestamp < :cutoff")
     int deleteMessagesOlderThan(@Param("cutoff") LocalDateTime cutoff);
+
+    @Modifying
+    @Transactional
+    @Query(value = "DELETE FROM chat_messages WHERE id IN (SELECT id FROM chat_messages WHERE timestamp < :cutoff LIMIT :batchSize)", nativeQuery = true)
+    int deleteBatchOlderThan(@Param("cutoff") LocalDateTime cutoff, @Param("batchSize") int batchSize);
     Page<ChatMessageEntity> findByChatRoomIdOrderByTimestampDesc(String chatRoomId, Pageable pageable);
 
     @Query("SELECT m FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp < :cursor ORDER BY m.timestamp DESC")

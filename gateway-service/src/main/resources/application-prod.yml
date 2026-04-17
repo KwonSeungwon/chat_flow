@@ -14,11 +14,23 @@ spring:
   cloud:
     gateway:
       routes:
+        # ───────── Chat API (userId 기반, 일반적) ─────────
+        # 주: /api/auth/** 는 게이트웨이 자체 AuthController가 처리하므로 별도 라우트 없음
+        #     로그인/회원가입 레이트 리밋은 LoginRateLimitFilter(WebFilter)가 담당
         - id: chat-service
           uri: ${CHAT_SERVICE_URL}
           predicates:
             - Path=/api/chat/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: chatCircuitBreaker
+                fallbackUri: forward:/api/fallback/chat
             - name: Retry
               args:
                 retries: 3
@@ -26,42 +38,83 @@ spring:
                 backoff:
                   firstBackoff: 50ms
                   maxBackoff: 500ms
+        # ───────── FHIR (의료 데이터, 중간) ─────────
         - id: fhir-service
           uri: ${CHAT_SERVICE_URL}
           predicates:
             - Path=/api/fhir/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: fhirCircuitBreaker
+                fallbackUri: forward:/api/fallback/fhir
             - name: Retry
               args:
                 retries: 2
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        # ───────── FCM 알림 (외부 호출, 중간) ─────────
         - id: fcm-service
           uri: ${CHAT_SERVICE_URL}
           predicates:
             - Path=/api/fcm/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: fcmCircuitBreaker
+                fallbackUri: forward:/api/fallback/fcm
             - name: Retry
               args:
                 retries: 2
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        # ───────── AI Summary (Gemini 호출, 비용 높음·느림, 엄격) ─────────
         - id: ai-summary-service
           uri: ${AI_SUMMARY_SERVICE_URL}
           predicates:
             - Path=/api/ai-summary/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 2
+                redis-rate-limiter.burstCapacity: 5
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: aiSummaryCircuitBreaker
+                fallbackUri: forward:/api/fallback/ai-summary
             - name: Retry
               args:
-                retries: 3
+                retries: 1
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        # ───────── Search (Elasticsearch, 중간) ─────────
         - id: search-service
           uri: ${SEARCH_SERVICE_URL}
           predicates:
             - Path=/api/search/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: searchCircuitBreaker
+                fallbackUri: forward:/api/fallback/search
             - name: Retry
               args:
                 retries: 2
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        # ───────── WebSocket (레이트 리밋 제외 — 지속 연결) ─────────
         - id: websocket
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
@@ -70,11 +123,21 @@ spring:
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
             - Path=/ws-native/**
+        # ───────── File (업로드·다운로드, 엄격) ─────────
         - id: file-service
           uri: ${CHAT_SERVICE_URL}
           predicates:
             - Path=/api/files/**
           filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 15
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: fileCircuitBreaker
+                fallbackUri: forward:/api/fallback/files
             - name: Retry
               args:
                 retries: 1
@@ -85,13 +148,8 @@ spring:
             allowedOriginPatterns:
               - "https://*.chatflow.com"
               - "https://chatflow.com"
-              - "https://*.chatflow.ai.kr"
+              - "https://app.chatflow.ai.kr"
               - "https://chatflow.ai.kr"
-              - "http://*.chatflow.ai.kr"
-              - "http://chatflow.ai.kr"
-              - "https://*.tistory.com"
-              - "http://43.201.22.86"
-              - "http://43.201.22.86:*"
             allowedMethods: 
               - GET
               - POST
@@ -101,12 +159,8 @@ spring:
             allowedHeaders: "*"
             allowCredentials: true
             maxAge: 3600
-      default-filters:
-        - name: RequestRateLimiter
-          args:
-            redis-rate-limiter.replenishRate: 100
-            redis-rate-limiter.burstCapacity: 200
-            deny-empty-key: false
+      # default-filters는 제거 — 각 라우트가 자체 RateLimiter + CircuitBreaker를 가짐
+      # 전역 필터는 세밀한 제어를 방해하고 fallback URI 라우팅도 못 막기 때문
   
   # Production Valkey Configuration
   data:
@@ -150,19 +204,73 @@ management:
 
 resilience4j:
   circuitbreaker:
-    instances:
+    configs:
       default:
         sliding-window-size: 50
         minimum-number-of-calls: 20
         failure-rate-threshold: 60
-        wait-duration-in-open-state: 60s
-        permitted-number-of-calls-in-half-open-state: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
         slow-call-rate-threshold: 80
         slow-call-duration-threshold: 3s
-  timelimiter:
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.reactive.function.client.WebClientResponseException$InternalServerError
+          - org.springframework.web.reactive.function.client.WebClientResponseException$ServiceUnavailable
+          - org.springframework.web.reactive.function.client.WebClientResponseException$GatewayTimeout
     instances:
+      # 채팅 API — 빠른 응답 기대, 표준 임계치
+      chatCircuitBreaker:
+        base-config: default
+      # FHIR — 의료 데이터, 약간 여유
+      fhirCircuitBreaker:
+        base-config: default
+        slow-call-duration-threshold: 5s
+      # FCM — 외부 의존 (Firebase), failure 여유
+      fcmCircuitBreaker:
+        base-config: default
+        failure-rate-threshold: 70
+        wait-duration-in-open-state: 60s
+      # AI Summary — Gemini 호출, 매우 느림 허용
+      aiSummaryCircuitBreaker:
+        base-config: default
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 70
+        slow-call-rate-threshold: 90
+        slow-call-duration-threshold: 15s
+        wait-duration-in-open-state: 60s
+      # Search — Elasticsearch, 중간
+      searchCircuitBreaker:
+        base-config: default
+        slow-call-duration-threshold: 5s
+      # File — 대용량 업로드 가능, 느림 허용
+      fileCircuitBreaker:
+        base-config: default
+        failure-rate-threshold: 70
+        slow-call-duration-threshold: 10s
+  timelimiter:
+    configs:
       default:
         timeout-duration: 10s
+        cancel-running-future: true
+    instances:
+      chatCircuitBreaker:
+        base-config: default
+      fhirCircuitBreaker:
+        base-config: default
+      fcmCircuitBreaker:
+        base-config: default
+      aiSummaryCircuitBreaker:
+        base-config: default
+        timeout-duration: 30s
+      searchCircuitBreaker:
+        base-config: default
+      fileCircuitBreaker:
+        base-config: default
+        timeout-duration: 30s
 
 jwt:
   secret: ${JWT_SECRET}

@@ -594,8 +594,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       await _dioClient.dio.delete('/api/chat/rooms/$roomId/members/me');
       _stompService.disconnect();
       state = const ChatMessagesState();
+      // 사이드바에서 나간 방이 즉시 제거되도록 방 목록 재조회
+      _ref.read(chatRoomsProvider.notifier).fetchRooms();
       return true;
-    } catch (_) {
+    } catch (e) {
+      if (e is DioException) {
+        debugPrint('leaveRoom failed: status=${e.response?.statusCode} body=${e.response?.data}');
+      } else {
+        debugPrint('leaveRoom failed: $e');
+      }
       return false;
     }
   }
@@ -911,7 +918,8 @@ final chatNotifierProvider =
     if (auth.token != null) {
       notifier.joinRoom(roomId);
     }
-    ref.onDispose(() => notifier.disconnect());
+    // StateNotifier.dispose()가 _stompService.dispose()를 호출하므로 ref.onDispose 중복 등록 제거.
+    // 이중 disconnect가 _manualDisconnect를 true로 고정시켜 재연결 불가 상태를 유발했던 버그 수정.
     return notifier;
   },
 );

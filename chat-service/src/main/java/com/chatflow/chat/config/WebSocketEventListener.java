@@ -35,8 +35,13 @@ public class WebSocketEventListener {
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
         activeSessions.decrementAndGet();
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
-        String username = (String) accessor.getSessionAttributes().get("username");
-        String roomId = (String) accessor.getSessionAttributes().get("chatRoomId");
+        var attrs = accessor.getSessionAttributes();
+        if (attrs == null) {
+            log.debug("WebSocket disconnected with no session attributes, session={}", accessor.getSessionId());
+            return;
+        }
+        String username = (String) attrs.get("username");
+        String roomId = (String) attrs.get("chatRoomId");
         String sessionId = accessor.getSessionId();
 
         if (username != null && roomId != null) {

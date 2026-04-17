@@ -32,7 +32,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
@@ -78,7 +78,7 @@ spring:
       max-poll-records: 100
 
 chatflow:
-  allowed-origins: "http://app.chatflow.ai.kr,https://app.chatflow.ai.kr,http://chatflow.ai.kr,https://chatflow.ai.kr,http://43.201.22.86,http://localhost:3000,http://localhost:8000"
+  allowed-origins: "https://app.chatflow.ai.kr,https://chatflow.ai.kr"
   file-storage:
     upload-dir: /app/uploads
 

@@ -75,7 +75,7 @@ public class AuthService {
                     return userRepository.save(entity)
                             .flatMap(saved -> {
                                 UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                                        saved.getEncodedPassword(), saved.getRole(), saved.getProfileImageUrl());
+                                        null, saved.getRole(), saved.getProfileImageUrl());
                                 return cacheUser(saved.getUsername(), record)
                                         .then(Mono.fromCallable(() -> {
                                             String token = jwtUtil.generateToken(userId, request.username(), role);
@@ -89,15 +89,18 @@ public class AuthService {
      * 로그인: Cache-Aside — cache hit → return, miss → DB → cache → return
      */
     public Mono<AuthResponse> login(AuthRequest request) {
-        return getUserRecord(request.username())
+        // 비밀번호 검증은 항상 DB에서 수행 (캐시에는 encodedPassword 미저장)
+        return userRepository.findByUsername(request.username())
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(request.password(), user.encodedPassword())) {
+                .flatMap(entity -> {
+                    if (!passwordEncoder.matches(request.password(), entity.getEncodedPassword())) {
                         return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
                     }
-                    String role = user.role() != null ? user.role() : "NURSE";
-                    String token = jwtUtil.generateToken(user.userId(), user.username(), role);
-                    return Mono.just(new AuthResponse(token, user.userId(), user.username(), role, user.profileImageUrl()));
+                    String role = entity.getRole() != null ? entity.getRole() : "NURSE";
+                    String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
+                    UserRecord record = new UserRecord(entity.getUserId(), entity.getUsername(), null, role, entity.getProfileImageUrl());
+                    return cacheUser(entity.getUsername(), record)
+                            .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
                 });
     }
 
@@ -113,7 +116,7 @@ public class AuthService {
                 })
                 .flatMap(saved -> {
                     UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                            saved.getEncodedPassword(), saved.getRole(), saved.getProfileImageUrl());
+                            null, saved.getRole(), saved.getProfileImageUrl());
                     return cacheUser(saved.getUsername(), record);
                 })
                 .then();
@@ -123,25 +126,22 @@ public class AuthService {
         if (newPassword == null || newPassword.length() < 8) {
             return Mono.error(new IllegalArgumentException("새 비밀번호는 8자 이상이어야 합니다."));
         }
-        return getUserRecord(username)
+        // 비밀번호 검증은 항상 DB에서 수행
+        return userRepository.findByUsername(username)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(currentPassword, user.encodedPassword())) {
+                .flatMap(entity -> {
+                    if (!passwordEncoder.matches(currentPassword, entity.getEncodedPassword())) {
                         return Mono.error(new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다."));
                     }
-                    String newEncoded = passwordEncoder.encode(newPassword);
-                    return userRepository.findByUsername(username)
-                            .flatMap(entity -> {
-                                entity.setEncodedPassword(newEncoded);
-                                return userRepository.save(entity);
-                            })
-                            .flatMap(saved -> {
-                                UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                                        saved.getEncodedPassword(), saved.getRole(), saved.getProfileImageUrl());
-                                return cacheUser(saved.getUsername(), record);
-                            })
-                            .then();
-                });
+                    entity.setEncodedPassword(passwordEncoder.encode(newPassword));
+                    return userRepository.save(entity);
+                })
+                .flatMap(saved -> {
+                    UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
+                            null, saved.getRole(), saved.getProfileImageUrl());
+                    return cacheUser(saved.getUsername(), record);
+                })
+                .then();
     }
 
     public Mono<Void> logout(String token) {
@@ -171,7 +171,7 @@ public class AuthService {
                     userRepository.findByUsername(username)
                             .flatMap(entity -> {
                                 UserRecord record = new UserRecord(entity.getUserId(), entity.getUsername(),
-                                        entity.getEncodedPassword(), entity.getRole(), entity.getProfileImageUrl());
+                                        null, entity.getRole(), entity.getProfileImageUrl());
                                 return cacheUser(username, record).thenReturn(record);
                             })
                 );

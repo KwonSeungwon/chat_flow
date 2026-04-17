@@ -25,11 +25,20 @@ spec:
             - containerPort: 5432
           env:
             - name: POSTGRES_DB
-              value: chatflow
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-postgresql-secret
+                  key: DB_NAME
             - name: POSTGRES_USER
-              value: chatflow
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-postgresql-secret
+                  key: DB_USERNAME
             - name: POSTGRES_PASSWORD
-              value: wVlv/80p34Yr6tfsINH1CYwCeIwI0V7N
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-postgresql-secret
+                  key: DB_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           resources:
@@ -85,7 +94,13 @@ spec:
           image: valkey/valkey:7.2-alpine
           ports:
             - containerPort: 6379
-          command: ["valkey-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+          command: ["sh", "-c", "valkey-server --maxmemory 128mb --maxmemory-policy allkeys-lru --requirepass $VALKEY_PASSWORD"]
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-valkey-secret
+                  key: VALKEY_PASSWORD
           resources:
             requests:
               cpu: 50m

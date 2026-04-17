@@ -41,6 +41,8 @@ public class ChatRoomService {
     private static final String ROOMS_LIST_KEY = "chatflow:rooms:list";
     private static final Duration ROOM_TTL = Duration.ofMinutes(5);
     private static final Duration LIST_TTL = Duration.ofSeconds(30);
+    private static final java.util.regex.Pattern TITLE_PATTERN =
+            java.util.regex.Pattern.compile("<title[^>]*>([^<]+)</title>", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -90,7 +92,7 @@ public class ChatRoomService {
 
     public ChatRoom createRoom(ChatRoom request, String creatorId) {
         ChatRoom room = ChatRoom.builder()
-                .id("room_" + UUID.randomUUID().toString().substring(0, 8))
+                .id("room_" + UUID.randomUUID().toString())
                 .name(request.getName().trim())
                 .description(request.getDescription())
                 .color(request.getColor() != null ? request.getColor() : "#6366f1")
@@ -116,7 +118,7 @@ public class ChatRoomService {
         return chatRoomRepository.findByExternalId(externalId)
                 .orElseGet(() -> {
                     ChatRoom newRoom = ChatRoom.builder()
-                            .id("ext_" + UUID.randomUUID().toString().substring(0, 8))
+                            .id("ext_" + UUID.randomUUID().toString())
                             .externalId(externalId)
                             .name(name != null ? name : externalId)
                             .description(description)
@@ -212,7 +214,7 @@ public class ChatRoomService {
         List<ChatRoom> rooms = chatRoomRepository.findAllByOrderByCreatedAtDesc();
 
         Optional<ChatRoom> available = rooms.stream()
-                .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
+                .filter(r -> r.getName().equals(baseName) || r.getName().matches(java.util.regex.Pattern.quote(baseName) + "-\\d+"))
                 .filter(r -> !r.isFull())
                 .findFirst();
 
@@ -221,12 +223,12 @@ public class ChatRoomService {
         }
 
         long count = rooms.stream()
-                .filter(r -> r.getName().equals(baseName) || r.getName().matches(baseName + "-\\d+"))
+                .filter(r -> r.getName().equals(baseName) || r.getName().matches(java.util.regex.Pattern.quote(baseName) + "-\\d+"))
                 .count();
 
         String newName = ChatRoom.nextOverflowName(baseName, count);
         ChatRoom newRoom = ChatRoom.builder()
-                .id("room_" + UUID.randomUUID().toString().substring(0, 8))
+                .id("room_" + UUID.randomUUID().toString())
                 .name(newName)
                 .description(baseName + " 채팅방 (자동 생성)")
                 .color("#6366f1")
@@ -324,6 +326,7 @@ public class ChatRoomService {
         }).orElse(false);
     }
 
+    @Transactional
     public void leaveRoom(String roomId, String userId, String username) {
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 — 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
@@ -402,9 +405,17 @@ public class ChatRoomService {
                 .participantCount(0)
                 .createdAt(LocalDateTime.now())
                 .build();
-        ChatRoom saved = chatRoomRepository.save(dm);
-        evictRoomCaches(saved.getId());
-        return saved;
+        try {
+            ChatRoom saved = chatRoomRepository.save(dm);
+            evictRoomCaches(saved.getId());
+            return saved;
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // TOCTOU: 동시 요청으로 중복 생성 시 기존 방 반환
+            log.warn("DM room race condition detected, re-querying: {} ↔ {}", username1, username2);
+            List<ChatRoom> retry = chatRoomRepository.findDmRoom(name1, name2);
+            if (!retry.isEmpty()) return retry.get(0);
+            throw e;
+        }
     }
 
     /**
@@ -479,7 +490,7 @@ public class ChatRoomService {
                 extractOg(html, "og:description", result, "description");
                 extractOg(html, "og:image", result, "image");
                 if (!result.containsKey("title")) {
-                    var m = java.util.regex.Pattern.compile("<title[^>]*>([^<]+)</title>", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html);
+                    var m = TITLE_PATTERN.matcher(html);
                     if (m.find()) result.put("title", m.group(1).trim());
                 }
             }
