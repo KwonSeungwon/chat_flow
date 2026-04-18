@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS tar: 리소스 포크 파일(._) 제외
+export COPYFILE_DISABLE=1
+
 # ChatFlow K3s 배포 스크립트
 # 사용법: ./scripts/deploy-k3s.sh [step]
 # Steps: infra, secrets, images, helm, all
