@@ -788,7 +788,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     );
     state = state.copyWith(messages: [...state.messages, localMsg]);
     if (_stompService.isConnected) {
-      _stompService.sendMessage(msg);
+      final sendPayload = Map<String, dynamic>.from(msg)..remove('_localId');
+      _stompService.sendMessage(sendPayload);
     } else {
       _offlineQueue.add(msg);
     }
