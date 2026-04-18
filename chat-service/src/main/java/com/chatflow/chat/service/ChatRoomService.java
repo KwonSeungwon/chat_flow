@@ -209,6 +209,7 @@ public class ChatRoomService {
         }
     }
 
+    @Transactional
     public ChatRoom findOrCreateAvailableRoom(String baseName) {
         String escapedPattern = baseName.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
         List<ChatRoom> available = chatRoomRepository.findAvailableByBaseName(baseName, escapedPattern);
@@ -230,10 +231,18 @@ public class ChatRoomService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        ChatRoom saved = chatRoomRepository.save(newRoom);
-        evictRoomCaches(saved.getId());
-        log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
-        return saved;
+        try {
+            ChatRoom saved = chatRoomRepository.save(newRoom);
+            evictRoomCaches(saved.getId());
+            log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
+            return saved;
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("Concurrent room creation detected for '{}', returning existing room", newName);
+            List<ChatRoom> retry = chatRoomRepository.findByBaseName(newName,
+                    newName.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"));
+            if (!retry.isEmpty()) return retry.get(0);
+            throw e;
+        }
     }
 
     public void sendInviteMessage(String roomId, String inviterName, String targetUsername) {
