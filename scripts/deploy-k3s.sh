@@ -86,29 +86,42 @@ step_images() {
   echo "=== Step 3: Build & Transfer Images ==="
   cd "$PROJECT_ROOT"
 
+  # Timestamp-based build tag to force Pod rollout (imagePullPolicy: Never + latest won't trigger rollout)
+  BUILD_TAG="$(date +%Y%m%d-%H%M%S)"
+  echo "Build tag: $BUILD_TAG"
+
   # Build all backend services
   ./gradlew bootJar --no-daemon
 
-  # Build Docker images (amd64)
+  # Build Docker images (amd64) — tagged with both latest and BUILD_TAG
   SERVICES="gateway-service chat-service ai-summary-service search-service"
   for svc in $SERVICES; do
     echo "Building $svc..."
     docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=$svc \
-      -t docker.io/chatflow/$svc:latest --load .
+      -t docker.io/chatflow/$svc:latest \
+      -t docker.io/chatflow/$svc:$BUILD_TAG \
+      --load .
   done
 
   # Frontend
   echo "Building frontend..."
   cd frontend && flutter build web --release && cd ..
-  docker buildx build --platform linux/amd64 -t docker.io/chatflow/frontend:latest --load frontend/
+  docker buildx build --platform linux/amd64 \
+    -t docker.io/chatflow/frontend:latest \
+    -t docker.io/chatflow/frontend:$BUILD_TAG \
+    --load frontend/
 
-  # Elasticsearch with Nori
+  # Elasticsearch with Nori (no BUILD_TAG — rarely changes)
   echo "Building elasticsearch..."
   docker buildx build --platform linux/amd64 -t docker.io/chatflow/elasticsearch:latest --load elasticsearch/
 
-  # Save all images
+  # Save all images (include BUILD_TAG variants so containerd has them)
   echo "Saving images..."
-  ALL_IMAGES="docker.io/chatflow/gateway-service:latest docker.io/chatflow/chat-service:latest docker.io/chatflow/ai-summary-service:latest docker.io/chatflow/search-service:latest docker.io/chatflow/frontend:latest docker.io/chatflow/elasticsearch:latest"
+  ALL_IMAGES=""
+  for svc in $SERVICES frontend; do
+    ALL_IMAGES="$ALL_IMAGES docker.io/chatflow/$svc:$BUILD_TAG"
+  done
+  ALL_IMAGES="$ALL_IMAGES docker.io/chatflow/elasticsearch:latest"
   docker save $ALL_IMAGES | gzip > /tmp/chatflow-all-images.tar.gz
   echo "Image bundle: $(ls -lh /tmp/chatflow-all-images.tar.gz | awk '{print $5}')"
 
@@ -121,10 +134,19 @@ step_images() {
   ssh_k3s "sudo k3s ctr images import ~/chatflow-all-images.tar.gz"
   echo "Images imported."
   ssh_k3s "sudo k3s ctr images list | grep chatflow"
+
+  # Persist build tag for step_helm
+  echo "$BUILD_TAG" > /tmp/chatflow-build-tag
+  echo "Build tag saved: $BUILD_TAG"
 }
 
 step_helm() {
   echo "=== Step 4: Helm Deploy ==="
+
+  # Read build tag from step_images (falls back to latest if run standalone)
+  BUILD_TAG=$(cat /tmp/chatflow-build-tag 2>/dev/null || echo "latest")
+  echo "Deploying with image tag: $BUILD_TAG"
+
   # Copy helm chart to K3s
   cd "$PROJECT_ROOT"
   tar czf /tmp/chatflow-helm.tar.gz -C helm chatflow
@@ -135,9 +157,11 @@ step_helm() {
     tar xzf chatflow-helm.tar.gz -C chatflow-chart &&
     cd chatflow-chart/chatflow &&
     helm dependency update . 2>/dev/null || true &&
-    helm upgrade --install chatflow . -n $NAMESPACE -f values-k3s.yaml --wait --timeout 5m
+    helm upgrade --install chatflow . -n $NAMESPACE -f values-k3s.yaml \
+      --set global.image.tag=$BUILD_TAG \
+      --wait --timeout 5m
   "
-  echo "Helm deploy complete."
+  echo "Helm deploy complete. Tag: $BUILD_TAG"
   ssh_k3s "kubectl get pods -n $NAMESPACE"
 }
 
