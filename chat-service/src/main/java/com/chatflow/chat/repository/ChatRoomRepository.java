@@ -12,8 +12,6 @@ import java.util.Optional;
 
 @Repository
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
-    List<ChatRoom> findAllByOrderByCreatedAtDesc();
-
     @Query("SELECT r FROM ChatRoom r ORDER BY COALESCE(r.lastMessageAt, r.createdAt) DESC")
     List<ChatRoom> findAllOrderByLastActivity();
     Optional<ChatRoom> findByExternalId(String externalId);
