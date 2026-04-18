@@ -23,6 +23,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -361,14 +362,22 @@ public class ChatRoomService {
     }
 
     public Map<String, Long> getUnreadCounts(String userId, List<String> roomIds) {
+        if (roomIds.isEmpty()) return Collections.emptyMap();
+
+        List<String> keys = roomIds.stream()
+                .map(id -> "chatflow:readat:" + id + ":" + userId)
+                .collect(Collectors.toList());
+
+        List<String> values = redisTemplate.opsForValue().multiGet(keys);
+
         Map<String, Long> result = new LinkedHashMap<>();
-        for (String roomId : roomIds) {
+        for (int i = 0; i < roomIds.size(); i++) {
+            String roomId = roomIds.get(i);
+            String readAtStr = (values != null) ? values.get(i) : null;
             try {
-                String atKey = "chatflow:readat:" + roomId + ":" + userId;
-                String readAtStr = redisTemplate.opsForValue().get(atKey);
                 if (readAtStr == null) {
-                    // 읽은 기록 없음 — 전체 메시지 카운트
-                    result.put(roomId, chatMessageRepository.countNewChatMessages(roomId, LocalDateTime.of(2000, 1, 1, 0, 0)));
+                    result.put(roomId, chatMessageRepository.countNewChatMessages(
+                            roomId, LocalDateTime.of(2000, 1, 1, 0, 0)));
                 } else {
                     LocalDateTime readAt = LocalDateTime.parse(readAtStr);
                     result.put(roomId, chatMessageRepository.countNewChatMessages(roomId, readAt));
