@@ -368,7 +368,15 @@ public class ChatRoomService {
                 .map(id -> "chatflow:readat:" + id + ":" + userId)
                 .collect(Collectors.toList());
 
-        List<String> values = redisTemplate.opsForValue().multiGet(keys);
+        List<String> values = null;
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                values = redisTemplate.opsForValue().multiGet(keys);
+                redisHealth.recordSuccess();
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
+            }
+        }
 
         Map<String, Long> result = new LinkedHashMap<>();
         for (int i = 0; i < roomIds.size(); i++) {
