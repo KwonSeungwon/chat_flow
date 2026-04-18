@@ -23,14 +23,21 @@ class ChatRoomSidebar extends ConsumerStatefulWidget {
   ConsumerState<ChatRoomSidebar> createState() => _ChatRoomSidebarState();
 }
 
-class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
+class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
+    with WidgetsBindingObserver {
   Timer? _refreshTimer;
   bool _disposed = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadInitialUnreadCounts();
+    _startRefreshTimer();
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (_disposed) return;
       ref.read(chatRoomsProvider.notifier).fetchRooms();
@@ -43,6 +50,17 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    } else if (state == AppLifecycleState.resumed && _refreshTimer == null) {
+      _startRefreshTimer();
+    }
+  }
+
   Future<void> _loadInitialUnreadCounts() async {
     final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
     if (!_disposed && counts.isNotEmpty) {
@@ -53,6 +71,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar> {
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }
