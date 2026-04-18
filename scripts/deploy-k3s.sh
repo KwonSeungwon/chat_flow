@@ -158,11 +158,18 @@ step_helm() {
     cd chatflow-chart/chatflow &&
     helm dependency update . 2>/dev/null || true &&
     helm upgrade --install chatflow . -n $NAMESPACE -f values-k3s.yaml \
-      --set global.image.tag=$BUILD_TAG \
       --wait --timeout 5m
   "
-  echo "Helm deploy complete. Tag: $BUILD_TAG"
-  ssh_k3s "kubectl get pods -n $NAMESPACE"
+  # global.image.tag=BUILD_TAG 미사용 이유:
+  # imagePullPolicy:Never 환경에서 부분 빌드 시 미빌드 서비스가 ErrImageNeverPull 발생.
+  # 대신 step_images()에서 빌드된 서비스만 rollout restart로 강제 롤아웃.
+  APP_SERVICES="gateway-service chat-service ai-summary-service search-service frontend"
+  for svc in $APP_SERVICES; do
+    ssh_k3s "kubectl rollout restart deployment/chatflow-$svc -n $NAMESPACE --kubeconfig /etc/rancher/k3s/k3s.yaml 2>/dev/null || true"
+  done
+  ssh_k3s "kubectl rollout status deployment -n $NAMESPACE --timeout=3m --kubeconfig /etc/rancher/k3s/k3s.yaml 2>/dev/null || true"
+  echo "Helm deploy complete."
+  ssh_k3s "kubectl get pods -n $NAMESPACE --kubeconfig /etc/rancher/k3s/k3s.yaml"
 }
 
 case "${1:-all}" in
