@@ -13,12 +13,15 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +32,7 @@ public class AiSummaryService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Executor geminiExecutor;
 
     private static final String SUMMARY_TOPIC = "ai-summaries";
     private static final int SUMMARY_TRIGGER_COUNT = 10;
@@ -53,11 +57,13 @@ public class AiSummaryService {
     public AiSummaryService(ChatModelClient chatModelClient,
                             KafkaTemplate<String, Object> kafkaTemplate,
                             StringRedisTemplate redisTemplate,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            @Qualifier("geminiExecutor") Executor geminiExecutor) {
         this.chatModelClient = chatModelClient;
         this.kafkaTemplate = kafkaTemplate;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.geminiExecutor = geminiExecutor;
     }
 
     @KafkaListener(topics = "ai-summary-requests")
@@ -103,13 +109,21 @@ public class AiSummaryService {
                 redisTemplate.opsForList().trim(bufferKey, bufferSize - MAX_MESSAGES_PER_ROOM, -1);
             }
 
-            // 메시지 카운트 기반 트리거
+            // 메시지 카운트 기반 트리거 — Gemini 호출을 전용 Executor로 오프로드
             if (bufferSize != null && bufferSize >= SUMMARY_TRIGGER_COUNT) {
                 List<ChatMessage> snapshot = consumeBuffer(bufferKey);
                 if (!snapshot.isEmpty()) {
                     redisTemplate.delete(timeKey);
                     redisTemplate.opsForSet().remove(REDIS_ACTIVE_ROOMS_KEY, roomId);
-                    generateSummaryIfNeeded(roomId, snapshot);
+                    final String rid = roomId;
+                    final List<ChatMessage> msgs = snapshot;
+                    geminiExecutor.execute(() -> {
+                        try {
+                            generateSummaryIfNeeded(rid, msgs);
+                        } catch (Exception e) {
+                            log.error("Gemini executor task failed for room {}", rid, e);
+                        }
+                    });
                 }
             }
         } catch (JsonProcessingException e) {
@@ -146,7 +160,15 @@ public class AiSummaryService {
 
                         if (!snapshot.isEmpty()) {
                             log.info("시간 기반 트리거 발동: room={}, messages={}", roomId, snapshot.size());
-                            generateSummaryIfNeeded(roomId, snapshot);
+                            final String rid = roomId;
+                            final List<ChatMessage> msgs = snapshot;
+                            geminiExecutor.execute(() -> {
+                                try {
+                                    generateSummaryIfNeeded(rid, msgs);
+                                } catch (Exception e) {
+                                    log.error("Gemini executor task failed for room {}", rid, e);
+                                }
+                            });
                         }
                     }
                 }
