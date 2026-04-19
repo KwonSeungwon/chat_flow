@@ -30,6 +30,13 @@ spring:
       max-file-size: 50MB
       max-request-size: 55MB
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
   jpa:
     hibernate:
       ddl-auto: validate
