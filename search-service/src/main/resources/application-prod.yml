@@ -40,6 +40,8 @@ spring:
       enable-auto-commit: false
       max-poll-records: 100
       session-timeout-ms: 30000
+    listener:
+      concurrency: 3
     # Kafka SSL configuration for production
     security:
       protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
