@@ -42,6 +42,19 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("SELECT COUNT(m) FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp > :after AND m.type = 'CHAT' AND m.deleted = false")
     long countNewChatMessages(@Param("roomId") String roomId, @Param("after") LocalDateTime after);
 
+    /**
+     * 여러 chatRoomId에 대한 메시지 카운트를 한 번에 조회.
+     * readAt이 null인 roomIds (cutoff 공통)에 대한 배치 최적화용.
+     */
+    @Query("SELECT m.chatRoomId, COUNT(m) FROM ChatMessageEntity m " +
+           "WHERE m.chatRoomId IN :roomIds " +
+           "AND m.timestamp > :after " +
+           "AND m.type = 'CHAT' AND m.deleted = false " +
+           "GROUP BY m.chatRoomId")
+    List<Object[]> countNewChatMessagesBatch(
+            @Param("roomIds") List<String> roomIds,
+            @Param("after") LocalDateTime after);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId")
