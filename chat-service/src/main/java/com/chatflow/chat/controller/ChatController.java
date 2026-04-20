@@ -79,9 +79,14 @@ public class ChatController {
         String roomId = payload.get("chatRoomId");
         if (roomId == null) return;
         Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
-        String username = sessionAttrs != null ? (String) sessionAttrs.get("username") : payload.get("username");
+        // 세션 username 우선, null/blank이면 payload로 fallback — 빈 username 브로드캐스트 방지
+        String username = (sessionAttrs != null) ? (String) sessionAttrs.get("username") : null;
+        if (username == null || username.isBlank()) {
+            username = payload.get("username");
+        }
+        if (username == null || username.isBlank()) return;  // 신원 확인 불가 시 브로드캐스트 생략
         messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/typing",
-                Map.of("username", username != null ? username : "", "timestamp", java.time.LocalDateTime.now().toString()));
+                Map.of("username", username, "timestamp", java.time.LocalDateTime.now().toString()));
     }
 
     @MessageMapping("/chat.markRead")

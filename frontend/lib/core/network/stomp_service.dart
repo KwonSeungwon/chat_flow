@@ -217,12 +217,10 @@ class StompService {
   void sendReadReceipt(String roomId, String messageId) {
     if (_connected && _client != null) {
       _client!.send(
-        destination: '/app/chat.readReceipt',
+        destination: '/app/chat.markRead',
         body: jsonEncode({
-          'chatRoomId': roomId,
-          'messageId': messageId,
-          'userId': _currentUserId ?? '',
-          'username': _currentUsername ?? '',
+          'roomId': roomId,
+          'lastReadMessageId': messageId,
         }),
       );
     }

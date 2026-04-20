@@ -52,6 +52,17 @@ public class ReadReceiptService {
         return positions;
     }
 
+    /**
+     * readAt 타임스탬프만 갱신 (lastReadMessageId 없이).
+     * 방 입장 시점에 로컬 메시지가 아직 로드되지 않아 lastReadMessageId를 모를 때 사용.
+     * unread count는 readAt 기준으로 계산되므로 이것만으로 충분히 동작.
+     */
+    public void updateReadAt(String roomId, String userId) {
+        String atKey = "chatflow:readat:" + roomId + ":" + userId;
+        redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
+        log.debug("readAt updated (no lastRead): room={}, user={}", roomId, userId);
+    }
+
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
         String key = READ_KEY_PREFIX + roomId + ":" + userId;
         redisTemplate.opsForValue().set(key, lastReadMessageId, READ_TTL_HOURS, TimeUnit.HOURS);

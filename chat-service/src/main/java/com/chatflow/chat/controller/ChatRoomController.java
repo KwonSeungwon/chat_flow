@@ -366,6 +366,8 @@ public class ChatRoomController {
         }
         String lastReadMessageId = body.get("lastReadMessageId");
         if (lastReadMessageId == null || lastReadMessageId.isBlank()) {
+            // 메시지가 아직 로드되지 않은 방 입장 시점에도 unread count를 초기화하도록 readAt만 갱신
+            readReceiptService.updateReadAt(roomId, userId);
             return ResponseEntity.ok(ApiResponse.ok(null));
         }
         readReceiptService.markRead(roomId, userId, username != null ? username : "", lastReadMessageId);

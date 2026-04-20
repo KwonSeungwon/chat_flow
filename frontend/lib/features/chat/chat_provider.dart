@@ -666,16 +666,16 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   /// Called when user enters a room. Clears local unread count and persists last-read position.
+  /// 메시지 미로드 상태에서도 서버 readAt을 NOW로 갱신해야 sidebar timer 폴링이 count를 덮어쓰지 않음.
   void markRoomRead(String roomId) {
     final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
     current[roomId] = 0;
     _ref.read(roomUnreadCountsProvider.notifier).state = current;
 
-    // Persist last-read position so it survives app restarts (best-effort)
+    // 항상 서버에 readAt을 갱신 — 메시지가 아직 로드되지 않았어도 빈 lastReadMessageId로 호출
     final chatMsgs = state.messages.where((m) => m.type == 'CHAT').toList();
-    if (chatMsgs.isNotEmpty) {
-      _persistLastRead(roomId, chatMsgs.last.effectiveId);
-    }
+    final lastReadId = chatMsgs.isNotEmpty ? chatMsgs.last.effectiveId : '';
+    _persistLastRead(roomId, lastReadId);
   }
 
   Future<void> _persistLastRead(String roomId, String lastReadMessageId) async {
