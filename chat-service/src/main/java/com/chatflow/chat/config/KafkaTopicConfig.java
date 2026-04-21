@@ -14,7 +14,8 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     private static final int PARTITIONS = 3;
-    private static final short REPLICATION = 1;
+    // 3-broker StatefulSet 전환으로 replication 1→3
+    private static final short REPLICATION = 3;
 
     @Bean
     public NewTopic chatMessagesTopic() {

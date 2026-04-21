@@ -121,69 +121,26 @@ spec:
     - port: 6379
       targetPort: 6379
 ---
-# ======================== Kafka (KRaft, no Zookeeper) ========================
-apiVersion: apps/v1
-kind: Deployment
+# ======================== Kafka (KRaft, 3-broker StatefulSet) ========================
+# 단일 K3s 노드 환경에서 3개 broker를 StatefulSet으로 실행.
+# HA(노드 장애 내성) 아님 — 브로커 단위 재시작 내성 + 파티션 리더 분산 연습용.
+# 프로덕션 멀티 노드 전환 시 `nodeSelector`/affinity로 브로커 분산 필요.
+apiVersion: v1
+kind: Service
 metadata:
-  name: kafka
+  name: kafka-headless
   namespace: chatflow
 spec:
-  replicas: 1
+  clusterIP: None
   selector:
-    matchLabels:
-      app: kafka
-  template:
-    metadata:
-      labels:
-        app: kafka
-    spec:
-      enableServiceLinks: false
-      containers:
-        - name: kafka
-          image: confluentinc/cp-kafka:7.4.0
-          ports:
-            - containerPort: 9092
-            - containerPort: 9093
-          env:
-            - name: KAFKA_NODE_ID
-              value: "1"
-            - name: KAFKA_PROCESS_ROLES
-              value: "broker,controller"
-            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@localhost:9093"
-            - name: KAFKA_LISTENERS
-              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
-            - name: KAFKA_ADVERTISED_LISTENERS
-              value: "PLAINTEXT://kafka:9092"
-            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-              value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
-            - name: KAFKA_CONTROLLER_LISTENER_NAMES
-              value: "CONTROLLER"
-            - name: KAFKA_INTER_BROKER_LISTENER_NAME
-              value: "PLAINTEXT"
-            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-              value: "1"
-            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-              value: "1"
-            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
-              value: "1"
-            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
-              value: "1"
-            - name: KAFKA_NUM_PARTITIONS
-              value: "3"
-            - name: KAFKA_LOG_RETENTION_HOURS
-              value: "24"
-            - name: KAFKA_HEAP_OPTS
-              value: "-Xmx256m -Xms128m"
-            - name: CLUSTER_ID
-              value: "MkU3OEVBNTcwNTJENDM2Qg"
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+    app: kafka
+  ports:
+    - port: 9092
+      name: broker
+      targetPort: 9092
+    - port: 9093
+      name: controller
+      targetPort: 9093
 ---
 apiVersion: v1
 kind: Service
@@ -196,6 +153,101 @@ spec:
   ports:
     - port: 9092
       targetPort: 9092
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: chatflow
+spec:
+  serviceName: kafka-headless
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.4.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              # POD_NAME: kafka-0, kafka-1, kafka-2 → NODE_ID: 1, 2, 3
+              ORDINAL="${HOSTNAME##*-}"
+              export KAFKA_NODE_ID=$((ORDINAL + 1))
+              export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${HOSTNAME}.kafka-headless.chatflow.svc.cluster.local:9092"
+              echo "Starting Kafka NODE_ID=${KAFKA_NODE_ID} ADV=${KAFKA_ADVERTISED_LISTENERS}"
+              exec /etc/confluent/docker/run
+          ports:
+            - containerPort: 9092
+              name: broker
+            - containerPort: 9093
+              name: controller
+          env:
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka-0.kafka-headless.chatflow.svc.cluster.local:9093,2@kafka-1.kafka-headless.chatflow.svc.cluster.local:9093,3@kafka-2.kafka-headless.chatflow.svc.cluster.local:9093"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "2"
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              value: "3"
+            - name: KAFKA_MIN_INSYNC_REPLICAS
+              value: "1"
+            - name: KAFKA_NUM_PARTITIONS
+              value: "3"
+            - name: KAFKA_LOG_RETENTION_HOURS
+              value: "24"
+            - name: KAFKA_LOG_DIRS
+              value: "/var/lib/kafka/data"
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx256m -Xms128m"
+            - name: CLUSTER_ID
+              value: "MkU3OEVBNTcwNTJENDM2Qg"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 20
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
 ---
 # ======================== Elasticsearch 8.11 + Nori ========================
 apiVersion: apps/v1
