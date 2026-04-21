@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../core/network/app_stomp_service.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/stomp_service.dart';
 import '../../core/services/fcm_service.dart';
@@ -77,6 +78,32 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     return {};
   }
 
+  /// Update participant count for a specific room (from real-time presence events).
+  void updateParticipantCount(String roomId, int count) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final updated = current.map((r) {
+      if (r.id == roomId) {
+        return ChatRoom(
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          color: r.color,
+          roomType: r.roomType,
+          allowedRoles: r.allowedRoles,
+          isPrivate: r.isPrivate,
+          participantCount: count,
+          maxParticipants: r.maxParticipants,
+          createdAt: r.createdAt,
+          lastMessageAt: r.lastMessageAt,
+          pinnedMessageId: r.pinnedMessageId,
+        );
+      }
+      return r;
+    }).toList();
+    state = AsyncValue.data(updated);
+  }
+
   /// Creates a room and returns its ID for navigation.
   Future<String?> createRoom({
     required String name,
@@ -119,6 +146,23 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 // ---------------------------------------------------------------------------
 
 final roomUnreadCountsProvider = StateProvider<Map<String, int>>((ref) => {});
+
+// ---------------------------------------------------------------------------
+// App-level STOMP service (single connection, survives room changes)
+// ---------------------------------------------------------------------------
+
+final appStompServiceProvider = Provider<AppStompService>((ref) {
+  final service = AppStompService();
+  ref.onDispose(service.disconnect);
+  return service;
+});
+
+// ---------------------------------------------------------------------------
+// Active room ID — set by ChatPage, cleared on leave. Used by AppStompService
+// to skip unread increments for the room the user is currently viewing.
+// ---------------------------------------------------------------------------
+
+final activeRoomIdProvider = StateProvider<String?>((ref) => null);
 
 // ---------------------------------------------------------------------------
 // Muted Rooms (local-only, persisted to FlutterSecureStorage)
@@ -181,6 +225,8 @@ class ChatMessagesState {
   /// For ROOM_FULL: redirectTo room ID
   final String? redirectTo;
   final Set<String> typingUsers;
+  /// Real-time participant count from presence events
+  final int? participantCount;
 
   const ChatMessagesState({
     this.messages = const [],
@@ -198,6 +244,7 @@ class ChatMessagesState {
     this.exitReason = ChatExitReason.none,
     this.redirectTo,
     this.typingUsers = const {},
+    this.participantCount,
   });
 
   ChatMessagesState copyWith({
@@ -219,6 +266,7 @@ class ChatMessagesState {
     ChatExitReason? exitReason,
     String? redirectTo,
     Set<String>? typingUsers,
+    int? participantCount,
   }) {
     final newConnected = isConnected ?? this.isConnected;
     return ChatMessagesState(
@@ -237,6 +285,7 @@ class ChatMessagesState {
       exitReason: exitReason ?? this.exitReason,
       redirectTo: redirectTo ?? this.redirectTo,
       typingUsers: typingUsers ?? this.typingUsers,
+      participantCount: participantCount ?? this.participantCount,
     );
   }
 }
@@ -367,6 +416,16 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onTyping: (username, {bool stop = false}) {
         if (!mounted) return;
         _onTypingReceived(username, stop: stop);
+      },
+      onPresence: (type, username, count) {
+        if (!mounted) return;
+        state = state.copyWith(participantCount: count);
+        // Sync participant count to room list for sidebar display
+        if (_currentRoomId != null) {
+          try {
+            _ref.read(chatRoomsProvider.notifier).updateParticipantCount(_currentRoomId!, count);
+          } catch (_) {}
+        }
       },
       onRoomFull: (redirectTo, roomName) {
         if (mounted) {

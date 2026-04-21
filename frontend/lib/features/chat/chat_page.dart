@@ -358,11 +358,17 @@ class ChatPage extends ConsumerWidget {
               ),
               if (roomData != null) ...[
                 const SizedBox(width: 10),
-                _ParticipantBadge(
-                  count: roomData.participantCount,
-                  max: roomData.maxParticipants,
-                  roomId: effectiveRoomId,
-                ),
+                Builder(builder: (context) {
+                  // Prefer real-time presence count over static room data
+                  final realtimeCount = ref.watch(
+                    chatNotifierProvider(effectiveRoomId).select((s) => s.participantCount),
+                  );
+                  return _ParticipantBadge(
+                    count: realtimeCount ?? roomData.participantCount,
+                    max: roomData.maxParticipants,
+                    roomId: effectiveRoomId,
+                  );
+                }),
               ],
             ],
           ],
@@ -820,6 +826,9 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Track which room the user is viewing so AppStompService can skip unread increments
+      ref.read(activeRoomIdProvider.notifier).state = widget.roomId;
       ref.read(chatNotifierProvider(widget.roomId).notifier)
           .markRoomRead(widget.roomId);
     });
@@ -827,6 +836,8 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
 
   @override
   void dispose() {
+    // Clear active room on leave so unread increments resume for this room
+    ref.read(activeRoomIdProvider.notifier).state = null;
     _searchCtrl.dispose();
     _keyboardFocusNode.dispose();
     super.dispose();

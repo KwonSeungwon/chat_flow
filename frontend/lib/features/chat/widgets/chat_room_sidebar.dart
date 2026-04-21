@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider;
+import '../../auth/auth_provider.dart';
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider, appStompServiceProvider, activeRoomIdProvider;
 import 'create_room_dialog.dart';
 
 
@@ -34,11 +35,35 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     WidgetsBinding.instance.addObserver(this);
     _loadInitialUnreadCounts();
     _startRefreshTimer();
+    _initAppStomp();
+  }
+
+  /// Connect the app-level STOMP service for real-time unread increments.
+  void _initAppStomp() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed) return;
+      final auth = ref.read(authProvider);
+      if (auth.token == null || auth.userId == null) return;
+      ref.read(appStompServiceProvider).connect(
+        userId: auth.userId!,
+        token: auth.token!,
+        onRoomUpdate: (roomId, type) {
+          if (_disposed) return;
+          if (type != 'UNREAD_INCREMENT') return;
+          // Skip increment if user is currently viewing this room
+          final activeRoom = ref.read(activeRoomIdProvider);
+          if (activeRoom == roomId) return;
+          final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
+          current[roomId] = (current[roomId] ?? 0) + 1;
+          ref.read(roomUnreadCountsProvider.notifier).state = current;
+        },
+      );
+    });
   }
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (_disposed) return;
       ref.read(chatRoomsProvider.notifier).fetchRooms();
       final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();

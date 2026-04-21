@@ -8,6 +8,7 @@ typedef MessageCallback = void Function(Map<String, dynamic> message);
 typedef ConnectionCallback = void Function(bool connected);
 typedef ReadReceiptCallback = void Function(Map<String, String> positions);
 typedef TypingCallback = void Function(String username, {bool stop});
+typedef PresenceCallback = void Function(String type, String username, int participantCount);
 
 class StompService {
   StompClient? _client;
@@ -26,6 +27,7 @@ class StompService {
   ConnectionCallback? _onConnectionChanged;
   ReadReceiptCallback? _onReadReceipt;
   TypingCallback? _onTyping;
+  PresenceCallback? _onPresence;
   void Function(String? redirectTo, String? roomName)? _onRoomFull;
 
   bool get isConnected => _connected;
@@ -40,6 +42,7 @@ class StompService {
     Future<String?> Function()? tokenProvider,
     ReadReceiptCallback? onReadReceipt,
     TypingCallback? onTyping,
+    PresenceCallback? onPresence,
     void Function(String? redirectTo, String? roomName)? onRoomFull,
   }) {
     _currentRoomId = roomId;
@@ -51,6 +54,7 @@ class StompService {
     _onConnectionChanged = onConnectionChanged;
     _onReadReceipt = onReadReceipt;
     _onTyping = onTyping;
+    _onPresence = onPresence;
     _onRoomFull = onRoomFull;
     _manualDisconnect = false;
     _retryCount = 0;
@@ -159,6 +163,22 @@ class StompService {
       },
     );
 
+    // Subscribe to presence events (JOIN/LEAVE with participant count)
+    _client!.subscribe(
+      destination: '/topic/chat/$_currentRoomId/presence',
+      callback: (frame) {
+        if (frame.body != null && _onPresence != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final type = data['type']?.toString() ?? '';
+            final username = data['username']?.toString() ?? '';
+            final count = (data['participantCount'] as num?)?.toInt() ?? 0;
+            _onPresence!(type, username, count);
+          } catch (_) {}
+        }
+      },
+    );
+
     // Send JOIN via /app/chat.addUser
     _client!.send(
       destination: '/app/chat.addUser',
@@ -249,6 +269,7 @@ class StompService {
     _onConnectionChanged = null;
     _onReadReceipt = null;
     _onTyping = null;
+    _onPresence = null;
     _onRoomFull = null;
   }
 
