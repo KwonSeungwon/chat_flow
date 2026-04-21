@@ -16,6 +16,7 @@ import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
+import 'widgets/in_room_search_sheet.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -242,6 +243,24 @@ void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier curren
   );
 }
 
+void _showInRoomSearch(BuildContext context, WidgetRef ref, String roomId) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) => InRoomSearchSheet(
+      roomId: roomId,
+      onResultTap: (messageId) {
+        Navigator.of(ctx).pop();
+        GoRouter.of(context).go('/chat/$roomId?messageId=$messageId');
+      },
+    ),
+  );
+}
+
 void _showReadersSheet(BuildContext context, WidgetRef ref, String roomId, String messageId, List<ChatMessage> messages) async {
   try {
     final resp = await ref.read(dioClientProvider).dio.get('/api/chat/rooms/$roomId/readers');
@@ -382,9 +401,15 @@ class ChatPage extends ConsumerWidget {
             ),
           if (effectiveRoomId != null)
             _AiSummaryButton(roomId: effectiveRoomId),
+          if (effectiveRoomId != null)
+            IconButton(
+              icon: const Icon(Icons.manage_search, size: 22),
+              tooltip: '방 내 검색',
+              onPressed: () => _showInRoomSearch(context, ref, effectiveRoomId),
+            ),
           IconButton(
             icon: const Icon(Icons.search),
-            tooltip: '메시지 검색',
+            tooltip: '전체 검색',
             onPressed: () => context.push('/search'),
           ),
           PopupMenuButton<String>(
