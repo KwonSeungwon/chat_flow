@@ -56,6 +56,16 @@ public class UserPresenceService {
         // Sync DB participantCount from Redis SET (unique user count)
         syncParticipantCount(message.getChatRoomId());
 
+        // Broadcast presence JOIN event to room subscribers
+        Set<String> participantIds = getRoomParticipantUserIds(message.getChatRoomId());
+        messagingTemplate.convertAndSend("/topic/chat/" + message.getChatRoomId() + "/presence",
+                java.util.Map.of(
+                        "type", "JOIN",
+                        "roomId", message.getChatRoomId(),
+                        "username", message.getUsername(),
+                        "participantCount", participantIds.size(),
+                        "timestamp", LocalDateTime.now().toString()));
+
         chatPersistenceService.saveOutboxEventAndPublish(message, CHAT_TOPIC, "USER_JOINED");
     }
 
@@ -105,24 +115,41 @@ public class UserPresenceService {
         }
 
         syncParticipantCount(roomId);
+
+        // Broadcast presence LEAVE event to room subscribers
+        if (!userStillPresent) {
+            Set<String> remainingUserIds = getRoomParticipantUserIds(roomId);
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/presence",
+                    java.util.Map.of(
+                            "type", "LEAVE",
+                            "roomId", roomId,
+                            "username", username,
+                            "participantCount", remainingUserIds.size(),
+                            "timestamp", LocalDateTime.now().toString()));
+        }
     }
 
     public void leave(String roomId, String username) {
         leave(roomId, username, null);
     }
 
-    private void syncParticipantCount(String roomId) {
+    /**
+     * Redis SET에서 roomId의 참여자 userId 집합을 반환한다.
+     * entry format: "userId:sessionId:username" — 첫 segment(userId)만 추출, 중복 제거.
+     */
+    public Set<String> getRoomParticipantUserIds(String roomId) {
         String participantKey = "chatflow:room:participants:" + roomId;
         Set<String> members = redisTemplate.opsForSet().members(participantKey);
-
-        long uniqueUsers = 0;
-        if (members != null) {
-            uniqueUsers = members.stream()
-                    .map(e -> e.split(":")[0])  // extract userId
-                    .distinct()
-                    .count();
+        if (members == null || members.isEmpty()) {
+            return Set.of();
         }
+        return members.stream()
+                .map(e -> e.split(":")[0])
+                .collect(java.util.stream.Collectors.toSet());
+    }
 
-        chatRoomService.setParticipantCount(roomId, (int) uniqueUsers);
+    private void syncParticipantCount(String roomId) {
+        Set<String> userIds = getRoomParticipantUserIds(roomId);
+        chatRoomService.setParticipantCount(roomId, userIds.size());
     }
 }
