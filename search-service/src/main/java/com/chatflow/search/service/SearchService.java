@@ -166,4 +166,32 @@ public class SearchService {
         Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
         return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
     }
+
+    // ---- 결합 필터 (QA F6 IMPORTANT 반영) ----
+
+    public Page<ChatMessageDocument> searchByUsernameAndContent(String chatRoomId, String username, String query, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
+        return searchRepository.findByChatRoomIdAndUsernameContainingAndContentContaining(chatRoomId, username, query, pageable);
+    }
+
+    public Page<ChatMessageDocument> searchByTimeRangeCombined(
+            String chatRoomId, LocalDateTime start, LocalDateTime end,
+            String username, String query, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
+        boolean hasUser = username != null && !username.isBlank();
+        boolean hasQuery = query != null && !query.isBlank();
+        if (hasUser && hasQuery) {
+            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContainingAndContentContaining(
+                    chatRoomId, start, end, username, query, pageable);
+        }
+        if (hasUser) {
+            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContaining(
+                    chatRoomId, start, end, username, pageable);
+        }
+        if (hasQuery) {
+            return searchRepository.findByChatRoomIdAndTimestampBetweenAndContentContaining(
+                    chatRoomId, start, end, query, pageable);
+        }
+        return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
+    }
 }

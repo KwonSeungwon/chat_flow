@@ -50,13 +50,17 @@ public class SearchController {
     public ResponseEntity<Page<ChatMessageDocument>> searchByUser(
             @PathVariable String roomId,
             @RequestParam String username,
+            @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("username은 필수입니다.");
         }
-        Page<ChatMessageDocument> results = searchService.searchByUsername(roomId, username, page, Math.min(size, MAX_PAGE_SIZE));
+        int clampedSize = Math.min(size, MAX_PAGE_SIZE);
+        Page<ChatMessageDocument> results = (query != null && !query.isBlank())
+                ? searchService.searchByUsernameAndContent(roomId, username, query, page, clampedSize)
+                : searchService.searchByUsername(roomId, username, page, clampedSize);
         return ResponseEntity.ok(results);
     }
 
@@ -65,13 +69,16 @@ public class SearchController {
             @PathVariable String roomId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         if (start.isAfter(end)) {
             throw new IllegalArgumentException("시작 시간은 종료 시간보다 이전이어야 합니다.");
         }
-        Page<ChatMessageDocument> results = searchService.searchByTimeRange(roomId, start, end, page, Math.min(size, MAX_PAGE_SIZE));
+        Page<ChatMessageDocument> results = searchService.searchByTimeRangeCombined(
+                roomId, start, end, username, query, page, Math.min(size, MAX_PAGE_SIZE));
         return ResponseEntity.ok(results);
     }
 

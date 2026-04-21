@@ -20,8 +20,22 @@ public interface ChatMessageSearchRepository extends ElasticsearchRepository<Cha
     
     Page<ChatMessageDocument> findByChatRoomIdAndTimestampBetween(
             String chatRoomId, LocalDateTime start, LocalDateTime end, Pageable pageable);
-    
+
     List<ChatMessageDocument> findByChatRoomIdOrderByTimestampDesc(String chatRoomId);
-    
+
     Page<ChatMessageDocument> findByContentContaining(String content, Pageable pageable);
+
+    // ---- 결합 필터 (F6 QA 피드백 반영) ----
+
+    Page<ChatMessageDocument> findByChatRoomIdAndUsernameContainingAndContentContaining(
+            String chatRoomId, String username, String content, Pageable pageable);
+
+    Page<ChatMessageDocument> findByChatRoomIdAndTimestampBetweenAndContentContaining(
+            String chatRoomId, LocalDateTime start, LocalDateTime end, String content, Pageable pageable);
+
+    Page<ChatMessageDocument> findByChatRoomIdAndTimestampBetweenAndUsernameContaining(
+            String chatRoomId, LocalDateTime start, LocalDateTime end, String username, Pageable pageable);
+
+    Page<ChatMessageDocument> findByChatRoomIdAndTimestampBetweenAndUsernameContainingAndContentContaining(
+            String chatRoomId, LocalDateTime start, LocalDateTime end, String username, String content, Pageable pageable);
 }
