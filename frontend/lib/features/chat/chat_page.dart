@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/font_scale_provider.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/utils/url_helper.dart';
 import '../auth/auth_provider.dart';
+import 'bookmark_provider.dart';
 import 'chat_provider.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/chat_room.dart';
@@ -131,6 +133,27 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
           const SizedBox(height: 4),
           if (auth.userId != null)
             Text('ID: ${auth.userId}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
+          const SizedBox(height: 16),
+          // Font scale selector
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('글꼴 크기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ),
+          const SizedBox(height: 6),
+          Consumer(builder: (_, ref, __) {
+            final current = ref.watch(fontScaleProvider);
+            return SegmentedButton<FontScale>(
+              segments: FontScale.values
+                  .map((e) => ButtonSegment(value: e, label: Text(e.label)))
+                  .toList(),
+              selected: {current},
+              onSelectionChanged: (set) =>
+                  ref.read(fontScaleProvider.notifier).set(set.first),
+              style: SegmentedButton.styleFrom(
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+            );
+          }),
         ],
       ),
       actionsAlignment: MainAxisAlignment.center,
@@ -155,7 +178,92 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
             },
           )),
         ]),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.bookmark_outline, size: 18),
+            label: const Text('북마크'),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _showBookmarksDialog(context, ref);
+            },
+          ),
+        ),
       ],
+    ),
+  );
+}
+
+void _showBookmarksDialog(BuildContext context, WidgetRef ref) {
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      child: SizedBox(
+        width: 500,
+        height: 600,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.bookmark, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('북마크', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: Consumer(builder: (_, ref, __) {
+                final bookmarks = ref.watch(bookmarksProvider);
+                if (bookmarks.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.bookmark_border, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100)),
+                        const SizedBox(height: 12),
+                        Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  itemCount: bookmarks.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final b = bookmarks[i];
+                    String formattedTime = b.timestamp;
+                    try {
+                      final dt = DateTime.parse(b.timestamp).toLocal();
+                      formattedTime = '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                    } catch (_) {}
+                    return ListTile(
+                      title: Text(b.content, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${b.username} · $formattedTime', style: const TextStyle(fontSize: 11)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        onPressed: () => ref.read(bookmarksProvider.notifier).remove(b.messageId),
+                      ),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        GoRouter.of(context).go('/chat/${b.roomId}?messageId=${b.messageId}');
+                      },
+                    );
+                  },
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }
@@ -424,6 +532,8 @@ class ChatPage extends ConsumerWidget {
                 ref.read(themeModeProvider.notifier).toggle();
               } else if (value == 'profile') {
                 if (context.mounted) _showProfileDialog(context, ref);
+              } else if (value == 'bookmarks') {
+                if (context.mounted) _showBookmarksDialog(context, ref);
               } else if (value == 'password') {
                 if (context.mounted) _showChangePasswordDialog(context, ref);
               } else if (value == 'logout') {
@@ -463,6 +573,16 @@ class ChatPage extends ConsumerWidget {
                     Icon(Icons.person_outline, size: 20),
                     SizedBox(width: 8),
                     Text('프로필 관리'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'bookmarks',
+                child: Row(
+                  children: [
+                    Icon(Icons.bookmark_outline, size: 20),
+                    SizedBox(width: 8),
+                    Text('북마크'),
                   ],
                 ),
               ),
@@ -1095,6 +1215,23 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                 );
               },
               onRetry: (msg) => chatNotifier.retryFailedMessage(msg),
+              onBookmarkToggle: (msg) {
+                final notifier = ref.read(bookmarksProvider.notifier);
+                if (notifier.isBookmarked(msg.effectiveId)) {
+                  notifier.remove(msg.effectiveId);
+                } else {
+                  notifier.add(BookmarkEntry(
+                    messageId: msg.effectiveId,
+                    roomId: msg.chatRoomId,
+                    username: msg.username,
+                    content: msg.content,
+                    timestamp: msg.timestamp,
+                  ));
+                }
+              },
+              bookmarkedMessageIds: ref.watch(bookmarksProvider)
+                  .map((e) => e.messageId)
+                  .toSet(),
               lastReadMessageId: chatState.lastReadMessageId,
             ),
           ),

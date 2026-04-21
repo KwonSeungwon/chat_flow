@@ -17,6 +17,14 @@ import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
+// Room Sort
+// ---------------------------------------------------------------------------
+
+enum RoomSortOption { recent, unread, name }
+
+final roomSortProvider = StateProvider<RoomSortOption>((ref) => RoomSortOption.recent);
+
+// ---------------------------------------------------------------------------
 // Chat Rooms
 // ---------------------------------------------------------------------------
 

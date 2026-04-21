@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/keyboard/app_shortcuts.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
 import 'firebase_options.dart';
 
@@ -40,13 +42,24 @@ class ChatFlowApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
-    return MaterialApp.router(
-      title: 'ChatFlow',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ref.watch(themeModeProvider),
-      routerConfig: router,
+    final fontScale = ref.watch(fontScaleProvider);
+    return AppShortcuts(
+      child: MaterialApp.router(
+        title: 'ChatFlow',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ref.watch(themeModeProvider),
+        routerConfig: router,
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(fontScale.factor),
+            ),
+            child: child ?? const SizedBox(),
+          );
+        },
+      ),
     );
   }
 }

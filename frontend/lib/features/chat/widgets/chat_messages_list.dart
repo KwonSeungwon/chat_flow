@@ -33,6 +33,8 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(ChatMessage msg)? onForward;
   final void Function(String messageId)? onPin;
   final void Function(ChatMessage msg)? onRetry;
+  final void Function(ChatMessage msg)? onBookmarkToggle;
+  final Set<String> bookmarkedMessageIds;
   final String? lastReadMessageId;
 
   const ChatMessagesList({
@@ -55,6 +57,8 @@ class ChatMessagesList extends StatefulWidget {
     this.onForward,
     this.onPin,
     this.onRetry,
+    this.onBookmarkToggle,
+    this.bookmarkedMessageIds = const {},
     this.lastReadMessageId,
   });
 
@@ -455,6 +459,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 onRetry: (isMine && msg.deliveryStatus == MessageDeliveryStatus.failed && widget.onRetry != null)
                     ? () => widget.onRetry!(msg)
                     : null,
+                onBookmark: (!msg.deleted && widget.onBookmarkToggle != null)
+                    ? () => widget.onBookmarkToggle!(msg)
+                    : null,
+                isBookmarked: widget.bookmarkedMessageIds.contains(msg.effectiveId),
                 showAvatar: isFirstInGroup,
                 showTime: showTime,
               );
@@ -872,6 +880,8 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onForward;
   final VoidCallback? onPin;
   final VoidCallback? onRetry;
+  final VoidCallback? onBookmark;
+  final bool isBookmarked;
   final bool showAvatar;
   final bool showTime;
 
@@ -890,6 +900,8 @@ class _ChatBubble extends StatelessWidget {
     this.onForward,
     this.onPin,
     this.onRetry,
+    this.onBookmark,
+    this.isBookmarked = false,
     this.showAvatar = true,
     this.showTime = true,
   });
@@ -985,6 +997,12 @@ class _ChatBubble extends StatelessWidget {
                 title: Text(msg.pinned ? '고정 해제' : '메시지 고정'),
                 onTap: () { Navigator.of(context).pop(); onPin?.call(); },
               ),
+            if (onBookmark != null)
+              ListTile(
+                leading: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border),
+                title: Text(isBookmarked ? '북마크 해제' : '북마크'),
+                onTap: () { Navigator.of(context).pop(); onBookmark?.call(); },
+              ),
             if (!msg.deleted)
               ListTile(
                 leading: const Icon(Icons.copy_outlined),
@@ -1039,6 +1057,9 @@ class _ChatBubble extends StatelessWidget {
     if (onPin != null) {
       items.add(PopupMenuItem(value: 'pin', child: Row(children: [Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18), const SizedBox(width: 8), Text(msg.pinned ? '고정 해제' : '고정')])));
     }
+    if (onBookmark != null) {
+      items.add(PopupMenuItem(value: 'bookmark', child: Row(children: [Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border, size: 18), const SizedBox(width: 8), Text(isBookmarked ? '북마크 해제' : '북마크')])));
+    }
     if (!msg.deleted) {
       items.add(const PopupMenuItem(value: 'copy', child: Row(children: [Icon(Icons.copy_outlined, size: 18), SizedBox(width: 8), Text('복사')])));
     }
@@ -1065,6 +1086,7 @@ class _ChatBubble extends StatelessWidget {
       if (value == 'reply') onReply?.call();
       if (value == 'forward') onForward?.call();
       if (value == 'pin') onPin?.call();
+      if (value == 'bookmark') onBookmark?.call();
       if (value == 'edit') onEdit?.call();
       if (value == 'delete') onDelete?.call();
     });
@@ -1122,7 +1144,7 @@ class _ChatBubble extends StatelessWidget {
 
     final isUrgent = msg.priority.toUpperCase() == 'URGENT' || msg.priority.toUpperCase() == 'STAT';
 
-    final hasActions = onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null;
+    final hasActions = onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null || onBookmark != null;
 
     final bubble = GestureDetector(
       onLongPress: hasActions ? () => _showDeleteSheet(context) : null,
@@ -1513,14 +1535,25 @@ class _ChatBubble extends StatelessWidget {
     ),  // Padding
     ); // GestureDetector
 
-    // Swipe to reply + Reaction chips
+    // Swipe gestures: right = reply, left = action menu
     Widget result = bubble;
 
-    if (onReply != null && !msg.deleted) {
+    if (!msg.deleted && (onReply != null || hasActions)) {
       result = Dismissible(
         key: ValueKey('swipe-${msg.effectiveId}'),
-        direction: DismissDirection.startToEnd,
-        confirmDismiss: (_) async { onReply!(); return false; },
+        direction: onReply != null && hasActions
+            ? DismissDirection.horizontal
+            : onReply != null
+                ? DismissDirection.startToEnd
+                : DismissDirection.endToStart,
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.startToEnd) {
+            onReply?.call();
+          } else if (direction == DismissDirection.endToStart) {
+            _showDeleteSheet(context);
+          }
+          return false;
+        },
         background: Align(
           alignment: Alignment.centerLeft,
           child: Padding(
@@ -1528,11 +1561,17 @@ class _ChatBubble extends StatelessWidget {
             child: Icon(Icons.reply, color: Theme.of(context).colorScheme.primary.withAlpha(150)),
           ),
         ),
+        secondaryBackground: Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Icon(Icons.more_horiz, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(150)),
+          ),
+        ),
         child: result,
       );
     }
 
-    // Reactions now rendered inside the bubble column
     return result;
   }
 }

@@ -6,7 +6,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider, appStompServiceProvider, activeRoomIdProvider;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption;
 import 'create_room_dialog.dart';
 
 
@@ -126,6 +126,8 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
             onCreateTap: () => _showCreateDialog(context),
             onDmTap: () => _showDmDialog(context),
             onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
+            onSortSelected: (v) => ref.read(roomSortProvider.notifier).state = v,
+            currentSort: ref.watch(roomSortProvider),
           ),
           Divider(height: 1, color: cs.outline.withAlpha(60), thickness: 1),
           Expanded(
@@ -139,7 +141,31 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
               data: (rooms) {
                     final unreadCounts = ref.watch(roomUnreadCountsProvider);
                     final mutedRooms = ref.watch(mutedRoomsProvider);
-                    return rooms.isEmpty
+                    final sort = ref.watch(roomSortProvider);
+                    // Apply sort
+                    final sortedRooms = [...rooms];
+                    switch (sort) {
+                      case RoomSortOption.recent:
+                        sortedRooms.sort((a, b) {
+                          final aT = a.lastMessageAt ?? a.createdAt ?? '';
+                          final bT = b.lastMessageAt ?? b.createdAt ?? '';
+                          return bT.compareTo(aT);
+                        });
+                      case RoomSortOption.unread:
+                        sortedRooms.sort((a, b) {
+                          final au = unreadCounts[a.id] ?? 0;
+                          final bu = unreadCounts[b.id] ?? 0;
+                          if (au == bu) {
+                            final aT = a.lastMessageAt ?? a.createdAt ?? '';
+                            final bT = b.lastMessageAt ?? b.createdAt ?? '';
+                            return bT.compareTo(aT);
+                          }
+                          return bu.compareTo(au);
+                        });
+                      case RoomSortOption.name:
+                        sortedRooms.sort((a, b) => a.name.compareTo(b.name));
+                    }
+                    return sortedRooms.isEmpty
                         ? _EmptyRoomState(
                             onCreateTap: () => _showCreateDialog(context))
                         : RefreshIndicator(
@@ -147,9 +173,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                             child: ListView.builder(
                             padding: const EdgeInsets.symmetric(
                                 vertical: 8, horizontal: 8),
-                            itemCount: rooms.length,
+                            itemCount: sortedRooms.length,
                             itemBuilder: (context, index) {
-                              final room = rooms[index];
+                              final room = sortedRooms[index];
                               final unread = unreadCounts[room.id] ?? 0;
                               final isMuted = mutedRooms.contains(room.id);
                               return _RoomTile(
@@ -383,7 +409,9 @@ class _SidebarHeader extends StatelessWidget {
   final VoidCallback onCreateTap;
   final VoidCallback? onDmTap;
   final VoidCallback? onRefresh;
-  const _SidebarHeader({required this.onCreateTap, this.onDmTap, this.onRefresh});
+  final void Function(RoomSortOption)? onSortSelected;
+  final RoomSortOption currentSort;
+  const _SidebarHeader({required this.onCreateTap, this.onDmTap, this.onRefresh, this.onSortSelected, this.currentSort = RoomSortOption.recent});
 
   @override
   Widget build(BuildContext context) {
@@ -418,6 +446,50 @@ class _SidebarHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (onSortSelected != null)
+            PopupMenuButton<RoomSortOption>(
+              icon: Icon(Icons.sort, size: 18, color: cs.onSurfaceVariant),
+              tooltip: '정렬',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onSelected: onSortSelected,
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: RoomSortOption.recent,
+                  child: Row(children: [
+                    if (currentSort == RoomSortOption.recent)
+                      Icon(Icons.check, size: 16, color: cs.primary)
+                    else
+                      const SizedBox(width: 16),
+                    const SizedBox(width: 8),
+                    const Text('최근 메시지 순'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: RoomSortOption.unread,
+                  child: Row(children: [
+                    if (currentSort == RoomSortOption.unread)
+                      Icon(Icons.check, size: 16, color: cs.primary)
+                    else
+                      const SizedBox(width: 16),
+                    const SizedBox(width: 8),
+                    const Text('미읽음 많은 순'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: RoomSortOption.name,
+                  child: Row(children: [
+                    if (currentSort == RoomSortOption.name)
+                      Icon(Icons.check, size: 16, color: cs.primary)
+                    else
+                      const SizedBox(width: 16),
+                    const SizedBox(width: 8),
+                    const Text('이름 순'),
+                  ]),
+                ),
+              ],
+            ),
+          const SizedBox(width: 2),
           if (onDmTap != null)
             Tooltip(
               message: '새 DM',
