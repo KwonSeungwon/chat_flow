@@ -170,8 +170,10 @@ class ChatMessagesState {
   final bool isSummaryLoading;
   final bool hasMoreHistory;
   final String? errorMessage;
-  /// messageId → read count
+  /// messageId → read count (파생값 — readPositions로부터 계산)
   final Map<String, int> readCounts;
+  /// userId → 해당 사용자의 lastReadMessageId (room 전체 읽음 상태)
+  final Map<String, String> readPositions;
   /// Last message the current user has read (fetched from backend on join)
   final String? lastReadMessageId;
   final ChatMessage? replyTarget;
@@ -190,6 +192,7 @@ class ChatMessagesState {
     this.hasMoreHistory = true,
     this.errorMessage,
     this.readCounts = const {},
+    this.readPositions = const {},
     this.lastReadMessageId,
     this.replyTarget,
     this.exitReason = ChatExitReason.none,
@@ -208,6 +211,7 @@ class ChatMessagesState {
     String? errorMessage,
     bool clearErrorMessage = false,
     Map<String, int>? readCounts,
+    Map<String, String>? readPositions,
     String? lastReadMessageId,
     bool clearLastReadMessageId = false,
     ChatMessage? replyTarget,
@@ -227,6 +231,7 @@ class ChatMessagesState {
       hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       readCounts: readCounts ?? this.readCounts,
+      readPositions: readPositions ?? this.readPositions,
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
       replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
       exitReason: exitReason ?? this.exitReason,
@@ -246,6 +251,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   static const _storage = FlutterSecureStorage();
   Timer? _typingDebounce;
   final Map<String, Timer> _typingTimers = {};
+  /// localId → sending 타임아웃 타이머
+  final Map<String, Timer> _sendingTimers = {};
   final List<Map<String, dynamic>> _offlineQueue = [];
   String? _currentRoomId;
 
@@ -270,8 +277,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       hasMoreHistory: true,
       clearErrorMessage: true,
       readCounts: {},
+      readPositions: {},
       clearLastReadMessageId: true,
     );
+
+    // Fetch initial read positions for this room (non-blocking, best effort)
+    _fetchInitialReadPositions(roomId);
 
     // Load history
     try {
@@ -341,15 +352,21 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           if (connected) _flushOfflineQueue();
         }
       },
-      onReadReceipt: (messageId, readCount) {
+      onReadReceipt: (positions) {
         if (!mounted) return;
-        final updated = Map<String, int>.from(state.readCounts);
-        updated[messageId] = readCount;
-        state = state.copyWith(readCounts: updated);
+        // 본인 id 제외한 다른 참여자의 포지션만 유지 (본인 메시지에 본인이 카운트되지 않도록)
+        final filtered = <String, String>{};
+        positions.forEach((uid, msgId) {
+          if (uid != _userId && msgId.isNotEmpty) filtered[uid] = msgId;
+        });
+        state = state.copyWith(
+          readPositions: filtered,
+          readCounts: _computeReadCounts(state.messages, filtered),
+        );
       },
-      onTyping: (username) {
+      onTyping: (username, {bool stop = false}) {
         if (!mounted) return;
-        _onTypingReceived(username);
+        _onTypingReceived(username, stop: stop);
       },
       onRoomFull: (redirectTo, roomName) {
         if (mounted) {
@@ -518,6 +535,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (sendingIdx >= 0) {
       final replaced = List<ChatMessage>.from(existing);
       replaced[sendingIdx] = msg;
+      // 서버 확인됨 — 해당 localId의 타임아웃 취소
+      final localId = existing[sendingIdx].localId;
+      if (localId != null) {
+        _sendingTimers.remove(localId)?.cancel();
+      }
       state = state.copyWith(messages: replaced);
       return;
     }
@@ -527,7 +549,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Cap at 500
     final capped =
         updated.length > 500 ? updated.sublist(updated.length - 500) : updated;
-    state = state.copyWith(messages: capped);
+    // 새 메시지가 추가되면 타임라인이 변하므로 readCounts 재계산
+    state = state.copyWith(
+      messages: capped,
+      readCounts: _computeReadCounts(capped, state.readPositions),
+    );
     // Auto read-receipt: mark as read when message arrives (user is viewing room)
     if (msg.userId != _userId && _currentRoomId != null) {
       _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
@@ -794,6 +820,64 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       _offlineQueue.add(msg);
     }
     if (reply != null) clearReplyTarget();
+    // 10초 내 서버 확인(동일 localId 메시지가 sent로 교체) 없으면 failed로 표시
+    _sendingTimers[localId] = Timer(const Duration(seconds: 10), () {
+      _sendingTimers.remove(localId);
+      if (!mounted) return;
+      final idx = state.messages.indexWhere((m) =>
+          m.localId == localId && m.deliveryStatus == MessageDeliveryStatus.sending);
+      if (idx < 0) return;
+      final m = state.messages[idx];
+      final failed = ChatMessage(
+        id: m.id, messageId: m.messageId,
+        chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
+        content: m.content, timestamp: m.timestamp, type: m.type,
+        priority: m.priority, isAiGenerated: m.isAiGenerated,
+        fileUrl: m.fileUrl, fileName: m.fileName, fileContentType: m.fileContentType,
+        parentMessageId: m.parentMessageId, parentMessagePreview: m.parentMessagePreview,
+        deleted: m.deleted, edited: m.edited, editedAt: m.editedAt, pinned: m.pinned,
+        reactions: m.reactions, localId: m.localId,
+        deliveryStatus: MessageDeliveryStatus.failed,
+      );
+      final list = List<ChatMessage>.from(state.messages);
+      list[idx] = failed;
+      state = state.copyWith(messages: list);
+    });
+  }
+
+  /// 실패한 메시지 재전송. 기존 localMsg를 제거하고 sendMessage 재호출.
+  void retryFailedMessage(ChatMessage msg) {
+    if (msg.deliveryStatus != MessageDeliveryStatus.failed) return;
+    final list = state.messages.where((m) => m.localId != msg.localId).toList();
+    state = state.copyWith(messages: list);
+    sendMessage(
+      roomId: msg.chatRoomId,
+      content: msg.content,
+      priority: msg.priority,
+    );
+  }
+
+  Future<void> _fetchInitialReadPositions(String roomId) async {
+    try {
+      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/readers');
+      final data = resp.data;
+      if (data is Map && data['data'] is Map) {
+        final raw = data['data'] as Map;
+        final positions = <String, String>{};
+        raw.forEach((k, v) {
+          final uid = k.toString();
+          final mid = v?.toString() ?? '';
+          if (uid != _userId && mid.isNotEmpty) positions[uid] = mid;
+        });
+        if (!mounted) return;
+        state = state.copyWith(
+          readPositions: positions,
+          readCounts: _computeReadCounts(state.messages, positions),
+        );
+      }
+    } catch (_) {
+      // best-effort
+    }
   }
 
   void _flushOfflineQueue() {
@@ -887,7 +971,14 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     });
   }
 
-  void _onTypingReceived(String username) {
+  void _onTypingReceived(String username, {bool stop = false}) {
+    if (stop) {
+      _typingTimers[username]?.cancel();
+      _typingTimers.remove(username);
+      final updated = Set<String>.from(state.typingUsers)..remove(username);
+      state = state.copyWith(typingUsers: updated);
+      return;
+    }
     final users = Set<String>.from(state.typingUsers)..add(username);
     state = state.copyWith(typingUsers: users);
     _typingTimers[username]?.cancel();
@@ -899,6 +990,37 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     });
   }
 
+  /// readPositions(userId → lastReadMessageId)와 messages 타임라인으로부터
+  /// 메시지별 readCount 맵을 계산. messageId가 특정 메시지 이후(또는 동일)면 해당 사용자는 그 메시지를 읽은 것.
+  Map<String, int> _computeReadCounts(
+      List<ChatMessage> messages, Map<String, String> positions) {
+    if (messages.isEmpty || positions.isEmpty) return const {};
+    final indexById = <String, int>{};
+    for (int i = 0; i < messages.length; i++) {
+      final id = messages[i].effectiveId;
+      if (id.isNotEmpty) indexById[id] = i;
+    }
+    // 각 사용자의 마지막 읽은 메시지 인덱스
+    final userReadIndexes = <int>[];
+    positions.forEach((_, msgId) {
+      final idx = indexById[msgId];
+      if (idx != null) userReadIndexes.add(idx);
+    });
+    if (userReadIndexes.isEmpty) return const {};
+    // 메시지 i에 대해 readIndex >= i 인 사용자 수를 계산
+    final counts = <String, int>{};
+    for (int i = 0; i < messages.length; i++) {
+      final id = messages[i].effectiveId;
+      if (id.isEmpty) continue;
+      int c = 0;
+      for (final idx in userReadIndexes) {
+        if (idx >= i) c++;
+      }
+      if (c > 0) counts[id] = c;
+    }
+    return counts;
+  }
+
   void disconnect() {
     _currentRoomId = null;
     _stompService.disconnect();
@@ -908,6 +1030,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   void dispose() {
     _typingDebounce?.cancel();
     for (final t in _typingTimers.values) { t.cancel(); }
+    for (final t in _sendingTimers.values) { t.cancel(); }
+    _sendingTimers.clear();
     _stompService.dispose();
     super.dispose();
   }

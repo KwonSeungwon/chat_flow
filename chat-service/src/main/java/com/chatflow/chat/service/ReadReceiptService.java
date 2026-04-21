@@ -70,15 +70,20 @@ public class ReadReceiptService {
         String atKey = "chatflow:readat:" + roomId + ":" + userId;
         redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
 
-        ReadReceipt receipt = ReadReceipt.builder()
-                .userId(userId)
-                .username(username)
-                .roomId(roomId)
-                .lastReadMessageId(lastReadMessageId)
-                .timestamp(LocalDateTime.now())
-                .build();
+        // 프론트엔드가 메시지별 readCount를 계산할 수 있도록 전체 readPositions를 함께 전송
+        Map<String, String> positions = getRoomReadPositions(roomId);
 
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/read-receipts", receipt);
-        log.debug("Read receipt recorded: room={}, user={}, messageId={}", roomId, userId, lastReadMessageId);
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("userId", userId);
+        payload.put("username", username);
+        payload.put("roomId", roomId);
+        payload.put("messageId", lastReadMessageId);           // frontend 호환 (기존 lastReadMessageId alias)
+        payload.put("lastReadMessageId", lastReadMessageId);
+        payload.put("readCount", positions.size());             // 방 전체 읽음 인원수 (하위 호환용)
+        payload.put("positions", positions);                    // userId -> lastReadMessageId
+        payload.put("timestamp", LocalDateTime.now().toString());
+
+        messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/read-receipts", payload);
+        log.debug("Read receipt recorded: room={}, user={}, messageId={}, positions={}", roomId, userId, lastReadMessageId, positions.size());
     }
 }

@@ -32,6 +32,7 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(String messageId, String emoji)? onReaction;
   final void Function(ChatMessage msg)? onForward;
   final void Function(String messageId)? onPin;
+  final void Function(ChatMessage msg)? onRetry;
   final String? lastReadMessageId;
 
   const ChatMessagesList({
@@ -53,6 +54,7 @@ class ChatMessagesList extends StatefulWidget {
     this.onReaction,
     this.onForward,
     this.onPin,
+    this.onRetry,
     this.lastReadMessageId,
   });
 
@@ -449,6 +451,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                     : null,
                 onPin: (!msg.deleted && widget.onPin != null)
                     ? () => widget.onPin!(msg.effectiveId)
+                    : null,
+                onRetry: (isMine && msg.deliveryStatus == MessageDeliveryStatus.failed && widget.onRetry != null)
+                    ? () => widget.onRetry!(msg)
                     : null,
                 showAvatar: isFirstInGroup,
                 showTime: showTime,
@@ -866,6 +871,7 @@ class _ChatBubble extends StatelessWidget {
   final void Function(String emoji)? onReaction;
   final VoidCallback? onForward;
   final VoidCallback? onPin;
+  final VoidCallback? onRetry;
   final bool showAvatar;
   final bool showTime;
 
@@ -883,6 +889,7 @@ class _ChatBubble extends StatelessWidget {
     this.onReaction,
     this.onForward,
     this.onPin,
+    this.onRetry,
     this.showAvatar = true,
     this.showTime = true,
   });
@@ -891,6 +898,45 @@ class _ChatBubble extends StatelessWidget {
       AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
 
   static const _quickReactions = ['👍', '❤️', '😂', '😮', '😢', '✅'];
+
+  /// 메시지 content의 @username 패턴을 하이라이트해 RichText로 반환.
+  /// invertColors=true면 어두운 배경 위(본인 버블)에 맞게 대비를 조정.
+  Widget _buildContentRichText(BuildContext context, String content, TextStyle baseStyle,
+      {required bool invertColors, String? highlightMe}) {
+    final pattern = RegExp(r'@([A-Za-z0-9_\.가-힣]{1,30})');
+    final matches = pattern.allMatches(content).toList();
+    if (matches.isEmpty) {
+      return Text(content, style: baseStyle);
+    }
+    final spans = <TextSpan>[];
+    int cursor = 0;
+    for (final m in matches) {
+      if (m.start > cursor) {
+        spans.add(TextSpan(text: content.substring(cursor, m.start), style: baseStyle));
+      }
+      final mentioned = m.group(1) ?? '';
+      final isMeMentioned = highlightMe != null && mentioned == highlightMe;
+      final fg = invertColors
+          ? (isMeMentioned ? const Color(0xFFFFE082) : Colors.white)
+          : (isMeMentioned ? const Color(0xFFB71C1C) : AppColors.primary);
+      final bg = isMeMentioned
+          ? (invertColors ? Colors.white.withAlpha(40) : const Color(0xFFFFF59D))
+          : (invertColors ? Colors.white.withAlpha(30) : AppColors.primary.withAlpha(25));
+      spans.add(TextSpan(
+        text: m.group(0),
+        style: baseStyle.copyWith(
+          color: fg,
+          fontWeight: FontWeight.w700,
+          backgroundColor: bg,
+        ),
+      ));
+      cursor = m.end;
+    }
+    if (cursor < content.length) {
+      spans.add(TextSpan(text: content.substring(cursor), style: baseStyle));
+    }
+    return RichText(text: TextSpan(children: spans));
+  }
 
   void _showDeleteSheet(BuildContext context) {
     showModalBottomSheet(
@@ -1246,15 +1292,27 @@ class _ChatBubble extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                gradient: isAiQuestion
+                                gradient: msg.priority == 'STAT'
                                     ? const LinearGradient(
-                                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                                        colors: [Color(0xFFE53935), Color(0xFFC62828)],
                                       )
-                                    : AppColors.myBubbleGradient,
+                                    : msg.priority == 'URGENT'
+                                        ? const LinearGradient(
+                                            colors: [Color(0xFFFB8C00), Color(0xFFE65100)],
+                                          )
+                                        : isAiQuestion
+                                            ? const LinearGradient(
+                                                colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                                              )
+                                            : AppColors.myBubbleGradient,
                                 borderRadius: radius,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
+                                    color: msg.priority == 'STAT'
+                                        ? const Color(0xFFD32F2F).withAlpha(90)
+                                        : msg.priority == 'URGENT'
+                                            ? const Color(0xFFF57C00).withAlpha(70)
+                                            : (isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
                                     blurRadius: 10,
                                     offset: const Offset(0, 3),
                                   ),
@@ -1301,12 +1359,11 @@ class _ChatBubble extends StatelessWidget {
                                         ],
                                       ),
                                     ),
-                                  Text(
+                                  _buildContentRichText(
+                                    context,
                                     isAiQuestion ? msg.content.replaceFirst('[AI에게] ', '') : msg.content,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        height: 1.4),
+                                    const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                                    invertColors: true,
                                   ),
                                 ],
                               ),
@@ -1317,10 +1374,19 @@ class _ChatBubble extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainer,
+                                color: msg.priority == 'STAT'
+                                    ? const Color(0xFFD32F2F).withAlpha(18)
+                                    : msg.priority == 'URGENT'
+                                        ? const Color(0xFFF57C00).withAlpha(18)
+                                        : Theme.of(context).colorScheme.surfaceContainer,
                                 borderRadius: radius,
                                 border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withAlpha(80), width: 1),
+                                    color: msg.priority == 'STAT'
+                                        ? const Color(0xFFD32F2F)
+                                        : msg.priority == 'URGENT'
+                                            ? const Color(0xFFF57C00)
+                                            : Theme.of(context).colorScheme.outline.withAlpha(80),
+                                    width: (msg.priority == 'STAT' || msg.priority == 'URGENT') ? 1.5 : 1),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1351,12 +1417,14 @@ class _ChatBubble extends StatelessWidget {
                                       ),
                                     ),
                                   ],
-                                  Text(
+                                  _buildContentRichText(
+                                    context,
                                     msg.content,
-                                    style: TextStyle(
+                                    TextStyle(
                                         color: Theme.of(context).colorScheme.onSurface,
                                         fontSize: 14,
                                         height: 1.4),
+                                    invertColors: false,
                                   ),
                                 ],
                               ),
@@ -1383,7 +1451,15 @@ class _ChatBubble extends StatelessWidget {
                             if (isMine && msg.deliveryStatus == MessageDeliveryStatus.sending)
                               Padding(padding: const EdgeInsets.only(left: 3), child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
                             if (isMine && msg.deliveryStatus == MessageDeliveryStatus.failed)
-                              const Padding(padding: EdgeInsets.only(left: 3), child: Icon(Icons.error_outline, size: 11, color: Colors.red)),
+                              GestureDetector(
+                                onTap: onRetry,
+                                child: const Padding(
+                                    padding: EdgeInsets.only(left: 3),
+                                    child: Tooltip(
+                                      message: '재전송',
+                                      child: Icon(Icons.refresh, size: 13, color: Colors.red),
+                                    )),
+                              ),
                           ],
                         ),
                       ),

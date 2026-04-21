@@ -6,8 +6,8 @@ import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 typedef MessageCallback = void Function(Map<String, dynamic> message);
 typedef ConnectionCallback = void Function(bool connected);
-typedef ReadReceiptCallback = void Function(String messageId, int readCount);
-typedef TypingCallback = void Function(String username);
+typedef ReadReceiptCallback = void Function(Map<String, String> positions);
+typedef TypingCallback = void Function(String username, {bool stop});
 
 class StompService {
   StompClient? _client;
@@ -117,24 +117,32 @@ class StompService {
       },
     );
 
-    // Subscribe to read receipts
+    // Subscribe to read receipts — positions 맵으로 프론트가 메시지별 카운트 계산
     _client!.subscribe(
       destination: '/topic/chat/$_currentRoomId/read-receipts',
       callback: (frame) {
         if (frame.body != null && _onReadReceipt != null) {
           try {
             final data = jsonDecode(frame.body!) as Map<String, dynamic>;
-            final messageId = data['messageId']?.toString();
-            final readCount = (data['readCount'] as num?)?.toInt() ?? 0;
-            if (messageId != null) {
-              _onReadReceipt!(messageId, readCount);
+            final rawPositions = data['positions'];
+            Map<String, String> positions = <String, String>{};
+            if (rawPositions is Map) {
+              positions = rawPositions.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+            } else {
+              // legacy payload 폴백 — 단일 receipt만 제공
+              final userId = data['userId']?.toString();
+              final lastRead = (data['lastReadMessageId'] ?? data['messageId'])?.toString();
+              if (userId != null && lastRead != null && lastRead.isNotEmpty) {
+                positions[userId] = lastRead;
+              }
             }
+            _onReadReceipt!(positions);
           } catch (_) {}
         }
       },
     );
 
-    // Subscribe to typing indicators
+    // Subscribe to typing indicators (stop 플래그로 유령 제거 지원)
     _client!.subscribe(
       destination: '/topic/chat/$_currentRoomId/typing',
       callback: (frame) {
@@ -142,8 +150,9 @@ class StompService {
           try {
             final data = jsonDecode(frame.body!) as Map<String, dynamic>;
             final username = data['username']?.toString();
+            final stop = data['stop'] == true;
             if (username != null && username != _currentUsername) {
-              _onTyping!(username);
+              _onTyping!(username, stop: stop);
             }
           } catch (_) {}
         }

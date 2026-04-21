@@ -1058,6 +1058,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                   data: {'messageId': messageId},
                 );
               },
+              onRetry: (msg) => chatNotifier.retryFailedMessage(msg),
               lastReadMessageId: chatState.lastReadMessageId,
             ),
           ),
