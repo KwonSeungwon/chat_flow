@@ -6,7 +6,8 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, mutedRoomsProvider, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption;
+import '../../../core/services/fcm_service.dart';
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption;
 import 'create_room_dialog.dart';
 
 
@@ -47,12 +48,28 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
       ref.read(appStompServiceProvider).connect(
         userId: auth.userId!,
         token: auth.token!,
-        onRoomUpdate: (roomId, type) {
+        onRoomUpdate: (roomId, type, {List<String> mentionedUsernames = const []}) {
           if (_disposed) return;
           if (type != 'UNREAD_INCREMENT') return;
           // Skip increment if user is currently viewing this room
           final activeRoom = ref.read(activeRoomIdProvider);
           if (activeRoom == roomId) return;
+
+          final policy = ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId);
+          final currentUsername = ref.read(authProvider).username;
+          final isMentioningMe = mentionedUsernames.contains(currentUsername);
+
+          // Policy-based filtering
+          switch (policy) {
+            case NotificationPolicy.muted:
+              return; // fully muted — do not increment count
+            case NotificationPolicy.mentionsOnly:
+              if (!isMentioningMe) return;
+              break;
+            case NotificationPolicy.all:
+              break;
+          }
+
           final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
           current[roomId] = (current[roomId] ?? 0) + 1;
           ref.read(roomUnreadCountsProvider.notifier).state = current;
@@ -140,7 +157,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
               ),
               data: (rooms) {
                     final unreadCounts = ref.watch(roomUnreadCountsProvider);
-                    final mutedRooms = ref.watch(mutedRoomsProvider);
+                    final policies = ref.watch(roomNotificationPolicyProvider);
                     final sort = ref.watch(roomSortProvider);
                     // Apply sort
                     final sortedRooms = [...rooms];
@@ -177,13 +194,13 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                             itemBuilder: (context, index) {
                               final room = sortedRooms[index];
                               final unread = unreadCounts[room.id] ?? 0;
-                              final isMuted = mutedRooms.contains(room.id);
+                              final policy = policies[room.id] ?? NotificationPolicy.all;
                               return _RoomTile(
                                 room: room,
                                 color: _roomColor(room),
                                 isSelected: room.id == widget.currentRoomId,
                                 isFull: room.isFull,
-                                isMuted: isMuted,
+                                policy: policy,
                                 unreadCount: unread,
                                 onTap: room.isFull &&
                                         room.id != widget.currentRoomId
@@ -204,7 +221,10 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                           widget.onRoomSelected?.call();
                                         }
                                       },
-                                onMuteToggle: () => ref.read(mutedRoomsProvider.notifier).toggle(room.id),
+                                onPolicyChange: (p) async {
+                                  await ref.read(roomNotificationPolicyProvider.notifier).setPolicy(room.id, p);
+                                  _applyFcmSubscription(ref, room.id, p);
+                                },
                                 onDelete: () => _showDeleteRoomDialog(context, room),
                               );
                             },
@@ -216,6 +236,21 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
         ],
       ),
     );
+  }
+
+  Future<void> _applyFcmSubscription(WidgetRef ref, String roomId, NotificationPolicy policy) async {
+    final token = await FcmService.getToken();
+    if (token == null) return;
+    final dio = ref.read(dioClientProvider).dio;
+    try {
+      if (policy == NotificationPolicy.all) {
+        await dio.post('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+      } else {
+        // MENTIONS_ONLY and MUTED both unsubscribe room topic
+        // (mention-{username} topic remains subscribed so mentions still arrive)
+        await dio.delete('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+      }
+    } catch (_) {/* best-effort */}
   }
 
   void _showDmDialog(BuildContext context) {
@@ -542,22 +577,22 @@ class _RoomTile extends StatefulWidget {
   final Color color;
   final bool isSelected;
   final bool isFull;
-  final bool isMuted;
+  final NotificationPolicy policy;
   final int unreadCount;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
-  final VoidCallback? onMuteToggle;
+  final void Function(NotificationPolicy)? onPolicyChange;
 
   const _RoomTile({
     required this.room,
     required this.color,
     required this.isSelected,
     required this.isFull,
-    this.isMuted = false,
+    this.policy = NotificationPolicy.all,
     required this.unreadCount,
     required this.onTap,
     this.onDelete,
-    this.onMuteToggle,
+    this.onPolicyChange,
   });
 
   @override
@@ -573,21 +608,31 @@ class _RoomTileState extends State<_RoomTile> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Icon(widget.isMuted ? Icons.notifications_active : Icons.notifications_off),
-              title: Text(widget.isMuted ? '알림 켜기' : '알림 끄기'),
-              onTap: () { Navigator.of(context).pop(); widget.onMuteToggle?.call(); },
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('알림 설정', style: TextStyle(fontWeight: FontWeight.w700)),
             ),
+            ...NotificationPolicy.values.map((p) => RadioListTile<NotificationPolicy>(
+              title: Text(p.label),
+              secondary: Icon(p.icon),
+              value: p,
+              groupValue: widget.policy,
+              onChanged: (v) {
+                if (v == null) return;
+                Navigator.of(ctx).pop();
+                widget.onPolicyChange?.call(v);
+              },
+            )),
+            const Divider(height: 1),
             if (widget.onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('채팅방 삭제', style: TextStyle(color: Colors.red)),
-                onTap: () { Navigator.of(context).pop(); widget.onDelete?.call(); },
+                onTap: () { Navigator.of(ctx).pop(); widget.onDelete?.call(); },
               ),
             const SizedBox(height: 8),
           ],
@@ -601,11 +646,19 @@ class _RoomTileState extends State<_RoomTile> {
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: [
-        PopupMenuItem(value: 'mute', child: Row(children: [
-          Icon(widget.isMuted ? Icons.notifications_active : Icons.notifications_off, size: 18),
-          const SizedBox(width: 8),
-          Text(widget.isMuted ? '알림 켜기' : '알림 끄기'),
-        ])),
+        ...NotificationPolicy.values.map((p) => PopupMenuItem(
+          value: 'policy_${p.name}',
+          child: Row(children: [
+            if (widget.policy == p)
+              Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.primary)
+            else
+              const SizedBox(width: 16),
+            const SizedBox(width: 6),
+            Icon(p.icon, size: 18),
+            const SizedBox(width: 8),
+            Text(p.label),
+          ]),
+        )),
         if (widget.onDelete != null)
           const PopupMenuItem(value: 'delete', child: Row(children: [
             Icon(Icons.delete_outline, size: 18, color: Colors.red),
@@ -614,7 +667,12 @@ class _RoomTileState extends State<_RoomTile> {
           ])),
       ],
     ).then((value) {
-      if (value == 'mute') widget.onMuteToggle?.call();
+      if (value == null) return;
+      if (value.startsWith('policy_')) {
+        final name = value.substring(7);
+        final p = NotificationPolicy.values.firstWhere((e) => e.name == name, orElse: () => NotificationPolicy.all);
+        widget.onPolicyChange?.call(p);
+      }
       if (value == 'delete') widget.onDelete?.call();
     });
   }
@@ -674,7 +732,9 @@ class _RoomTileState extends State<_RoomTile> {
               Expanded(
                 child: Opacity(
                   opacity:
-                      widget.isFull && !widget.isSelected ? 0.48 : 1.0,
+                      widget.isFull && !widget.isSelected ? 0.48
+                      : widget.policy == NotificationPolicy.muted ? 0.5
+                      : 1.0,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
@@ -805,13 +865,13 @@ class _RoomTileState extends State<_RoomTile> {
                             ],
                           ),
                         ),
-                        if (widget.isMuted)
+                        if (widget.policy != NotificationPolicy.all)
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: Icon(Icons.notifications_off, size: 14,
+                            child: Icon(widget.policy.icon, size: 14,
                                 color: cs.onSurfaceVariant.withAlpha(120)),
                           ),
-                        if (widget.unreadCount > 0 && !widget.isMuted) ...[
+                        if (widget.unreadCount > 0 && widget.policy != NotificationPolicy.muted) ...[
                           Container(
                             constraints: const BoxConstraints(minWidth: 18),
                             height: 18,

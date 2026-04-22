@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -173,38 +174,83 @@ final appStompServiceProvider = Provider<AppStompService>((ref) {
 final activeRoomIdProvider = StateProvider<String?>((ref) => null);
 
 // ---------------------------------------------------------------------------
-// Muted Rooms (local-only, persisted to FlutterSecureStorage)
+// Per-room notification policy (ALL / MENTIONS_ONLY / MUTED)
 // ---------------------------------------------------------------------------
 
-const _mutedKey = StorageKeys.mutedRooms;
-const _muteStorage = FlutterSecureStorage();
+enum NotificationPolicy { all, mentionsOnly, muted }
 
-final mutedRoomsProvider = StateNotifierProvider<MutedRoomsNotifier, Set<String>>((ref) {
-  return MutedRoomsNotifier();
+extension NotificationPolicyX on NotificationPolicy {
+  String get label => switch (this) {
+    NotificationPolicy.all => '모든 메시지',
+    NotificationPolicy.mentionsOnly => '@멘션만',
+    NotificationPolicy.muted => '음소거',
+  };
+  String get shortLabel => switch (this) {
+    NotificationPolicy.all => '전체',
+    NotificationPolicy.mentionsOnly => '멘션',
+    NotificationPolicy.muted => '무음',
+  };
+  IconData get icon => switch (this) {
+    NotificationPolicy.all => Icons.notifications_outlined,
+    NotificationPolicy.mentionsOnly => Icons.alternate_email,
+    NotificationPolicy.muted => Icons.notifications_off_outlined,
+  };
+}
+
+const _policyKey = 'chatflow.roomNotificationPolicies';
+const _policyStorage = FlutterSecureStorage();
+
+final roomNotificationPolicyProvider =
+    StateNotifierProvider<RoomNotificationPolicyNotifier, Map<String, NotificationPolicy>>((ref) {
+  return RoomNotificationPolicyNotifier();
 });
 
-class MutedRoomsNotifier extends StateNotifier<Set<String>> {
-  MutedRoomsNotifier() : super({}) { _load(); }
+class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, NotificationPolicy>> {
+  RoomNotificationPolicyNotifier() : super({}) { _load(); }
 
   Future<void> _load() async {
-    final raw = await _muteStorage.read(key: _mutedKey);
-    if (raw != null && raw.isNotEmpty) {
-      state = Set<String>.from(jsonDecode(raw) as List);
+    try {
+      final raw = await _policyStorage.read(key: _policyKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        state = decoded.map((k, v) => MapEntry(
+          k,
+          NotificationPolicy.values.firstWhere((e) => e.name == v, orElse: () => NotificationPolicy.all),
+        ));
+      }
+      // Migration: absorb legacy chatflow.mutedRooms (List<String>) as MUTED, then delete
+      final legacy = await _policyStorage.read(key: StorageKeys.mutedRooms);
+      if (legacy != null && legacy.isNotEmpty) {
+        final migrated = Map<String, NotificationPolicy>.from(state);
+        for (final id in (jsonDecode(legacy) as List)) {
+          migrated[id.toString()] = NotificationPolicy.muted;
+        }
+        state = migrated;
+        await _persist();
+        await _policyStorage.delete(key: StorageKeys.mutedRooms);
+      }
+    } catch (_) {
+      // first run or corrupted — start fresh
     }
   }
 
-  Future<void> toggle(String roomId) async {
-    final updated = Set<String>.from(state);
-    if (updated.contains(roomId)) {
-      updated.remove(roomId);
+  NotificationPolicy policyFor(String roomId) => state[roomId] ?? NotificationPolicy.all;
+
+  Future<void> setPolicy(String roomId, NotificationPolicy policy) async {
+    final updated = Map<String, NotificationPolicy>.from(state);
+    if (policy == NotificationPolicy.all) {
+      updated.remove(roomId); // default — no need to persist
     } else {
-      updated.add(roomId);
+      updated[roomId] = policy;
     }
     state = updated;
-    await _muteStorage.write(key: _mutedKey, value: jsonEncode(updated.toList()));
+    await _persist();
   }
 
-  bool isMuted(String roomId) => state.contains(roomId);
+  Future<void> _persist() async {
+    final serializable = state.map((k, v) => MapEntry(k, v.name));
+    await _policyStorage.write(key: _policyKey, value: jsonEncode(serializable));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +497,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   Future<void> _subscribeFcmToRoom(String roomId) async {
     try {
+      final policy = _ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId);
+      if (policy != NotificationPolicy.all) return; // policy says skip room topic
       final token = await FcmService.getToken();
       if (token == null) return;
       await _dioClient.dio.post('/api/fcm/subscribe', data: {
