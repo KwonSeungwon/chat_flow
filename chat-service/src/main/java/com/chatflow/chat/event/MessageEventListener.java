@@ -11,13 +11,19 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MessageEventListener {
+
+    private static final Pattern MENTION_PATTERN = Pattern.compile("@([A-Za-z0-9_\\.\\uac00-\\ud7a3]{1,30})");
 
     private final SimpMessagingTemplate messagingTemplate;
     private final UserPresenceService userPresenceService;
@@ -40,11 +46,13 @@ public class MessageEventListener {
         try {
             Set<String> participantUserIds = userPresenceService.getRoomParticipantUserIds(message.getChatRoomId());
             String senderId = message.getUserId();
+            List<String> mentioned = extractMentionedUsernames(message.getContent());
 
             Map<String, Object> payload = Map.of(
                     "type", "UNREAD_INCREMENT",
                     "roomId", message.getChatRoomId(),
                     "senderId", senderId != null ? senderId : "",
+                    "mentionedUsernames", mentioned,
                     "timestamp", LocalDateTime.now().toString());
 
             for (String userId : participantUserIds) {
@@ -52,11 +60,23 @@ public class MessageEventListener {
                     messagingTemplate.convertAndSendToUser(userId, "/queue/room-updates", payload);
                 }
             }
-            log.debug("Sent UNREAD_INCREMENT to {} participants for room {}",
-                    participantUserIds.size() - 1, message.getChatRoomId());
+            log.debug("Sent UNREAD_INCREMENT to {} participants (mentions={}) for room {}",
+                    participantUserIds.size() - 1, mentioned.size(), message.getChatRoomId());
         } catch (Exception e) {
             log.warn("Failed to send unread notifications for message {}: {}",
                     message.getMessageId(), e.getMessage());
         }
+    }
+
+    private static List<String> extractMentionedUsernames(String content) {
+        if (content == null || content.isEmpty() || content.indexOf('@') < 0) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        Matcher m = MENTION_PATTERN.matcher(content);
+        while (m.find()) {
+            result.add(m.group(1));
+        }
+        return result;
     }
 }
