@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/utils/url_helper.dart';
 
 class AuthState {
   final String? token;
@@ -56,8 +57,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   static const _storage = FlutterSecureStorage();
 
   AuthNotifier(this._dioClient) : super(const AuthState()) {
-    _dioClient.onUnauthorized = () => state = const AuthState(isHydrated: true);
+    _dioClient.onUnauthorized = () {
+      state = const AuthState(isHydrated: true);
+      setAuthTokenForFiles(null);
+    };
     _hydrate();
+  }
+
+  @override
+  set state(AuthState value) {
+    super.state = value;
+    // /api/files/* URL이 브라우저에서 동기적으로 token query param을 받도록 캐시 동기화
+    setAuthTokenForFiles(value.token);
   }
 
   Future<void> _hydrate() async {

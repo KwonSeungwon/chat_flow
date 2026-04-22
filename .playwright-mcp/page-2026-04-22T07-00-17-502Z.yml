@@ -1,0 +1,22 @@
+- generic [ref=e14]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - heading "ChatFlow" [active] [level=2]
+            - button "전체 검색" [ref=e25]
+            - button "Show menu" [ref=e26]
+          - button "ChatFlow" [ref=e27]
+          - button "정렬" [ref=e28]
+          - button "새 DM" [ref=e29]
+          - button "새 채팅방" [ref=e30]
+          - generic:
+            - group:
+              - button "땅콩 · 땅콩2 1/2 5" [ref=e32]
+              - button "테 테스트방 1/10 15" [ref=e33]
+          - generic:
+            - generic: 채팅을 시작하세요
+          - generic:
+            - generic: 채팅방을 선택하거나 새로 만들어 대화를 시작할 수 있습니다
+          - button "새 채팅방 만들기" [ref=e31]
