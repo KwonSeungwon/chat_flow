@@ -37,10 +37,16 @@ class DioClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          await _storage.delete(key: StorageKeys.token);
-          await _storage.delete(key: StorageKeys.userId);
-          await _storage.delete(key: StorageKeys.username);
-          onUnauthorized?.call();
+          // 토큰을 실제로 보낸 요청이 401인 경우만 auth 리셋.
+          // 토큰 없이 보낸 요청(예: 로그인 전 자동 fetchRooms)의 401은 그냥 무시해
+          // 방금 로그인으로 저장된 토큰을 실수로 삭제하지 않도록 한다.
+          final hadToken = (error.requestOptions.headers['Authorization'] as String?)?.startsWith('Bearer ') ?? false;
+          if (hadToken) {
+            await _storage.delete(key: StorageKeys.token);
+            await _storage.delete(key: StorageKeys.userId);
+            await _storage.delete(key: StorageKeys.username);
+            onUnauthorized?.call();
+          }
         }
         return handler.next(error);
       },

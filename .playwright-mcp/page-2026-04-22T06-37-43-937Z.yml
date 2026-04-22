@@ -1,0 +1,26 @@
+- generic [ref=e14]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - group:
+            - img [ref=e15]
+            - generic:
+              - generic: ChatFlow
+            - generic:
+              - generic: AI 기반 실시간 채팅 플랫폼
+            - tablist:
+              - tab "로그인" [ref=e16]
+              - tab "회원가입" [active] [selected] [ref=e17]
+            - generic:
+              - button [ref=e25]
+              - textbox "아이디" [ref=e27]
+              - generic [ref=e28]:
+                - textbox "비밀번호" [ref=e29]
+                - button [ref=e30]
+              - generic [ref=e31]:
+                - textbox "비밀번호 확인" [ref=e32]
+                - button [ref=e33]
+              - button "역할 간호사 (NURSE)" [ref=e34]
+              - button "회원가입" [ref=e35]
+            - button "Android 앱 다운로드" [ref=e24]
