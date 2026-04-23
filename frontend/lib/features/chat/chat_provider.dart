@@ -93,20 +93,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     if (current == null) return;
     final updated = current.map((r) {
       if (r.id == roomId) {
-        return ChatRoom(
-          id: r.id,
-          name: r.name,
-          description: r.description,
-          color: r.color,
-          roomType: r.roomType,
-          allowedRoles: r.allowedRoles,
-          isPrivate: r.isPrivate,
-          participantCount: count,
-          maxParticipants: r.maxParticipants,
-          createdAt: r.createdAt,
-          lastMessageAt: r.lastMessageAt,
-          pinnedMessageId: r.pinnedMessageId,
-        );
+        return r.copyWith(participantCount: count);
       }
       return r;
     }).toList();
@@ -576,13 +563,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       if (deletedId == null) return;
       final updated = state.messages.map((m) {
         if (m.effectiveId == deletedId || m.messageId == deletedId) {
-          return ChatMessage(
-            id: m.id, messageId: m.messageId,
-            chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
-            content: '삭제된 메시지입니다.', timestamp: m.timestamp, type: m.type,
-            priority: m.priority, isAiGenerated: m.isAiGenerated,
-            deleted: true,
-          );
+          return m.copyWith(content: '삭제된 메시지입니다.', deleted: true);
         }
         return m;
       }).toList();
@@ -597,13 +578,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       if (editedId == null || newContent == null) return;
       final updated = state.messages.map((m) {
         if (m.effectiveId == editedId || m.messageId == editedId) {
-          return ChatMessage(
-            id: m.id, messageId: m.messageId,
-            chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
-            content: newContent, timestamp: m.timestamp, type: m.type,
-            priority: m.priority, isAiGenerated: m.isAiGenerated,
-            deleted: m.deleted, edited: true, editedAt: editedAt,
-          );
+          return m.copyWith(content: newContent, edited: true, editedAt: editedAt);
         }
         return m;
       }).toList();
@@ -617,16 +592,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final reactions = ChatMessage.parseReactions(rawMsg['reactions']);
       final updated = state.messages.map((m) {
         if (m.effectiveId == msgId || m.messageId == msgId) {
-          return ChatMessage(
-            id: m.id, messageId: m.messageId, chatRoomId: m.chatRoomId,
-            userId: m.userId, username: m.username, content: m.content,
-            timestamp: m.timestamp, type: m.type, priority: m.priority,
-            isAiGenerated: m.isAiGenerated, deleted: m.deleted,
-            edited: m.edited, editedAt: m.editedAt, pinned: m.pinned,
-            reactions: reactions,
-            fileUrl: m.fileUrl, fileName: m.fileName, fileContentType: m.fileContentType,
-            parentMessageId: m.parentMessageId, parentMessagePreview: m.parentMessagePreview,
-          );
+          return m.copyWith(reactions: reactions);
         }
         return m;
       }).toList();
@@ -680,13 +646,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Optimistic update
     final updated = state.messages.map((m) {
       if (m.effectiveId == messageId || m.messageId == messageId) {
-        return ChatMessage(
-          id: m.id, messageId: m.messageId,
-          chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
-          content: '삭제된 메시지입니다.', timestamp: m.timestamp, type: m.type,
-          priority: m.priority, isAiGenerated: m.isAiGenerated,
-          deleted: true,
-        );
+        return m.copyWith(content: '삭제된 메시지입니다.', deleted: true);
       }
       return m;
     }).toList();
@@ -707,12 +667,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Optimistic update
     final updated = state.messages.map((m) {
       if (m.effectiveId == messageId || m.messageId == messageId) {
-        return ChatMessage(
-          id: m.id, messageId: m.messageId,
-          chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
-          content: newContent, timestamp: m.timestamp, type: m.type,
-          priority: m.priority, isAiGenerated: m.isAiGenerated,
-          deleted: m.deleted, edited: true, editedAt: DateTime.now().toIso8601String(),
+        return m.copyWith(
+          content: newContent,
+          edited: true,
+          editedAt: DateTime.now().toIso8601String(),
         );
       }
       return m;
@@ -943,17 +901,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           m.localId == localId && m.deliveryStatus == MessageDeliveryStatus.sending);
       if (idx < 0) return;
       final m = state.messages[idx];
-      final failed = ChatMessage(
-        id: m.id, messageId: m.messageId,
-        chatRoomId: m.chatRoomId, userId: m.userId, username: m.username,
-        content: m.content, timestamp: m.timestamp, type: m.type,
-        priority: m.priority, isAiGenerated: m.isAiGenerated,
-        fileUrl: m.fileUrl, fileName: m.fileName, fileContentType: m.fileContentType,
-        parentMessageId: m.parentMessageId, parentMessagePreview: m.parentMessagePreview,
-        deleted: m.deleted, edited: m.edited, editedAt: m.editedAt, pinned: m.pinned,
-        reactions: m.reactions, localId: m.localId,
-        deliveryStatus: MessageDeliveryStatus.failed,
-      );
+      final failed = m.copyWith(deliveryStatus: MessageDeliveryStatus.failed);
       final list = List<ChatMessage>.from(state.messages);
       list[idx] = failed;
       state = state.copyWith(messages: list);

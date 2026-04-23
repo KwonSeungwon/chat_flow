@@ -44,6 +44,36 @@ class ChatRoom {
     );
   }
 
+  ChatRoom copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? color,
+    String? roomType,
+    String? allowedRoles,
+    bool? isPrivate,
+    int? participantCount,
+    int? maxParticipants,
+    String? createdAt,
+    String? lastMessageAt,
+    String? pinnedMessageId,
+  }) {
+    return ChatRoom(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      color: color ?? this.color,
+      roomType: roomType ?? this.roomType,
+      allowedRoles: allowedRoles ?? this.allowedRoles,
+      isPrivate: isPrivate ?? this.isPrivate,
+      participantCount: participantCount ?? this.participantCount,
+      maxParticipants: maxParticipants ?? this.maxParticipants,
+      createdAt: createdAt ?? this.createdAt,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      pinnedMessageId: pinnedMessageId ?? this.pinnedMessageId,
+    );
+  }
+
   bool get isFull => participantCount >= maxParticipants;
   bool get isHandoff => roomType == 'HANDOFF';
 }

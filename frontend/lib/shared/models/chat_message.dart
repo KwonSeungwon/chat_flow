@@ -136,6 +136,56 @@ class ChatMessage {
     if (parentMessagePreview != null) 'parentMessagePreview': parentMessagePreview,
   };
 
+  ChatMessage copyWith({
+    String? id,
+    String? messageId,
+    String? chatRoomId,
+    String? userId,
+    String? username,
+    String? content,
+    String? timestamp,
+    String? type,
+    String? priority,
+    bool? isAiGenerated,
+    String? fileUrl,
+    String? fileName,
+    String? fileContentType,
+    String? parentMessageId,
+    String? parentMessagePreview,
+    bool? deleted,
+    bool? edited,
+    String? editedAt,
+    bool? pinned,
+    Map<String, List<String>>? reactions,
+    String? localId,
+    MessageDeliveryStatus? deliveryStatus,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      messageId: messageId ?? this.messageId,
+      chatRoomId: chatRoomId ?? this.chatRoomId,
+      userId: userId ?? this.userId,
+      username: username ?? this.username,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      type: type ?? this.type,
+      priority: priority ?? this.priority,
+      isAiGenerated: isAiGenerated ?? this.isAiGenerated,
+      fileUrl: fileUrl ?? this.fileUrl,
+      fileName: fileName ?? this.fileName,
+      fileContentType: fileContentType ?? this.fileContentType,
+      parentMessageId: parentMessageId ?? this.parentMessageId,
+      parentMessagePreview: parentMessagePreview ?? this.parentMessagePreview,
+      deleted: deleted ?? this.deleted,
+      edited: edited ?? this.edited,
+      editedAt: editedAt ?? this.editedAt,
+      pinned: pinned ?? this.pinned,
+      reactions: reactions ?? this.reactions,
+      localId: localId ?? this.localId,
+      deliveryStatus: deliveryStatus ?? this.deliveryStatus,
+    );
+  }
+
   String get effectiveId => messageId ?? id ?? '$timestamp-$username-${content.hashCode}';
   bool get isReply => parentMessageId != null && parentMessageId!.isNotEmpty;
   bool get isFileMessage => type.toUpperCase() == 'FILE' && fileUrl != null;
