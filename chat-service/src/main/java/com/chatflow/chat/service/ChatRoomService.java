@@ -19,7 +19,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -43,8 +42,6 @@ public class ChatRoomService {
     private static final String ROOMS_LIST_KEY = "chatflow:rooms:list";
     private static final Duration ROOM_TTL = Duration.ofMinutes(5);
     private static final Duration LIST_TTL = Duration.ofSeconds(30);
-    private static final java.util.regex.Pattern TITLE_PATTERN =
-            java.util.regex.Pattern.compile("<title[^>]*>([^<]+)</title>", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -54,7 +51,12 @@ public class ChatRoomService {
     private final MessageEncryptor messageEncryptor;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
-    private final RestClient restClient;
+
+    // Delegated services
+    private final LinkPreviewService linkPreviewService;
+    private final MessageReactionService messageReactionService;
+    private final MessagePinService messagePinService;
+    private final MessageEditService messageEditService;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -167,7 +169,7 @@ public class ChatRoomService {
                     if (stored.startsWith("$2")) {
                         return passwordEncoder.matches(password, stored);
                     }
-                    // 레거시 평문 비밀번호 — 일치 시 자동 재해시 (마이그레이션)
+                    // 레거시 평문 비밀번호 -- 일치 시 자동 재해시 (마이그레이션)
                     if (java.security.MessageDigest.isEqual(
                             stored.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                             password.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
@@ -206,7 +208,7 @@ public class ChatRoomService {
         try {
             return chatRoomRepository.isRoomFull(roomId);
         } catch (Exception e) {
-            log.warn("isRoomFull 조회 실패 — 안전을 위해 만석으로 처리: {}", roomId, e);
+            log.warn("isRoomFull 조회 실패 -- 안전을 위해 만석으로 처리: {}", roomId, e);
             return true;
         }
     }
@@ -262,7 +264,7 @@ public class ChatRoomService {
 
     @Transactional
     public void deleteRoom(String id) {
-        // 삭제 전 STOMP 브로드캐스트 — 연결된 클라이언트가 퇴장 처리
+        // 삭제 전 STOMP 브로드캐스트 -- 연결된 클라이언트가 퇴장 처리
         Map<String, Object> deletedEvent = new LinkedHashMap<>();
         deletedEvent.put("type", "ROOM_DELETED");
         deletedEvent.put("chatRoomId", id);
@@ -284,55 +286,17 @@ public class ChatRoomService {
 
     @Transactional
     public boolean deleteMessage(String messageId, String requestingUserId) {
-        return chatMessageRepository.findById(messageId).map(entity -> {
-            if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
-                return false;
-            }
-            entity.setDeleted(true);
-            entity.setContent("삭제된 메시지입니다.");
-            chatMessageRepository.save(entity);
-            Map<String, Object> broadcast = new LinkedHashMap<>();
-            broadcast.put("type", "MESSAGE_DELETED");
-            broadcast.put("messageId", messageId);
-            broadcast.put("chatRoomId", entity.getChatRoomId());
-            broadcast.put("content", "삭제된 메시지입니다.");
-            broadcast.put("username", entity.getUsername());
-            broadcast.put("timestamp", entity.getTimestamp().toString());
-            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
-            log.info("Message deleted: {} by user {}", messageId, requestingUserId);
-            return true;
-        }).orElse(false);
+        return messageEditService.deleteMessage(messageId, requestingUserId);
     }
 
     @Transactional
     public boolean editMessage(String messageId, String requestingUserId, String newContent) {
-        return chatMessageRepository.findById(messageId).map(entity -> {
-            if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
-                return false;
-            }
-            if (entity.isDeleted()) return false;
-            entity.setContent(messageEncryptor.isEnabled() ? messageEncryptor.encrypt(newContent) : newContent);
-            entity.setEdited(true);
-            entity.setEditedAt(LocalDateTime.now());
-            chatMessageRepository.save(entity);
-
-            Map<String, Object> broadcast = new LinkedHashMap<>();
-            broadcast.put("type", "MESSAGE_EDITED");
-            broadcast.put("messageId", messageId);
-            broadcast.put("chatRoomId", entity.getChatRoomId());
-            broadcast.put("content", newContent);
-            broadcast.put("username", entity.getUsername());
-            broadcast.put("timestamp", entity.getTimestamp().toString());
-            broadcast.put("editedAt", entity.getEditedAt().toString());
-            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
-            log.info("Message edited: {} by user {}", messageId, requestingUserId);
-            return true;
-        }).orElse(false);
+        return messageEditService.editMessage(messageId, requestingUserId, newContent);
     }
 
     @Transactional
     public void leaveRoom(String roomId, String userId, String username) {
-        // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 — 스푸핑 방지)
+        // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {
             try {
@@ -403,7 +367,7 @@ public class ChatRoomService {
         // roomIds 순서 보존을 위해 모든 roomId를 0L로 초기화
         for (String roomId : roomIds) result.put(roomId, 0L);
 
-        // Group A: readAt null — 단일 배치 쿼리
+        // Group A: readAt null -- 단일 배치 쿼리
         if (!unreadAllRoomIds.isEmpty()) {
             LocalDateTime epoch = LocalDateTime.of(2000, 1, 1, 0, 0);
             try {
@@ -425,7 +389,7 @@ public class ChatRoomService {
             }
         }
 
-        // Group B: readAt 존재 — 각 roomId별 개별 쿼리 (cutoff 다름)
+        // Group B: readAt 존재 -- 각 roomId별 개별 쿼리 (cutoff 다름)
         for (Map.Entry<String, LocalDateTime> entry : readAtByRoom.entrySet()) {
             try {
                 result.put(entry.getKey(),
@@ -471,108 +435,15 @@ public class ChatRoomService {
             return saved;
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // TOCTOU: 동시 요청으로 중복 생성 시 기존 방 반환
-            log.warn("DM room race condition detected, re-querying: {} ↔ {}", username1, username2);
+            log.warn("DM room race condition detected, re-querying: {} <-> {}", username1, username2);
             List<ChatRoom> retry = chatRoomRepository.findDmRoom(name1, name2);
             if (!retry.isEmpty()) return retry.get(0);
             throw e;
         }
     }
 
-    /**
-     * SSRF 방어: DNS rebinding 방지를 위해 IP를 한 번만 해석하고 검증된 IP로 직접 요청.
-     * 반환값: 원본 URI의 호스트를 해석된 IP로 교체한 안전한 URI 문자열.
-     */
-    private record ResolvedUrl(String safeUri, String originalHost) {}
-
-    private ResolvedUrl validateAndResolveUrl(String url) {
-        if (url == null || url.isBlank()) throw new IllegalArgumentException("URL must not be blank");
-        java.net.URI uri;
-        try {
-            uri = java.net.URI.create(url);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Malformed URL: " + e.getMessage());
-        }
-        String scheme = uri.getScheme();
-        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("Only http/https schemes are allowed");
-        }
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) throw new IllegalArgumentException("Missing host in URL");
-        try {
-            java.net.InetAddress addr = java.net.InetAddress.getByName(host);
-            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress()
-                    || addr.isSiteLocalAddress() || addr.isAnyLocalAddress()
-                    || addr.isMulticastAddress()) {
-                throw new IllegalArgumentException("Access to private/internal addresses is forbidden");
-            }
-            // DNS rebinding 방지: 해석된 IP 주소로 URI를 직접 구성 — 재조회 없이 이 IP로 요청
-            String ipLiteral = addr instanceof java.net.Inet6Address
-                    ? "[" + addr.getHostAddress() + "]"
-                    : addr.getHostAddress();
-            String safeUri = new java.net.URI(
-                    scheme, null, ipLiteral, uri.getPort(),
-                    uri.getRawPath(), uri.getRawQuery(), null
-            ).toString();
-            return new ResolvedUrl(safeUri, host);
-        } catch (java.net.UnknownHostException e) {
-            throw new IllegalArgumentException("Unable to resolve host: " + host);
-        } catch (java.net.URISyntaxException e) {
-            throw new IllegalArgumentException("Failed to build safe URI: " + e.getMessage());
-        }
-    }
-
-    private static final int LINK_PREVIEW_MAX_BYTES = 1_048_576; // 1 MB
-
     public Map<String, String> fetchLinkPreview(String url) {
-        Map<String, String> result = new LinkedHashMap<>();
-        try {
-            ResolvedUrl resolved = validateAndResolveUrl(url);
-            String html = restClient.get()
-                    .uri(resolved.safeUri())
-                    .header("Host", resolved.originalHost())
-                    .header("User-Agent", "Mozilla/5.0 ChatFlow-Bot")
-                    .exchange((req, resp) -> {
-                        // 응답 크기 제한: Content-Length 헤더 사전 확인
-                        long contentLength = resp.getHeaders().getContentLength();
-                        if (contentLength > LINK_PREVIEW_MAX_BYTES) {
-                            throw new java.io.IOException("Response Content-Length exceeds 1MB limit");
-                        }
-                        // 스트림에서 최대 1MB+1 바이트만 읽어 초과 여부 확인
-                        byte[] buf = resp.getBody().readNBytes(LINK_PREVIEW_MAX_BYTES + 1);
-                        if (buf.length > LINK_PREVIEW_MAX_BYTES) {
-                            throw new java.io.IOException("Response body exceeds 1MB limit");
-                        }
-                        return new String(buf, java.nio.charset.StandardCharsets.UTF_8);
-                    });
-            if (html != null) {
-                result.put("url", url);
-                extractOg(html, "og:title", result, "title");
-                extractOg(html, "og:description", result, "description");
-                extractOg(html, "og:image", result, "image");
-                if (!result.containsKey("title")) {
-                    var m = TITLE_PATTERN.matcher(html);
-                    if (m.find()) result.put("title", m.group(1).trim());
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Link preview fetch failed: {}", e.getMessage());
-        }
-        return result;
-    }
-
-    private void extractOg(String html, String property, Map<String, String> result, String key) {
-        // property → content 순서 (일반적)
-        var p1 = java.util.regex.Pattern.compile(
-                "meta[^>]+property=[\"']" + property + "[\"'][^>]+content=[\"']([^\"']+)[\"']",
-                java.util.regex.Pattern.CASE_INSENSITIVE);
-        var m1 = p1.matcher(html);
-        if (m1.find()) { result.put(key, m1.group(1)); return; }
-        // content → property 순서 (일부 사이트)
-        var p2 = java.util.regex.Pattern.compile(
-                "meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']" + property + "[\"']",
-                java.util.regex.Pattern.CASE_INSENSITIVE);
-        var m2 = p2.matcher(html);
-        if (m2.find()) result.put(key, m2.group(1));
+        return linkPreviewService.fetch(url);
     }
 
     @Transactional
@@ -586,76 +457,17 @@ public class ChatRoomService {
 
     @Transactional
     public boolean toggleReaction(String messageId, String emoji, String userId) {
-        return chatMessageRepository.findById(messageId).map(entity -> {
-            Map<String, List<String>> map;
-            try {
-                map = entity.getReactions() != null
-                        ? objectMapper.readValue(entity.getReactions(), new TypeReference<>() {})
-                        : new LinkedHashMap<>();
-            } catch (Exception e) {
-                map = new LinkedHashMap<>();
-            }
-            List<String> users = map.computeIfAbsent(emoji, k -> new java.util.ArrayList<>());
-            if (users.contains(userId)) {
-                users.remove(userId);
-                if (users.isEmpty()) map.remove(emoji);
-            } else {
-                users.add(userId);
-            }
-            try {
-                entity.setReactions(map.isEmpty() ? null : objectMapper.writeValueAsString(map));
-            } catch (Exception e) {
-                return false;
-            }
-            chatMessageRepository.save(entity);
-            // Broadcast reaction update
-            Map<String, Object> broadcast = new LinkedHashMap<>();
-            broadcast.put("type", "REACTION_UPDATED");
-            broadcast.put("messageId", messageId);
-            broadcast.put("reactions", map);
-            messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
-            return true;
-        }).orElse(false);
+        return messageReactionService.toggleReaction(messageId, emoji, userId);
     }
 
     @Transactional
     public boolean pinMessage(String roomId, String messageId) {
-        return chatRoomRepository.findById(roomId).map(room -> {
-            room.setPinnedMessageId(messageId);
-            chatRoomRepository.save(room);
-            chatMessageRepository.findById(messageId).ifPresent(msg -> {
-                msg.setPinned(true);
-                chatMessageRepository.save(msg);
-            });
-            evictRoomCaches(roomId);
-            Map<String, Object> broadcast = new LinkedHashMap<>();
-            broadcast.put("type", "MESSAGE_PINNED");
-            broadcast.put("messageId", messageId);
-            broadcast.put("chatRoomId", roomId);
-            messagingTemplate.convertAndSend("/topic/chat/" + roomId, broadcast);
-            return true;
-        }).orElse(false);
+        return messagePinService.pinMessage(roomId, messageId);
     }
 
     @Transactional
     public boolean unpinMessage(String roomId) {
-        return chatRoomRepository.findById(roomId).map(room -> {
-            String oldPin = room.getPinnedMessageId();
-            room.setPinnedMessageId(null);
-            chatRoomRepository.save(room);
-            if (oldPin != null) {
-                chatMessageRepository.findById(oldPin).ifPresent(msg -> {
-                    msg.setPinned(false);
-                    chatMessageRepository.save(msg);
-                });
-            }
-            evictRoomCaches(roomId);
-            Map<String, Object> broadcast = new LinkedHashMap<>();
-            broadcast.put("type", "MESSAGE_UNPINNED");
-            broadcast.put("chatRoomId", roomId);
-            messagingTemplate.convertAndSend("/topic/chat/" + roomId, broadcast);
-            return true;
-        }).orElse(false);
+        return messagePinService.unpinMessage(roomId);
     }
 
     @Transactional
