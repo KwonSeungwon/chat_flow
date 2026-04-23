@@ -60,8 +60,11 @@ public class DmRoomService {
     }
 
     static String buildCanonicalDmName(String a, String b) {
-        String first = a.compareTo(b) <= 0 ? a : b;
-        String second = a.compareTo(b) <= 0 ? b : a;
+        java.util.Objects.requireNonNull(a, "username1");
+        java.util.Objects.requireNonNull(b, "username2");
+        int cmp = a.compareTo(b);
+        String first = cmp <= 0 ? a : b;
+        String second = cmp <= 0 ? b : a;
         return "DM:" + first + "," + second;
     }
 
