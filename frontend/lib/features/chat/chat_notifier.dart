@@ -14,6 +14,8 @@ import '../../shared/models/patient_card.dart';
 import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 import 'chat_rooms_provider.dart';
+import 'helpers/offline_message_queue.dart';
+import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -115,11 +117,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final String _username;
   final String _userId;
   static const _storage = FlutterSecureStorage();
-  Timer? _typingDebounce;
-  final Map<String, Timer> _typingTimers = {};
+  final TypingController _typing = TypingController();
   /// localId → sending 타임아웃 타이머
   final Map<String, Timer> _sendingTimers = {};
-  final List<Map<String, dynamic>> _offlineQueue = [];
+  final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
   String? _currentRoomId;
 
   ChatNotifier(
@@ -215,7 +216,18 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onConnectionChanged: (connected) {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
-          if (connected) _flushOfflineQueue();
+          if (connected) {
+            _offlineQueue.flush(
+              onDedup: (ids) {
+                if (!mounted) return;
+                final cleaned = state.messages
+                    .where((m) => m.localId == null || !ids.contains(m.localId))
+                    .toList();
+                state = state.copyWith(messages: cleaned);
+              },
+              onSend: (msg) => _stompService.sendMessage(msg),
+            );
+          }
         }
       },
       onReadReceipt: (positions) {
@@ -666,7 +678,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final sendPayload = Map<String, dynamic>.from(msg)..remove('_localId');
       _stompService.sendMessage(sendPayload);
     } else {
-      _offlineQueue.add(msg);
+      _offlineQueue.enqueue(msg);
     }
     if (reply != null) clearReplyTarget();
     // 10초 내 서버 확인(동일 localId 메시지가 sent로 교체) 없으면 failed로 표시
@@ -716,25 +728,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       }
     } catch (_) {
       // best-effort
-    }
-  }
-
-  void _flushOfflineQueue() {
-    if (_offlineQueue.isEmpty) return;
-    final queued = List<Map<String, dynamic>>.from(_offlineQueue);
-    _offlineQueue.clear();
-    // Remove locally-added messages by their UUID localId to prevent duplicates
-    // when server broadcasts them back
-    final queuedLocalIds = queued
-        .map((m) => m['_localId']?.toString())
-        .whereType<String>()
-        .toSet();
-    final cleaned = state.messages
-        .where((m) => m.localId == null || !queuedLocalIds.contains(m.localId))
-        .toList();
-    state = state.copyWith(messages: cleaned);
-    for (final msg in queued) {
-      _stompService.sendMessage(msg);
     }
   }
 
@@ -804,29 +797,24 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   void notifyTyping(String roomId) {
-    _typingDebounce?.cancel();
-    _typingDebounce = Timer(const Duration(milliseconds: 500), () {
-      _stompService.sendTyping(roomId);
-    });
+    _typing.scheduleSend(() => _stompService.sendTyping(roomId));
   }
 
   void _onTypingReceived(String username, {bool stop = false}) {
-    if (stop) {
-      _typingTimers[username]?.cancel();
-      _typingTimers.remove(username);
-      final updated = Set<String>.from(state.typingUsers)..remove(username);
-      state = state.copyWith(typingUsers: updated);
-      return;
-    }
-    final users = Set<String>.from(state.typingUsers)..add(username);
-    state = state.copyWith(typingUsers: users);
-    _typingTimers[username]?.cancel();
-    _typingTimers[username] = Timer(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      final updated = Set<String>.from(state.typingUsers)..remove(username);
-      state = state.copyWith(typingUsers: updated);
-      _typingTimers.remove(username);
-    });
+    _typing.markTyping(
+      username,
+      stop: stop,
+      onAdd: () {
+        if (!mounted) return;
+        final users = Set<String>.from(state.typingUsers)..add(username);
+        state = state.copyWith(typingUsers: users);
+      },
+      onRemove: () {
+        if (!mounted) return;
+        final updated = Set<String>.from(state.typingUsers)..remove(username);
+        state = state.copyWith(typingUsers: updated);
+      },
+    );
   }
 
   /// readPositions(userId → lastReadMessageId)와 messages 타임라인으로부터
@@ -867,8 +855,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   @override
   void dispose() {
-    _typingDebounce?.cancel();
-    for (final t in _typingTimers.values) { t.cancel(); }
+    _typing.dispose();
     for (final t in _sendingTimers.values) { t.cancel(); }
     _sendingTimers.clear();
     _stompService.dispose();
