@@ -28,15 +28,18 @@ public class DmRoomService {
 
     @Transactional
     public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
-        // DM room name is canonical: sorted usernames
-        String name1 = "DM:" + username1 + "," + username2;
-        String name2 = "DM:" + username2 + "," + username1;
-        List<ChatRoom> existing = chatRoomRepository.findDmRoom(name1, name2);
+        // Canonicalize by sorting usernames so any argument order produces the
+        // same name. Prevents duplicate DM rooms under concurrent swapped-order requests.
+        String canonicalName = buildCanonicalDmName(username1, username2);
+        // legacyName covers DM rooms created before canonicalization landed (args as-given).
+        String legacyName = "DM:" + username1 + "," + username2;
+        String legacyNameReversed = "DM:" + username2 + "," + username1;
+        List<ChatRoom> existing = chatRoomRepository.findDmRoom(legacyName, legacyNameReversed);
         if (!existing.isEmpty()) return existing.get(0);
 
         ChatRoom dm = ChatRoom.builder()
                 .id(UUID.randomUUID().toString())
-                .name(name1)
+                .name(canonicalName)
                 .description(username1 + "님과 " + username2 + "님의 대화")
                 .roomType(RoomType.DIRECT)
                 .maxParticipants(2)
@@ -50,10 +53,16 @@ public class DmRoomService {
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // TOCTOU: 동시 요청으로 중복 생성 시 기존 방 반환
             log.warn("DM room race condition detected, re-querying: {} <-> {}", username1, username2);
-            List<ChatRoom> retry = chatRoomRepository.findDmRoom(name1, name2);
+            List<ChatRoom> retry = chatRoomRepository.findDmRoom(canonicalName, canonicalName);
             if (!retry.isEmpty()) return retry.get(0);
             throw e;
         }
+    }
+
+    static String buildCanonicalDmName(String a, String b) {
+        String first = a.compareTo(b) <= 0 ? a : b;
+        String second = a.compareTo(b) <= 0 ? b : a;
+        return "DM:" + first + "," + second;
     }
 
     private void evictRoomCaches(String roomId) {
