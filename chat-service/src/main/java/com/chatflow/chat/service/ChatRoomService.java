@@ -1,19 +1,14 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.chat.config.RedisHealthTracker;
-import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.common.util.MessageEncryptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -27,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -45,7 +39,6 @@ public class ChatRoomService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisHealthTracker redisHealth;
-    private final MessageEncryptor messageEncryptor;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -125,30 +118,6 @@ public class ChatRoomService {
                     log.info("Auto-created room for external ID: {}", externalId);
                     return chatRoomRepository.save(newRoom);
                 });
-    }
-
-    public Page<ChatMessageEntity> getMessages(String roomId, Pageable pageable) {
-        Page<ChatMessageEntity> page = chatMessageRepository.findByChatRoomIdOrderByTimestampDesc(roomId, pageable);
-        if (!messageEncryptor.isEnabled()) return page;
-        List<ChatMessageEntity> decrypted = page.getContent().stream()
-                .map(this::decryptEntity)
-                .collect(Collectors.toList());
-        return new PageImpl<>(decrypted, pageable, page.getTotalElements());
-    }
-
-    public List<ChatMessageEntity> getMessagesByCursor(String roomId, LocalDateTime before, int size) {
-        Pageable limit = Pageable.ofSize(size);
-        List<ChatMessageEntity> messages = before == null
-                ? chatMessageRepository.findLatestByChatRoomId(roomId, limit)
-                : chatMessageRepository.findByChatRoomIdBeforeCursor(roomId, before, limit);
-        if (!messageEncryptor.isEnabled()) return messages;
-        return messages.stream().map(this::decryptEntity).collect(Collectors.toList());
-    }
-
-    private ChatMessageEntity decryptEntity(ChatMessageEntity entity) {
-        if (entity.getContent() == null) return entity;
-        entity.setContent(messageEncryptor.decrypt(entity.getContent()));
-        return entity;
     }
 
     public boolean verifyRoomPassword(String roomId, String password) {

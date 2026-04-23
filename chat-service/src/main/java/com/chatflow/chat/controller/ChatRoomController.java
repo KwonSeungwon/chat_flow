@@ -8,6 +8,7 @@ import com.chatflow.chat.service.DmRoomService;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
+import com.chatflow.chat.service.MessageReadService;
 import com.chatflow.chat.service.MessageReactionService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.chat.service.UnreadCountService;
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
+    private final MessageReadService messageReadService;
     private final UnreadCountService unreadCountService;
     private final DmRoomService dmRoomService;
     private final MessageEditService messageEditService;
@@ -100,7 +102,7 @@ public class ChatRoomController {
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         size = Math.min(size, 100);
-        Page<ChatMessageEntity> messages = chatRoomService.getMessages(roomId, PageRequest.of(page, size));
+        Page<ChatMessageEntity> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size));
         auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
@@ -115,7 +117,7 @@ public class ChatRoomController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
             @RequestParam(defaultValue = "50") int size) {
         size = Math.min(size, 100);
-        List<ChatMessageEntity> messages = chatRoomService.getMessagesByCursor(roomId, before, size);
+        List<ChatMessageEntity> messages = messageReadService.getMessagesByCursor(roomId, before, size);
 
         LocalDateTime nextCursor = messages.isEmpty() ? null
                 : messages.get(messages.size() - 1).getTimestamp();
