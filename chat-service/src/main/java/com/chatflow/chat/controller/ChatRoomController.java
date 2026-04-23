@@ -4,11 +4,13 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.DmRoomService;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
 import com.chatflow.chat.service.ReadReceiptService;
+import com.chatflow.chat.service.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,8 @@ import java.util.stream.Collectors;
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
+    private final UnreadCountService unreadCountService;
+    private final DmRoomService dmRoomService;
     private final MessageEditService messageEditService;
     private final MessageReactionService messageReactionService;
     private final MessagePinService messagePinService;
@@ -59,7 +63,7 @@ public class ChatRoomController {
         }
         List<ChatRoom> rooms = chatRoomService.getAllRooms();
         List<String> roomIds = rooms.stream().map(ChatRoom::getId).collect(Collectors.toList());
-        Map<String, Long> counts = chatRoomService.getUnreadCounts(userId, roomIds);
+        Map<String, Long> counts = unreadCountService.getUnreadCounts(userId, roomIds);
         return ResponseEntity.ok(ApiResponse.ok(counts));
     }
 
@@ -330,7 +334,7 @@ public class ChatRoomController {
         if (userId == null || targetUserId == null || targetUsername == null) {
             return ResponseEntity.badRequest().body(ApiResponse.error("userId, targetUserId, targetUsername이 필요합니다."));
         }
-        ChatRoom dm = chatRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
+        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
         return ResponseEntity.ok(ApiResponse.ok(dm));
     }
 
