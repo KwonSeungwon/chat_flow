@@ -52,12 +52,6 @@ public class ChatRoomService {
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
 
-    // Delegated services
-    private final LinkPreviewService linkPreviewService;
-    private final MessageReactionService messageReactionService;
-    private final MessagePinService messagePinService;
-    private final MessageEditService messageEditService;
-
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
             try {
@@ -285,16 +279,6 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public boolean deleteMessage(String messageId, String requestingUserId) {
-        return messageEditService.deleteMessage(messageId, requestingUserId);
-    }
-
-    @Transactional
-    public boolean editMessage(String messageId, String requestingUserId, String newContent) {
-        return messageEditService.editMessage(messageId, requestingUserId, newContent);
-    }
-
-    @Transactional
     public void leaveRoom(String roomId, String userId, String username) {
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
@@ -442,10 +426,6 @@ public class ChatRoomService {
         }
     }
 
-    public Map<String, String> fetchLinkPreview(String url) {
-        return linkPreviewService.fetch(url);
-    }
-
     @Transactional
     public void updateLastMessageAt(String roomId) {
         chatRoomRepository.findById(roomId).ifPresent(room -> {
@@ -453,21 +433,6 @@ public class ChatRoomService {
             chatRoomRepository.save(room);
             evictRoomCaches(roomId);
         });
-    }
-
-    @Transactional
-    public boolean toggleReaction(String messageId, String emoji, String userId) {
-        return messageReactionService.toggleReaction(messageId, emoji, userId);
-    }
-
-    @Transactional
-    public boolean pinMessage(String roomId, String messageId) {
-        return messagePinService.pinMessage(roomId, messageId);
-    }
-
-    @Transactional
-    public boolean unpinMessage(String roomId) {
-        return messagePinService.unpinMessage(roomId);
     }
 
     @Transactional

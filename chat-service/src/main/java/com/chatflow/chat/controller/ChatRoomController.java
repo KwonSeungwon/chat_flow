@@ -4,6 +4,10 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.LinkPreviewService;
+import com.chatflow.chat.service.MessageEditService;
+import com.chatflow.chat.service.MessagePinService;
+import com.chatflow.chat.service.MessageReactionService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
@@ -34,6 +38,10 @@ import java.util.stream.Collectors;
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
+    private final MessageEditService messageEditService;
+    private final MessageReactionService messageReactionService;
+    private final MessagePinService messagePinService;
+    private final LinkPreviewService linkPreviewService;
     private final AuditService auditService;
     private final StringRedisTemplate redisTemplate;
     private final ReadReceiptService readReceiptService;
@@ -230,7 +238,7 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("인증이 필요합니다."));
         }
-        boolean deleted = chatRoomService.deleteMessage(messageId, userId);
+        boolean deleted = messageEditService.deleteMessage(messageId, userId);
         if (!deleted) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("삭제 권한이 없거나 메시지를 찾을 수 없습니다."));
@@ -255,7 +263,7 @@ public class ChatRoomController {
         if (newContent.length() > 10_000) {
             return ResponseEntity.badRequest().body(ApiResponse.error("메시지는 10,000자를 초과할 수 없습니다."));
         }
-        boolean edited = chatRoomService.editMessage(messageId, userId, newContent.trim());
+        boolean edited = messageEditService.editMessage(messageId, userId, newContent.trim());
         if (!edited) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("수정 권한이 없거나 메시지를 찾을 수 없습니다."));
@@ -294,7 +302,7 @@ public class ChatRoomController {
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
         String emoji = body.get("emoji");
         if (emoji == null || userId == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji와 userId가 필요합니다."));
-        boolean ok = chatRoomService.toggleReaction(messageId, emoji, userId);
+        boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
         return ResponseEntity.ok(ApiResponse.ok(ok));
     }
 
@@ -304,12 +312,12 @@ public class ChatRoomController {
             @RequestBody Map<String, String> body) {
         String messageId = body.get("messageId");
         if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
-        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.pinMessage(roomId, messageId)));
+        return ResponseEntity.ok(ApiResponse.ok(messagePinService.pinMessage(roomId, messageId)));
     }
 
     @DeleteMapping("/{roomId}/pin")
     public ResponseEntity<ApiResponse<Boolean>> unpinMessage(@PathVariable String roomId) {
-        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.unpinMessage(roomId)));
+        return ResponseEntity.ok(ApiResponse.ok(messagePinService.unpinMessage(roomId)));
     }
 
     @PostMapping("/dm")
@@ -331,7 +339,7 @@ public class ChatRoomController {
         if (url == null || url.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("url이 필요합니다."));
         }
-        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.fetchLinkPreview(url)));
+        return ResponseEntity.ok(ApiResponse.ok(linkPreviewService.fetch(url)));
     }
 
     @PutMapping("/{roomId}/settings")
