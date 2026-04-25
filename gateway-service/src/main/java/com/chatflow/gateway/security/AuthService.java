@@ -28,6 +28,7 @@ public class AuthService {
     private final Duration cacheTtl;
 
     private static final String USER_KEY_PREFIX = "chatflow:user:";
+    private static final String ACTIVE_JTI_PREFIX = "chatflow:user:active_jti:";
 
     public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
                        TokenBlacklistService tokenBlacklistService,
@@ -74,19 +75,20 @@ public class AuthService {
 
                     return userRepository.save(entity)
                             .flatMap(saved -> {
+                                String token = jwtUtil.generateToken(userId, request.username(), role);
+                                String newJti = jwtUtil.getJti(token);
                                 UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
                                         null, saved.getRole(), saved.getProfileImageUrl());
-                                return cacheUser(saved.getUsername(), record)
-                                        .then(Mono.fromCallable(() -> {
-                                            String token = jwtUtil.generateToken(userId, request.username(), role);
-                                            return new AuthResponse(token, userId, request.username(), role, null);
-                                        }));
+                                return rotateActiveJti(userId, newJti, cacheTtl)
+                                        .then(cacheUser(saved.getUsername(), record))
+                                        .thenReturn(new AuthResponse(token, userId, request.username(), role, null));
                             });
                 });
     }
 
     /**
      * 로그인: Cache-Aside — cache hit → return, miss → DB → cache → return
+     * 단일 세션 강제: 이전 active jti를 blacklist에 등록하여 기존 디바이스 강제 logout
      */
     public Mono<AuthResponse> login(AuthRequest request) {
         // 비밀번호 검증은 항상 DB에서 수행 (캐시에는 encodedPassword 미저장)
@@ -98,8 +100,10 @@ public class AuthService {
                     }
                     String role = entity.getRole() != null ? entity.getRole() : "NURSE";
                     String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
+                    String newJti = jwtUtil.getJti(token);
                     UserRecord record = new UserRecord(entity.getUserId(), entity.getUsername(), null, role, entity.getProfileImageUrl());
-                    return cacheUser(entity.getUsername(), record)
+                    return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
+                            .then(cacheUser(entity.getUsername(), record))
                             .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
                 });
     }
@@ -146,9 +150,35 @@ public class AuthService {
 
     public Mono<Void> logout(String token) {
         String jti = jwtUtil.getJti(token);
+        String userId = jwtUtil.getUserId(token);
         long remainingMs = jwtUtil.getRemainingTtlMs(token);
         return tokenBlacklistService.blacklist(jti, Duration.ofMillis(remainingMs))
+                .then(clearActiveJti(userId));
+    }
+
+    // ---- Active JTI tracking (single-session enforcement) ----
+
+    /**
+     * 이전 active jti를 blacklist에 등록하고 새 jti를 active로 저장.
+     * 새 로그인 시 기존 디바이스의 토큰을 무효화하여 단일 세션을 강제한다.
+     */
+    private Mono<Void> rotateActiveJti(String userId, String newJti, Duration ttl) {
+        String key = ACTIVE_JTI_PREFIX + userId;
+        return redisTemplate.opsForValue().get(key)
+                .flatMap(prevJti -> {
+                    if (prevJti != null && !prevJti.isEmpty() && !prevJti.equals(newJti)) {
+                        log.info("Invalidating previous session for user {}: jti={}", userId, prevJti);
+                        return tokenBlacklistService.blacklist(prevJti, ttl).then();
+                    }
+                    return Mono.<Void>empty();
+                })
+                .then(redisTemplate.opsForValue().set(key, newJti, ttl))
                 .then();
+    }
+
+    private Mono<Void> clearActiveJti(String userId) {
+        if (userId == null) return Mono.empty();
+        return redisTemplate.delete(ACTIVE_JTI_PREFIX + userId).then();
     }
 
     // ---- Cache-Aside helpers ----

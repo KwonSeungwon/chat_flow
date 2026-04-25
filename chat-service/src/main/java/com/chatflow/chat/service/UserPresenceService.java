@@ -1,6 +1,7 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomType;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,17 @@ public class UserPresenceService {
     public void join(ChatMessage message, String sessionId) {
         if (chatRoomService.isRoomFull(message.getChatRoomId())) {
             ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
+
+            // DM(DIRECT) 방은 자동 분할하지 않음 -- 정원 초과 시 입장 거부
+            if (room != null && room.getRoomType() == RoomType.DIRECT) {
+                log.warn("DM room {} is full, rejecting user {}", message.getChatRoomId(), message.getUsername());
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + message.getChatRoomId() + "/errors",
+                        java.util.Map.of("type", "ROOM_FULL_DM", "roomId", message.getChatRoomId(),
+                                "roomName", room.getName()));
+                return;
+            }
+
             String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
             ChatRoom newRoom = chatRoomService.findOrCreateAvailableRoom(baseName);
 

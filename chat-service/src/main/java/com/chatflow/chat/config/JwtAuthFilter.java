@@ -26,6 +26,7 @@ import java.util.Map;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Value("${GATEWAY_INTERNAL_SECRET:}")
     private String gatewayInternalSecret;
@@ -74,6 +75,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (token != null) {
             try {
                 Claims claims = jwtUtil.parseToken(token);
+                String jti = claims.getId();
+                if (jti != null && tokenBlacklistService.isBlacklisted(jti)) {
+                    log.debug("Blacklisted token rejected: jti={}", jti);
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 String userId = claims.getSubject();
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(userId, null, List.of());

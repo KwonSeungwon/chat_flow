@@ -270,10 +270,41 @@ public class ChatRoomService {
         leaveMsg.put("timestamp", LocalDateTime.now().toString());
         leaveMsg.put("content", username + "님이 채팅방을 나갔습니다.");
         messagingTemplate.convertAndSend("/topic/chat/" + roomId, leaveMsg);
-        // 참가자 수 동기화
-        decrementParticipantCount(roomId);
+        // 참가자 수 동기화 (Redis SET 기반 unique user count로 설정 -- UserPresenceService와 동일 패턴)
+        syncParticipantCountFromRedis(roomId);
         evictRoomCaches(roomId);
         log.info("User {} left room {} via REST API", username, roomId);
+    }
+
+    /**
+     * Redis SET에서 unique user count를 계산하여 DB participantCount를 동기화.
+     * UserPresenceService.syncParticipantCount와 동일한 패턴.
+     */
+    private void syncParticipantCountFromRedis(String roomId) {
+        String participantKey = "chatflow:room:participants:" + roomId;
+        int uniqueUserCount = 0;
+        if (!redisHealth.isCircuitOpen()) {
+            try {
+                Set<String> members = redisTemplate.opsForSet().members(participantKey);
+                if (members != null) {
+                    uniqueUserCount = (int) members.stream()
+                            .map(e -> e.split(":")[0])
+                            .distinct()
+                            .count();
+                }
+                redisHealth.recordSuccess();
+            } catch (Exception e) {
+                redisHealth.recordFailure(e);
+                // Redis 실패 시 fallback으로 decrement 사용
+                decrementParticipantCount(roomId);
+                return;
+            }
+        } else {
+            // circuit open 시 fallback으로 decrement 사용
+            decrementParticipantCount(roomId);
+            return;
+        }
+        setParticipantCount(roomId, uniqueUserCount);
     }
 
     private <T> void cacheValue(String key, T value, Duration ttl) {
