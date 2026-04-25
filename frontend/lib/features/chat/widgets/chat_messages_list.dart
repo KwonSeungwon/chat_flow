@@ -69,6 +69,7 @@ class ChatMessagesList extends StatefulWidget {
 class _ChatMessagesListState extends State<ChatMessagesList> {
   final _scrollController = ScrollController();
   final _targetKey = GlobalKey();
+  final _unreadDividerKey = GlobalKey();
   bool _autoScroll = true;
   int _unreadCount = 0;
   String? _highlightedMessageId;
@@ -77,6 +78,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   List<Object>? _cachedItems;
   List<ChatMessage>? _lastMessages;
   String? _lastReadMessageIdCache;
+  bool _initialUnreadJumpDone = false;
 
   /// Number of automatic loadMoreHistory attempts for search-jump target
   int _autoLoadAttempts = 0;
@@ -181,9 +183,35 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     });
   }
 
+  /// Check whether the cached items contain the unread divider marker.
+  bool _hasUnreadDivider() {
+    return (_cachedItems ?? const []).any((item) => item == _unreadDividerMarker);
+  }
+
+  /// Scroll to the unread divider position so users start reading from the
+  /// first unread message without manually scrolling up.
+  void _scrollToUnreadDivider() {
+    final ctx = _unreadDividerKey.currentContext;
+    if (ctx != null) {
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.2, // slightly below the top of the viewport
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   @override
   void didUpdateWidget(covariant ChatMessagesList oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Room switch detection — messages cleared then reloaded
+    if (oldWidget.messages.isNotEmpty && widget.messages.isEmpty) {
+      _initialUnreadJumpDone = false;
+      _autoLoadAttempts = 0;
+      _lastScrollTarget = null;
+    }
 
     // When messages load and there's a scroll target, scroll to it once.
     // Also retry when isLoadingHistory transitions false (load finished).
@@ -192,6 +220,31 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
          (!widget.isLoadingHistory && oldWidget.isLoadingHistory))) {
       _tryScrollToTarget();
       if (_lastScrollTarget == widget.scrollToMessageId) return;
+    }
+
+    // Auto-scroll to unread divider on room entry (one-time)
+    if (!_initialUnreadJumpDone &&
+        widget.scrollToMessageId == null &&
+        widget.messages.isNotEmpty &&
+        widget.lastReadMessageId != null &&
+        widget.lastReadMessageId!.isNotEmpty) {
+      // Rebuild cached items so _hasUnreadDivider reflects latest state
+      if (!identical(_lastMessages, widget.messages) ||
+          _lastReadMessageIdCache != widget.lastReadMessageId) {
+        _cachedItems = _buildItemsWithDividers(widget.messages);
+        _lastMessages = widget.messages;
+        _lastReadMessageIdCache = widget.lastReadMessageId;
+      }
+      if (_hasUnreadDivider()) {
+        _initialUnreadJumpDone = true;
+        _autoScroll = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToUnreadDivider();
+        });
+      } else {
+        // lastReadMessageId is the last message or divider not applicable — no unread
+        _initialUnreadJumpDone = true;
+      }
     }
 
     if (widget.messages.length > oldWidget.messages.length) {
@@ -345,7 +398,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             // Date divider or unread divider
             if (item is String) {
               if (item == _unreadDividerMarker) {
-                return _UnreadDivider();
+                return KeyedSubtree(
+                  key: _unreadDividerKey,
+                  child: _UnreadDivider(),
+                );
               }
               return _DateDivider(date: item);
             }
