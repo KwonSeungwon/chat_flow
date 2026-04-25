@@ -560,14 +560,14 @@ class ChatPage extends ConsumerWidget {
               child: Text(roomDisplayName, overflow: TextOverflow.ellipsis),
             ),
             if (effectiveRoomId != null) ...[
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _ConnectionDot(
                 connected: ref.watch(chatNotifierProvider(effectiveRoomId)).isConnected,
               ),
-              if (roomData != null) ...[
+              // Participant badge only on wide screens to save AppBar space
+              if (isWide && roomData != null) ...[
                 const SizedBox(width: 10),
                 Builder(builder: (context) {
-                  // Prefer real-time presence count over static room data
                   final realtimeCount = ref.watch(
                     chatNotifierProvider(effectiveRoomId).select((s) => s.participantCount),
                   );
@@ -582,25 +582,132 @@ class ChatPage extends ConsumerWidget {
           ],
         ),
         actions: [
-          if (effectiveRoomId != null && roomData != null)
+          // Wide (>=768): show all action buttons individually
+          if (isWide) ...[
+            if (effectiveRoomId != null && roomData != null)
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, size: 20),
+                tooltip: '채팅방 설정',
+                onPressed: () => _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
+              ),
+            if (effectiveRoomId != null)
+              _AiSummaryButton(roomId: effectiveRoomId),
+            if (effectiveRoomId != null)
+              IconButton(
+                icon: const Icon(Icons.manage_search, size: 22),
+                tooltip: '방 내 검색',
+                onPressed: () => _showInRoomSearch(context, ref, effectiveRoomId),
+              ),
             IconButton(
-              icon: const Icon(Icons.settings_outlined, size: 20),
-              tooltip: '채팅방 설정',
-              onPressed: () => _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
+              icon: const Icon(Icons.search),
+              tooltip: '전체 검색',
+              onPressed: () => context.push('/search'),
             ),
-          if (effectiveRoomId != null)
-            _AiSummaryButton(roomId: effectiveRoomId),
-          if (effectiveRoomId != null)
-            IconButton(
-              icon: const Icon(Icons.manage_search, size: 22),
-              tooltip: '방 내 검색',
-              onPressed: () => _showInRoomSearch(context, ref, effectiveRoomId),
-            ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: '전체 검색',
-            onPressed: () => context.push('/search'),
-          ),
+          ],
+          // Mobile (<768): merge room actions + search into overflow menu
+          if (!isWide) ...[
+            if (effectiveRoomId != null)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 22),
+                tooltip: '메뉴',
+                onSelected: (value) {
+                  if (value == 'settings' && roomData != null) {
+                    _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
+                  } else if (value == 'ai_summary') {
+                    ref.read(chatNotifierProvider(effectiveRoomId).notifier)
+                        .requestSummary(effectiveRoomId)
+                        .then((msg) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(msg.isNotEmpty ? msg : 'AI 요약을 요청했습니다. 잠시 후 채팅방에 표시됩니다.'),
+                        duration: const Duration(seconds: 3),
+                      ));
+                    }).catchError((_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('요약 요청에 실패했습니다.')));
+                      }
+                    });
+                  } else if (value == 'room_search') {
+                    _showInRoomSearch(context, ref, effectiveRoomId);
+                  } else if (value == 'global_search') {
+                    context.push('/search');
+                  } else if (value == 'participants') {
+                    showModalBottomSheet(
+                      context: context,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      builder: (_) => _ParticipantsModal(
+                        roomId: effectiveRoomId,
+                        count: roomData?.participantCount ?? 0,
+                      ),
+                    );
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (roomData != null)
+                    PopupMenuItem(
+                      value: 'participants',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.people_outline, size: 20),
+                          const SizedBox(width: 8),
+                          Text('참가자 (${roomData.participantCount}명)'),
+                        ],
+                      ),
+                    ),
+                  if (roomData != null)
+                    const PopupMenuItem(
+                      value: 'settings',
+                      child: Row(
+                        children: [
+                          Icon(Icons.settings_outlined, size: 20),
+                          SizedBox(width: 8),
+                          Text('채팅방 설정'),
+                        ],
+                      ),
+                    ),
+                  const PopupMenuItem(
+                    value: 'ai_summary',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_awesome, size: 20),
+                        SizedBox(width: 8),
+                        Text('AI 대화 요약'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'room_search',
+                    child: Row(
+                      children: [
+                        Icon(Icons.manage_search, size: 20),
+                        SizedBox(width: 8),
+                        Text('방 내 검색'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'global_search',
+                    child: Row(
+                      children: [
+                        Icon(Icons.search, size: 20),
+                        SizedBox(width: 8),
+                        Text('전체 검색'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            if (effectiveRoomId == null)
+              IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: '전체 검색',
+                onPressed: () => context.push('/search'),
+              ),
+          ],
           PopupMenuButton<String>(
             icon: _ProfileAvatar(
               url: auth.profileImageUrl != null

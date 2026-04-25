@@ -304,9 +304,13 @@ class _ChatInputState extends State<ChatInput> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 600;
+    final btnSize = isNarrow ? 34.0 : 40.0;
+    final btnGap = isNarrow ? 4.0 : 6.0;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 8, isNarrow ? 8 : 12, 8),
       decoration: BoxDecoration(
         color: cs.surface,
         border: Border(
@@ -453,8 +457,8 @@ class _ChatInputState extends State<ChatInput> {
                 // AI mode toggle
                 if (widget.onAskAi != null) ...[
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: btnSize,
+                    height: btnSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: _aiMode
@@ -490,7 +494,7 @@ class _ChatInputState extends State<ChatInput> {
                                 child: Text(
                                   'AI',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: isNarrow ? 10 : 11,
                                     fontWeight: FontWeight.w700,
                                     color: _aiMode
                                         ? AppColors.secondary
@@ -503,7 +507,7 @@ class _ChatInputState extends State<ChatInput> {
                             ),
                           ),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: btnGap),
                 ],
                 // Priority toggle (handoff rooms only)
                 if (widget.isHandoff && !_aiMode) ...[
@@ -515,8 +519,8 @@ class _ChatInputState extends State<ChatInput> {
                       });
                     } : null,
                     child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      height: btnSize,
+                      padding: EdgeInsets.symmetric(horizontal: isNarrow ? 5 : 8),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         color: _priority == 'STAT' ? const Color(0xFFD32F2F).withAlpha(25)
@@ -543,14 +547,14 @@ class _ChatInputState extends State<ChatInput> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: btnGap),
                 ],
                 // Handoff tools (SBAR + Patient card) — combined menu
                 if (widget.isHandoff && !_aiMode) ...[
                   PopupMenuButton<String>(
                     enabled: widget.isConnected,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    constraints: BoxConstraints(minWidth: btnSize, minHeight: btnSize),
                     icon: Icon(
                       Icons.add_circle_outline,
                       size: 22,
@@ -601,14 +605,14 @@ class _ChatInputState extends State<ChatInput> {
                       ),
                     ],
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: btnGap),
                 ],
                 // File attach button (hidden in AI mode)
                 if (!_aiMode && widget.onFilePick != null) ...[
                   _isUploading
                       ? Container(
-                          width: 40,
-                          height: 40,
+                          width: btnSize,
+                          height: btnSize,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Theme.of(context).colorScheme.surfaceContainer,
@@ -628,8 +632,9 @@ class _ChatInputState extends State<ChatInput> {
                           icon: Icons.attach_file_rounded,
                           enabled: widget.isConnected && !_isUploading,
                           onTap: _pickFile,
+                          size: btnSize,
                         ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: btnGap),
                 ],
                 // Emoji button (hidden in AI mode)
                 if (!_aiMode) ...[
@@ -637,8 +642,9 @@ class _ChatInputState extends State<ChatInput> {
                     icon: Icons.emoji_emotions_outlined,
                     enabled: widget.isConnected,
                     onTap: _showEmojiSheet,
+                    size: btnSize,
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: isNarrow ? 6 : 8),
                 ],
 
                 // Text field (pill style)
@@ -704,7 +710,7 @@ class _ChatInputState extends State<ChatInput> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isNarrow ? 6 : 8),
 
                 // Send button (animated fill on active)
                 ValueListenableBuilder<TextEditingValue>(
@@ -716,8 +722,8 @@ class _ChatInputState extends State<ChatInput> {
                         !_isUploading;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      width: 40,
-                      height: 40,
+                      width: btnSize,
+                      height: btnSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: canSend
@@ -788,19 +794,22 @@ class _CircleIconBtn extends StatelessWidget {
   final bool enabled;
   final bool active;
   final VoidCallback onTap;
+  final double size;
   const _CircleIconBtn({
     required this.icon,
     required this.enabled,
     required this.onTap,
     this.active = false,
+    this.size = 40,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final iconSize = size < 38 ? 18.0 : 20.0;
     return Container(
-      width: 40,
-      height: 40,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: active ? AppColors.secondary.withAlpha(30) : cs.surfaceContainer,
@@ -813,10 +822,10 @@ class _CircleIconBtn extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(size / 2),
           child: Icon(
             icon,
-            size: 20,
+            size: iconSize,
             color: active
                 ? AppColors.secondary
                 : enabled

@@ -564,28 +564,35 @@ class _SystemBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainer,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: cs.outline.withAlpha(80)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.85,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 13, color: cs.onSurfaceVariant.withAlpha(160)),
-                const SizedBox(width: 5),
-              ],
-              Text(
-                _text,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant.withAlpha(160),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainer,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: cs.outline.withAlpha(80)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 13, color: cs.onSurfaceVariant.withAlpha(160)),
+                  const SizedBox(width: 5),
+                ],
+                Flexible(
+                  child: Text(
+                    _text,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant.withAlpha(160),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -704,7 +711,11 @@ class _AiSummaryCardState extends State<_AiSummaryCard> {
                   ),
                 ),
                 Container(
-                  constraints: const BoxConstraints(maxWidth: 320),
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width < 600
+                        ? MediaQuery.of(context).size.width * 0.70
+                        : 320,
+                  ),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
@@ -1094,6 +1105,11 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive max width: 70% of screen on mobile, capped at 320 on desktop
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bubbleMaxWidth = screenWidth < 600
+        ? (screenWidth * 0.70).clamp(180.0, 320.0)
+        : 320.0;
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(20),
       topRight: const Radius.circular(20),
@@ -1310,7 +1326,7 @@ class _ChatBubble extends StatelessWidget {
                       child: isMine
                           ? Container(
                               constraints:
-                                  const BoxConstraints(maxWidth: 320),
+                                  BoxConstraints(maxWidth: bubbleMaxWidth),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
@@ -1392,7 +1408,7 @@ class _ChatBubble extends StatelessWidget {
                             )
                           : Container(
                               constraints:
-                                  const BoxConstraints(maxWidth: 320),
+                                  BoxConstraints(maxWidth: bubbleMaxWidth),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
@@ -1620,8 +1636,12 @@ class _SbarCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardMaxWidth = screenWidth < 600
+        ? (screenWidth * 0.70).clamp(180.0, 320.0)
+        : 320.0;
     return Container(
-      constraints: const BoxConstraints(maxWidth: 320),
+      constraints: BoxConstraints(maxWidth: cardMaxWidth),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(80)),
@@ -1640,7 +1660,7 @@ class _SbarCardWidget extends StatelessWidget {
               children: [
                 Icon(Icons.assignment_outlined, size: 16),
                 SizedBox(width: 6),
-                Text('SBAR 인수인계', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Flexible(child: Text('SBAR 인수인계', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
               ],
             ),
           ),
@@ -1694,7 +1714,11 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
       child: Container(
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        constraints: const BoxConstraints(maxWidth: 300),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width < 600
+              ? MediaQuery.of(context).size.width * 0.65
+              : 300,
+        ),
         decoration: BoxDecoration(
           color: cs.surfaceContainer,
           borderRadius: BorderRadius.circular(8),
@@ -1972,6 +1996,11 @@ class _FileBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Responsive image width for mobile
+    final imageWidth = screenWidth < 600
+        ? (screenWidth * 0.55).clamp(140.0, 220.0)
+        : 220.0;
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(20),
       topRight: const Radius.circular(20),
@@ -1998,12 +2027,12 @@ class _FileBubble extends StatelessWidget {
                   : radius,
               child: Image.network(
                 fullUrl,
-                width: 220,
+                width: imageWidth,
                 fit: BoxFit.cover,
                 loadingBuilder: (_, child, progress) {
                   if (progress == null) return child;
                   return Container(
-                    width: 220,
+                    width: imageWidth,
                     height: 160,
                     decoration: BoxDecoration(
                       color: cs.surfaceContainer,
@@ -2020,7 +2049,7 @@ class _FileBubble extends StatelessWidget {
                   );
                 },
                 errorBuilder: (_, __, ___) => Container(
-                  width: 220,
+                  width: imageWidth,
                   height: 80,
                   decoration: BoxDecoration(
                     color: cs.surfaceContainer,
@@ -2036,7 +2065,7 @@ class _FileBubble extends StatelessWidget {
           ),
           if (hasTextContent)
             Container(
-              width: 220,
+              width: imageWidth,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: isMine ? null : cs.surfaceContainer,
@@ -2059,10 +2088,13 @@ class _FileBubble extends StatelessWidget {
         ],
       );
     } else if (msg.isPdfFile) {
+      final fileMaxWidth = screenWidth < 600
+          ? (screenWidth * 0.65).clamp(160.0, 260.0)
+          : 260.0;
       content = GestureDetector(
         onTap: () => PdfViewerDialog.open(context, fullUrl, msg.fileName ?? 'PDF'),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 260),
+          constraints: BoxConstraints(maxWidth: fileMaxWidth),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: isMine ? null : cs.surfaceContainer,
@@ -2117,8 +2149,11 @@ class _FileBubble extends StatelessWidget {
         ),
       );
     } else {
+      final fileMaxWidth = screenWidth < 600
+          ? (screenWidth * 0.65).clamp(160.0, 260.0)
+          : 260.0;
       content = Container(
-        constraints: const BoxConstraints(maxWidth: 260),
+        constraints: BoxConstraints(maxWidth: fileMaxWidth),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isMine ? null : cs.surfaceContainer,
@@ -2227,7 +2262,7 @@ class _FileBubble extends StatelessWidget {
                           ],
                         ),
                       ),
-                    content,
+                    Flexible(child: content),
                     if (!isMine)
                       Padding(
                         padding: const EdgeInsets.only(left: 5, bottom: 3),

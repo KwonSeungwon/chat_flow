@@ -16,8 +16,12 @@ class PatientCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardMaxWidth = screenWidth < 600
+        ? (screenWidth * 0.70).clamp(180.0, 320.0)
+        : 320.0;
     return Container(
-      constraints: const BoxConstraints(maxWidth: 320),
+      constraints: BoxConstraints(maxWidth: cardMaxWidth),
       decoration: BoxDecoration(
         color: cs.surfaceContainer,
         borderRadius: BorderRadius.only(
