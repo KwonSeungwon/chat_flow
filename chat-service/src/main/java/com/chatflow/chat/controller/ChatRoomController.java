@@ -320,15 +320,18 @@ public class ChatRoomController {
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         if (userId == null || userId.isBlank()) {
+            auditService.logAccess("unknown", "unknown", roomId, AuditEvent.ROOM_HIDE_DENIED);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("인증이 필요합니다."));
         }
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
+            auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDE_DENIED);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
         if (room.getRoomType() != RoomType.DIRECT) {
+            auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDE_DENIED);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("DM 방만 숨길 수 있습니다. 단체방은 나가기를 사용하세요."));
         }

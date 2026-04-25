@@ -3,6 +3,8 @@ package com.chatflow.chat.config;
 import com.chatflow.common.security.SecurityKeys;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -28,13 +30,16 @@ public class TokenBlacklistService {
 
     public TokenBlacklistService(
             StringRedisTemplate redisTemplate,
+            MeterRegistry meterRegistry,
             @Value("${chatflow.security.blacklist.cache-ttl-seconds:5}") long cacheTtlSeconds,
             @Value("${chatflow.security.blacklist.cache-max-size:10000}") long cacheMaxSize) {
         this.redisTemplate = redisTemplate;
         this.negativeCache = Caffeine.newBuilder()
                 .expireAfterWrite(Duration.ofSeconds(cacheTtlSeconds))
                 .maximumSize(cacheMaxSize)
+                .recordStats()
                 .build();
+        CaffeineCacheMetrics.monitor(meterRegistry, this.negativeCache, "blacklistNegative");
     }
 
     public boolean isBlacklisted(String jti) {
