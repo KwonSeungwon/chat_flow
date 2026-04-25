@@ -17,6 +17,9 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
+  flyway:
+    enabled: false  # test는 ddl-auto=create-drop 사용, Flyway 미실행 (V2 partial index가 H2 미지원)
+
   data:
     redis:
       host: localhost

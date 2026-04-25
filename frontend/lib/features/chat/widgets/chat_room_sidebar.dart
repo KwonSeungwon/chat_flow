@@ -749,11 +749,10 @@ class _RoomTileState extends State<_RoomTile> {
     });
   }
 
-  /// DM 방 식별. 1순위는 백엔드 [RoomType.DIRECT].
-  /// `name.startsWith('DM:')` fallback은 (a) roomType 필드 누락된 캐시 응답
-  /// (b) 레거시 데이터 호환을 위한 방어. 백엔드가 항상 roomType을 채워주는
-  /// 것이 정착되면 제거 가능.
-  bool get _isDm => widget.room.roomType == 'DIRECT' || widget.room.name.startsWith('DM:');
+  /// DM 방 식별. 백엔드 [RoomType.DIRECT] 사용.
+  /// (백엔드 ChatRoom.roomType은 default 'GENERAL', fromJson도 fallback 'GENERAL'
+  /// 적용하므로 'DIRECT'만 신뢰 가능.)
+  bool get _isDm => widget.room.roomType == 'DIRECT';
   String get _displayName {
     if (!_isDm) return widget.room.name;
     // "DM:user1,user2" → show the other user's name
