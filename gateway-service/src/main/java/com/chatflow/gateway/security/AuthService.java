@@ -7,12 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -29,6 +31,27 @@ public class AuthService {
 
     private static final String USER_KEY_PREFIX = "chatflow:user:";
     private static final String ACTIVE_JTI_PREFIX = "chatflow:user:active_jti:";
+    private static final String BLACKLIST_PREFIX = "chatflow:blacklist:";
+
+    /**
+     * Lua script: atomic rotate-active-jti.
+     * GET → blacklist old (if different) → SET new — single Redis round-trip.
+     *
+     * KEYS[1]: active_jti key  (chatflow:user:active_jti:{userId})
+     * KEYS[2]: blacklist prefix (chatflow:blacklist:)
+     * ARGV[1]: newJti
+     * ARGV[2]: ttl in seconds
+     * ARGV[3]: blacklist value ("1")
+     */
+    private static final RedisScript<Long> ROTATE_JTI_SCRIPT = RedisScript.of(
+            "local prev = redis.call('GET', KEYS[1])\n" +
+            "if prev and prev ~= '' and prev ~= ARGV[1] then\n" +
+            "    redis.call('SET', KEYS[2] .. prev, ARGV[3], 'EX', ARGV[2])\n" +
+            "end\n" +
+            "redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])\n" +
+            "return 1",
+            Long.class
+    );
 
     public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
                        TokenBlacklistService tokenBlacklistService,
@@ -161,19 +184,17 @@ public class AuthService {
     /**
      * 이전 active jti를 blacklist에 등록하고 새 jti를 active로 저장.
      * 새 로그인 시 기존 디바이스의 토큰을 무효화하여 단일 세션을 강제한다.
+     *
+     * Redis Lua script로 atomic 실행 — 동시 멀티 로그인 race condition 방지.
      */
     private Mono<Void> rotateActiveJti(String userId, String newJti, Duration ttl) {
-        String key = ACTIVE_JTI_PREFIX + userId;
-        return redisTemplate.opsForValue().get(key)
-                .flatMap(prevJti -> {
-                    if (prevJti != null && !prevJti.isEmpty() && !prevJti.equals(newJti)) {
-                        log.info("Invalidating previous session for user {}: jti={}", userId, prevJti);
-                        return tokenBlacklistService.blacklist(prevJti, ttl).then();
-                    }
-                    return Mono.<Void>empty();
-                })
-                .then(redisTemplate.opsForValue().set(key, newJti, ttl))
-                .then();
+        String activeKey = ACTIVE_JTI_PREFIX + userId;
+        long ttlSeconds = Math.max(1, ttl.toSeconds());
+        return redisTemplate.execute(
+                ROTATE_JTI_SCRIPT,
+                List.of(activeKey, BLACKLIST_PREFIX),
+                List.of(newJti, String.valueOf(ttlSeconds), "1")
+        ).then();
     }
 
     private Mono<Void> clearActiveJti(String userId) {
