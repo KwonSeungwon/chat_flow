@@ -21,12 +21,13 @@ public class UserPresenceService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatPersistenceService chatPersistenceService;
     private final ChatRoomService chatRoomService;
+    private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
 
     private static final String CHAT_TOPIC = "chat-messages";
 
     public void join(ChatMessage message, String sessionId) {
-        if (chatRoomService.isRoomFull(message.getChatRoomId())) {
+        if (participantService.isRoomFull(message.getChatRoomId())) {
             ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
 
             // DM(DIRECT) 방은 자동 분할하지 않음 -- 정원 초과 시 입장 거부
@@ -40,7 +41,7 @@ public class UserPresenceService {
             }
 
             String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
-            ChatRoom newRoom = chatRoomService.findOrCreateAvailableRoom(baseName);
+            ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
 
             log.info("Room {} full, redirecting user {} to {}",
                     message.getChatRoomId(), message.getUsername(), newRoom.getId());
@@ -162,6 +163,6 @@ public class UserPresenceService {
 
     private void syncParticipantCount(String roomId) {
         Set<String> userIds = getRoomParticipantUserIds(roomId);
-        chatRoomService.setParticipantCount(roomId, userIds.size());
+        participantService.setParticipantCount(roomId, userIds.size());
     }
 }
