@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../shared/models/chat_message.dart';
 import 'search_provider.dart';
+
+class _CloseSearchIntent extends Intent {
+  const _CloseSearchIntent();
+}
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -92,11 +97,40 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       }
     });
 
-    return Scaffold(
+    void closeSearch() {
+      if (context.canPop()) {
+        context.pop();
+      } else if (context.mounted) {
+        context.go('/chat');
+      }
+    }
+
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.mounted) context.go('/chat');
+      },
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.escape): _CloseSearchIntent(),
+        },
+        child: Actions(
+          actions: {
+            _CloseSearchIntent: CallbackAction<_CloseSearchIntent>(
+              onInvoke: (_) {
+                closeSearch();
+                return null;
+              },
+            ),
+          },
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/chat'),
+          onPressed: closeSearch,
         ),
         title: const Text('메시지 검색'),
       ),
@@ -171,6 +205,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             child: _buildResults(searchState, colorScheme, theme),
           ),
         ],
+      ),
+            ),
+          ),
+        ),
       ),
     );
   }

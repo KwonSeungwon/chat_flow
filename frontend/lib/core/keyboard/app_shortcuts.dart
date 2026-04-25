@@ -28,7 +28,7 @@ class AppShortcuts extends ConsumerWidget {
         actions: <Type, Action<Intent>>{
           _GlobalSearchIntent: CallbackAction<_GlobalSearchIntent>(
             onInvoke: (_) {
-              GoRouter.of(context).go('/search');
+              GoRouter.of(context).push('/search');
               return null;
             },
           ),

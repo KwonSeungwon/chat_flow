@@ -661,7 +661,8 @@ class _ChatInputState extends State<ChatInput> {
                       onKeyEvent: (event) {
                         if (kIsWeb &&
                             event is KeyDownEvent &&
-                            event.logicalKey == LogicalKeyboardKey.enter &&
+                            (event.logicalKey == LogicalKeyboardKey.enter ||
+                             event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
                             !HardwareKeyboard.instance.isShiftPressed &&
                             !_controller.value.composing.isValid) {
                           _send();
@@ -807,30 +808,38 @@ class _CircleIconBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final iconSize = size < 38 ? 18.0 : 20.0;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: active ? AppColors.secondary.withAlpha(30) : cs.surfaceContainer,
-        border: Border.all(
-          color: active ? AppColors.secondary : cs.outline,
-          width: active ? 1.5 : 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(size / 2),
-          child: Icon(
-            icon,
-            size: iconSize,
-            color: active
-                ? AppColors.secondary
-                : enabled
-                    ? cs.onSurfaceVariant
-                    : cs.onSurfaceVariant.withAlpha(80),
+    // Ensure minimum 44x44 hit area (iOS HIG / Material guidelines)
+    final hitSize = size < 44 ? 44.0 : size;
+    return SizedBox(
+      width: hitSize,
+      height: hitSize,
+      child: Center(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active ? AppColors.secondary.withAlpha(30) : cs.surfaceContainer,
+            border: Border.all(
+              color: active ? AppColors.secondary : cs.outline,
+              width: active ? 1.5 : 1,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: enabled ? onTap : null,
+              borderRadius: BorderRadius.circular(size / 2),
+              child: Icon(
+                icon,
+                size: iconSize,
+                color: active
+                    ? AppColors.secondary
+                    : enabled
+                        ? cs.onSurfaceVariant
+                        : cs.onSurfaceVariant.withAlpha(80),
+              ),
+            ),
           ),
         ),
       ),

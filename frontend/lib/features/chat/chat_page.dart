@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -198,73 +199,79 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
 void _showBookmarksDialog(BuildContext context, WidgetRef ref) {
   showDialog(
     context: context,
-    builder: (ctx) => Dialog(
-      child: SizedBox(
-        width: 500,
-        height: 600,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.bookmark, size: 20),
-                  const SizedBox(width: 8),
-                  const Text('북마크', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: Consumer(builder: (_, ref, __) {
-                final bookmarks = ref.watch(bookmarksProvider);
-                if (bookmarks.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.bookmark_border, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100)),
-                        const SizedBox(height: 12),
-                        Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.separated(
-                  itemCount: bookmarks.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final b = bookmarks[i];
-                    String formattedTime = b.timestamp;
-                    try {
-                      final dt = DateTime.parse(b.timestamp).toLocal();
-                      formattedTime = '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-                    } catch (_) {}
-                    return ListTile(
-                      title: Text(b.content, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text('${b.username} · $formattedTime', style: const TextStyle(fontSize: 11)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        onPressed: () => ref.read(bookmarksProvider.notifier).remove(b.messageId),
+    builder: (ctx) {
+      final mq = MediaQuery.of(ctx);
+      return Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: SizedBox(
+            width: math.min(500.0, mq.size.width - 32),
+            height: math.min(600.0, mq.size.height - 120),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bookmark, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('북마크', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.of(ctx).pop(),
                       ),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        GoRouter.of(context).go('/chat/${b.roomId}?messageId=${b.messageId}');
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: Consumer(builder: (_, ref, __) {
+                    final bookmarks = ref.watch(bookmarksProvider);
+                    if (bookmarks.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.bookmark_border, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100)),
+                            const SizedBox(height: 12),
+                            Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      itemCount: bookmarks.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final b = bookmarks[i];
+                        String formattedTime = b.timestamp;
+                        try {
+                          final dt = DateTime.parse(b.timestamp).toLocal();
+                          formattedTime = '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                        } catch (_) {}
+                        return ListTile(
+                          title: Text(b.content, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text('${b.username} · $formattedTime', style: const TextStyle(fontSize: 11)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: () => ref.read(bookmarksProvider.notifier).remove(b.messageId),
+                          ),
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            GoRouter.of(context).go('/chat/${b.roomId}?messageId=${b.messageId}');
+                          },
+                        );
                       },
                     );
-                  },
-                );
-              }),
+                  }),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 
@@ -407,11 +414,13 @@ void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier curren
           final filtered = filter.isEmpty
               ? rooms
               : rooms.where((r) => r.name.toLowerCase().contains(filter.toLowerCase())).toList();
+          final fwdMq = MediaQuery.of(ctx);
+          final fwdMobile = fwdMq.size.width < 600;
           return AlertDialog(
             title: const Text('메시지 전달'),
             content: SizedBox(
-              width: 280,
-              height: 360,
+              width: fwdMobile ? math.min(fwdMq.size.width - 64, 360.0) : 280,
+              height: math.min(360.0, fwdMq.size.height - 200),
               child: Column(
                 children: [
                   TextField(
@@ -568,7 +577,15 @@ class ChatPage extends ConsumerWidget {
         : null;
     final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'ChatFlow';
 
-    return Scaffold(
+    return PopScope(
+      canPop: effectiveRoomId == null || isWide,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (effectiveRoomId != null && !isWide) {
+          context.go('/chat');
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         leading: isWide
             ? null
@@ -842,17 +859,23 @@ class ChatPage extends ConsumerWidget {
           if (isWide) ChatRoomSidebar(currentRoomId: effectiveRoomId ?? ''),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
-            child: effectiveRoomId != null
-                ? _ChatRoomContent(
-                    roomId: effectiveRoomId,
-                    username: auth.username,
-                    scrollToMessageId: scrollToMessageId,
-                  )
-                : const _LobbyPlaceholder(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: effectiveRoomId != null
+                    ? _ChatRoomContent(
+                        roomId: effectiveRoomId,
+                        username: auth.username,
+                        scrollToMessageId: scrollToMessageId,
+                      )
+                    : const _LobbyPlaceholder(),
+              ),
+            ),
           ),
         ],
       ),
       resizeToAvoidBottomInset: true,
+    ),
     );
   }
 }
