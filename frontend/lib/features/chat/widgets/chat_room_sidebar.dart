@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult;
 import 'create_room_dialog.dart';
 
 
@@ -394,18 +394,25 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                 child: FilledButton(
                   onPressed: () async {
                     Navigator.of(ctx).pop();
-                    final ok = await ref.read(chatRoomsProvider.notifier).hideRoom(room.id);
-                    if (!ok && context.mounted) {
+                    final result = await ref.read(chatRoomsProvider.notifier).hideRoom(room.id);
+                    if (!context.mounted) return;
+                    if (result != HideRoomResult.success) {
+                      final msg = switch (result) {
+                        HideRoomResult.notDmRoom => 'DM 방만 숨길 수 있습니다.',
+                        HideRoomResult.notFound => '방을 찾을 수 없습니다.',
+                        HideRoomResult.unauthorized => '인증이 만료되었습니다. 다시 로그인해주세요.',
+                        HideRoomResult.serverError => '서버 오류로 숨기기에 실패했습니다. 잠시 후 다시 시도해주세요.',
+                        HideRoomResult.networkError => '네트워크 오류로 숨기기에 실패했습니다.',
+                        HideRoomResult.success => '',
+                      };
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('방 숨기기에 실패했습니다.')),
+                        SnackBar(content: Text(msg)),
                       );
                       return;
                     }
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('방을 숨겼습니다.')),
-                      );
-                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('방을 숨겼습니다.')),
+                    );
                     if (context.mounted && room.id == widget.currentRoomId) {
                       context.go('/chat');
                     }
@@ -742,6 +749,10 @@ class _RoomTileState extends State<_RoomTile> {
     });
   }
 
+  /// DM 방 식별. 1순위는 백엔드 [RoomType.DIRECT].
+  /// `name.startsWith('DM:')` fallback은 (a) roomType 필드 누락된 캐시 응답
+  /// (b) 레거시 데이터 호환을 위한 방어. 백엔드가 항상 roomType을 채워주는
+  /// 것이 정착되면 제거 가능.
   bool get _isDm => widget.room.roomType == 'DIRECT' || widget.room.name.startsWith('DM:');
   String get _displayName {
     if (!_isDm) return widget.room.name;

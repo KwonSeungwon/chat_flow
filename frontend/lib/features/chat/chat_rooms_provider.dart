@@ -10,6 +10,19 @@ import '../../shared/models/chat_room.dart';
 
 enum RoomSortOption { recent, unread, name }
 
+// ---------------------------------------------------------------------------
+// Hide Room Result
+// ---------------------------------------------------------------------------
+
+enum HideRoomResult {
+  success,
+  notDmRoom,    // 400 — DM 방만 숨길 수 있음
+  notFound,     // 404
+  unauthorized, // 401 (auth interceptor가 처리하지만 명시)
+  serverError,  // 5xx
+  networkError, // connection / timeout 등
+}
+
 final roomSortProvider = StateProvider<RoomSortOption>((ref) => RoomSortOption.recent);
 
 // ---------------------------------------------------------------------------
@@ -62,13 +75,18 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     }
   }
 
-  Future<bool> hideRoom(String id) async {
+  Future<HideRoomResult> hideRoom(String id) async {
     try {
       await _dioClient.dio.post('/api/chat/rooms/$id/hide');
       await fetchRooms();
-      return true;
-    } on DioException {
-      return false;
+      return HideRoomResult.success;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 400) return HideRoomResult.notDmRoom;
+      if (status == 401) return HideRoomResult.unauthorized;
+      if (status == 404) return HideRoomResult.notFound;
+      if (status != null && status >= 500) return HideRoomResult.serverError;
+      return HideRoomResult.networkError;
     }
   }
 
