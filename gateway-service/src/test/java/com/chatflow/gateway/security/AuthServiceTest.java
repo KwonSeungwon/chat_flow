@@ -63,9 +63,9 @@ class AuthServiceTest {
         when(jwtUtil.generateToken("user-1", "user1", "NURSE")).thenReturn("new-token");
         when(jwtUtil.getJti("new-token")).thenReturn("new-jti-123");
 
-        // Lua script execution (rotateActiveJti)
+        // Lua script execution (rotateActiveJti) — returns prev jti or empty
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
-                .thenReturn(Flux.just(1L));
+                .thenReturn(Flux.just("old-jti-prev"));
 
         // cacheUser
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
@@ -104,9 +104,9 @@ class AuthServiceTest {
         when(jwtUtil.generateToken("user-2", "newuser", "DOCTOR")).thenReturn("token-abc");
         when(jwtUtil.getJti("token-abc")).thenReturn("jti-first");
 
-        // Lua script handles both first-time and rotation atomically
+        // Lua script handles both first-time and rotation atomically — empty = no prev session
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
-                .thenReturn(Flux.just(1L));
+                .thenReturn(Flux.empty());
 
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         try {
@@ -169,9 +169,9 @@ class AuthServiceTest {
         when(jwtUtil.generateToken(anyString(), eq("newreg"), eq("NURSE"))).thenReturn("reg-token");
         when(jwtUtil.getJti("reg-token")).thenReturn("reg-jti");
 
-        // Lua script for rotateActiveJti
+        // Lua script for rotateActiveJti — empty = first registration, no prev session
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
-                .thenReturn(Flux.just(1L));
+                .thenReturn(Flux.empty());
 
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         try {

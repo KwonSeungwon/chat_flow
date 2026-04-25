@@ -1,5 +1,6 @@
 package com.chatflow.gateway.security;
 
+import com.chatflow.common.security.SecurityKeys;
 import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,12 +31,11 @@ public class AuthService {
     private final Duration cacheTtl;
 
     private static final String USER_KEY_PREFIX = "chatflow:user:";
-    private static final String ACTIVE_JTI_PREFIX = "chatflow:user:active_jti:";
-    private static final String BLACKLIST_PREFIX = "chatflow:blacklist:";
 
     /**
      * Lua script: atomic rotate-active-jti.
      * GET → blacklist old (if different) → SET new — single Redis round-trip.
+     * Returns: invalidated prev jti (or nil if no previous session).
      *
      * KEYS[1]: active_jti key  (chatflow:user:active_jti:{userId})
      * KEYS[2]: blacklist prefix (chatflow:blacklist:)
@@ -43,14 +43,16 @@ public class AuthService {
      * ARGV[2]: ttl in seconds
      * ARGV[3]: blacklist value ("1")
      */
-    private static final RedisScript<Long> ROTATE_JTI_SCRIPT = RedisScript.of(
+    private static final RedisScript<String> ROTATE_JTI_SCRIPT = RedisScript.of(
             "local prev = redis.call('GET', KEYS[1])\n" +
+            "local invalidated = nil\n" +
             "if prev and prev ~= '' and prev ~= ARGV[1] then\n" +
             "    redis.call('SET', KEYS[2] .. prev, ARGV[3], 'EX', ARGV[2])\n" +
+            "    invalidated = prev\n" +
             "end\n" +
             "redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])\n" +
-            "return 1",
-            Long.class
+            "return invalidated",
+            String.class
     );
 
     public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
@@ -188,18 +190,21 @@ public class AuthService {
      * Redis Lua script로 atomic 실행 — 동시 멀티 로그인 race condition 방지.
      */
     private Mono<Void> rotateActiveJti(String userId, String newJti, Duration ttl) {
-        String activeKey = ACTIVE_JTI_PREFIX + userId;
+        String activeKey = SecurityKeys.ACTIVE_JTI_PREFIX + userId;
         long ttlSeconds = Math.max(1, ttl.toSeconds());
         return redisTemplate.execute(
                 ROTATE_JTI_SCRIPT,
-                List.of(activeKey, BLACKLIST_PREFIX),
+                List.of(activeKey, SecurityKeys.BLACKLIST_PREFIX),
                 List.of(newJti, String.valueOf(ttlSeconds), "1")
-        ).then();
+        )
+        .next()
+        .doOnNext(prevJti -> log.info("[auth] previous session invalidated: userId={} prevJti={}", userId, prevJti))
+        .then();
     }
 
     private Mono<Void> clearActiveJti(String userId) {
         if (userId == null) return Mono.empty();
-        return redisTemplate.delete(ACTIVE_JTI_PREFIX + userId).then();
+        return redisTemplate.delete(SecurityKeys.ACTIVE_JTI_PREFIX + userId).then();
     }
 
     // ---- Cache-Aside helpers ----
