@@ -99,8 +99,10 @@ public class RoomVisibilityService {
         // lastMessageAt이 없으면 (메시지 없는 빈 방) hidden 유지
         if (room.getLastMessageAt() == null) return false;
 
+        // lastMessageAt(LocalDateTime)을 시스템 기본 타임존으로 해석 — 같은 zone에서 생성된
+        // LocalDateTime.now()와 일관 비교. JVM 타임존이 UTC인 K3s prod와 KST인 Mac local 양쪽 모두 안전.
         Instant lastMsgInstant = room.getLastMessageAt()
-                .atZone(ZoneOffset.UTC).toInstant();
+                .atZone(java.time.ZoneId.systemDefault()).toInstant();
         return lastMsgInstant.isAfter(hiddenAt);
     }
 }
