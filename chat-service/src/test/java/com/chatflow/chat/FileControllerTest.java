@@ -94,19 +94,27 @@ class FileControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ── 다운로드 (permit all) ──────────────────────────────────
+    // ── 다운로드 (인증 필요 — frontend는 ?token=JWT 쿼리 파라미터 사용) ──────────
 
     @Test
-    void download_withoutToken_returns404ForNonexistentUuid() throws Exception {
+    void download_withoutToken_returns401() throws Exception {
+        String uuid = UUID.randomUUID().toString();
+        mockMvc.perform(get("/api/files/" + uuid))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void download_withTokenQuery_returns404ForNonexistentUuid() throws Exception {
         String uuid = UUID.randomUUID().toString();
         when(fileStorageService.loadAsResource(eq(uuid)))
                 .thenThrow(new IOException("not found"));
-        mockMvc.perform(get("/api/files/" + uuid))
+        mockMvc.perform(get("/api/files/" + uuid)
+                        .header("Authorization", "Bearer " + generateToken("user1", "testuser")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void download_withoutToken_returns200ForExistingFile() throws Exception {
+    void download_withTokenQuery_returns200ForExistingFile() throws Exception {
         String uuid = UUID.randomUUID().toString();
         org.springframework.core.io.ByteArrayResource resource =
                 new org.springframework.core.io.ByteArrayResource(JPEG_MAGIC);
@@ -114,7 +122,8 @@ class FileControllerTest {
                 new FileStorageService.FileResource(resource, "photo.jpg", "image/jpeg");
         when(fileStorageService.loadAsResource(eq(uuid))).thenReturn(fr);
 
-        mockMvc.perform(get("/api/files/" + uuid))
+        mockMvc.perform(get("/api/files/" + uuid)
+                        .header("Authorization", "Bearer " + generateToken("user1", "testuser")))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("inline")))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
@@ -129,7 +138,8 @@ class FileControllerTest {
                 new FileStorageService.FileResource(resource, "photo.jpg", "image/jpeg");
         when(fileStorageService.loadAsResource(eq(uuid))).thenReturn(fr);
 
-        mockMvc.perform(get("/api/files/" + uuid))
+        mockMvc.perform(get("/api/files/" + uuid)
+                        .header("Authorization", "Bearer " + generateToken("user1", "testuser")))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
