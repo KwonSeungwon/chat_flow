@@ -317,7 +317,8 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/hide")
     public ResponseEntity<ApiResponse<Void>> hideRoom(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
         if (userId == null || userId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("인증이 필요합니다."));
@@ -332,6 +333,7 @@ public class ChatRoomController {
                     .body(ApiResponse.error("DM 방만 숨길 수 있습니다. 단체방은 나가기를 사용하세요."));
         }
         roomVisibilityService.hide(userId, roomId);
+        auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDDEN);
         return ResponseEntity.ok(ApiResponse.ok(null, "방을 숨겼습니다"));
     }
 

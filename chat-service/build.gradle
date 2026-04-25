@@ -8,6 +8,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
     implementation 'com.google.firebase:firebase-admin:9.4.1'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     implementation 'org.apache.tika:tika-core:2.9.2'

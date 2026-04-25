@@ -23,4 +23,5 @@ public class AuditEvent {
     public static final String MESSAGE_READ = "MESSAGE_READ";
     public static final String ROOM_JOIN = "ROOM_JOIN";
     public static final String MESSAGE_SEARCH = "MESSAGE_SEARCH";
+    public static final String ROOM_HIDDEN = "ROOM_HIDDEN";
 }
