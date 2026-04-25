@@ -1,12 +1,10 @@
 package com.chatflow.chat.service;
 
-import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,12 +17,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DmRoomService {
 
-    private static final String ROOM_CACHE_KEY = "chatflow:room:";
-    private static final String ROOMS_LIST_KEY = "chatflow:rooms:list";
-
     private final ChatRoomRepository chatRoomRepository;
-    private final StringRedisTemplate redisTemplate;
-    private final RedisHealthTracker redisHealth;
+    private final RoomCacheEvictor roomCacheEvictor;
 
     @Transactional
     public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
@@ -48,7 +42,7 @@ public class DmRoomService {
                 .build();
         try {
             ChatRoom saved = chatRoomRepository.save(dm);
-            evictRoomCaches(saved.getId());
+            roomCacheEvictor.evict(saved.getId());
             return saved;
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // TOCTOU: 동시 요청으로 중복 생성 시 기존 방 반환
@@ -68,14 +62,4 @@ public class DmRoomService {
         return "DM:" + first + "," + second;
     }
 
-    private void evictRoomCaches(String roomId) {
-        if (redisHealth.isCircuitOpen()) return;
-        try {
-            redisTemplate.delete(ROOM_CACHE_KEY + roomId);
-            redisTemplate.delete(ROOMS_LIST_KEY);
-            redisHealth.recordSuccess();
-        } catch (Exception e) {
-            redisHealth.recordFailure(e);
-        }
-    }
 }

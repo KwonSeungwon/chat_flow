@@ -42,6 +42,7 @@ public class ChatRoomService {
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
     private final ParticipantService participantService;
+    private final RoomCacheEvictor roomCacheEvictor;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -98,7 +99,7 @@ public class ChatRoomService {
                 .build();
 
         ChatRoom saved = chatRoomRepository.save(room);
-        evictRoomCaches(saved.getId());
+        roomCacheEvictor.evict(saved.getId());
         log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
         return saved;
     }
@@ -136,7 +137,7 @@ public class ChatRoomService {
                             password.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
                         room.setPassword(passwordEncoder.encode(password));
                         chatRoomRepository.save(room);
-                        evictRoomCaches(roomId);
+                        roomCacheEvictor.evict(roomId);
                         return true;
                     }
                     return false;
@@ -175,7 +176,7 @@ public class ChatRoomService {
                 redisHealth.recordFailure(e);
             }
         }
-        evictRoomCaches(id);
+        roomCacheEvictor.evict(id);
         log.info("Chat room deleted: {}", id);
     }
 
@@ -207,7 +208,7 @@ public class ChatRoomService {
         messagingTemplate.convertAndSend("/topic/chat/" + roomId, leaveMsg);
         // 참가자 수 동기화 (Redis SET 기반 unique user count로 설정 -- UserPresenceService와 동일 패턴)
         participantService.syncParticipantCountFromRedis(roomId);
-        evictRoomCaches(roomId);
+        roomCacheEvictor.evict(roomId);
         log.info("User {} left room {} via REST API", username, roomId);
     }
 
@@ -226,7 +227,7 @@ public class ChatRoomService {
         chatRoomRepository.findById(roomId).ifPresent(room -> {
             room.setLastMessageAt(LocalDateTime.now());
             chatRoomRepository.save(room);
-            evictRoomCaches(roomId);
+            roomCacheEvictor.evict(roomId);
         });
     }
 
@@ -236,19 +237,9 @@ public class ChatRoomService {
             if (name != null && !name.isBlank()) room.setName(name);
             if (description != null) room.setDescription(description);
             chatRoomRepository.save(room);
-            evictRoomCaches(roomId);
+            roomCacheEvictor.evict(roomId);
             return true;
         }).orElse(false);
     }
 
-    private void evictRoomCaches(String roomId) {
-        if (redisHealth.isCircuitOpen()) return;
-        try {
-            redisTemplate.delete(ROOM_CACHE_KEY + roomId);
-            redisTemplate.delete(ROOMS_LIST_KEY);
-            redisHealth.recordSuccess();
-        } catch (Exception e) {
-            redisHealth.recordFailure(e);
-        }
-    }
 }

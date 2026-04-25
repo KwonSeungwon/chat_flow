@@ -1,11 +1,9 @@
 package com.chatflow.chat.service;
 
-import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,14 +19,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MessagePinService {
 
-    private static final String ROOM_CACHE_KEY = "chatflow:room:";
-    private static final String ROOMS_LIST_KEY = "chatflow:rooms:list";
-
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate;
-    private final StringRedisTemplate redisTemplate;
-    private final RedisHealthTracker redisHealth;
+    private final RoomCacheEvictor roomCacheEvictor;
 
     @Transactional
     public boolean pinMessage(String roomId, String messageId) {
@@ -39,7 +33,7 @@ public class MessagePinService {
                 msg.setPinned(true);
                 chatMessageRepository.save(msg);
             });
-            evictRoomCaches(roomId);
+            roomCacheEvictor.evict(roomId);
             Map<String, Object> broadcast = new LinkedHashMap<>();
             broadcast.put("type", "MESSAGE_PINNED");
             broadcast.put("messageId", messageId);
@@ -61,7 +55,7 @@ public class MessagePinService {
                     chatMessageRepository.save(msg);
                 });
             }
-            evictRoomCaches(roomId);
+            roomCacheEvictor.evict(roomId);
             Map<String, Object> broadcast = new LinkedHashMap<>();
             broadcast.put("type", "MESSAGE_UNPINNED");
             broadcast.put("chatRoomId", roomId);
@@ -70,14 +64,4 @@ public class MessagePinService {
         }).orElse(false);
     }
 
-    private void evictRoomCaches(String roomId) {
-        if (redisHealth.isCircuitOpen()) return;
-        try {
-            redisTemplate.delete(ROOM_CACHE_KEY + roomId);
-            redisTemplate.delete(ROOMS_LIST_KEY);
-            redisHealth.recordSuccess();
-        } catch (Exception e) {
-            redisHealth.recordFailure(e);
-        }
-    }
 }

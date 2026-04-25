@@ -24,15 +24,18 @@ public class ParticipantService {
     private final ChatRoomRepository chatRoomRepository;
     private final StringRedisTemplate redisTemplate;
     private final RedisHealthTracker redisHealth;
+    private final RoomCacheEvictor roomCacheEvictor;
 
     @Transactional
     public void incrementParticipantCount(String roomId) {
         chatRoomRepository.incrementParticipantCount(roomId);
+        roomCacheEvictor.evict(roomId);
     }
 
     @Transactional
     public void decrementParticipantCount(String roomId) {
         chatRoomRepository.decrementParticipantCount(roomId);
+        roomCacheEvictor.evict(roomId);
     }
 
     @Transactional
@@ -40,6 +43,7 @@ public class ParticipantService {
         chatRoomRepository.findById(roomId).ifPresent(room ->
             room.setParticipantCount(count)
         );
+        roomCacheEvictor.evict(roomId);
     }
 
     @Transactional(readOnly = true)
@@ -76,6 +80,7 @@ public class ParticipantService {
 
         try {
             ChatRoom saved = chatRoomRepository.save(newRoom);
+            roomCacheEvictor.evict(saved.getId());
             log.info("Auto-created overflow room: {} ({})", saved.getName(), saved.getId());
             return saved;
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
