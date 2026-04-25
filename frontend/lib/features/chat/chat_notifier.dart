@@ -784,14 +784,20 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
     if (!_stompService.isConnected) return false;
+    final isFile = msg.isFileMessage;
     _stompService.sendMessage({
       'chatRoomId': targetRoomId,
       'userId': _userId,
       'username': _username,
-      'content': '[전달] ${msg.username}: ${msg.content}',
-      'type': 'CHAT',
+      'content': isFile
+          ? '[전달] ${msg.username}: ${msg.content}'
+          : '[전달] ${msg.username}: ${msg.content}',
+      'type': isFile ? 'FILE' : 'CHAT',
       'priority': 'ROUTINE',
       'timestamp': DateTime.now().toIso8601String(),
+      if (isFile) 'fileUrl': msg.fileUrl,
+      if (isFile) 'fileName': msg.fileName,
+      if (isFile) 'fileContentType': msg.fileContentType,
     });
     return true;
   }

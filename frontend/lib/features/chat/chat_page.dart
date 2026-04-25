@@ -400,35 +400,60 @@ void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier curren
   final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
   showDialog(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('메시지 전달'),
-      content: SizedBox(
-        width: 280,
-        height: 300,
-        child: rooms.isEmpty
-            ? const Center(child: Text('채팅방이 없습니다.'))
-            : ListView.builder(
-                itemCount: rooms.length,
-                itemBuilder: (_, i) {
-                  final room = rooms[i];
-                  return ListTile(
-                    leading: CircleAvatar(radius: 16, child: Text(room.name.isNotEmpty ? room.name[0].toUpperCase() : '#')),
-                    title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      Navigator.of(ctx).pop();
-                      final ok = await currentNotifier.forwardMessage(room.id, msg);
-                      if (ok) {
-                        messenger.showSnackBar(SnackBar(content: Text('"${room.name}"에 메시지를 전달했습니다.')));
-                      } else {
-                        messenger.showSnackBar(const SnackBar(content: Text('연결이 끊겨 전달에 실패했습니다.')));
-                      }
-                    },
-                  );
-                },
+    builder: (ctx) {
+      String filter = '';
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          final filtered = filter.isEmpty
+              ? rooms
+              : rooms.where((r) => r.name.toLowerCase().contains(filter.toLowerCase())).toList();
+          return AlertDialog(
+            title: const Text('메시지 전달'),
+            content: SizedBox(
+              width: 280,
+              height: 360,
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: '방 검색',
+                      prefixIcon: Icon(Icons.search, size: 20),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setState(() => filter = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('일치하는 방이 없습니다.'))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final room = filtered[i];
+                              return ListTile(
+                                leading: CircleAvatar(radius: 16, child: Text(room.name.isNotEmpty ? room.name[0].toUpperCase() : '#')),
+                                title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  Navigator.of(ctx).pop();
+                                  final ok = await currentNotifier.forwardMessage(room.id, msg);
+                                  messenger.showSnackBar(SnackBar(
+                                    content: Text(ok
+                                        ? '"${room.name}"에 메시지를 전달했습니다.'
+                                        : '연결 상태를 확인하고 다시 시도해주세요.'),
+                                  ));
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-      ),
-    ),
+            ),
+          );
+        },
+      );
+    },
   );
 }
 
