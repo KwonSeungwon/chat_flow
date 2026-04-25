@@ -112,7 +112,8 @@ class StompService {
         try {
           final data = jsonDecode(frame.body!) as Map<String, dynamic>;
           final type = data['type']?.toString();
-          if (type == 'ROOM_FULL') {
+          if (type == 'ROOM_FULL' || type == 'ROOM_FULL_DM') {
+            // ROOM_FULL_DM: DM 방은 분할 불가, redirectTo가 null이므로 이탈 화면만 표시
             _onRoomFull?.call(data['redirectTo']?.toString(), data['roomName']?.toString());
           } else {
             debugPrint('[STOMP] Server error: $data');
