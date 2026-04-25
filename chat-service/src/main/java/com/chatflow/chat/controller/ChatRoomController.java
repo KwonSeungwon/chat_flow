@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.DmRoomService;
@@ -11,6 +12,7 @@ import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReadService;
 import com.chatflow.chat.service.MessageReactionService;
 import com.chatflow.chat.service.ReadReceiptService;
+import com.chatflow.chat.service.RoomVisibilityService;
 import com.chatflow.chat.service.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
@@ -26,6 +28,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.RequestHeader;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,10 +54,23 @@ public class ChatRoomController {
     private final AuditService auditService;
     private final StringRedisTemplate redisTemplate;
     private final ReadReceiptService readReceiptService;
+    private final RoomVisibilityService roomVisibilityService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms() {
-        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.getAllRooms()));
+    public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        List<ChatRoom> rooms = chatRoomService.getAllRooms();
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.ok(rooms));
+        }
+        Map<String, Instant> hiddenMap = roomVisibilityService.getHiddenMap(userId);
+        if (hiddenMap.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.ok(rooms));
+        }
+        List<ChatRoom> visible = rooms.stream()
+                .filter(r -> roomVisibilityService.isVisible(r, hiddenMap))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(visible));
     }
 
     @GetMapping("/unread-counts")
@@ -291,6 +307,32 @@ public class ChatRoomController {
         }
         chatRoomService.leaveRoom(roomId, userId, username);
         return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
+    }
+
+    /**
+     * DM 방 per-user soft-hide. 본인 화면에서만 숨김 처리.
+     * 상대가 새 메시지 보내면 자동 재출현 (lastMessageAt > hidden_at).
+     * 단체방/HANDOFF는 hide 불가 -- 기존 leave 사용.
+     */
+    @PostMapping("/{roomId}/hide")
+    public ResponseEntity<ApiResponse<Void>> hideRoom(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (room.getRoomType() != RoomType.DIRECT) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("DM 방만 숨길 수 있습니다. 단체방은 나가기를 사용하세요."));
+        }
+        roomVisibilityService.hide(userId, roomId);
+        return ResponseEntity.ok(ApiResponse.ok(null, "방을 숨겼습니다"));
     }
 
     @GetMapping("/{roomId}/readers")
