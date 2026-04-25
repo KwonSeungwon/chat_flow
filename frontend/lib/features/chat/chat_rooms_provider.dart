@@ -62,6 +62,16 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     }
   }
 
+  Future<bool> hideRoom(String id) async {
+    try {
+      await _dioClient.dio.post('/api/chat/rooms/$id/hide');
+      await fetchRooms();
+      return true;
+    } on DioException {
+      return false;
+    }
+  }
+
   Future<Map<String, int>> fetchUnreadCounts() async {
     try {
       final resp = await _dioClient.dio.get('/api/chat/rooms/unread-counts');

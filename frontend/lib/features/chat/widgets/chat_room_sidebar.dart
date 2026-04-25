@@ -226,6 +226,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                   _applyFcmSubscription(ref, room.id, p);
                                 },
                                 onDelete: () => _showDeleteRoomDialog(context, room),
+                                onHide: () => _showHideRoomDialog(context, room),
                               );
                             },
                           ),
@@ -365,6 +366,54 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
               if (ok && ctx.mounted) Navigator.of(ctx).pop();
             },
             child: const Text('입장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHideRoomDialog(BuildContext context, ChatRoom room) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('방 숨기기'),
+        content: const Text('이 대화를 목록에서 숨깁니다.\n상대가 새 메시지를 보내면 다시 보입니다.'),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('취소'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await ref.read(chatRoomsProvider.notifier).hideRoom(room.id);
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('방 숨기기에 실패했습니다.')),
+                      );
+                      return;
+                    }
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('방을 숨겼습니다.')),
+                      );
+                    }
+                    if (context.mounted && room.id == widget.currentRoomId) {
+                      context.go('/chat');
+                    }
+                  },
+                  child: const Text('숨기기'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -581,6 +630,7 @@ class _RoomTile extends StatefulWidget {
   final int unreadCount;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
+  final VoidCallback? onHide;
   final void Function(NotificationPolicy)? onPolicyChange;
 
   const _RoomTile({
@@ -592,6 +642,7 @@ class _RoomTile extends StatefulWidget {
     required this.unreadCount,
     required this.onTap,
     this.onDelete,
+    this.onHide,
     this.onPolicyChange,
   });
 
@@ -628,7 +679,14 @@ class _RoomTileState extends State<_RoomTile> {
               },
             )),
             const Divider(height: 1),
-            if (widget.onDelete != null)
+            if (_isDm && widget.onHide != null)
+              ListTile(
+                leading: const Icon(Icons.visibility_off_outlined),
+                title: const Text('방 숨기기'),
+                subtitle: const Text('상대가 새 메시지를 보내면 다시 보입니다'),
+                onTap: () { Navigator.of(ctx).pop(); widget.onHide?.call(); },
+              ),
+            if (!_isDm && widget.onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('채팅방 삭제', style: TextStyle(color: Colors.red)),
@@ -659,7 +717,13 @@ class _RoomTileState extends State<_RoomTile> {
             Text(p.label),
           ]),
         )),
-        if (widget.onDelete != null)
+        if (_isDm && widget.onHide != null)
+          const PopupMenuItem(value: 'hide', child: Row(children: [
+            Icon(Icons.visibility_off_outlined, size: 18),
+            SizedBox(width: 8),
+            Text('방 숨기기'),
+          ])),
+        if (!_isDm && widget.onDelete != null)
           const PopupMenuItem(value: 'delete', child: Row(children: [
             Icon(Icons.delete_outline, size: 18, color: Colors.red),
             SizedBox(width: 8),
@@ -673,6 +737,7 @@ class _RoomTileState extends State<_RoomTile> {
         final p = NotificationPolicy.values.firstWhere((e) => e.name == name, orElse: () => NotificationPolicy.all);
         widget.onPolicyChange?.call(p);
       }
+      if (value == 'hide') widget.onHide?.call();
       if (value == 'delete') widget.onDelete?.call();
     });
   }
