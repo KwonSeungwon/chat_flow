@@ -48,10 +48,17 @@ public class MessageEventListener {
             String senderId = message.getUserId();
             List<String> mentioned = extractMentionedUsernames(message.getContent());
 
+            // Truncate content to 200 chars for keyword-matching on the client.
+            // FILE messages may have empty content — fall back to empty string.
+            String content = message.getContent() != null ? message.getContent() : "";
+            if (content.length() > 200) content = content.substring(0, 200);
+
             Map<String, Object> payload = Map.of(
                     "type", "UNREAD_INCREMENT",
                     "roomId", message.getChatRoomId(),
                     "senderId", senderId != null ? senderId : "",
+                    "senderUsername", message.getUsername() != null ? message.getUsername() : "",
+                    "content", content,
                     "mentionedUsernames", mentioned,
                     "timestamp", LocalDateTime.now().toString());
 

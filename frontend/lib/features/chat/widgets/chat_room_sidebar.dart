@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider;
 import 'create_room_dialog.dart';
 
 
@@ -48,7 +48,13 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
       ref.read(appStompServiceProvider).connect(
         userId: auth.userId!,
         token: auth.token!,
-        onRoomUpdate: (roomId, type, {List<String> mentionedUsernames = const []}) {
+        onRoomUpdate: (
+          roomId,
+          type, {
+          List<String> mentionedUsernames = const [],
+          String content = '',
+          String senderUsername = '',
+        }) {
           if (_disposed) return;
           if (type != 'UNREAD_INCREMENT') return;
           // Skip increment if user is currently viewing this room
@@ -58,13 +64,18 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
           final policy = ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId);
           final currentUsername = ref.read(authProvider).username;
           final isMentioningMe = mentionedUsernames.contains(currentUsername);
+          // Keyword bypass: even MUTED/MENTIONS_ONLY rooms surface unread when
+          // user-defined keywords appear in the content (frontend-only).
+          final isKeywordHit =
+              ref.read(roomKeywordsProvider.notifier).matches(roomId, content);
 
           // Policy-based filtering
           switch (policy) {
             case NotificationPolicy.muted:
-              return; // fully muted — do not increment count
+              if (!isKeywordHit) return; // muted — only keyword hits surface
+              break;
             case NotificationPolicy.mentionsOnly:
-              if (!isMentioningMe) return;
+              if (!isMentioningMe && !isKeywordHit) return;
               break;
             case NotificationPolicy.all:
               break;
@@ -195,6 +206,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                               final room = sortedRooms[index];
                               final unread = unreadCounts[room.id] ?? 0;
                               final policy = policies[room.id] ?? NotificationPolicy.all;
+                              final keywords = ref.watch(roomKeywordsProvider)[room.id] ?? const <String>[];
                               return _RoomTile(
                                 room: room,
                                 color: _roomColor(room),
@@ -202,6 +214,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                 isFull: room.isFull,
                                 policy: policy,
                                 unreadCount: unread,
+                                keywords: keywords,
                                 onTap: room.isFull &&
                                         room.id != widget.currentRoomId
                                     ? () => ScaffoldMessenger.of(context)
@@ -225,6 +238,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                   await ref.read(roomNotificationPolicyProvider.notifier).setPolicy(room.id, p);
                                   _applyFcmSubscription(ref, room.id, p);
                                 },
+                                onKeywordsTap: () => _showKeywordsDialog(context, room.id),
                                 onDelete: () => _showDeleteRoomDialog(context, room),
                                 onHide: () => _showHideRoomDialog(context, room),
                               );
@@ -328,6 +342,52 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
 
   void _showCreateDialog(BuildContext context) {
     showDialog(context: context, builder: (_) => const CreateRoomDialog());
+  }
+
+  void _showKeywordsDialog(BuildContext context, String roomId) {
+    final current = ref.read(roomKeywordsProvider.notifier).keywordsFor(roomId);
+    final controller = TextEditingController(text: current.join(', '));
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('키워드 알림'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '이 방에 다음 키워드가 포함된 메시지가 오면\n음소거 상태에서도 알림을 받습니다.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: '예: 환자명, 약명, STAT',
+                helperText: '콤마(,)로 구분',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final keywords = controller.text.split(',').map((e) => e.trim()).toList();
+              await ref.read(roomKeywordsProvider.notifier).setKeywords(roomId, keywords);
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showPasswordDialog(BuildContext context, ChatRoom room) {
@@ -635,9 +695,11 @@ class _RoomTile extends StatefulWidget {
   final bool isFull;
   final NotificationPolicy policy;
   final int unreadCount;
+  final List<String> keywords;
   final VoidCallback onTap;
   final VoidCallback? onDelete;
   final VoidCallback? onHide;
+  final VoidCallback? onKeywordsTap;
   final void Function(NotificationPolicy)? onPolicyChange;
 
   const _RoomTile({
@@ -647,9 +709,11 @@ class _RoomTile extends StatefulWidget {
     required this.isFull,
     this.policy = NotificationPolicy.all,
     required this.unreadCount,
+    this.keywords = const [],
     required this.onTap,
     this.onDelete,
     this.onHide,
+    this.onKeywordsTap,
     this.onPolicyChange,
   });
 
@@ -686,6 +750,20 @@ class _RoomTileState extends State<_RoomTile> {
               },
             )),
             const Divider(height: 1),
+            if (widget.onKeywordsTap != null)
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('키워드 알림'),
+                subtitle: Text(
+                  widget.keywords.isEmpty ? '설정 안 됨' : widget.keywords.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  widget.onKeywordsTap?.call();
+                },
+              ),
             if (_isDm && widget.onHide != null)
               ListTile(
                 leading: const Icon(Icons.visibility_off_outlined),
@@ -724,6 +802,12 @@ class _RoomTileState extends State<_RoomTile> {
             Text(p.label),
           ]),
         )),
+        if (widget.onKeywordsTap != null)
+          const PopupMenuItem(value: 'keywords', child: Row(children: [
+            Icon(Icons.notifications_active_outlined, size: 18),
+            SizedBox(width: 8),
+            Text('키워드 알림'),
+          ])),
         if (_isDm && widget.onHide != null)
           const PopupMenuItem(value: 'hide', child: Row(children: [
             Icon(Icons.visibility_off_outlined, size: 18),
@@ -744,6 +828,7 @@ class _RoomTileState extends State<_RoomTile> {
         final p = NotificationPolicy.values.firstWhere((e) => e.name == name, orElse: () => NotificationPolicy.all);
         widget.onPolicyChange?.call(p);
       }
+      if (value == 'keywords') widget.onKeywordsTap?.call();
       if (value == 'hide') widget.onHide?.call();
       if (value == 'delete') widget.onDelete?.call();
     });
@@ -946,7 +1031,11 @@ class _RoomTileState extends State<_RoomTile> {
                             child: Icon(widget.policy.icon, size: 14,
                                 color: cs.onSurfaceVariant.withAlpha(120)),
                           ),
-                        if (widget.unreadCount > 0 && widget.policy != NotificationPolicy.muted) ...[
+                        // Badge shows whenever unread > 0 — for MUTED rooms the
+                        // count only increments on keyword match (see sidebar
+                        // STOMP handler), so a visible badge there means a
+                        // keyword hit and should surface.
+                        if (widget.unreadCount > 0) ...[
                           Container(
                             constraints: const BoxConstraints(minWidth: 18),
                             height: 18,

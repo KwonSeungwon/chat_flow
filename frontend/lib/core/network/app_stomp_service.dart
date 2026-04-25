@@ -4,7 +4,13 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
-typedef RoomUpdateCallback = void Function(String roomId, String type, {List<String> mentionedUsernames});
+typedef RoomUpdateCallback = void Function(
+  String roomId,
+  String type, {
+  List<String> mentionedUsernames,
+  String content,
+  String senderUsername,
+});
 
 /// App-level single STOMP connection for global subscriptions
 /// (e.g. /user/queue/room-updates for unread increments).
@@ -77,8 +83,16 @@ class AppStompService {
           final roomId = data['roomId']?.toString();
           final mentioned = (data['mentionedUsernames'] as List?)
               ?.map((e) => e.toString()).toList() ?? const <String>[];
+          final content = data['content']?.toString() ?? '';
+          final senderUsername = data['senderUsername']?.toString() ?? '';
           if (roomId != null && _onRoomUpdate != null) {
-            _onRoomUpdate!(roomId, type, mentionedUsernames: mentioned);
+            _onRoomUpdate!(
+              roomId,
+              type,
+              mentionedUsernames: mentioned,
+              content: content,
+              senderUsername: senderUsername,
+            );
           }
         } catch (e) {
           debugPrint('[AppSTOMP] Parse error: $e');

@@ -3,3 +3,4 @@
 export 'chat_rooms_provider.dart';
 export 'notification_policy_provider.dart';
 export 'chat_notifier.dart';
+export 'room_keywords_provider.dart';
