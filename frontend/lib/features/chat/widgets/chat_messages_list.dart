@@ -78,6 +78,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   List<ChatMessage>? _lastMessages;
   String? _lastReadMessageIdCache;
 
+  /// Number of automatic loadMoreHistory attempts for search-jump target
+  int _autoLoadAttempts = 0;
+  static const int _maxAutoLoadAttempts = 3;
+
   @override
   void initState() {
     super.initState();
@@ -109,14 +113,48 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   }
 
   /// Attempt to scroll to [widget.scrollToMessageId] if it exists in the list.
+  /// When the target message is not in the current messages (e.g. older than
+  /// the latest 50), automatically trigger [onLoadMoreHistory] up to
+  /// [_maxAutoLoadAttempts] times (~150 messages) so the user does not have
+  /// to scroll manually.
   void _tryScrollToTarget() {
     final target = widget.scrollToMessageId;
     if (target == null || target == _lastScrollTarget) return;
     final hasTarget = widget.messages.any((m) => m.effectiveId == target);
     if (hasTarget) {
+      _autoLoadAttempts = 0;
       _lastScrollTarget = target;
       _autoScroll = false;
       _scheduleScrollToTarget();
+      return;
+    }
+    // Target not found in loaded messages — load older history automatically.
+    if (_autoLoadAttempts < _maxAutoLoadAttempts && widget.hasMoreHistory) {
+      if (widget.isLoadingHistory) return; // wait for current load to finish
+      _autoLoadAttempts++;
+      _autoScroll = false; // suppress scroll-to-bottom during auto-load
+      debugPrint(
+        '[ChatMessagesList] target $target not found, '
+        'loading more history (attempt $_autoLoadAttempts)',
+      );
+      widget.onLoadMoreHistory?.call();
+      // didUpdateWidget will detect messages.length change and re-invoke
+      // _tryScrollToTarget on the next frame.
+      return;
+    }
+    // Max attempts reached or no more history — give up and notify user.
+    if (_lastScrollTarget != target) {
+      _lastScrollTarget = target; // prevent repeated SnackBars
+      _autoLoadAttempts = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('해당 메시지를 찾을 수 없습니다.'),
+            ),
+          );
+        }
+      });
     }
   }
 
@@ -147,9 +185,11 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   void didUpdateWidget(covariant ChatMessagesList oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // When messages load and there's a scroll target, scroll to it once
+    // When messages load and there's a scroll target, scroll to it once.
+    // Also retry when isLoadingHistory transitions false (load finished).
     if (widget.scrollToMessageId != null &&
-        widget.messages.length != oldWidget.messages.length) {
+        (widget.messages.length != oldWidget.messages.length ||
+         (!widget.isLoadingHistory && oldWidget.isLoadingHistory))) {
       _tryScrollToTarget();
       if (_lastScrollTarget == widget.scrollToMessageId) return;
     }
