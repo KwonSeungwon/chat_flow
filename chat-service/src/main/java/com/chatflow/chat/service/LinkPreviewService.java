@@ -1,7 +1,10 @@
 package com.chatflow.chat.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -11,6 +14,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -27,8 +31,12 @@ public class LinkPreviewService {
     private static final int LINK_PREVIEW_MAX_BYTES = 1_048_576; // 1 MB
     private static final Pattern TITLE_PATTERN =
             Pattern.compile("<title[^>]*>([^<]+)</title>", Pattern.CASE_INSENSITIVE);
+    private static final String CACHE_PREFIX = "chatflow:link-preview:";
+    private static final Duration CACHE_TTL = Duration.ofHours(1);
 
     private final RestClient restClient;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     private record ResolvedUrl(String safeUri, String originalHost) {}
 
@@ -71,6 +79,15 @@ public class LinkPreviewService {
 
     public Map<String, String> fetch(String url) {
         Map<String, String> result = new LinkedHashMap<>();
+        String cacheKey = CACHE_PREFIX + Math.abs(url.hashCode());
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            try {
+                return objectMapper.readValue(cached, new TypeReference<Map<String, String>>() {});
+            } catch (Exception e) {
+                log.debug("Cache parse failed, refetching: {}", e.getMessage());
+            }
+        }
         try {
             ResolvedUrl resolved = validateAndResolveUrl(url);
             String html = restClient.get()
@@ -98,6 +115,13 @@ public class LinkPreviewService {
                 if (!result.containsKey("title")) {
                     var m = TITLE_PATTERN.matcher(html);
                     if (m.find()) result.put("title", m.group(1).trim());
+                }
+            }
+            if (!result.isEmpty()) {
+                try {
+                    redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(result), CACHE_TTL);
+                } catch (Exception e) {
+                    log.debug("Cache write failed: {}", e.getMessage());
                 }
             }
         } catch (Exception e) {
