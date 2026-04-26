@@ -822,6 +822,26 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> searchParticipants(String roomId, String query) async {
+    try {
+      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/participants');
+      final data = resp.data;
+      List<dynamic> participants = [];
+      if (data is Map && data['data'] is List) {
+        participants = data['data'] as List;
+      } else if (data is List) {
+        participants = data;
+      }
+      final q = query.toLowerCase();
+      return participants
+          .where((p) => (p['username']?.toString() ?? '').toLowerCase().contains(q))
+          .map((p) => Map<String, dynamic>.from(p as Map))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   void notifyTyping(String roomId) {
     _typing.scheduleSend(() => _stompService.sendTyping(roomId));
   }

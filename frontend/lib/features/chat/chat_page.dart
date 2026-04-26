@@ -1553,16 +1553,9 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
           replyTarget: chatState.replyTarget,
           onCancelReply: () => chatNotifier.clearReplyTarget(),
           onTyping: () => chatNotifier.notifyTyping(widget.roomId),
-          onMentionSearch: (query) async {
-            try {
-              final resp = await ref.read(dioClientProvider).dio.get('/api/users/search', queryParameters: {'q': query});
-              final data = resp.data;
-              if (data is Map && data['data'] is List) {
-                return (data['data'] as List).cast<Map<String, dynamic>>();
-              }
-            } catch (_) {}
-            return [];
-          },
+          onMentionSearch: (query) => ref
+              .read(chatNotifierProvider(widget.roomId).notifier)
+              .searchParticipants(widget.roomId, query),
           onSend: (content, {String priority = 'ROUTINE'}) {
             chatNotifier.sendMessage(
                 roomId: widget.roomId, content: content, priority: priority);
