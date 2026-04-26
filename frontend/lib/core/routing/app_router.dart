@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/chat/chat_page.dart';
+import '../../features/chat/screens/invite_join_screen.dart';
 import '../../features/search/search_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
@@ -23,8 +24,14 @@ class _RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final auth = _ref.read(authProvider);
     if (!auth.isHydrated) return null;
-    final isLoginPage = state.matchedLocation == '/login';
-    if (!auth.isAuthenticated && !isLoginPage) return '/login';
+    final loc = state.matchedLocation;
+    final isLoginPage = loc == '/login';
+    final isInvitePage = loc.startsWith('/invite/');
+    if (!auth.isAuthenticated && !isLoginPage) {
+      // Preserve the invite path as a redirect target after login
+      if (isInvitePage) return '/login?redirect=${Uri.encodeComponent(loc)}';
+      return '/login';
+    }
     if (auth.isAuthenticated && isLoginPage) return '/chat';
     return null;
   }
@@ -66,6 +73,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/search',
         builder: (context, state) => const SearchPage(),
+      ),
+      GoRoute(
+        path: '/invite/:token',
+        builder: (context, state) {
+          final token = state.pathParameters['token'] ?? '';
+          return InviteJoinScreen(token: token);
+        },
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

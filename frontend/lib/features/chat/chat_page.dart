@@ -275,6 +275,34 @@ void _showBookmarksDialog(BuildContext context, WidgetRef ref) {
   );
 }
 
+Future<void> _copyInviteLink(BuildContext context, WidgetRef ref, String roomId) async {
+  try {
+    final dio = ref.read(dioClientProvider).dio;
+    final resp = await dio.post('/api/chat/rooms/$roomId/invite-link');
+    final data = resp.data;
+    String? url;
+    if (data is Map && data['data'] is Map) {
+      url = (data['data'] as Map)['url']?.toString();
+    }
+    if (url == null || url.isEmpty) throw Exception('url empty');
+    await Clipboard.setData(ClipboardData(text: url));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('초대 링크가 클립보드에 복사되었습니다 (24시간 유효)'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('초대 링크 생성에 실패했습니다')),
+      );
+    }
+  }
+}
+
 void _showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, ChatRoom room) {
   final nameCtrl = TextEditingController(text: room.name);
   final descCtrl = TextEditingController(text: room.description ?? '');
@@ -633,6 +661,12 @@ class ChatPage extends ConsumerWidget {
                 onPressed: () => _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
               ),
             if (effectiveRoomId != null)
+              IconButton(
+                icon: const Icon(Icons.person_add_outlined, size: 20),
+                tooltip: '초대 링크 복사',
+                onPressed: () => _copyInviteLink(context, ref, effectiveRoomId),
+              ),
+            if (effectiveRoomId != null)
               _AiSummaryButton(roomId: effectiveRoomId),
             if (effectiveRoomId != null)
               IconButton(
@@ -653,7 +687,9 @@ class ChatPage extends ConsumerWidget {
                 icon: const Icon(Icons.more_vert, size: 22),
                 tooltip: '메뉴',
                 onSelected: (value) {
-                  if (value == 'settings' && roomData != null) {
+                  if (value == 'invite_link') {
+                    _copyInviteLink(context, ref, effectiveRoomId);
+                  } else if (value == 'settings' && roomData != null) {
                     _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
                   } else if (value == 'ai_summary') {
                     ref.read(chatNotifierProvider(effectiveRoomId).notifier)
@@ -710,6 +746,16 @@ class ChatPage extends ConsumerWidget {
                         ],
                       ),
                     ),
+                  const PopupMenuItem(
+                    value: 'invite_link',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_add_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('초대 링크 복사'),
+                      ],
+                    ),
+                  ),
                   const PopupMenuItem(
                     value: 'ai_summary',
                     child: Row(
