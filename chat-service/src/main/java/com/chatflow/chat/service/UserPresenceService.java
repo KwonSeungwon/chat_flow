@@ -173,7 +173,7 @@ public class UserPresenceService {
             return Set.of();
         }
         return members.stream()
-                .map(e -> e.split(":")[0])
+                .map(e -> e.split(":", 3)[0])
                 .collect(java.util.stream.Collectors.toSet());
     }
 
