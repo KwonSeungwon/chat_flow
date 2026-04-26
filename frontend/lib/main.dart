@@ -15,15 +15,37 @@ import 'core/theme/theme_provider.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try { await dotenv.load(fileName: '.env'); } catch (_) {}
+  // Suppress Flutter Web SDK noise from focus_traversal.dart's
+  // `nearestCommonDirectionality!` null-assert (fires on _viewFocusBinding
+  // before the widget tree has a Directionality ancestor). The error never
+  // reaches user code and the app keeps working — silencing the console noise.
+  bool isHarmlessFocusTraversalError(Object error, StackTrace stack) {
+    final s = stack.toString();
+    return s.contains('focus_traversal.dart') &&
+        s.contains('_pickNext');
+  }
 
-  // runApp 먼저 호출 — Firebase/FCM이 hang되어도 UI는 즉시 표시되어야 함.
-  // 특히 web에서 requestPermission이 user gesture 없이 hang되던 문제 수정.
-  runApp(const ProviderScope(child: ChatFlowApp()));
+  runZonedGuarded<Future<void>>(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    try { await dotenv.load(fileName: '.env'); } catch (_) {}
 
-  // Firebase + FCM 초기화는 background fire-and-forget.
-  _initFirebaseInBackground();
+    final defaultErrorHandler = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (isHarmlessFocusTraversalError(details.exception, details.stack ?? StackTrace.empty)) return;
+      defaultErrorHandler?.call(details);
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      if (isHarmlessFocusTraversalError(error, stack)) return true;
+      return false;
+    };
+
+    runApp(const ProviderScope(child: ChatFlowApp()));
+    _initFirebaseInBackground();
+  }, (error, stack) {
+    if (isHarmlessFocusTraversalError(error, stack)) return;
+    debugPrint('[uncaught] $error\n$stack');
+  });
 }
 
 Future<void> _initFirebaseInBackground() async {
@@ -56,7 +78,12 @@ class ChatFlowApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
     final fontScale = ref.watch(fontScaleProvider);
-    return AppShortcuts(
+    // Override default ReadingOrderTraversalPolicy with WidgetOrderTraversalPolicy.
+    // ReadingOrderTraversalPolicy has a known bug (`nearestCommonDirectionality!`
+    // throws on null when focus nodes lack a common Directionality ancestor),
+    // which fires on Flutter Web's view focus binding at app start.
+    return FocusTraversalGroup(
+      policy: WidgetOrderTraversalPolicy(),
       child: MaterialApp.router(
         title: 'ChatFlow',
         debugShowCheckedModeBanner: false,
@@ -69,7 +96,7 @@ class ChatFlowApp extends ConsumerWidget {
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(fontScale.factor),
             ),
-            child: child ?? const SizedBox(),
+            child: AppShortcuts(child: child ?? const SizedBox()),
           );
         },
       ),
