@@ -54,6 +54,8 @@ public abstract class BaseMessage {
     private String parentMessageId;
     private String parentMessagePreview;  // "username: truncated content"
 
+    private String forwardedFrom;  // "originalSender: truncatedContent" — 전달 메시지 원본 발신자+내용 요약
+
     public enum MessageType {
         CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD, FILE
     }

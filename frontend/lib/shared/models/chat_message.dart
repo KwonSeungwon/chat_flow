@@ -24,6 +24,7 @@ class ChatMessage {
   final bool pinned;
   /// JSON map: {"emoji": ["userId1","userId2"]}
   final Map<String, List<String>> reactions;
+  final String? forwardedFrom;
   final String? localId;
   final MessageDeliveryStatus deliveryStatus;
 
@@ -48,6 +49,7 @@ class ChatMessage {
     this.editedAt,
     this.pinned = false,
     this.reactions = const {},
+    this.forwardedFrom,
     this.localId,
     this.deliveryStatus = MessageDeliveryStatus.sent,
   });
@@ -99,6 +101,7 @@ class ChatMessage {
       editedAt: json['editedAt']?.toString(),
       pinned: json['pinned'] == true,
       reactions: parseReactions(json['reactions']),
+      forwardedFrom: json['forwardedFrom']?.toString(),
       deliveryStatus: MessageDeliveryStatus.sent,
     );
   }
@@ -134,6 +137,7 @@ class ChatMessage {
     if (fileContentType != null) 'fileContentType': fileContentType,
     if (parentMessageId != null) 'parentMessageId': parentMessageId,
     if (parentMessagePreview != null) 'parentMessagePreview': parentMessagePreview,
+    if (forwardedFrom != null) 'forwardedFrom': forwardedFrom,
   };
 
   ChatMessage copyWith({
@@ -157,6 +161,7 @@ class ChatMessage {
     String? editedAt,
     bool? pinned,
     Map<String, List<String>>? reactions,
+    String? forwardedFrom,
     String? localId,
     MessageDeliveryStatus? deliveryStatus,
   }) {
@@ -181,6 +186,7 @@ class ChatMessage {
       editedAt: editedAt ?? this.editedAt,
       pinned: pinned ?? this.pinned,
       reactions: reactions ?? this.reactions,
+      forwardedFrom: forwardedFrom ?? this.forwardedFrom,
       localId: localId ?? this.localId,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
     );

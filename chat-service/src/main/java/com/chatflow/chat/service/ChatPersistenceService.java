@@ -55,6 +55,7 @@ public class ChatPersistenceService {
                 .fileContentType(message.getFileContentType())
                 .parentMessageId(message.getParentMessageId())
                 .parentMessagePreview(message.getParentMessagePreview())
+                .forwardedFrom(message.getForwardedFrom())
                 .build();
         chatMessageRepository.save(entity);
 

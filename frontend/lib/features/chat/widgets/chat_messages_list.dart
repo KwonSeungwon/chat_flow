@@ -1455,6 +1455,28 @@ class _ChatBubble extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (msg.forwardedFrom != null)
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withAlpha(20),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.forward, size: 12, color: Colors.white.withAlpha(160)),
+                                          const SizedBox(width: 4),
+                                          Flexible(child: Text(
+                                            msg.forwardedFrom!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 11, color: Colors.white.withAlpha(160)),
+                                          )),
+                                        ],
+                                      ),
+                                    ),
                                   if (msg.isReply) ...[
                                     GestureDetector(
                                       onTap: onScrollToParent,
@@ -1525,6 +1547,28 @@ class _ChatBubble extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  if (msg.forwardedFrom != null)
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.onSurface.withAlpha(12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.forward, size: 12, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
+                                          const SizedBox(width: 4),
+                                          Flexible(child: Text(
+                                            msg.forwardedFrom!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
+                                          )),
+                                        ],
+                                      ),
+                                    ),
                                   if (msg.isReply) ...[
                                     GestureDetector(
                                       onTap: onScrollToParent,

@@ -7,12 +7,14 @@ import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.DmRoomService;
 import com.chatflow.chat.service.MessageReadService;
+import com.chatflow.chat.service.MessageSenderService;
 import com.chatflow.chat.service.ParticipantService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.chat.service.RoomVisibilityService;
 import com.chatflow.chat.service.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
+import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -49,6 +51,7 @@ public class ChatRoomController {
     private final StringRedisTemplate redisTemplate;
     private final ReadReceiptService readReceiptService;
     private final RoomVisibilityService roomVisibilityService;
+    private final MessageSenderService messageSenderService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
@@ -351,6 +354,40 @@ public class ChatRoomController {
         }
         readReceiptService.markRead(roomId, userId, username != null ? username : "", lastReadMessageId);
         return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    /**
+     * REST fallback for sending a message when STOMP is disconnected.
+     * Also used for forwarded messages with forwardedFrom metadata.
+     */
+    @PostMapping("/{roomId}/messages")
+    public ResponseEntity<ApiResponse<Void>> sendMessage(
+            @PathVariable String roomId,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        String content = body.get("content");
+        if (content == null || content.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("content가 필요합니다."));
+        }
+        ChatMessage msg = new ChatMessage();
+        msg.setChatRoomId(roomId);
+        msg.setUserId(userId);
+        msg.setUsername(username != null ? username : userId);
+        msg.setContent(content);
+        msg.setType(ChatMessage.MessageType.CHAT);
+        msg.setPriority("ROUTINE");
+        String forwardedFrom = body.get("forwardedFrom");
+        if (forwardedFrom != null && !forwardedFrom.isBlank()) {
+            msg.setForwardedFrom(forwardedFrom);
+        }
+        messageSenderService.send(msg);
+        return ResponseEntity.ok(ApiResponse.ok(null, "메시지를 전송했습니다."));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}

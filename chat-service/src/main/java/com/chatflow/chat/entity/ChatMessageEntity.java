@@ -72,6 +72,9 @@ public class ChatMessageEntity implements Persistable<String> {
     @Column(length = 150)
     private String parentMessagePreview;
 
+    @Column(length = 200)
+    private String forwardedFrom;
+
     @Builder.Default
     @Column(name = "is_deleted")
     private boolean deleted = false;

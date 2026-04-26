@@ -783,23 +783,36 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
-    if (!_stompService.isConnected) return false;
     final isFile = msg.isFileMessage;
-    _stompService.sendMessage({
-      'chatRoomId': targetRoomId,
-      'userId': _userId,
-      'username': _username,
-      'content': isFile
-          ? '[전달] ${msg.username}: ${msg.content}'
-          : '[전달] ${msg.username}: ${msg.content}',
-      'type': isFile ? 'FILE' : 'CHAT',
-      'priority': 'ROUTINE',
-      'timestamp': DateTime.now().toIso8601String(),
-      if (isFile) 'fileUrl': msg.fileUrl,
-      if (isFile) 'fileName': msg.fileName,
-      if (isFile) 'fileContentType': msg.fileContentType,
-    });
-    return true;
+    final content = '[전달] ${msg.username}: ${msg.content}';
+    final forwardedFrom = '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
+
+    if (_stompService.isConnected) {
+      _stompService.sendMessage({
+        'chatRoomId': targetRoomId,
+        'userId': _userId,
+        'username': _username,
+        'content': content,
+        'type': isFile ? 'FILE' : 'CHAT',
+        'priority': 'ROUTINE',
+        'timestamp': DateTime.now().toIso8601String(),
+        'forwardedFrom': forwardedFrom,
+        if (isFile) 'fileUrl': msg.fileUrl,
+        if (isFile) 'fileName': msg.fileName,
+        if (isFile) 'fileContentType': msg.fileContentType,
+      });
+      return true;
+    }
+    // REST fallback when STOMP is disconnected
+    try {
+      await _dioClient.dio.post(
+        '/api/chat/rooms/$targetRoomId/messages',
+        data: {'content': content, 'forwardedFrom': forwardedFrom},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void notifyTyping(String roomId) {
