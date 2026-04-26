@@ -2,8 +2,8 @@ package com.chatflow.chat.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -25,7 +25,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LinkPreviewService {
 
     private static final int LINK_PREVIEW_MAX_BYTES = 1_048_576; // 1 MB
@@ -37,6 +36,15 @@ public class LinkPreviewService {
     private final RestClient restClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+
+    public LinkPreviewService(
+            @Qualifier("linkPreviewRestClient") RestClient restClient,
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper) {
+        this.restClient = restClient;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+    }
 
     private record ResolvedUrl(String safeUri, String originalHost) {}
 
@@ -79,7 +87,7 @@ public class LinkPreviewService {
 
     public Map<String, String> fetch(String url) {
         Map<String, String> result = new LinkedHashMap<>();
-        String cacheKey = CACHE_PREFIX + Math.abs(url.hashCode());
+        String cacheKey = CACHE_PREFIX + (url.length() > 200 ? url.substring(0, 200) : url);
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             try {

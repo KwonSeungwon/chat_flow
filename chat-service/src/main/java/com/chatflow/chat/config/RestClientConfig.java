@@ -17,4 +17,14 @@ public class RestClientConfig {
                 .requestFactory(factory)
                 .build();
     }
+
+    @Bean
+    public RestClient linkPreviewRestClient() {
+        var factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(3000);
+        factory.setReadTimeout(8000);
+        return RestClient.builder()
+                .requestFactory(factory)
+                .build();
+    }
 }
