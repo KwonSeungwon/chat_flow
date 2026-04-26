@@ -535,6 +535,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                       );
                       return;
                     }
+                    // Clean up per-room storage for the deleted room
+                    ref.read(roomKeywordsProvider.notifier).removeRoom(room.id);
+                    ref.read(roomNotificationPolicyProvider.notifier).removeRoom(room.id);
                     if (context.mounted && room.id == widget.currentRoomId) {
                       context.go('/chat');
                     }

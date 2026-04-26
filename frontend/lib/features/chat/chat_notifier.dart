@@ -17,6 +17,7 @@ import 'chat_rooms_provider.dart';
 import 'helpers/offline_message_queue.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
+import 'room_keywords_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Chat Messages
@@ -482,6 +483,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       await _dioClient.dio.delete('/api/chat/rooms/$roomId/members/me');
       _stompService.disconnect();
       state = const ChatMessagesState();
+      // Clean up per-room storage for the left room
+      _ref.read(roomKeywordsProvider.notifier).removeRoom(roomId);
+      _ref.read(roomNotificationPolicyProvider.notifier).removeRoom(roomId);
       // 사이드바에서 나간 방이 즉시 제거되도록 방 목록 재조회
       _ref.read(chatRoomsProvider.notifier).fetchRooms();
       return true;

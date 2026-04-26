@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -66,6 +67,9 @@ public class UserPresenceService {
         String safeSessionId = sessionId != null ? sessionId : "unknown";
         String entry = safeUserId + ":" + safeSessionId + ":" + message.getUsername();
         redisTemplate.opsForSet().add(participantKey, entry);
+        // Safety-net TTL: if the server crashes without a clean leave, stale keys expire in 7 days.
+        // Refreshed on every join, so active rooms are never evicted.
+        redisTemplate.expire(participantKey, 7, TimeUnit.DAYS);
 
         // Sync DB participantCount from Redis SET (unique user count)
         syncParticipantCount(message.getChatRoomId());

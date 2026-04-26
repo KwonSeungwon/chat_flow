@@ -47,6 +47,15 @@ class RoomKeywordsNotifier extends StateNotifier<Map<String, List<String>>> {
     } catch (_) {/* best-effort */}
   }
 
+  Future<void> removeRoom(String roomId) async {
+    final updated = Map<String, List<String>>.from(state);
+    if (updated.remove(roomId) == null) return;
+    state = updated;
+    try {
+      await _storage.write(key: _storageKey, value: jsonEncode(updated));
+    } catch (_) {/* best-effort */}
+  }
+
   /// content에 keywords 중 하나라도 포함되면 true (case-insensitive)
   bool matches(String roomId, String content) {
     final list = keywordsFor(roomId);

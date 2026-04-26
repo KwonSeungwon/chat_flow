@@ -78,6 +78,14 @@ class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, Notificat
     await _persist();
   }
 
+  Future<void> removeRoom(String roomId) async {
+    if (!state.containsKey(roomId)) return;
+    final updated = Map<String, NotificationPolicy>.from(state);
+    updated.remove(roomId);
+    state = updated;
+    await _persist();
+  }
+
   Future<void> _persist() async {
     final serializable = state.map((k, v) => MapEntry(k, v.name));
     await _policyStorage.write(key: _policyKey, value: jsonEncode(serializable));
