@@ -85,6 +85,7 @@ class ChatMessagesState {
     bool clearReplyTarget = false,
     ChatExitReason? exitReason,
     String? redirectTo,
+    bool clearRedirectTo = false,
     Set<String>? typingUsers,
     int? participantCount,
   }) {
@@ -103,7 +104,7 @@ class ChatMessagesState {
       lastReadMessageId: clearLastReadMessageId ? null : (lastReadMessageId ?? this.lastReadMessageId),
       replyTarget: clearReplyTarget ? null : (replyTarget ?? this.replyTarget),
       exitReason: exitReason ?? this.exitReason,
-      redirectTo: redirectTo ?? this.redirectTo,
+      redirectTo: clearRedirectTo ? null : (redirectTo ?? this.redirectTo),
       typingUsers: typingUsers ?? this.typingUsers,
       participantCount: participantCount ?? this.participantCount,
     );
@@ -147,6 +148,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       readCounts: {},
       readPositions: {},
       clearLastReadMessageId: true,
+      exitReason: ChatExitReason.none,
+      clearRedirectTo: true,
     );
 
     // Fetch initial read positions for this room (non-blocking, best effort)

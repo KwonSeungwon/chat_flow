@@ -104,7 +104,7 @@ public class ParticipantService {
                 Set<String> members = redisTemplate.opsForSet().members(participantKey);
                 if (members != null) {
                     uniqueUserCount = (int) members.stream()
-                            .map(e -> e.split(":")[0])
+                            .map(e -> e.split(":", 3)[0])
                             .distinct()
                             .count();
                 }
