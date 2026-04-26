@@ -40,11 +40,18 @@ class _InviteJoinScreenState extends ConsumerState<InviteJoinScreen> {
         roomName = d['roomName']?.toString();
       }
       if (mounted) {
-        setState(() {
-          _roomId = roomId;
-          _roomName = roomName;
-          _loading = false;
-        });
+        if (roomId == null || roomId.isEmpty) {
+          setState(() {
+            _error = '초대 링크가 유효하지 않습니다';
+            _loading = false;
+          });
+        } else {
+          setState(() {
+            _roomId = roomId;
+            _roomName = roomName;
+            _loading = false;
+          });
+        }
       }
     } on DioException catch (e) {
       String errorMessage;
