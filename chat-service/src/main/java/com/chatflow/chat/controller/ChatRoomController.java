@@ -6,6 +6,7 @@ import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.DmRoomService;
+import com.chatflow.chat.service.InviteLinkService;
 import com.chatflow.chat.service.MessageReadService;
 import com.chatflow.chat.service.MessageSenderService;
 import com.chatflow.chat.service.ParticipantService;
@@ -52,6 +53,7 @@ public class ChatRoomController {
     private final ReadReceiptService readReceiptService;
     private final RoomVisibilityService roomVisibilityService;
     private final MessageSenderService messageSenderService;
+    private final InviteLinkService inviteLinkService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
@@ -388,6 +390,69 @@ public class ChatRoomController {
         }
         messageSenderService.send(msg);
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지를 전송했습니다."));
+    }
+
+    /**
+     * 초대 링크 생성. 24시간 유효한 토큰을 발급하고 초대 URL을 반환한다.
+     * POST /api/chat/rooms/{roomId}/invite-link
+     */
+    @PostMapping("/{roomId}/invite-link")
+    public ResponseEntity<ApiResponse<Map<String, String>>> createInviteLink(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        String token = inviteLinkService.createInviteToken(roomId);
+        String url = "https://app.chatflow.ai.kr/invite/" + token;
+        Map<String, String> data = new LinkedHashMap<>();
+        data.put("token", token);
+        data.put("url", url);
+        return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
+    /**
+     * 초대 링크로 채팅방 참가. 토큰을 검증하고 대상 채팅방 정보를 반환한다.
+     * POST /api/chat/rooms/join-by-invite
+     * Body: {"token": "uuid"}
+     */
+    @PostMapping("/join-by-invite")
+    public ResponseEntity<ApiResponse<Map<String, String>>> joinByInvite(
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        String token = body.get("token");
+        if (token == null || token.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("token이 필요합니다."));
+        }
+        String roomId = inviteLinkService.resolveToken(token);
+        if (roomId == null) {
+            return ResponseEntity.status(HttpStatus.GONE)
+                    .body(ApiResponse.error("초대 링크가 만료되었거나 유효하지 않습니다."));
+        }
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (participantService.isRoomFull(roomId)) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
+        }
+        Map<String, String> data = new LinkedHashMap<>();
+        data.put("roomId", room.getId());
+        data.put("roomName", room.getName());
+        return ResponseEntity.ok(ApiResponse.ok(data));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}
