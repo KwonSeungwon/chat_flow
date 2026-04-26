@@ -8,6 +8,7 @@ class ChatRoom {
   final bool isPrivate;
   final int participantCount;
   final int maxParticipants;
+  final String? createdBy;
   final String? createdAt;
   final String? lastMessageAt;
   final String? pinnedMessageId;
@@ -22,6 +23,7 @@ class ChatRoom {
     this.isPrivate = false,
     required this.participantCount,
     this.maxParticipants = 10,
+    this.createdBy,
     this.createdAt,
     this.lastMessageAt,
     this.pinnedMessageId,
@@ -38,6 +40,7 @@ class ChatRoom {
       isPrivate: json['isPrivate'] == true || json['private'] == true,
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
       maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? 10,
+      createdBy: json['createdBy']?.toString(),
       createdAt: json['createdAt']?.toString(),
       lastMessageAt: json['lastMessageAt']?.toString(),
       pinnedMessageId: json['pinnedMessageId']?.toString(),
@@ -54,6 +57,7 @@ class ChatRoom {
     bool? isPrivate,
     int? participantCount,
     int? maxParticipants,
+    String? createdBy,
     String? createdAt,
     String? lastMessageAt,
     String? pinnedMessageId,
@@ -68,6 +72,7 @@ class ChatRoom {
       isPrivate: isPrivate ?? this.isPrivate,
       participantCount: participantCount ?? this.participantCount,
       maxParticipants: maxParticipants ?? this.maxParticipants,
+      createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       pinnedMessageId: pinnedMessageId ?? this.pinnedMessageId,

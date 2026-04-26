@@ -207,6 +207,8 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                               final unread = unreadCounts[room.id] ?? 0;
                               final policy = policies[room.id] ?? NotificationPolicy.all;
                               final keywords = ref.watch(roomKeywordsProvider)[room.id] ?? const <String>[];
+                              final currentUserId = ref.watch(authProvider.select((s) => s.userId));
+                              final isOwner = room.createdBy != null && room.createdBy == currentUserId;
                               return _RoomTile(
                                 room: room,
                                 color: _roomColor(room),
@@ -239,7 +241,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                   _applyFcmSubscription(ref, room.id, p);
                                 },
                                 onKeywordsTap: () => _showKeywordsDialog(context, room.id),
-                                onDelete: () => _showDeleteRoomDialog(context, room),
+                                onDelete: isOwner ? () => _showDeleteRoomDialog(context, room) : null,
                                 onHide: () => _showHideRoomDialog(context, room),
                               );
                             },
