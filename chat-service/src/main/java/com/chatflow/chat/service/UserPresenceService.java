@@ -28,28 +28,36 @@ public class UserPresenceService {
 
     public void join(ChatMessage message, String sessionId) {
         if (participantService.isRoomFull(message.getChatRoomId())) {
-            ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
+            // 본인이 이미 참여 중이면 정원 추가 없음 — 만석 분기 skip (다른 세션 재입장 허용)
+            Set<String> existing = getRoomParticipantUserIds(message.getChatRoomId());
+            String safeUserId = message.getUserId() != null ? message.getUserId() : "";
+            boolean alreadyJoined = !safeUserId.isEmpty() && existing.contains(safeUserId);
 
-            // DM(DIRECT) 방은 자동 분할하지 않음 -- 정원 초과 시 입장 거부
-            if (room != null && room.getRoomType() == RoomType.DIRECT) {
-                log.warn("DM room {} is full, rejecting user {}", message.getChatRoomId(), message.getUsername());
+            if (!alreadyJoined) {
+                ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
+
+                // DM(DIRECT) 방은 자동 분할하지 않음 -- 정원 초과 시 입장 거부
+                if (room != null && room.getRoomType() == RoomType.DIRECT) {
+                    log.warn("DM room {} is full, rejecting user {}", message.getChatRoomId(), message.getUsername());
+                    messagingTemplate.convertAndSend(
+                            "/topic/chat/" + message.getChatRoomId() + "/errors",
+                            java.util.Map.of("type", "ROOM_FULL_DM", "roomId", message.getChatRoomId(),
+                                    "roomName", room.getName()));
+                    return;
+                }
+
+                String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
+                ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
+
+                log.info("Room {} full, redirecting user {} to {}",
+                        message.getChatRoomId(), message.getUsername(), newRoom.getId());
                 messagingTemplate.convertAndSend(
                         "/topic/chat/" + message.getChatRoomId() + "/errors",
-                        java.util.Map.of("type", "ROOM_FULL_DM", "roomId", message.getChatRoomId(),
-                                "roomName", room.getName()));
-                return;
+                        java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+
+                message.setChatRoomId(newRoom.getId());
             }
-
-            String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
-            ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
-
-            log.info("Room {} full, redirecting user {} to {}",
-                    message.getChatRoomId(), message.getUsername(), newRoom.getId());
-            messagingTemplate.convertAndSend(
-                    "/topic/chat/" + message.getChatRoomId() + "/errors",
-                    java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
-
-            message.setChatRoomId(newRoom.getId());
+            // alreadyJoined이면 분기 통과 — 동일 방에 추가 entry만 등록 (sessionId 다름)
         }
 
         message.setType(ChatMessage.MessageType.JOIN);

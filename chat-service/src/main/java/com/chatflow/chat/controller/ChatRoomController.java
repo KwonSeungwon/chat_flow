@@ -236,8 +236,8 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        // createdBy가 설정된 방은 방장만 삭제 가능 (null이면 레거시 방 — 제한 없음)
-        if (room.getCreatedBy() != null && !room.getCreatedBy().equals(userId)) {
+        // 방장만 삭제 가능. createdBy null인 레거시 방은 누구도 삭제 불가 (운영자 DB 직접 정리)
+        if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("채팅방 삭제 권한이 없습니다. 방장만 삭제할 수 있습니다."));
         }
