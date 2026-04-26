@@ -174,3 +174,24 @@ final appStompServiceProvider = Provider<AppStompService>((ref) {
 // ---------------------------------------------------------------------------
 
 final activeRoomIdProvider = StateProvider<String?>((ref) => null);
+
+// ---------------------------------------------------------------------------
+// Keyword alert — surfaces an in-app banner when a keyword match is detected
+// in a room the user is NOT currently viewing.
+// ---------------------------------------------------------------------------
+
+class KeywordAlert {
+  final String roomId;
+  final String roomName;
+  final String senderUsername;
+  final String snippet; // matched content preview (max 60 chars)
+
+  const KeywordAlert({
+    required this.roomId,
+    required this.roomName,
+    required this.senderUsername,
+    required this.snippet,
+  });
+}
+
+final keywordAlertProvider = StateProvider<KeywordAlert?>((ref) => null);

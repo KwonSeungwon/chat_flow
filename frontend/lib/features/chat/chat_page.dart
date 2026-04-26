@@ -1232,12 +1232,26 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
         widget.scrollToMessageId != null) {
       _replyScrollTarget = null;
     }
+    // Clear keyword alert when navigating to the alerted room
+    if (widget.roomId != oldWidget.roomId) {
+      final alert = ref.read(keywordAlertProvider);
+      if (alert != null && alert.roomId == widget.roomId) {
+        Future.microtask(() => ref.read(keywordAlertProvider.notifier).state = null);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatNotifierProvider(widget.roomId));
     final chatNotifier = ref.read(chatNotifierProvider(widget.roomId).notifier);
+
+    // Auto-clear keyword alert when viewing the alerted room
+    ref.listen<KeywordAlert?>(keywordAlertProvider, (prev, next) {
+      if (next != null && next.roomId == widget.roomId) {
+        Future.microtask(() => ref.read(keywordAlertProvider.notifier).state = null);
+      }
+    });
 
     // Route away on room exit (deleted or full)
     ref.listen(chatNotifierProvider(widget.roomId), (_, next) {
@@ -1375,6 +1389,42 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                         ref.read(chatRoomsProvider.notifier).fetchRooms();
                       } catch (_) {}
                     },
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        // Keyword alert banner
+        Builder(builder: (ctx) {
+          final alert = ref.watch(keywordAlertProvider);
+          if (alert == null) return const SizedBox.shrink();
+          return GestureDetector(
+            onTap: () {
+              ref.read(keywordAlertProvider.notifier).state = null;
+              context.push('/chat/${alert.roomId}');
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.amber.shade700,
+              child: Row(
+                children: [
+                  const Icon(Icons.notifications_active, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${alert.roomName}: ${alert.snippet}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 14, color: Colors.white),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    onPressed: () => ref.read(keywordAlertProvider.notifier).state = null,
                   ),
                 ],
               ),

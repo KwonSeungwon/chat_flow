@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider, keywordAlertProvider, KeywordAlert;
 import 'create_room_dialog.dart';
 
 
@@ -79,6 +79,22 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
               break;
             case NotificationPolicy.all:
               break;
+          }
+
+          // Surface in-app keyword alert banner
+          if (isKeywordHit) {
+            final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
+            final room = rooms.where((r) => r.id == roomId).firstOrNull;
+            final roomName = room?.name ?? roomId;
+            final snippet = content.length > 60
+                ? '${content.substring(0, 60)}...'
+                : content;
+            ref.read(keywordAlertProvider.notifier).state = KeywordAlert(
+              roomId: roomId,
+              roomName: roomName,
+              senderUsername: senderUsername,
+              snippet: snippet,
+            );
           }
 
           final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
