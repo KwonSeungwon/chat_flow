@@ -410,7 +410,7 @@ public class ChatRoomController {
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
         String token = inviteLinkService.createInviteToken(roomId);
-        String url = "https://app.chatflow.ai.kr/invite/" + token;
+        String url = inviteLinkService.getInviteUrl(token);
         Map<String, String> data = new LinkedHashMap<>();
         data.put("token", token);
         data.put("url", url);

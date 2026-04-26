@@ -88,6 +88,8 @@ spring:
 
 chatflow:
   allowed-origins: "https://app.chatflow.ai.kr,https://chatflow.ai.kr"
+  frontend:
+    base-url: https://app.chatflow.ai.kr
   file-storage:
     upload-dir: /app/uploads
 
