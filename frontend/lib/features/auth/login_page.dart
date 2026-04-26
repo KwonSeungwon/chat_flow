@@ -109,7 +109,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final auth = ref.watch(authProvider);
 
     ref.listen<AuthState>(authProvider, (_, next) {
-      if (next.isAuthenticated) context.go('/chat');
+      if (next.isAuthenticated) {
+        final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
+        context.go(redirect != null && redirect.isNotEmpty ? redirect : '/chat');
+      }
     });
 
     final colorScheme = Theme.of(context).colorScheme;
