@@ -27,12 +27,12 @@ public class UserPresenceService {
     private static final String CHAT_TOPIC = "chat-messages";
 
     public void join(ChatMessage message, String sessionId) {
-        if (participantService.isRoomFull(message.getChatRoomId())) {
-            // 본인이 이미 참여 중이면 정원 추가 없음 — 만석 분기 skip (다른 세션 재입장 허용)
-            Set<String> existing = getRoomParticipantUserIds(message.getChatRoomId());
-            String safeUserId = message.getUserId() != null ? message.getUserId() : "";
-            boolean alreadyJoined = !safeUserId.isEmpty() && existing.contains(safeUserId);
+        // 본인이 이미 다른 세션으로 참여 중인지 — 만석 분기 skip + system JOIN 노이즈 억제용
+        Set<String> existingUserIds = getRoomParticipantUserIds(message.getChatRoomId());
+        String currentUserId = message.getUserId() != null ? message.getUserId() : "";
+        boolean alreadyJoined = !currentUserId.isEmpty() && existingUserIds.contains(currentUserId);
 
+        if (participantService.isRoomFull(message.getChatRoomId())) {
             if (!alreadyJoined) {
                 ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
 
@@ -60,13 +60,6 @@ public class UserPresenceService {
             // alreadyJoined이면 분기 통과 — 동일 방에 추가 entry만 등록 (sessionId 다름)
         }
 
-        message.setType(ChatMessage.MessageType.JOIN);
-        message.setTimestamp(LocalDateTime.now());
-        message.setMessageId(UUID.randomUUID().toString());
-        message.setContent(message.getUsername() + "님이 입장하셨습니다.");
-
-        log.info("User {} joined chat room {}", message.getUsername(), message.getChatRoomId());
-
         // Track participant in Redis SET using sessionId for multi-tab deduplication
         String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
         String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
@@ -76,6 +69,21 @@ public class UserPresenceService {
 
         // Sync DB participantCount from Redis SET (unique user count)
         syncParticipantCount(message.getChatRoomId());
+
+        if (alreadyJoined) {
+            // 다른 세션(탭/디바이스)에서 같은 사용자가 재입장 — 시스템 JOIN/presence 노이즈 억제.
+            // entry는 위에서 이미 추가됐고, count는 unique userId 기준이라 변동 없음.
+            log.debug("User {} reconnected to room {} via additional session — suppressing JOIN broadcast",
+                    message.getUsername(), message.getChatRoomId());
+            return;
+        }
+
+        message.setType(ChatMessage.MessageType.JOIN);
+        message.setTimestamp(LocalDateTime.now());
+        message.setMessageId(UUID.randomUUID().toString());
+        message.setContent(message.getUsername() + "님이 입장하셨습니다.");
+
+        log.info("User {} joined chat room {}", message.getUsername(), message.getChatRoomId());
 
         // Broadcast presence JOIN event to room subscribers
         Set<String> participantIds = getRoomParticipantUserIds(message.getChatRoomId());
