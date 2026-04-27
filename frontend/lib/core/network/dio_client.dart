@@ -37,14 +37,21 @@ class DioClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          // 토큰을 실제로 보낸 요청이 401인 경우만 auth 리셋.
-          // 토큰 없이 보낸 요청(예: 로그인 전 자동 fetchRooms)의 401은 그냥 무시해
-          // 방금 로그인으로 저장된 토큰을 실수로 삭제하지 않도록 한다.
-          final hadToken = (error.requestOptions.headers['Authorization'] as String?)?.startsWith('Bearer ') ?? false;
-          if (hadToken) {
-            await _storage.delete(key: StorageKeys.token);
-            await _storage.delete(key: StorageKeys.userId);
-            await _storage.delete(key: StorageKeys.username);
+          // /api/auth/* (login/register)의 401은 잘못된 자격증명 응답이므로 logout
+          // 처리하면 안 된다. 그 외 401은 토큰 만료/무효 → logout 처리.
+          final path = error.requestOptions.path;
+          final isAuthEndpoint = path.startsWith('/api/auth/');
+          if (!isAuthEndpoint) {
+            // 저장소에 토큰이 있으면 만료된 것. 헤더 검사 대신 storage 직접 조회 (대소문자/Dio 직렬화 무관).
+            try {
+              final stored = await _storage.read(key: StorageKeys.token);
+              if (stored != null) {
+                await _storage.delete(key: StorageKeys.token);
+                await _storage.delete(key: StorageKeys.userId);
+                await _storage.delete(key: StorageKeys.username);
+              }
+            } catch (_) {/* best-effort */}
+            // storage 동작과 무관하게 항상 onUnauthorized 호출 → state 리셋 + router redirect
             onUnauthorized?.call();
           }
         }

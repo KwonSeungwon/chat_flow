@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,7 +78,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final token = await _storage.read(key: StorageKeys.token);
       final userId = await _storage.read(key: StorageKeys.userId);
       final username = await _storage.read(key: StorageKeys.username);
-      if (token != null) {
+      if (token != null && !_isJwtExpired(token)) {
         final role = await _storage.read(key: StorageKeys.role);
         final profileImageUrl = await _storage.read(key: StorageKeys.profileImage);
         state = AuthState(
@@ -88,12 +90,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isHydrated: true,
         );
       } else {
+        // Token absent or already expired locally — clear and route to login.
+        if (token != null) {
+          await _storage.delete(key: StorageKeys.token);
+          await _storage.delete(key: StorageKeys.userId);
+          await _storage.delete(key: StorageKeys.username);
+        }
         state = const AuthState(isHydrated: true);
       }
     } catch (e) {
       // Corrupted or locked secure storage — fall back to logged-out state
       debugPrint('[AuthNotifier] _hydrate error: $e');
       state = const AuthState(isHydrated: true);
+    }
+  }
+
+  /// Decode JWT exp claim and check expiry. Conservative: any error → expired.
+  static bool _isJwtExpired(String jwt) {
+    try {
+      final parts = jwt.split('.');
+      if (parts.length != 3) return true;
+      // base64Url 패딩 보정
+      String payload = parts[1];
+      switch (payload.length % 4) {
+        case 2: payload += '=='; break;
+        case 3: payload += '='; break;
+      }
+      final decoded = utf8.decode(base64Url.decode(payload));
+      final claims = jsonDecode(decoded) as Map<String, dynamic>;
+      final exp = claims['exp'];
+      if (exp is! int) return true;
+      final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return nowSec >= exp;
+    } catch (_) {
+      return true;
     }
   }
 
