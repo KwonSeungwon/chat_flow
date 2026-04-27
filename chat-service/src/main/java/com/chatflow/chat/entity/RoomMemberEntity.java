@@ -28,6 +28,14 @@ public class RoomMemberEntity {
     @Column(name = "username", length = 50, nullable = false)
     private String username;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20, nullable = false)
+    @Builder.Default
+    private RoomRole role = RoomRole.MEMBER;
+
+    @Column(name = "muted_until")
+    private LocalDateTime mutedUntil;
+
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 
