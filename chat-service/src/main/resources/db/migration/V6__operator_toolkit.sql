@@ -1,7 +1,7 @@
 -- 1) room_members에 역할/뮤트 컬럼 추가
 ALTER TABLE room_members
-    ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'MEMBER',
-    ADD COLUMN muted_until TIMESTAMP NULL;
+    ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'MEMBER',
+    ADD COLUMN IF NOT EXISTS muted_until TIMESTAMP NULL;
 
 -- 2) 기존 chat_rooms.created_by 기반 OWNER 백필
 UPDATE room_members rm
@@ -11,7 +11,7 @@ WHERE rm.room_id = cr.id
   AND rm.user_id = cr.created_by;
 
 -- 3) ban 테이블
-CREATE TABLE room_bans (
+CREATE TABLE IF NOT EXISTS room_bans (
     room_id    VARCHAR(50) NOT NULL,
     user_id    VARCHAR(36) NOT NULL,
     banned_by  VARCHAR(36) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE room_bans (
 );
 
 -- 4) 메시지 신고 테이블
-CREATE TABLE message_reports (
+CREATE TABLE IF NOT EXISTS message_reports (
     id           BIGSERIAL PRIMARY KEY,
     message_id   VARCHAR(36) NOT NULL,
     room_id      VARCHAR(50) NOT NULL,
@@ -33,9 +33,11 @@ CREATE TABLE message_reports (
     status       VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     resolved_by  VARCHAR(36),
     resolved_at  TIMESTAMP,
-    created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_message_reports_room FOREIGN KEY (room_id)
+        REFERENCES chat_rooms(id) ON DELETE CASCADE
 );
-CREATE INDEX idx_message_reports_room_status
+CREATE INDEX IF NOT EXISTS idx_message_reports_room_status
     ON message_reports(room_id, status);
-CREATE INDEX idx_message_reports_message
+CREATE INDEX IF NOT EXISTS idx_message_reports_message
     ON message_reports(message_id);

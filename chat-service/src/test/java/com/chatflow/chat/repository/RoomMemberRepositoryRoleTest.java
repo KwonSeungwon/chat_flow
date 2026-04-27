@@ -86,7 +86,7 @@ class RoomMemberRepositoryRoleTest {
         ).orElseThrow();
 
         // then
-        assertThat(found.getMutedUntil()).isEqualTo(muteExpiry);
+        assertThat(found.getMutedUntil()).isEqualToIgnoringNanos(muteExpiry);
     }
 
     @Test

@@ -8,10 +8,12 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "room_bans")
 @IdClass(RoomBanId.class)
-@Data
-@Builder
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
+@EqualsAndHashCode(of = {"roomId", "userId"})
 public class RoomBanEntity {
 
     @Id

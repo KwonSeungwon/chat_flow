@@ -12,10 +12,12 @@ import java.time.LocalDateTime;
         @Index(name = "idx_message_reports_message", columnList = "message_id")
     }
 )
-@Data
-@Builder
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
+@EqualsAndHashCode(of = "id")
 public class MessageReportEntity {
 
     @Id
