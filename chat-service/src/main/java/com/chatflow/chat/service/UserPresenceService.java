@@ -1,8 +1,9 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomType;
-import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,7 @@ public class UserPresenceService {
     private final ChatRoomService chatRoomService;
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
-    private final ChatMessageRepository chatMessageRepository;
+    private final RoomMemberRepository roomMemberRepository;
 
     private static final String CHAT_TOPIC = "chat-messages";
 
@@ -40,10 +41,10 @@ public class UserPresenceService {
                 ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
 
                 // DM(DIRECT) 방은 자동 분할하지 않음 -- 제3자 입장만 거부, 기존 멤버 재입장은 허용.
-                // 멤버십 판정: 해당 사용자가 이 방에 메시지 이력이 있으면 멤버.
+                // 멤버십 판정: room_members 테이블에 명시 등록된 멤버만 허용.
                 if (room != null && room.getRoomType() == RoomType.DIRECT) {
                     boolean isExistingMember = !currentUserId.isEmpty() &&
-                            chatMessageRepository.existsByChatRoomIdAndUserId(
+                            roomMemberRepository.existsByRoomIdAndUserId(
                                     message.getChatRoomId(), currentUserId);
                     if (!isExistingMember) {
                         log.warn("DM room {} is full, rejecting non-member {}",
@@ -86,6 +87,24 @@ public class UserPresenceService {
 
         // Sync DB participantCount from Redis SET (unique user count)
         syncParticipantCount(message.getChatRoomId());
+
+        // 멤버십 자동 등록 (idempotent — PK 중복은 무시)
+        String safeUsername = message.getUsername() != null ? message.getUsername() : "anonymous";
+        if (!safeUserId.equals("anonymous")) {
+            try {
+                if (!roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), safeUserId)) {
+                    roomMemberRepository.save(RoomMemberEntity.builder()
+                            .roomId(message.getChatRoomId())
+                            .userId(safeUserId)
+                            .username(safeUsername)
+                            .joinedAt(LocalDateTime.now())
+                            .build());
+                }
+            } catch (Exception e) {
+                log.debug("Failed to register room membership: roomId={} userId={} reason={}",
+                        message.getChatRoomId(), safeUserId, e.getMessage());
+            }
+        }
 
         if (alreadyJoined) {
             // 다른 세션(탭/디바이스)에서 같은 사용자가 재입장 — 시스템 JOIN/presence 노이즈 억제.
