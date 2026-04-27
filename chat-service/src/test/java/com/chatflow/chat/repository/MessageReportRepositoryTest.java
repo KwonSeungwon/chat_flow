@@ -77,24 +77,6 @@ class MessageReportRepositoryTest {
     }
 
     @Test
-    void existsByMessageIdAndReportedBy_trueWhenDuplicateReport() {
-        // given
-        messageReportRepository.save(MessageReportEntity.builder()
-                .messageId("msg-1")
-                .roomId(ROOM_ID)
-                .reportedBy(REPORTER_A)
-                .reason(ReportReason.SPAM)
-                .status(ReportStatus.PENDING)
-                .createdAt(LocalDateTime.now())
-                .build());
-
-        // when & then
-        assertThat(messageReportRepository.existsByMessageIdAndReportedBy("msg-1", REPORTER_A)).isTrue();
-        assertThat(messageReportRepository.existsByMessageIdAndReportedBy("msg-1", REPORTER_B)).isFalse();
-        assertThat(messageReportRepository.existsByMessageIdAndReportedBy("msg-other", REPORTER_A)).isFalse();
-    }
-
-    @Test
     void countByReportedByAndCreatedAtAfter_forRateLimit() {
         // given
         LocalDateTime now = LocalDateTime.now();

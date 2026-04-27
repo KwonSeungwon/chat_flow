@@ -41,3 +41,8 @@ CREATE INDEX IF NOT EXISTS idx_message_reports_room_status
     ON message_reports(room_id, status);
 CREATE INDEX IF NOT EXISTS idx_message_reports_message
     ON message_reports(message_id);
+
+-- 5) 동일 메시지에 대한 중복 신고 방지 (idempotency race-safety)
+ALTER TABLE message_reports
+    ADD CONSTRAINT IF NOT EXISTS uq_message_reports_message_reporter
+    UNIQUE (message_id, reported_by);

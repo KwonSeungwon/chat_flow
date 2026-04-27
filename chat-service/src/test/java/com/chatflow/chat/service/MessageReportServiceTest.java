@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -224,6 +225,37 @@ class MessageReportServiceTest {
             ArgumentCaptor<MessageReportEntity> captor = ArgumentCaptor.forClass(MessageReportEntity.class);
             verify(messageReportRepository).save(captor.capture());
             assertNull(captor.getValue().getComment());
+        }
+
+        @Test
+        void submitReport_concurrentDuplicate_returnsExistingId() {
+            // Scenario: two threads pass the findByMessageIdAndReportedBy check simultaneously.
+            // The first thread inserts successfully. The second thread hits the UNIQUE constraint.
+            // The service should catch DataIntegrityViolationException and return the existing id.
+            ChatMessageEntity msg = message(MESSAGE_ID, ROOM_ID, AUTHOR_USER_ID, "author", "content");
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
+
+            // First call (idempotency check): not found yet — the other thread hasn't committed
+            when(messageReportRepository.findByMessageIdAndReportedBy(MESSAGE_ID, REPORTER_USER_ID))
+                    .thenReturn(Optional.empty())      // first call during idempotency check
+                    .thenReturn(Optional.of(           // second call during catch recovery
+                            report(77L, MESSAGE_ID, ROOM_ID, REPORTER_USER_ID, ReportReason.SPAM)));
+
+            when(messageReportRepository.countByReportedByAndCreatedAtAfter(eq(REPORTER_USER_ID), any()))
+                    .thenReturn(0L);
+
+            // save throws DataIntegrityViolationException (UNIQUE constraint violation)
+            when(messageReportRepository.save(any(MessageReportEntity.class)))
+                    .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+            Long reportId = messageReportService.submitReport(
+                    MESSAGE_ID, REPORTER_USER_ID, ReportReason.SPAM, "concurrent");
+
+            assertEquals(77L, reportId);
+            verify(messageReportRepository).save(any(MessageReportEntity.class));
+            // findByMessageIdAndReportedBy called twice: once for idempotency check, once for recovery
+            verify(messageReportRepository, times(2))
+                    .findByMessageIdAndReportedBy(MESSAGE_ID, REPORTER_USER_ID);
         }
     }
 

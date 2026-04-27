@@ -10,6 +10,10 @@ import java.time.LocalDateTime;
     indexes = {
         @Index(name = "idx_message_reports_room_status", columnList = "room_id, status"),
         @Index(name = "idx_message_reports_message", columnList = "message_id")
+    },
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uq_message_reports_message_reporter",
+                columnNames = {"message_id", "reported_by"})
     }
 )
 @Getter

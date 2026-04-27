@@ -10,6 +10,7 @@ import com.chatflow.chat.repository.MessageReportRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,7 +79,7 @@ public class MessageReportService {
                             + RATE_LIMIT_PER_MINUTE + "건)");
         }
 
-        // 5. Persist
+        // 5. Persist (race-safe: UNIQUE constraint on (message_id, reported_by))
         MessageReportEntity report = MessageReportEntity.builder()
                 .messageId(messageId)
                 .roomId(message.getChatRoomId())
@@ -88,11 +89,20 @@ public class MessageReportService {
                 .status(ReportStatus.PENDING)
                 .build();
 
-        MessageReportEntity saved = messageReportRepository.save(report);
-        log.info("Report submitted: id={}, messageId={}, roomId={}, reporterUserId={}, reason={}",
-                saved.getId(), messageId, message.getChatRoomId(), reporterUserId, reason);
-
-        return saved.getId();
+        try {
+            MessageReportEntity saved = messageReportRepository.save(report);
+            log.info("Report submitted: id={}, messageId={}, roomId={}, reporterUserId={}, reason={}",
+                    saved.getId(), messageId, message.getChatRoomId(), reporterUserId, reason);
+            return saved.getId();
+        } catch (DataIntegrityViolationException e) {
+            // Concurrent duplicate — the UNIQUE constraint fired between our check and insert.
+            // Re-fetch the winner row and return its id (idempotent recovery).
+            log.info("Concurrent duplicate report detected (UNIQUE violation): messageId={}, reporterUserId={}",
+                    messageId, reporterUserId);
+            return messageReportRepository.findByMessageIdAndReportedBy(messageId, reporterUserId)
+                    .orElseThrow(() -> e) // should never happen; re-throw if somehow missing
+                    .getId();
+        }
     }
 
     /**
