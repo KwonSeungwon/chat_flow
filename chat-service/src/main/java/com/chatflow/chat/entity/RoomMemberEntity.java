@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 public class RoomMemberEntity {
 
     @Id
-    @Column(name = "room_id", length = 36, nullable = false)
+    @Column(name = "room_id", length = 50, nullable = false)
     private String roomId;
 
     @Id

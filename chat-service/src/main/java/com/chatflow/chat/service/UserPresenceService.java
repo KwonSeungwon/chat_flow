@@ -59,18 +59,19 @@ public class UserPresenceService {
                     log.info("DM {} full but {} is existing member — allowing re-entry",
                             message.getChatRoomId(), message.getUsername());
                     // 분기 통과: 아래 Redis entry 등록 후 정상 join 흐름 진행
+                } else {
+                    // non-DM 방: 만석이면 사용 가능한 방으로 redirect
+                    String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
+                    ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
+
+                    log.info("Room {} full, redirecting user {} to {}",
+                            message.getChatRoomId(), message.getUsername(), newRoom.getId());
+                    messagingTemplate.convertAndSend(
+                            "/topic/chat/" + message.getChatRoomId() + "/errors",
+                            java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+
+                    message.setChatRoomId(newRoom.getId());
                 }
-
-                String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
-                ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
-
-                log.info("Room {} full, redirecting user {} to {}",
-                        message.getChatRoomId(), message.getUsername(), newRoom.getId());
-                messagingTemplate.convertAndSend(
-                        "/topic/chat/" + message.getChatRoomId() + "/errors",
-                        java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
-
-                message.setChatRoomId(newRoom.getId());
             }
             // alreadyJoined이면 분기 통과 — 동일 방에 추가 entry만 등록 (sessionId 다름)
         }

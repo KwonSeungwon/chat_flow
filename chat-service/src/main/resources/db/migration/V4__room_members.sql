@@ -1,7 +1,7 @@
 -- 채팅방 멤버십 명시 추적 테이블.
 -- DM 만석 재입장 판정에 사용 (메시지 이력 의존 제거).
 CREATE TABLE IF NOT EXISTS room_members (
-    room_id    VARCHAR(36) NOT NULL,
+    room_id    VARCHAR(50) NOT NULL,
     user_id    VARCHAR(36) NOT NULL,
     username   VARCHAR(50) NOT NULL,
     joined_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
