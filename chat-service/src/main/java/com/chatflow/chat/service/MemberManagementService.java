@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -26,6 +25,7 @@ public class MemberManagementService {
     private final RoomMemberRepository roomMemberRepository;
     private final RoomPermissionService roomPermissionService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MemberListBroadcaster memberListBroadcaster;
 
     @Transactional
     public void kickMember(String roomId, String actorUserId, String targetUserId) {
@@ -41,8 +41,8 @@ public class MemberManagementService {
         roomMemberRepository.deleteByRoomIdAndUserId(roomId, targetUserId);
         log.info("Member kicked: roomId={}, target={}, by={}", roomId, targetUserId, actorUserId);
 
-        sendKickedNotification(targetUserId, roomId, "KICKED", actorUsername);
-        broadcastMemberList(roomId);
+        sendKickedNotification(targetUserId, roomId, "KICKED", actorUsername, actorUserId);
+        memberListBroadcaster.broadcast(roomId);
     }
 
     @Transactional
@@ -66,8 +66,8 @@ public class MemberManagementService {
                 roomId, targetUserId, mutedUntil, actorUserId);
 
         String actorUsername = getActorUsername(roomId, actorUserId);
-        sendMutedNotification(targetUserId, roomId, mutedUntil, actorUsername);
-        broadcastMemberList(roomId);
+        sendMutedNotification(targetUserId, roomId, mutedUntil, actorUsername, actorUserId);
+        memberListBroadcaster.broadcast(roomId);
 
         return new MuteResult(mutedUntil);
     }
@@ -85,7 +85,7 @@ public class MemberManagementService {
         roomMemberRepository.save(target);
         log.info("Member unmuted: roomId={}, target={}, by={}", roomId, targetUserId, actorUserId);
 
-        broadcastMemberList(roomId);
+        memberListBroadcaster.broadcast(roomId);
     }
 
     @Transactional
@@ -105,7 +105,7 @@ public class MemberManagementService {
         log.info("Member role changed: roomId={}, target={}, newRole={}, by={}",
                 roomId, targetUserId, newRole, ownerUserId);
 
-        broadcastMemberList(roomId);
+        memberListBroadcaster.broadcast(roomId);
     }
 
     @Transactional
@@ -124,7 +124,7 @@ public class MemberManagementService {
         log.info("Ownership transferred: roomId={}, from={}, to={}",
                 roomId, ownerUserId, newOwnerUserId);
 
-        broadcastMemberList(roomId);
+        memberListBroadcaster.broadcast(roomId);
     }
 
     // ── Internal helpers ─────────────────────────────────────────
@@ -142,6 +142,8 @@ public class MemberManagementService {
      */
     private void validateNotTargetingOwner(RoomMemberEntity target, String actorUserId) {
         if (target.getRole() == RoomRole.OWNER) {
+            log.warn("Cannot target OWNER: roomId={} actor={} target={}",
+                    target.getRoomId(), actorUserId, target.getUserId());
             throw new PermissionDeniedException(
                     "OWNER에게는 이 액션을 수행할 수 없습니다. 방 삭제를 사용하세요.");
         }
@@ -153,41 +155,23 @@ public class MemberManagementService {
                 .orElse("unknown");
     }
 
-    void sendKickedNotification(String targetUserId, String roomId, String reason, String actorUsername) {
+    private void sendKickedNotification(String targetUserId, String roomId,
+                                        String reason, String actorUsername, String actorUserId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("roomId", roomId);
         payload.put("reason", reason);
         payload.put("by", actorUsername);
+        payload.put("byUserId", actorUserId);
         messagingTemplate.convertAndSendToUser(targetUserId, "/queue/kicked", payload);
     }
 
     private void sendMutedNotification(String targetUserId, String roomId,
-                                       LocalDateTime mutedUntil, String actorUsername) {
+                                       LocalDateTime mutedUntil, String actorUsername, String actorUserId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("roomId", roomId);
         payload.put("mutedUntil", mutedUntil.toString());
         payload.put("by", actorUsername);
+        payload.put("byUserId", actorUserId);
         messagingTemplate.convertAndSendToUser(targetUserId, "/queue/muted", payload);
-    }
-
-    void broadcastMemberList(String roomId) {
-        List<RoomMemberEntity> members = roomMemberRepository.findByRoomId(roomId);
-        List<Map<String, Object>> memberList = members.stream()
-                .map(m -> {
-                    Map<String, Object> map = new LinkedHashMap<>();
-                    map.put("userId", m.getUserId());
-                    map.put("username", m.getUsername());
-                    map.put("role", m.getRole().name());
-                    map.put("mutedUntil", m.getMutedUntil() != null ? m.getMutedUntil().toString() : null);
-                    return map;
-                })
-                .toList();
-
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", "MEMBER_LIST_UPDATED");
-        payload.put("members", memberList);
-        payload.put("timestamp", LocalDateTime.now().toString());
-
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/members", payload);
     }
 }

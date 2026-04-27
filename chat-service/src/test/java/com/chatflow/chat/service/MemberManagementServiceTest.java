@@ -33,6 +33,7 @@ class MemberManagementServiceTest {
     @Mock private RoomMemberRepository roomMemberRepository;
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private MemberListBroadcaster memberListBroadcaster;
 
     private RoomPermissionService roomPermissionService;
     private MemberManagementService memberManagementService;
@@ -47,7 +48,7 @@ class MemberManagementServiceTest {
     void setUp() {
         roomPermissionService = new RoomPermissionService(roomMemberRepository, chatRoomRepository);
         memberManagementService = new MemberManagementService(
-                roomMemberRepository, roomPermissionService, messagingTemplate);
+                roomMemberRepository, roomPermissionService, messagingTemplate, memberListBroadcaster);
     }
 
     private RoomMemberEntity member(String userId, String username, RoomRole role) {
@@ -84,16 +85,18 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner));
 
             memberManagementService.kickMember(ROOM_ID, OWNER_ID, TARGET_ID);
 
             verify(roomMemberRepository).deleteByRoomIdAndUserId(ROOM_ID, TARGET_ID);
             verify(messagingTemplate).convertAndSendToUser(
-                    eq(TARGET_ID), eq("/queue/kicked"), any(Map.class));
-            verify(messagingTemplate).convertAndSend(
-                    eq("/topic/chat/" + ROOM_ID + "/members"), any(Map.class));
+                    eq(TARGET_ID), eq("/queue/kicked"), argThat(payload -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> map = (Map<String, Object>) payload;
+                        return "KICKED".equals(map.get("reason"))
+                                && OWNER_ID.equals(map.get("byUserId"));
+                    }));
+            verify(memberListBroadcaster).broadcast(ROOM_ID);
         }
 
         @Test
@@ -105,8 +108,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(mod));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(mod));
 
             memberManagementService.kickMember(ROOM_ID, MOD_ID, TARGET_ID);
 
@@ -173,8 +174,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             LocalDateTime beforeMute = LocalDateTime.now();
             MuteResult result = memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 30);
@@ -189,9 +188,12 @@ class MemberManagementServiceTest {
             assertEquals(result.mutedUntil(), captor.getValue().getMutedUntil());
 
             verify(messagingTemplate).convertAndSendToUser(
-                    eq(TARGET_ID), eq("/queue/muted"), any(Map.class));
-            verify(messagingTemplate).convertAndSend(
-                    eq("/topic/chat/" + ROOM_ID + "/members"), any(Map.class));
+                    eq(TARGET_ID), eq("/queue/muted"), argThat(payload -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> map = (Map<String, Object>) payload;
+                        return OWNER_ID.equals(map.get("byUserId"));
+                    }));
+            verify(memberListBroadcaster).broadcast(ROOM_ID);
         }
 
         @Test
@@ -209,8 +211,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             MuteResult result = memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 5);
 
@@ -226,8 +226,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             MuteResult result = memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 60);
 
@@ -250,8 +248,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             memberManagementService.unmuteMember(ROOM_ID, OWNER_ID, TARGET_ID);
 
@@ -259,8 +255,7 @@ class MemberManagementServiceTest {
             verify(roomMemberRepository).save(captor.capture());
             assertNull(captor.getValue().getMutedUntil());
 
-            verify(messagingTemplate).convertAndSend(
-                    eq("/topic/chat/" + ROOM_ID + "/members"), any(Map.class));
+            verify(memberListBroadcaster).broadcast(ROOM_ID);
         }
     }
 
@@ -278,8 +273,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             memberManagementService.changeRole(ROOM_ID, OWNER_ID, TARGET_ID, RoomRole.MODERATOR);
 
@@ -297,8 +290,6 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(owner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(target));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(owner, target));
 
             memberManagementService.changeRole(ROOM_ID, OWNER_ID, TARGET_ID, RoomRole.MEMBER);
 
@@ -355,16 +346,13 @@ class MemberManagementServiceTest {
                     .thenReturn(Optional.of(currentOwner));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                     .thenReturn(Optional.of(newOwner));
-            when(roomMemberRepository.findByRoomId(ROOM_ID))
-                    .thenReturn(List.of(currentOwner, newOwner));
 
             memberManagementService.transferOwnership(ROOM_ID, OWNER_ID, TARGET_ID);
 
             assertEquals(RoomRole.MODERATOR, currentOwner.getRole());
             assertEquals(RoomRole.OWNER, newOwner.getRole());
             verify(roomMemberRepository, times(2)).save(any(RoomMemberEntity.class));
-            verify(messagingTemplate).convertAndSend(
-                    eq("/topic/chat/" + ROOM_ID + "/members"), any(Map.class));
+            verify(memberListBroadcaster).broadcast(ROOM_ID);
         }
 
         @Test

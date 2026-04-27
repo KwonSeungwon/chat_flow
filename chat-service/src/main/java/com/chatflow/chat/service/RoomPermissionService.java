@@ -28,8 +28,11 @@ public class RoomPermissionService {
      */
     public RoomRole getUserRole(String roomId, String userId) {
         RoomMemberEntity member = roomMemberRepository.findByRoomIdAndUserId(roomId, userId)
-                .orElseThrow(() -> new PermissionDeniedException(
-                        "사용자가 채팅방의 멤버가 아닙니다. roomId=" + roomId + ", userId=" + userId));
+                .orElseThrow(() -> {
+                    log.warn("PermissionDenied: roomId={} userId={} reason=not a member", roomId, userId);
+                    return new PermissionDeniedException(
+                            "사용자가 채팅방의 멤버가 아닙니다. roomId=" + roomId + ", userId=" + userId);
+                });
         return member.getRole();
     }
 
@@ -41,6 +44,8 @@ public class RoomPermissionService {
         RoomRole userRole = getUserRole(roomId, userId);
         boolean hasPermission = Arrays.asList(allowed).contains(userRole);
         if (!hasPermission) {
+            log.warn("PermissionDenied: roomId={} userId={} reason=insufficient role, required={}",
+                    roomId, userId, Arrays.toString(allowed));
             throw new PermissionDeniedException(
                     "권한이 부족합니다. 필요 역할: " + Arrays.toString(allowed)
                             + ", 현재 역할: " + userRole);
@@ -54,6 +59,8 @@ public class RoomPermissionService {
     public void requireNotDmRoom(String roomId) {
         chatRoomRepository.findById(roomId).ifPresent(room -> {
             if (room.getRoomType() == RoomType.DIRECT) {
+                log.warn("RoomTypeNotSupported: roomId={} reason=DM room does not support operator features",
+                        roomId);
                 throw new RoomTypeNotSupportedException(
                         "DM 채팅방에서는 운영 기능을 사용할 수 없습니다. roomId=" + roomId);
             }

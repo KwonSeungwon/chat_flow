@@ -35,6 +35,7 @@ class RoomBanServiceTest {
     @Mock private RoomMemberRepository roomMemberRepository;
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private MemberListBroadcaster memberListBroadcaster;
 
     private RoomPermissionService roomPermissionService;
     private RoomBanService roomBanService;
@@ -49,7 +50,8 @@ class RoomBanServiceTest {
     void setUp() {
         roomPermissionService = new RoomPermissionService(roomMemberRepository, chatRoomRepository);
         roomBanService = new RoomBanService(
-                roomBanRepository, roomMemberRepository, roomPermissionService, messagingTemplate);
+                roomBanRepository, roomMemberRepository, roomPermissionService,
+                messagingTemplate, memberListBroadcaster);
     }
 
     private RoomMemberEntity member(String userId, String username, RoomRole role) {
@@ -67,6 +69,11 @@ class RoomBanServiceTest {
         when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
     }
 
+    private void stubDmRoom() {
+        ChatRoom room = ChatRoom.builder().id(ROOM_ID).roomType(RoomType.DIRECT).build();
+        when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
+    }
+
     // ── banUser ─────────────────────────────────────────────────
 
     @Test
@@ -78,8 +85,6 @@ class RoomBanServiceTest {
                 .thenReturn(Optional.of(owner));
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
                 .thenReturn(Optional.of(target));
-        when(roomMemberRepository.findByRoomId(ROOM_ID))
-                .thenReturn(List.of(owner));
 
         roomBanService.banUser(ROOM_ID, OWNER_ID, TARGET_ID, "spam");
 
@@ -100,10 +105,10 @@ class RoomBanServiceTest {
                 eq(TARGET_ID), eq("/queue/kicked"), argThat(payload -> {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> map = (Map<String, Object>) payload;
-                    return "BANNED".equals(map.get("reason"));
+                    return "BANNED".equals(map.get("reason"))
+                            && OWNER_ID.equals(map.get("byUserId"));
                 }));
-        verify(messagingTemplate).convertAndSend(
-                eq("/topic/chat/" + ROOM_ID + "/members"), any(Map.class));
+        verify(memberListBroadcaster).broadcast(ROOM_ID);
     }
 
     @Test
@@ -147,8 +152,7 @@ class RoomBanServiceTest {
 
     @Test
     void banUser_dmRoom_throwsRoomTypeNotSupported() {
-        ChatRoom dmRoom = ChatRoom.builder().id(ROOM_ID).roomType(RoomType.DIRECT).build();
-        when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(dmRoom));
+        stubDmRoom();
 
         assertThrows(RoomTypeNotSupportedException.class,
                 () -> roomBanService.banUser(ROOM_ID, OWNER_ID, TARGET_ID, "test"));
@@ -166,6 +170,14 @@ class RoomBanServiceTest {
         roomBanService.unbanUser(ROOM_ID, OWNER_ID, TARGET_ID);
 
         verify(roomBanRepository).deleteByRoomIdAndUserId(ROOM_ID, TARGET_ID);
+    }
+
+    @Test
+    void unbanUser_self_throwsSelfTargetNotAllowed() {
+        stubGeneralRoom();
+
+        assertThrows(SelfTargetNotAllowedException.class,
+                () -> roomBanService.unbanUser(ROOM_ID, OWNER_ID, OWNER_ID));
     }
 
     // ── isBanned ────────────────────────────────────────────────
@@ -188,6 +200,7 @@ class RoomBanServiceTest {
 
     @Test
     void listBans_ownerCanView() {
+        stubGeneralRoom();
         RoomMemberEntity owner = member(OWNER_ID, "owner", RoomRole.OWNER);
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, OWNER_ID))
                 .thenReturn(Optional.of(owner));
@@ -206,6 +219,7 @@ class RoomBanServiceTest {
 
     @Test
     void listBans_modCanView() {
+        stubGeneralRoom();
         RoomMemberEntity mod = member(MOD_ID, "mod", RoomRole.MODERATOR);
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, MOD_ID))
                 .thenReturn(Optional.of(mod));
@@ -218,11 +232,20 @@ class RoomBanServiceTest {
 
     @Test
     void listBans_memberCannotView_throwsPermissionDenied() {
+        stubGeneralRoom();
         RoomMemberEntity normalMember = member(MEMBER_ID, "member", RoomRole.MEMBER);
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, MEMBER_ID))
                 .thenReturn(Optional.of(normalMember));
 
         assertThrows(PermissionDeniedException.class,
                 () -> roomBanService.listBans(ROOM_ID, MEMBER_ID));
+    }
+
+    @Test
+    void listBans_dmRoom_throwsRoomTypeNotSupported() {
+        stubDmRoom();
+
+        assertThrows(RoomTypeNotSupportedException.class,
+                () -> roomBanService.listBans(ROOM_ID, OWNER_ID));
     }
 }

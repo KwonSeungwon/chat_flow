@@ -26,6 +26,7 @@ public class RoomBanService {
     private final RoomMemberRepository roomMemberRepository;
     private final RoomPermissionService roomPermissionService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MemberListBroadcaster memberListBroadcaster;
 
     /**
      * Ban a user from the room: kick + insert ban row (single transaction).
@@ -41,6 +42,8 @@ public class RoomBanService {
         RoomMemberEntity target = roomMemberRepository.findByRoomIdAndUserId(roomId, targetUserId)
                 .orElse(null);
         if (target != null && target.getRole() == RoomRole.OWNER) {
+            log.warn("Cannot ban OWNER: roomId={} actor={} target={}",
+                    roomId, actorUserId, targetUserId);
             throw new PermissionDeniedException(
                     "OWNER를 ban할 수 없습니다.");
         }
@@ -71,15 +74,17 @@ public class RoomBanService {
         kickedPayload.put("roomId", roomId);
         kickedPayload.put("reason", "BANNED");
         kickedPayload.put("by", actorUsername);
+        kickedPayload.put("byUserId", actorUserId);
         messagingTemplate.convertAndSendToUser(targetUserId, "/queue/kicked", kickedPayload);
 
         // STOMP: broadcast updated member list
-        broadcastMemberList(roomId);
+        memberListBroadcaster.broadcast(roomId);
     }
 
     @Transactional
     public void unbanUser(String roomId, String actorUserId, String targetUserId) {
         roomPermissionService.requireNotDmRoom(roomId);
+        roomPermissionService.requireNotSelfTarget(actorUserId, targetUserId);
         roomPermissionService.requireRole(roomId, actorUserId, RoomRole.OWNER, RoomRole.MODERATOR);
 
         roomBanRepository.deleteByRoomIdAndUserId(roomId, targetUserId);
@@ -92,30 +97,8 @@ public class RoomBanService {
 
     @Transactional(readOnly = true)
     public List<RoomBanEntity> listBans(String roomId, String actorUserId) {
+        roomPermissionService.requireNotDmRoom(roomId);
         roomPermissionService.requireRole(roomId, actorUserId, RoomRole.OWNER, RoomRole.MODERATOR);
         return roomBanRepository.findByRoomId(roomId);
-    }
-
-    // ── Internal helpers ─────────────────────────────────────────
-
-    private void broadcastMemberList(String roomId) {
-        List<RoomMemberEntity> members = roomMemberRepository.findByRoomId(roomId);
-        List<Map<String, Object>> memberList = members.stream()
-                .map(m -> {
-                    Map<String, Object> map = new LinkedHashMap<>();
-                    map.put("userId", m.getUserId());
-                    map.put("username", m.getUsername());
-                    map.put("role", m.getRole().name());
-                    map.put("mutedUntil", m.getMutedUntil() != null ? m.getMutedUntil().toString() : null);
-                    return map;
-                })
-                .toList();
-
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", "MEMBER_LIST_UPDATED");
-        payload.put("members", memberList);
-        payload.put("timestamp", LocalDateTime.now().toString());
-
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/members", payload);
     }
 }
