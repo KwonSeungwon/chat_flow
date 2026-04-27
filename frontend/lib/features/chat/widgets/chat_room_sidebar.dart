@@ -914,7 +914,7 @@ class _RoomTileState extends State<_RoomTile> {
               Expanded(
                 child: Opacity(
                   opacity:
-                      widget.isFull && !widget.isSelected ? 0.48
+                      (widget.isFull && !_isDm && !widget.isSelected) ? 0.48
                       : widget.policy == NotificationPolicy.muted ? 0.5
                       : 1.0,
                   child: Padding(
@@ -1002,7 +1002,7 @@ class _RoomTileState extends State<_RoomTile> {
                                   Icon(
                                     Icons.people_outline_rounded,
                                     size: 11,
-                                    color: widget.isFull
+                                    color: (widget.isFull && !_isDm)
                                         ? AppColors.error
                                         : cs.onSurfaceVariant.withAlpha(150),
                                   ),
@@ -1011,15 +1011,16 @@ class _RoomTileState extends State<_RoomTile> {
                                     '${widget.room.participantCount}/${widget.room.maxParticipants}',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: widget.isFull
+                                      color: (widget.isFull && !_isDm)
                                           ? AppColors.error
                                           : cs.onSurfaceVariant.withAlpha(150),
-                                      fontWeight: widget.isFull
+                                      fontWeight: (widget.isFull && !_isDm)
                                           ? FontWeight.w600
                                           : FontWeight.w400,
                                     ),
                                   ),
-                                  if (widget.isFull) ...[
+                                  // DM은 항상 2/2가 정상 상태이므로 만석 뱃지 숨김.
+                                  if (widget.isFull && !_isDm) ...[
                                     const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
