@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface MessageReportRepository extends JpaRepository<MessageReportEntity, Long> {
@@ -14,6 +15,8 @@ public interface MessageReportRepository extends JpaRepository<MessageReportEnti
     List<MessageReportEntity> findByRoomIdAndStatusOrderByCreatedAtDesc(String roomId, ReportStatus status);
 
     boolean existsByMessageIdAndReportedBy(String messageId, String reportedBy);
+
+    Optional<MessageReportEntity> findByMessageIdAndReportedBy(String messageId, String reportedBy);
 
     long countByReportedByAndCreatedAtAfter(String reportedBy, LocalDateTime after);
 }
