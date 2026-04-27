@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -27,13 +28,25 @@ public class UserPresenceService {
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
     private final RoomMemberRepository roomMemberRepository;
+    private final RoomBanService roomBanService;
 
     private static final String CHAT_TOPIC = "chat-messages";
 
     public void join(ChatMessage message, String sessionId) {
+        String currentUserId = message.getUserId() != null ? message.getUserId() : "";
+
+        // Ban gate — banned users cannot rejoin
+        if (!currentUserId.isEmpty() && roomBanService.isBanned(message.getChatRoomId(), currentUserId)) {
+            log.warn("User {} attempted to join banned room {}", message.getUsername(), message.getChatRoomId());
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + message.getChatRoomId() + "/errors",
+                    Map.of("type", "ROOM_BANNED",
+                            "roomId", message.getChatRoomId()));
+            return;
+        }
+
         // 본인이 이미 다른 세션으로 참여 중인지 — 만석 분기 skip + system JOIN 노이즈 억제용
         Set<String> existingUserIds = getRoomParticipantUserIds(message.getChatRoomId());
-        String currentUserId = message.getUserId() != null ? message.getUserId() : "";
         boolean alreadyJoined = !currentUserId.isEmpty() && existingUserIds.contains(currentUserId);
 
         if (participantService.isRoomFull(message.getChatRoomId())) {
