@@ -2,6 +2,7 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
+import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class UserPresenceService {
     private final ChatRoomService chatRoomService;
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
+    private final ChatMessageRepository chatMessageRepository;
 
     private static final String CHAT_TOPIC = "chat-messages";
 
@@ -37,14 +39,25 @@ public class UserPresenceService {
             if (!alreadyJoined) {
                 ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
 
-                // DM(DIRECT) 방은 자동 분할하지 않음 -- 정원 초과 시 입장 거부
+                // DM(DIRECT) 방은 자동 분할하지 않음 -- 제3자 입장만 거부, 기존 멤버 재입장은 허용.
+                // 멤버십 판정: 해당 사용자가 이 방에 메시지 이력이 있으면 멤버.
                 if (room != null && room.getRoomType() == RoomType.DIRECT) {
-                    log.warn("DM room {} is full, rejecting user {}", message.getChatRoomId(), message.getUsername());
-                    messagingTemplate.convertAndSend(
-                            "/topic/chat/" + message.getChatRoomId() + "/errors",
-                            java.util.Map.of("type", "ROOM_FULL_DM", "roomId", message.getChatRoomId(),
-                                    "roomName", room.getName()));
-                    return;
+                    boolean isExistingMember = !currentUserId.isEmpty() &&
+                            chatMessageRepository.existsByChatRoomIdAndUserId(
+                                    message.getChatRoomId(), currentUserId);
+                    if (!isExistingMember) {
+                        log.warn("DM room {} is full, rejecting non-member {}",
+                                message.getChatRoomId(), message.getUsername());
+                        messagingTemplate.convertAndSend(
+                                "/topic/chat/" + message.getChatRoomId() + "/errors",
+                                java.util.Map.of("type", "ROOM_FULL_DM",
+                                        "roomId", message.getChatRoomId(),
+                                        "roomName", room.getName()));
+                        return;
+                    }
+                    log.info("DM {} full but {} is existing member — allowing re-entry",
+                            message.getChatRoomId(), message.getUsername());
+                    // 분기 통과: 아래 Redis entry 등록 후 정상 join 흐름 진행
                 }
 
                 String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";

@@ -233,8 +233,9 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                 policy: policy,
                                 unreadCount: unread,
                                 keywords: keywords,
-                                onTap: room.isFull &&
-                                        room.id != widget.currentRoomId
+                                onTap: (room.isFull &&
+                                        room.roomType != 'DIRECT' &&
+                                        room.id != widget.currentRoomId)
                                     ? () => ScaffoldMessenger.of(context)
                                             .showSnackBar(
                                           const SnackBar(

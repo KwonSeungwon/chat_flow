@@ -39,6 +39,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
 
     List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
 
+    /**
+     * 사용자가 해당 채팅방의 기존 멤버인지 확인 (메시지 이력 1건 이상 존재).
+     * DM 만석 재입장 허용 판정에 사용.
+     */
+    boolean existsByChatRoomIdAndUserId(String chatRoomId, String userId);
+
     @Query("SELECT COUNT(m) FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp > :after AND m.type = 'CHAT' AND m.deleted = false")
     long countNewChatMessages(@Param("roomId") String roomId, @Param("after") LocalDateTime after);
 
