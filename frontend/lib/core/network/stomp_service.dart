@@ -9,6 +9,10 @@ typedef ConnectionCallback = void Function(bool connected);
 typedef ReadReceiptCallback = void Function(Map<String, String> positions);
 typedef TypingCallback = void Function(String username, {bool stop});
 typedef PresenceCallback = void Function(String type, String username, int participantCount);
+typedef MemberListCallback = void Function(List<dynamic> members);
+typedef KickedCallback = void Function(String reason, String? byUserId, String? byUsername);
+typedef MutedCallback = void Function(DateTime mutedUntil, String? byUserId, String? byUsername);
+typedef BannedCallback = void Function(String roomId);
 
 class StompService {
   StompClient? _client;
@@ -29,6 +33,10 @@ class StompService {
   TypingCallback? _onTyping;
   PresenceCallback? _onPresence;
   void Function(String? redirectTo, String? roomName)? _onRoomFull;
+  MemberListCallback? _onMembersUpdate;
+  KickedCallback? _onKicked;
+  MutedCallback? _onMuted;
+  BannedCallback? _onBanned;
 
   bool get isConnected => _connected;
 
@@ -44,6 +52,10 @@ class StompService {
     TypingCallback? onTyping,
     PresenceCallback? onPresence,
     void Function(String? redirectTo, String? roomName)? onRoomFull,
+    MemberListCallback? onMembersUpdate,
+    KickedCallback? onKicked,
+    MutedCallback? onMuted,
+    BannedCallback? onBanned,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -56,6 +68,10 @@ class StompService {
     _onTyping = onTyping;
     _onPresence = onPresence;
     _onRoomFull = onRoomFull;
+    _onMembersUpdate = onMembersUpdate;
+    _onKicked = onKicked;
+    _onMuted = onMuted;
+    _onBanned = onBanned;
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -115,6 +131,9 @@ class StompService {
           if (type == 'ROOM_FULL' || type == 'ROOM_FULL_DM') {
             // ROOM_FULL_DM: DM 방은 분할 불가, redirectTo가 null이므로 이탈 화면만 표시
             _onRoomFull?.call(data['redirectTo']?.toString(), data['roomName']?.toString());
+          } else if (type == 'ROOM_BANNED') {
+            final bannedRoomId = data['roomId']?.toString() ?? _currentRoomId ?? '';
+            _onBanned?.call(bannedRoomId);
           } else {
             debugPrint('[STOMP] Server error: $data');
           }
@@ -175,6 +194,52 @@ class StompService {
             final username = data['username']?.toString() ?? '';
             final count = (data['participantCount'] as num?)?.toInt() ?? 0;
             _onPresence!(type, username, count);
+          } catch (_) {}
+        }
+      },
+    );
+
+    // Subscribe to member list updates (operator toolkit)
+    _client!.subscribe(
+      destination: '/topic/chat/$_currentRoomId/members',
+      callback: (frame) {
+        if (frame.body != null && _onMembersUpdate != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final members = data['members'] as List<dynamic>? ?? [];
+            _onMembersUpdate!(members);
+          } catch (_) {}
+        }
+      },
+    );
+
+    // Subscribe to user-specific kicked queue (operator toolkit)
+    _client!.subscribe(
+      destination: '/user/queue/kicked',
+      callback: (frame) {
+        if (frame.body != null && _onKicked != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final reason = data['reason']?.toString() ?? 'KICKED';
+            final byUserId = data['byUserId']?.toString();
+            final byUsername = data['by']?.toString();
+            _onKicked!(reason, byUserId, byUsername);
+          } catch (_) {}
+        }
+      },
+    );
+
+    // Subscribe to user-specific muted queue (operator toolkit)
+    _client!.subscribe(
+      destination: '/user/queue/muted',
+      callback: (frame) {
+        if (frame.body != null && _onMuted != null) {
+          try {
+            final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+            final mutedUntil = DateTime.parse(data['mutedUntil'].toString());
+            final byUserId = data['byUserId']?.toString();
+            final byUsername = data['by']?.toString();
+            _onMuted!(mutedUntil, byUserId, byUsername);
           } catch (_) {}
         }
       },
@@ -272,6 +337,10 @@ class StompService {
     _onTyping = null;
     _onPresence = null;
     _onRoomFull = null;
+    _onMembersUpdate = null;
+    _onKicked = null;
+    _onMuted = null;
+    _onBanned = null;
   }
 
   void dispose() {

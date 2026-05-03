@@ -18,6 +18,8 @@ import 'helpers/offline_message_queue.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
 import 'room_keywords_provider.dart';
+import 'admin/admin_event_state.dart';
+import 'admin/room_members_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Chat Messages
@@ -267,6 +269,38 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
             redirectTo: redirectTo,
           );
         }
+      },
+      onMembersUpdate: (members) {
+        if (!mounted || _currentRoomId == null) return;
+        try {
+          _ref
+              .read(roomMembersProvider(_currentRoomId!).notifier)
+              .applyMembersUpdate(members);
+        } catch (_) {}
+      },
+      onKicked: (reason, byUserId, byUsername) {
+        if (!mounted || _currentRoomId == null) return;
+        _ref.read(kickedEventProvider.notifier).state = KickedEvent(
+          roomId: _currentRoomId!,
+          reason: reason,
+          by: byUsername,
+        );
+      },
+      onMuted: (mutedUntil, byUserId, byUsername) {
+        if (!mounted || _currentRoomId == null) return;
+        _ref.read(mutedEventProvider(_currentRoomId!).notifier).state =
+            MutedEvent(
+          roomId: _currentRoomId!,
+          mutedUntil: mutedUntil,
+          by: byUsername,
+        );
+      },
+      onBanned: (bannedRoomId) {
+        if (!mounted) return;
+        _ref.read(kickedEventProvider.notifier).state = KickedEvent(
+          roomId: bannedRoomId,
+          reason: 'BANNED',
+        );
       },
     );
 
