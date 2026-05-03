@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/url_helper.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
+import '../admin/widgets/message_report_dialog.dart';
 import 'patient_card_widget.dart';
 import 'pdf_viewer_dialog.dart';
 
@@ -1135,6 +1136,16 @@ class _ChatBubble extends StatelessWidget {
                 title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
                 onTap: () { Navigator.of(context).pop(); onDelete?.call(); },
               ),
+            // 자기 메시지 / 삭제된 메시지에는 신고 노출 안 함.
+            if (!isMine && !msg.deleted)
+              ListTile(
+                leading: const Icon(Icons.flag_outlined, color: Colors.orange),
+                title: const Text('신고', style: TextStyle(color: Colors.orange)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showMessageReportDialog(context, msg.effectiveId);
+                },
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -1143,6 +1154,7 @@ class _ChatBubble extends StatelessWidget {
   }
 
   void _showContextMenu(BuildContext context, Offset position) {
+    final canReport = !isMine && !msg.deleted;
     final items = <PopupMenuEntry<String>>[];
     if (onReaction != null && !msg.deleted) {
       items.add(PopupMenuItem(
@@ -1178,6 +1190,9 @@ class _ChatBubble extends StatelessWidget {
     if (onDelete != null) {
       items.add(const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('삭제', style: TextStyle(color: Colors.red))])));
     }
+    if (canReport) {
+      items.add(const PopupMenuItem(value: 'report', child: Row(children: [Icon(Icons.flag_outlined, size: 18, color: Colors.orange), SizedBox(width: 8), Text('신고', style: TextStyle(color: Colors.orange))])));
+    }
     if (items.isEmpty) return;
     showMenu<String>(
       context: context,
@@ -1198,6 +1213,7 @@ class _ChatBubble extends StatelessWidget {
       if (value == 'bookmark') onBookmark?.call();
       if (value == 'edit') onEdit?.call();
       if (value == 'delete') onDelete?.call();
+      if (value == 'report') showMessageReportDialog(context, msg.effectiveId);
     });
   }
 
@@ -1258,7 +1274,8 @@ class _ChatBubble extends StatelessWidget {
 
     final isUrgent = msg.priority.toUpperCase() == 'URGENT' || msg.priority.toUpperCase() == 'STAT';
 
-    final hasActions = onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null || onBookmark != null;
+    final canReport = !isMine && !msg.deleted;
+    final hasActions = canReport || onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null || onBookmark != null;
 
     final bubble = GestureDetector(
       onLongPress: hasActions ? () => _showDeleteSheet(context) : null,

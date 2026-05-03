@@ -20,6 +20,7 @@ import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/in_room_search_sheet.dart';
+import 'admin/widgets/room_members_sheet.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -941,13 +942,8 @@ class _ParticipantBadge extends ConsumerWidget {
   });
 
   void _showModal(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _ParticipantsModal(roomId: roomId, count: count),
-    );
+    // 운영 도구 통합 멤버 시트로 일원화 — 역할 배지 + 강퇴/뮤트/위임/ban 액션 포함.
+    showRoomMembersSheet(context, roomId);
   }
 
   @override
