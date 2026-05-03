@@ -1,7 +1,6 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.chat.entity.RoomMemberEntity;
-import com.chatflow.chat.exception.MutedException;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.dto.BaseMessage.MessageType;
@@ -56,6 +55,7 @@ public class MessageSenderService {
         if (MessageType.CHAT.equals(message.getType()) && message.getUserId() != null) {
             RoomMemberEntity member = roomMemberRepository.findByRoomIdAndUserId(
                     message.getChatRoomId(), message.getUserId()).orElse(null);
+            // mutedUntil == now ⇒ 만료 (mute가 끝나는 그 순간부터는 발송 허용)
             if (member != null && member.getMutedUntil() != null
                     && member.getMutedUntil().isAfter(LocalDateTime.now())) {
                 log.warn("Muted user {} tried to send message to room {}",
