@@ -20,6 +20,8 @@ class ChatInput extends StatefulWidget {
   final VoidCallback? onCancelReply;
   final VoidCallback? onTyping;
   final Future<List<Map<String, dynamic>>> Function(String query)? onMentionSearch;
+  /// 음소거 상태 — null이거나 과거 시각이면 정상, 미래 시각이면 입력창 비활성화.
+  final DateTime? mutedUntil;
 
   const ChatInput({
     super.key,
@@ -34,6 +36,7 @@ class ChatInput extends StatefulWidget {
     this.onCancelReply,
     this.onTyping,
     this.onMentionSearch,
+    this.mutedUntil,
   });
 
   @override
@@ -668,46 +671,59 @@ class _ChatInputState extends State<ChatInput> {
                           _send();
                         }
                       },
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        enabled: widget.isConnected,
-                        onChanged: (text) {
-                          widget.onTyping?.call();
-                          _checkMention(text);
-                        },
-                        maxLines: 5,
-                        minLines: 1,
-                        inputFormatters: [
-                          LengthLimitingTextInputFormatter(_maxLength),
-                        ],
-                        textInputAction: kIsWeb
-                            ? TextInputAction.none
-                            : TextInputAction.newline,
-                        style: TextStyle(
-                          color: cs.onSurface,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: !widget.isConnected
-                              ? '연결 중...'
-                              : _aiMode
-                                  ? 'AI에게 질문하세요...'
-                                  : '메시지를 입력하세요...',
-                          hintMaxLines: 1,
-                          hintStyle: TextStyle(
-                              color: cs.onSurfaceVariant.withAlpha(130),
-                              fontSize: 14,
-                              overflow: TextOverflow.ellipsis),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          isDense: true,
-                        ),
-                      ),
+                      child: Builder(builder: (context) {
+                        final isMuted = widget.mutedUntil != null &&
+                            widget.mutedUntil!.isAfter(DateTime.now());
+                        String? mutedHint;
+                        if (isMuted) {
+                          final hh = widget.mutedUntil!.hour.toString().padLeft(2, '0');
+                          final mm = widget.mutedUntil!.minute.toString().padLeft(2, '0');
+                          mutedHint = '음소거됨 — $hh:$mm까지';
+                        }
+                        return TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          enabled: widget.isConnected && !isMuted,
+                          onChanged: (text) {
+                            widget.onTyping?.call();
+                            _checkMention(text);
+                          },
+                          maxLines: 5,
+                          minLines: 1,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(_maxLength),
+                          ],
+                          textInputAction: kIsWeb
+                              ? TextInputAction.none
+                              : TextInputAction.newline,
+                          style: TextStyle(
+                            color: cs.onSurface,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: !widget.isConnected
+                                ? '연결 중...'
+                                : isMuted
+                                    ? mutedHint
+                                    : _aiMode
+                                        ? 'AI에게 질문하세요...'
+                                        : '메시지를 입력하세요...',
+                            hintMaxLines: 1,
+                            hintStyle: TextStyle(
+                                color: isMuted ? Colors.orange : cs.onSurfaceVariant.withAlpha(130),
+                                fontSize: 14,
+                                fontWeight: isMuted ? FontWeight.w600 : null,
+                                overflow: TextOverflow.ellipsis),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            isDense: true,
+                          ),
+                        );
+                      }),
                     ),
                   ),
                 ),

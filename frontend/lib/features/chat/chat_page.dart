@@ -21,6 +21,11 @@ import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
 import 'widgets/in_room_search_sheet.dart';
 import 'admin/widgets/room_members_sheet.dart';
+import 'admin/widgets/moderator_queue_sheet.dart';
+import 'admin/admin_event_listener.dart';
+import 'admin/admin_event_state.dart';
+import 'admin/current_room_role_provider.dart';
+import '../../shared/models/room_role.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -614,6 +619,8 @@ class ChatPage extends ConsumerWidget {
           context.go('/chat');
         }
       },
+      child: AdminEventListener(
+      roomId: effectiveRoomId,
       child: Scaffold(
       appBar: AppBar(
         leading: isWide
@@ -653,6 +660,18 @@ class ChatPage extends ConsumerWidget {
           ],
         ),
         actions: [
+          // 운영자(OWNER/MOD)에게만 노출되는 방 관리 진입점
+          if (effectiveRoomId != null) Builder(builder: (context) {
+            final myRole = ref.watch(currentRoomRoleProvider(effectiveRoomId));
+            if (myRole != RoomRole.owner && myRole != RoomRole.moderator) {
+              return const SizedBox.shrink();
+            }
+            return IconButton(
+              icon: const Icon(Icons.shield_outlined, size: 20),
+              tooltip: '방 관리 (신고 처리)',
+              onPressed: () => showModeratorQueueSheet(context, effectiveRoomId),
+            );
+          }),
           // Wide (>=768): show all action buttons individually
           if (isWide) ...[
             if (effectiveRoomId != null && roomData != null)
@@ -922,6 +941,7 @@ class ChatPage extends ConsumerWidget {
         ],
       ),
       resizeToAvoidBottomInset: true,
+    ),
     ),
     );
   }
@@ -1587,6 +1607,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
         ChatInput(
           isConnected: chatState.isConnected,
           isAiLoading: chatState.isAiLoading,
+          mutedUntil: ref.watch(mutedEventProvider(widget.roomId))?.mutedUntil,
           isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
             data: (rooms) =>
                 rooms.any((r) => r.id == widget.roomId && r.isHandoff),
