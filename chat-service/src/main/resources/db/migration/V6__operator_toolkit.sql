@@ -43,6 +43,15 @@ CREATE INDEX IF NOT EXISTS idx_message_reports_message
     ON message_reports(message_id);
 
 -- 5) 동일 메시지에 대한 중복 신고 방지 (idempotency race-safety)
-ALTER TABLE message_reports
-    ADD CONSTRAINT IF NOT EXISTS uq_message_reports_message_reporter
-    UNIQUE (message_id, reported_by);
+-- PostgreSQL은 ADD CONSTRAINT IF NOT EXISTS를 지원하지 않아 DO 블록으로 idempotent 처리.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_message_reports_message_reporter'
+    ) THEN
+        ALTER TABLE message_reports
+            ADD CONSTRAINT uq_message_reports_message_reporter
+            UNIQUE (message_id, reported_by);
+    END IF;
+END $$;
