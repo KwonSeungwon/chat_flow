@@ -18,4 +18,55 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of(404, "NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."));
     }
+
+    // ── Operator Toolkit exceptions ─────────────────────────────
+
+    @ExceptionHandler(PermissionDeniedException.class)
+    public ResponseEntity<ErrorResponse> handlePermissionDenied(PermissionDeniedException e) {
+        log.warn("Permission denied: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of(403, "PERMISSION_DENIED", e.getMessage()));
+    }
+
+    @ExceptionHandler(RoomTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleRoomTypeNotSupported(RoomTypeNotSupportedException e) {
+        log.warn("Room type not supported: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "ROOM_TYPE_NOT_SUPPORTED", e.getMessage()));
+    }
+
+    @ExceptionHandler(SelfTargetNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSelfTarget(SelfTargetNotAllowedException e) {
+        log.warn("Self target not allowed: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "SELF_TARGET_NOT_ALLOWED", e.getMessage()));
+    }
+
+    @ExceptionHandler(SelfReportNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSelfReport(SelfReportNotAllowedException e) {
+        log.warn("Self report not allowed: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of(400, "SELF_REPORT_NOT_ALLOWED", e.getMessage()));
+    }
+
+    @ExceptionHandler(ReportRateLimitException.class)
+    public ResponseEntity<ErrorResponse> handleReportRateLimit(ReportRateLimitException e) {
+        log.warn("Report rate limit exceeded: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ErrorResponse.of(429, "REPORT_RATE_LIMIT", e.getMessage()));
+    }
+
+    @ExceptionHandler(MessageNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotFound(MessageNotFoundException e) {
+        log.warn("Message not found: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of(404, "MESSAGE_NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(MutedException.class)
+    public ResponseEntity<ErrorResponse> handleMuted(MutedException e) {
+        log.warn("User is muted: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.LOCKED)
+                .body(ErrorResponse.of(423, "MUTED", e.getMessage()));
+    }
 }
