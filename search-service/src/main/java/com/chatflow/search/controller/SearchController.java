@@ -108,6 +108,37 @@ public class SearchController {
         return ResponseEntity.ok(results);
     }
 
+    @GetMapping("/rooms/{roomId}/filter")
+    public ResponseEntity<Page<ChatMessageDocument>> filterSearch(
+            @PathVariable String roomId,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @RequestParam(required = false) String messageType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        boolean hasAny = (query != null && !query.isBlank())
+                || (username != null && !username.isBlank())
+                || startDate != null
+                || endDate != null
+                || (messageType != null && !messageType.isBlank());
+        if (!hasAny) {
+            throw new IllegalArgumentException("최소 하나의 검색 조건이 필요합니다.");
+        }
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException("시작 시간은 종료 시간보다 이전이어야 합니다.");
+        }
+
+        Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        Page<ChatMessageDocument> results = koreanSearchService.searchWithFilters(
+                roomId, query, username, startDate, endDate, messageType, pageable);
+        return ResponseEntity.ok(results);
+    }
+
     private void validateSearchParams(String query, int page, int size) {
         if (query == null || query.isBlank()) {
             throw new IllegalArgumentException("검색어는 필수입니다.");

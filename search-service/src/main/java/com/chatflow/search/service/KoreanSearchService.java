@@ -16,8 +16,13 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import co.elastic.clients.json.JsonData;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -166,6 +171,83 @@ public class KoreanSearchService {
 
         } catch (Exception e) {
             log.error("Error performing N-gram search for query: {}", query, e);
+            throw new SearchException("검색 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    public Page<ChatMessageDocument> searchWithFilters(
+            String roomId,
+            String query,
+            String username,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            String messageType,
+            Pageable pageable) {
+        try {
+            BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
+
+            if (query != null && !query.isBlank()) {
+                boolBuilder.must(MultiMatchQuery.of(m -> m
+                        .query(query)
+                        .fields("content^3", "content.ngram^0.3", "fileName^2", "fileName.ngram^0.5")
+                        .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
+                        .minimumShouldMatch("75%")
+                )._toQuery());
+            } else {
+                boolBuilder.must(q -> q.matchAll(m -> m));
+            }
+
+            boolBuilder.filter(f -> f.term(t -> t.field("chatRoomId").value(roomId)));
+
+            if (username != null && !username.isBlank()) {
+                final String u = username.trim();
+                boolBuilder.filter(f -> f.match(m -> m.field("username").query(u)));
+            }
+
+            if (startDate != null && endDate != null) {
+                final LocalDateTime sd = startDate;
+                final LocalDateTime ed = endDate;
+                boolBuilder.filter(f -> f.range(r -> r
+                        .field("timestamp")
+                        .gte(JsonData.of(sd.toString()))
+                        .lte(JsonData.of(ed.toString()))));
+            }
+
+            if (messageType != null && !messageType.isBlank()) {
+                final String mt = messageType.trim();
+                boolBuilder.filter(f -> f.term(t -> t.field("messageType").value(mt)));
+            } else {
+                boolBuilder.mustNot(mn -> mn.terms(t -> t
+                        .field("messageType")
+                        .terms(tv -> tv.value(List.of(
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
+                                co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
+                        )))));
+            }
+
+            SearchRequest request = SearchRequest.of(s -> s
+                    .index("chat_messages")
+                    .query(boolBuilder.build()._toQuery())
+                    .from((int) pageable.getOffset())
+                    .size(pageable.getPageSize())
+                    .sort(sort -> sort.field(f -> f
+                            .field("timestamp")
+                            .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc))));
+
+            SearchResponse<ChatMessageDocument> response =
+                    elasticsearchClient.search(request, ChatMessageDocument.class);
+
+            List<ChatMessageDocument> docs = response.hits().hits().stream()
+                    .map(co.elastic.clients.elasticsearch.core.search.Hit::source)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            long total = response.hits().total() != null ? response.hits().total().value() : 0;
+            return new PageImpl<>(docs, pageable, total);
+
+        } catch (Exception e) {
+            log.error("Error in searchWithFilters for roomId: {}", roomId, e);
             throw new SearchException("검색 중 오류가 발생했습니다.", e);
         }
     }
