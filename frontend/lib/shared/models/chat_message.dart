@@ -102,6 +102,7 @@ class ChatMessage {
       pinned: json['pinned'] == true,
       reactions: parseReactions(json['reactions']),
       forwardedFrom: json['forwardedFrom']?.toString(),
+      localId: json['localId']?.toString(),
       deliveryStatus: MessageDeliveryStatus.sent,
     );
   }
@@ -124,6 +125,8 @@ class ChatMessage {
   }
 
   Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
+    if (messageId != null) 'messageId': messageId,
     'chatRoomId': chatRoomId,
     'userId': userId,
     'username': username,
@@ -132,12 +135,18 @@ class ChatMessage {
     'type': type,
     'priority': priority,
     'isAiGenerated': isAiGenerated,
+    'deleted': deleted,
+    'edited': edited,
+    if (editedAt != null) 'editedAt': editedAt,
+    'pinned': pinned,
+    if (reactions.isNotEmpty) 'reactions': reactions,
     if (fileUrl != null) 'fileUrl': fileUrl,
     if (fileName != null) 'fileName': fileName,
     if (fileContentType != null) 'fileContentType': fileContentType,
     if (parentMessageId != null) 'parentMessageId': parentMessageId,
     if (parentMessagePreview != null) 'parentMessagePreview': parentMessagePreview,
     if (forwardedFrom != null) 'forwardedFrom': forwardedFrom,
+    if (localId != null) 'localId': localId,
   };
 
   ChatMessage copyWith({
