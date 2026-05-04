@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/chat/chat_provider.dart';
+import '../../features/command_palette/widgets/command_palette_overlay.dart';
 
 /// Global keyboard shortcuts widget wrapping the app.
-/// Ctrl+K / Cmd+K: global search, Ctrl+/ / Cmd+/: help, Ctrl+J / Cmd+J: previous room.
+/// Ctrl+K / Cmd+K: command palette, Ctrl+/ / Cmd+/: help, Ctrl+J / Cmd+J: previous room.
 class AppShortcuts extends ConsumerWidget {
   final Widget child;
   const AppShortcuts({super.key, required this.child});
@@ -14,9 +15,9 @@ class AppShortcuts extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Shortcuts(
       shortcuts: <ShortcutActivator, Intent>{
-        // Ctrl+K / Cmd+K : global search
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _GlobalSearchIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): const _GlobalSearchIntent(),
+        // Ctrl+K / Cmd+K : command palette
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _CommandPaletteIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): const _CommandPaletteIntent(),
         // Ctrl+/ / Cmd+/ : shortcut help
         const SingleActivator(LogicalKeyboardKey.slash, control: true): const _HelpIntent(),
         const SingleActivator(LogicalKeyboardKey.slash, meta: true): const _HelpIntent(),
@@ -26,9 +27,9 @@ class AppShortcuts extends ConsumerWidget {
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _GlobalSearchIntent: CallbackAction<_GlobalSearchIntent>(
+          _CommandPaletteIntent: CallbackAction<_CommandPaletteIntent>(
             onInvoke: (_) {
-              GoRouter.of(context).push('/search');
+              showCommandPalette(context);
               return null;
             },
           ),
@@ -70,7 +71,7 @@ class AppShortcuts extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _ShortcutRow(keys: 'Ctrl + K', desc: '전역 검색'),
+            _ShortcutRow(keys: 'Ctrl + K', desc: '명령 팔레트'),
             _ShortcutRow(keys: 'Ctrl + /', desc: '단축키 도움말'),
             _ShortcutRow(keys: 'Ctrl + J', desc: '이전 방'),
             _ShortcutRow(keys: 'Esc', desc: '대화상자 닫기'),
@@ -87,8 +88,8 @@ class AppShortcuts extends ConsumerWidget {
   }
 }
 
-class _GlobalSearchIntent extends Intent {
-  const _GlobalSearchIntent();
+class _CommandPaletteIntent extends Intent {
+  const _CommandPaletteIntent();
 }
 
 class _HelpIntent extends Intent {
