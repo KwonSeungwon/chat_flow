@@ -251,9 +251,9 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                             msg.content, _queryCtrl.text.trim()),
                       ),
                       onTap: () {
+                        Navigator.of(context).pop();
                         final id = msg.messageId ?? msg.id ?? '';
                         if (id.isNotEmpty && widget.onResultTap != null) {
-                          Navigator.of(context).pop();
                           widget.onResultTap!(id);
                         }
                       },
