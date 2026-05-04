@@ -12,6 +12,7 @@ public record ReportDto(
         String messageId,
         String messageContent,
         String messageAuthor,
+        String messageAuthorUserId,
         String reportedBy,
         String reportedByUserId,
         ReportReason reason,
@@ -33,12 +34,15 @@ public record ReportDto(
                                  String reporterUsername) {
         String content;
         String author;
+        String authorUserId;
         if (message == null || message.isDeleted()) {
             content = DELETED_MESSAGE_PLACEHOLDER;
             author = message != null ? message.getUsername() : UNKNOWN_AUTHOR;
+            authorUserId = message != null ? message.getUserId() : null;
         } else {
             content = truncate(message.getContent(), MESSAGE_PREVIEW_MAX_LENGTH);
             author = message.getUsername();
+            authorUserId = message.getUserId();
         }
 
         return new ReportDto(
@@ -46,6 +50,7 @@ public record ReportDto(
                 report.getMessageId(),
                 content,
                 author,
+                authorUserId,
                 reporterUsername,
                 report.getReportedBy(),
                 report.getReason(),

@@ -217,17 +217,15 @@ class _ReportCard extends ConsumerWidget {
     );
     if (confirm != true) return;
 
+    final authorUserId = report.messageAuthorUserId;
     final api = ref.read(roomAdminApiProvider);
     final messenger = ScaffoldMessenger.of(context);
+    if (authorUserId == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('작성자 ID를 알 수 없어 차단할 수 없습니다.')));
+      return;
+    }
     try {
-      // ban API는 userId 필요. ReportDto는 messageAuthor(username)만 가짐 — listMembers에서 username으로 매칭.
-      final members = await api.listMembers(roomId);
-      final author = members.firstWhere(
-        (m) => m.username == report.messageAuthor,
-        orElse: () => throw Exception('작성자가 더 이상 방에 없습니다.'),
-      );
-      await api.banUser(roomId, author.userId, '신고 처리');
-      // 신고도 자동 RESOLVED 처리
+      await api.banUser(roomId, authorUserId, '신고 처리');
       await api.updateReportStatus(report.id, ReportStatus.resolved);
       ref.invalidate(roomReportsProvider((roomId: roomId, status: ReportStatus.pending)));
       if (context.mounted) {

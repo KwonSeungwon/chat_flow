@@ -146,7 +146,7 @@ class MessageReportControllerTest {
         @Test
         void listReports_returnsOk() throws Exception {
             ReportDto dto = new ReportDto(
-                    1L, MESSAGE_ID, "bad content", "author1",
+                    1L, MESSAGE_ID, "bad content", "author1", "author-user-id",
                     "reporter1", "reporter-user-id", ReportReason.SPAM,
                     "looks like spam", ReportStatus.PENDING,
                     LocalDateTime.of(2026, 4, 27, 12, 0));

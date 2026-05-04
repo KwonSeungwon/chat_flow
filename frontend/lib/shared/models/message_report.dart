@@ -25,6 +25,7 @@ class MessageReport {
   final String messageId;
   final String messageContent;
   final String messageAuthor;
+  final String? messageAuthorUserId;
   final String reportedBy;
   final String? reportedByUserId;
   final ReportReason reason;
@@ -37,6 +38,7 @@ class MessageReport {
     required this.messageId,
     required this.messageContent,
     required this.messageAuthor,
+    this.messageAuthorUserId,
     required this.reportedBy,
     this.reportedByUserId,
     required this.reason,
@@ -51,6 +53,7 @@ class MessageReport {
       messageId: json['messageId']?.toString() ?? '',
       messageContent: json['messageContent']?.toString() ?? '',
       messageAuthor: json['messageAuthor']?.toString() ?? '',
+      messageAuthorUserId: json['messageAuthorUserId']?.toString(),
       reportedBy: json['reportedBy']?.toString() ?? '',
       reportedByUserId: json['reportedByUserId']?.toString(),
       reason:
@@ -68,6 +71,7 @@ class MessageReport {
         'messageId': messageId,
         'messageContent': messageContent,
         'messageAuthor': messageAuthor,
+        if (messageAuthorUserId != null) 'messageAuthorUserId': messageAuthorUserId,
         'reportedBy': reportedBy,
         if (reportedByUserId != null) 'reportedByUserId': reportedByUserId,
         'reason': reason.apiValue,
