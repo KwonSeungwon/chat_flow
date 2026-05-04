@@ -1,6 +1,7 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.common.dto.OrderEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,8 +18,6 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class OrderEventConsumer {
-
-    private static final String CHAT_TOPIC = "chat-messages";
 
     private final ChatPersistenceService chatPersistenceService;
     private final SimpMessagingTemplate messagingTemplate;
@@ -47,7 +46,7 @@ public class OrderEventConsumer {
                 .timestamp(LocalDateTime.now())
                 .build();
 
-        chatPersistenceService.persistMessageAndPublish(systemMessage, CHAT_TOPIC, "ORDER_EVENT", null);
+        chatPersistenceService.persistMessageAndPublish(systemMessage, KafkaTopics.CHAT_MESSAGES, "ORDER_EVENT", null);
         log.info("OrderEvent 처리 완료: roomId={}, orderId={}", event.getRoomId(), event.getOrderId());
     }
 }

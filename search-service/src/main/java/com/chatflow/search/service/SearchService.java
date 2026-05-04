@@ -1,6 +1,7 @@
 package com.chatflow.search.service;
 
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.repository.ChatMessageSearchRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -48,7 +49,7 @@ public class SearchService {
                 .register(registry);
     }
 
-    @KafkaListener(topics = {"chat-messages", "ai-summaries"})
+    @KafkaListener(topics = {KafkaTopics.CHAT_MESSAGES, KafkaTopics.AI_SUMMARIES})
     public void indexChatMessage(String messageJson) {
         ChatMessage message;
         try {

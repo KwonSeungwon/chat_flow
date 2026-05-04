@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -29,8 +30,6 @@ public class UserPresenceService {
     private final StringRedisTemplate redisTemplate;
     private final RoomMemberRepository roomMemberRepository;
     private final RoomBanService roomBanService;
-
-    private static final String CHAT_TOPIC = "chat-messages";
 
     public void join(ChatMessage message, String sessionId) {
         String currentUserId = message.getUserId() != null ? message.getUserId() : "";
@@ -145,7 +144,7 @@ public class UserPresenceService {
                         "participantCount", participantIds.size(),
                         "timestamp", LocalDateTime.now().toString()));
 
-        chatPersistenceService.saveOutboxEventAndPublish(message, CHAT_TOPIC, "USER_JOINED");
+        chatPersistenceService.saveOutboxEventAndPublish(message, KafkaTopics.CHAT_MESSAGES, "USER_JOINED");
     }
 
     public void join(ChatMessage message) {
@@ -187,7 +186,7 @@ public class UserPresenceService {
             leaveMessage.setMessageId(UUID.randomUUID().toString());
             leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
 
-            chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, CHAT_TOPIC, "USER_LEFT");
+            chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, KafkaTopics.CHAT_MESSAGES, "USER_LEFT");
             log.info("User {} left chat room {}", username, roomId);
         } else {
             log.info("User {} closed a tab in room {} (still has active sessions)", username, roomId);

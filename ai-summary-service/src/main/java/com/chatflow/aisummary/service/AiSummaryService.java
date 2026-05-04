@@ -2,6 +2,7 @@ package com.chatflow.aisummary.service;
 
 import com.chatflow.aisummary.client.ChatModelClient;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,7 +35,6 @@ public class AiSummaryService {
     private final ObjectMapper objectMapper;
     private final Executor geminiExecutor;
 
-    private static final String SUMMARY_TOPIC = "ai-summaries";
     private static final int SUMMARY_TRIGGER_COUNT = 10;
     private static final int MAX_MESSAGES_PER_ROOM = 100;
     private static final int MIN_MESSAGES_FOR_TIME_TRIGGER = 3;
@@ -66,7 +66,7 @@ public class AiSummaryService {
         this.geminiExecutor = geminiExecutor;
     }
 
-    @KafkaListener(topics = "ai-summary-requests")
+    @KafkaListener(topics = KafkaTopics.AI_SUMMARY_REQUESTS)
     public void handleSummaryRequest(String messageJson) {
         try {
             ChatMessage message = objectMapper.readValue(messageJson, ChatMessage.class);
@@ -77,7 +77,7 @@ public class AiSummaryService {
         }
     }
 
-    @KafkaListener(topics = "chat-messages")
+    @KafkaListener(topics = KafkaTopics.CHAT_MESSAGES)
     public void handleChatMessage(String messageJson) {
         try {
             ChatMessage message = objectMapper.readValue(messageJson, ChatMessage.class);
@@ -265,7 +265,7 @@ public class AiSummaryService {
             cacheSummary(roomId, summaryMessage);
             redisTemplate.opsForValue().set(REDIS_HASH_PREFIX + roomId, hash, REDIS_SUMMARY_TTL);
 
-            kafkaTemplate.send(SUMMARY_TOPIC, roomId, summaryMessage)
+            kafkaTemplate.send(KafkaTopics.AI_SUMMARIES, roomId, summaryMessage)
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
                             log.error("Failed to send summary to Kafka for room: {}", roomId, ex);
@@ -364,7 +364,7 @@ public class AiSummaryService {
                 .build();
 
         cacheSummary(roomId, response);
-        kafkaTemplate.send(SUMMARY_TOPIC, roomId, response);
+        kafkaTemplate.send(KafkaTopics.AI_SUMMARIES, roomId, response);
 
         return response;
     }
@@ -462,7 +462,7 @@ public class AiSummaryService {
                 .build();
 
         cacheSummary(roomId, response);
-        kafkaTemplate.send(SUMMARY_TOPIC, roomId, response);
+        kafkaTemplate.send(KafkaTopics.AI_SUMMARIES, roomId, response);
         return response;
     }
 

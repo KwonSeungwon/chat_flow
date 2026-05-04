@@ -5,6 +5,7 @@ import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -46,9 +47,6 @@ public class MessageSenderService {
                 .description("Total chat messages processed")
                 .register(registry);
     }
-
-    private static final String CHAT_TOPIC = "chat-messages";
-    private static final String AI_SUMMARY_TOPIC = "ai-summary-requests";
 
     public void send(ChatMessage message) {
         // Mute gate — muted users cannot send CHAT messages
@@ -101,8 +99,8 @@ public class MessageSenderService {
 
         log.info("Processing chat message: {}", message.getMessageId());
 
-        String aiTopic = shouldRequestAISummary(message) ? AI_SUMMARY_TOPIC : null;
-        chatPersistenceService.persistMessageAndPublish(message, CHAT_TOPIC, "MESSAGE_SENT", aiTopic);
+        String aiTopic = shouldRequestAISummary(message) ? KafkaTopics.AI_SUMMARY_REQUESTS : null;
+        chatPersistenceService.persistMessageAndPublish(message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", aiTopic);
         messageCounter.increment();
         chatRoomService.updateLastMessageAt(message.getChatRoomId());
 
