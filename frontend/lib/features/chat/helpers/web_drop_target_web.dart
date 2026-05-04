@@ -9,6 +9,15 @@ import 'pasted_image.dart';
 
 /// Web implementation: wraps [child] and listens to HTML5 drag/drop events
 /// and paste events on the document body for image files.
+///
+/// IMPORTANT: This implementation listens on `document.body` and `document` (page-wide),
+/// not on a scoped element. ChatFlow currently mounts at most one `ChatInput` at a time
+/// (`/chat/:roomId` only), so a singleton-by-convention assumption is safe.
+///
+/// If a future feature mounts a second `ChatInput` simultaneously (e.g., reply-in-thread
+/// modal, side-panel chat), every drop/paste will be received by ALL instances and the
+/// "first-image-wins" guard is per-instance, not global — refactor this listener to
+/// scope to a specific element or a class-level static before adding a second consumer.
 class WebDropTarget extends StatefulWidget {
   final Widget child;
   final void Function(PastedImage image)? onImageDrop;
@@ -41,6 +50,11 @@ class _WebDropTargetState extends State<WebDropTarget> {
     _subs.add(body.onDrop.listen(_onDrop));
     // Listen for paste events (Ctrl+V / Cmd+V with image in clipboard)
     _subs.add(html.document.onPaste.listen(_onPaste));
+
+    // Reset drag state when window loses focus or browser fires dragend — these can
+    // fire instead of a balancing dragleave when the user drops outside the viewport.
+    _subs.add(html.window.onBlur.listen((_) => _resetHover()));
+    _subs.add(html.document.onDragEnd.listen((_) => _resetHover()));
   }
 
   @override
@@ -50,6 +64,11 @@ class _WebDropTargetState extends State<WebDropTarget> {
     }
     _subs.clear();
     super.dispose();
+  }
+
+  void _resetHover() {
+    _dragCounter = 0;
+    widget.onHoverChanged?.call(false);
   }
 
   void _onDragEnter(html.MouseEvent event) {

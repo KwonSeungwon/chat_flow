@@ -116,12 +116,14 @@ class _ChatInputState extends State<ChatInput> {
   }
 
   void _handleImageDrop(PastedImage image) {
+    if (!mounted) return;
     if (widget.onFilePick == null || _isUploading) return;
     if (!_isImageMime(image.mimeType)) return;
     _submitImage(image);
   }
 
   void _submitImage(PastedImage image) {
+    if (!mounted) return;
     setState(() {
       _pendingFileName = image.name;
       _pendingFileBytes = image.bytes;
