@@ -21,6 +21,7 @@ import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
+import 'dialogs/change_password_dialog.dart';
 import 'widgets/in_room_search_sheet.dart';
 import 'admin/widgets/room_members_sheet.dart';
 import 'admin/widgets/moderator_queue_sheet.dart';
@@ -63,63 +64,6 @@ Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
         const SnackBar(content: Text('프로필 이미지 변경에 실패했습니다.')));
     }
   }
-}
-
-void _showChangePasswordDialog(BuildContext context, WidgetRef ref) {
-  final currentCtrl = TextEditingController();
-  final newCtrl = TextEditingController();
-  final confirmCtrl = TextEditingController();
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('비밀번호 변경'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(controller: currentCtrl, obscureText: true, decoration: const InputDecoration(labelText: '현재 비밀번호')),
-          const SizedBox(height: 8),
-          TextField(controller: newCtrl, obscureText: true, decoration: const InputDecoration(labelText: '새 비밀번호 (8자 이상)')),
-          const SizedBox(height: 8),
-          TextField(controller: confirmCtrl, obscureText: true, decoration: const InputDecoration(labelText: '새 비밀번호 확인')),
-        ],
-      ),
-      actionsAlignment: MainAxisAlignment.center,
-      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      actions: [
-        Row(children: [
-          Expanded(child: TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('취소'))),
-          const SizedBox(width: 8),
-          Expanded(child: FilledButton(
-            onPressed: () async {
-              if (newCtrl.text != confirmCtrl.text) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('새 비밀번호가 일치하지 않습니다.')));
-                return;
-              }
-              if (newCtrl.text.length < 8) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호는 8자 이상이어야 합니다.')));
-                return;
-              }
-              try {
-                await ref.read(dioClientProvider).dio.put('/api/auth/password', data: {
-                  'currentPassword': currentCtrl.text,
-                  'newPassword': newCtrl.text,
-                });
-                if (ctx.mounted) Navigator.of(ctx).pop();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호가 변경되었습니다.')));
-                }
-              } catch (_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('비밀번호 변경에 실패했습니다. 현재 비밀번호를 확인해주세요.')));
-                }
-              }
-            },
-            child: const Text('변경'),
-          )),
-        ]),
-      ],
-    ),
-  );
 }
 
 void _showProfileDialog(BuildContext context, WidgetRef ref) {
@@ -184,7 +128,10 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
             label: const Text('비밀번호'),
             onPressed: () {
               Navigator.of(ctx).pop();
-              _showChangePasswordDialog(context, ref);
+              showDialog(
+                context: context,
+                builder: (_) => const ChangePasswordDialog(),
+              );
             },
           )),
         ]),
@@ -826,7 +773,12 @@ class ChatPage extends ConsumerWidget {
               } else if (value == 'bookmarks') {
                 if (context.mounted) _showBookmarksDialog(context, ref);
               } else if (value == 'password') {
-                if (context.mounted) _showChangePasswordDialog(context, ref);
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (_) => const ChangePasswordDialog(),
+                  );
+                }
               } else if (value == 'logout') {
                 await ref.read(authProvider.notifier).logout();
                 if (context.mounted) context.go('/login');
