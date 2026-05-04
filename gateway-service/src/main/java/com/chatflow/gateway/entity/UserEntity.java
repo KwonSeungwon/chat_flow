@@ -30,6 +30,12 @@ public class UserEntity {
     @Column("profile_image_url")
     private String profileImageUrl;
 
+    @Column("status_message")
+    private String statusMessage;
+
+    @Column("bio")
+    private String bio;
+
     @Column("created_at")
     private LocalDateTime createdAt;
 }

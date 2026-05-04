@@ -13,14 +13,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberManagementService {
 
-    private static final Set<Integer> ALLOWED_MUTE_MINUTES = Set.of(5, 30, 60);
+    private static final int MIN_MUTE_MINUTES = 1;
+    private static final int MAX_MUTE_MINUTES = 1440; // 24시간 — 1년 mute 같은 abuse 차단
 
     private final RoomMemberRepository roomMemberRepository;
     private final RoomPermissionService roomPermissionService;
@@ -47,9 +47,9 @@ public class MemberManagementService {
 
     @Transactional
     public MuteResult muteMember(String roomId, String actorUserId, String targetUserId, int minutes) {
-        if (!ALLOWED_MUTE_MINUTES.contains(minutes)) {
+        if (minutes < MIN_MUTE_MINUTES || minutes > MAX_MUTE_MINUTES) {
             throw new IllegalArgumentException(
-                    "뮤트 시간은 5, 30, 60분만 허용됩니다. 요청값: " + minutes);
+                    "뮤트 시간은 " + MIN_MUTE_MINUTES + "~" + MAX_MUTE_MINUTES + "분 범위만 허용됩니다. 요청값: " + minutes);
         }
 
         roomPermissionService.requireNotDmRoom(roomId);

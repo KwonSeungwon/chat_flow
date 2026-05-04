@@ -197,9 +197,51 @@ class MemberManagementServiceTest {
         }
 
         @Test
-        void muteMember_invalidMinutes_throwsIllegalArgument() {
+        void muteMember_zeroMinutes_throwsIllegalArgument() {
             assertThrows(IllegalArgumentException.class,
-                    () -> memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 10));
+                    () -> memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 0));
+        }
+
+        @Test
+        void muteMember_negativeMinutes_throwsIllegalArgument() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, -5));
+        }
+
+        @Test
+        void muteMember_overMaximum_throwsIllegalArgument() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 1441));
+        }
+
+        @Test
+        void muteMember_customMinutesAllowed() {
+            stubGeneralRoom();
+            RoomMemberEntity owner = member(OWNER_ID, "owner", RoomRole.OWNER);
+            RoomMemberEntity target = member(TARGET_ID, "target", RoomRole.MEMBER);
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, OWNER_ID))
+                    .thenReturn(Optional.of(owner));
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
+                    .thenReturn(Optional.of(target));
+
+            // 12분 — 기존 5/30/60 프리셋 외 임의 값
+            MuteResult result = memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 12);
+
+            assertNotNull(result);
+            verify(roomMemberRepository).save(target);
+        }
+
+        @Test
+        void muteMember_atMaximumBoundary_allowed() {
+            stubGeneralRoom();
+            RoomMemberEntity owner = member(OWNER_ID, "owner", RoomRole.OWNER);
+            RoomMemberEntity target = member(TARGET_ID, "target", RoomRole.MEMBER);
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, OWNER_ID))
+                    .thenReturn(Optional.of(owner));
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
+                    .thenReturn(Optional.of(target));
+
+            assertNotNull(memberManagementService.muteMember(ROOM_ID, OWNER_ID, TARGET_ID, 1440));
         }
 
         @Test

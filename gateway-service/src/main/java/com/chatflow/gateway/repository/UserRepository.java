@@ -7,6 +7,7 @@ import reactor.core.publisher.Mono;
 
 public interface UserRepository extends ReactiveCrudRepository<UserEntity, Long> {
     Mono<UserEntity> findByUsername(String username);
+    Mono<UserEntity> findByUserId(String userId);
     Mono<Boolean> existsByUsername(String username);
     Flux<UserEntity> findByUsernameContainingIgnoreCaseOrderByUsernameAsc(String query);
 }

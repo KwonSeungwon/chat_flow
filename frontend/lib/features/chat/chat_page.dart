@@ -26,6 +26,7 @@ import 'admin/admin_event_listener.dart';
 import 'admin/admin_event_state.dart';
 import 'admin/current_room_role_provider.dart';
 import '../../shared/models/room_role.dart';
+import '../profile/widgets/profile_edit_dialog.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -819,6 +820,8 @@ class ChatPage extends ConsumerWidget {
                 ref.read(themeModeProvider.notifier).toggle();
               } else if (value == 'profile') {
                 if (context.mounted) _showProfileDialog(context, ref);
+              } else if (value == 'profile_edit') {
+                if (context.mounted) showProfileEditDialog(context);
               } else if (value == 'bookmarks') {
                 if (context.mounted) _showBookmarksDialog(context, ref);
               } else if (value == 'password') {
@@ -854,12 +857,22 @@ class ChatPage extends ConsumerWidget {
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
+                value: 'profile_edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 20),
+                    SizedBox(width: 8),
+                    Text('프로필 편집'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
                 value: 'profile',
                 child: Row(
                   children: [
                     Icon(Icons.person_outline, size: 20),
                     SizedBox(width: 8),
-                    Text('프로필 관리'),
+                    Text('계정 / 환경설정'),
                   ],
                 ),
               ),

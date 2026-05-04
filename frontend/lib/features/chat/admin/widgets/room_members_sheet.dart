@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/models/room_member.dart';
 import '../../../../shared/models/room_role.dart';
+import '../../../../shared/widgets/user_avatar.dart';
+import '../../../profile/widgets/profile_preview_dialog.dart';
 import '../current_room_role_provider.dart';
 import '../room_admin_api_provider.dart';
 import '../room_members_provider.dart';
+import 'mute_custom_time_dialog.dart';
 import 'role_badge.dart';
 
 /// 모바일 풀스크린 바텀시트 / 데스크톱 모달 다이얼로그로 멤버 시트를 띄운다.
@@ -130,12 +133,10 @@ class _MemberTile extends ConsumerWidget {
         myRole != null;
 
     return ListTile(
-      leading: CircleAvatar(
+      leading: UserAvatar(
+        fallbackName: member.username,
         radius: 18,
-        child: Text(
-          member.username.isNotEmpty ? member.username.characters.first : '?',
-          style: const TextStyle(fontSize: 14),
-        ),
+        onTap: () => showProfilePreview(context, member.userId),
       ),
       title: Row(
         children: [
@@ -168,6 +169,7 @@ class _MemberTile extends ConsumerWidget {
                 const PopupMenuItem(value: 'mute_5', child: Text('5분 음소거')),
                 const PopupMenuItem(value: 'mute_30', child: Text('30분 음소거')),
                 const PopupMenuItem(value: 'mute_60', child: Text('1시간 음소거')),
+                const PopupMenuItem(value: 'mute_custom', child: Text('다른 시간...')),
                 if (member.isMuted)
                   const PopupMenuItem(value: 'unmute', child: Text('음소거 해제')),
                 const PopupMenuItem(
@@ -203,6 +205,11 @@ class _MemberTile extends ConsumerWidget {
           break;
         case 'mute_60':
           await api.muteMember(roomId, member.userId, 60);
+          break;
+        case 'mute_custom':
+          final minutes = await showMuteCustomTimeDialog(context);
+          if (minutes == null) return;
+          await api.muteMember(roomId, member.userId, minutes);
           break;
         case 'unmute':
           await api.unmuteMember(roomId, member.userId);
