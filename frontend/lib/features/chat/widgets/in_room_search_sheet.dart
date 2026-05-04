@@ -78,13 +78,13 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
       }
       if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
       spans.add(TextSpan(
-        text: text.substring(idx, idx + query.length),
+        text: text.substring(idx, idx + lowerQ.length),
         style: TextStyle(
           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
           fontWeight: FontWeight.bold,
         ),
       ));
-      start = idx + query.length;
+      start = idx + lowerQ.length;
     }
     return RichText(
       maxLines: 2,
@@ -101,7 +101,6 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
     final cs = Theme.of(context).colorScheme;
     final df = DateFormat('MM/dd');
     final state = ref.watch(inRoomSearchProvider(widget.roomId));
-    final notifier = ref.read(inRoomSearchProvider(widget.roomId).notifier);
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -183,7 +182,9 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                 return ChoiceChip(
                   label: Text(label),
                   selected: selected,
-                  onSelected: (_) => notifier.setMessageTypeFilter(value),
+                  onSelected: (_) => ref
+                      .read(inRoomSearchProvider(widget.roomId).notifier)
+                      .setMessageTypeFilter(value),
                 );
               }).toList(),
             ),
@@ -252,9 +253,8 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                       ),
                       onTap: () {
                         Navigator.of(context).pop();
-                        final id = msg.messageId ?? msg.id ?? '';
-                        if (id.isNotEmpty && widget.onResultTap != null) {
-                          widget.onResultTap!(id);
+                        if (widget.onResultTap != null) {
+                          widget.onResultTap!(msg.effectiveId);
                         }
                       },
                     );

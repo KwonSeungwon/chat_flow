@@ -55,8 +55,7 @@ void main() {
 
   testWidgets('hasSearched=true + 결과 없으면 "검색 결과 없음" 표시', (tester) async {
     final stub = _StubNotifier();
-    // ignore: invalid_use_of_protected_member
-    stub.state = stub.state.copyWith(hasSearched: true);
+    stub.setStateForTest(stub.state.copyWith(hasSearched: true));
     await tester.pumpWidget(_wrap(
       const InRoomSearchSheet(roomId: 'room1'),
       stub: stub,

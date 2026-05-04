@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/chat_message.dart';
+
+const _defaultPageSize = 50;
 
 const _sentinel = Object();
 
@@ -52,11 +55,14 @@ class InRoomSearchNotifier extends StateNotifier<InRoomSearchState> {
         _roomId = roomId,
         super(const InRoomSearchState());
 
-  /// 테스트 전용 — HTTP 호출 없음
+  @visibleForTesting
   InRoomSearchNotifier.forTest(String roomId)
       : _dioClient = null,
         _roomId = roomId,
         super(const InRoomSearchState());
+
+  @visibleForTesting
+  void setStateForTest(InRoomSearchState s) => state = s;
 
   void setMessageTypeFilter(String? type) {
     final next = state.messageTypeFilter == type ? null : type;
@@ -87,7 +93,7 @@ class InRoomSearchNotifier extends StateNotifier<InRoomSearchState> {
         if (endDate != null) 'endDate': endDate.toUtc().toIso8601String(),
         if (state.messageTypeFilter != null)
           'messageType': state.messageTypeFilter,
-        'size': 50,
+        'size': _defaultPageSize,
       };
 
       final resp = await _dioClient.dio.get(

@@ -512,7 +512,6 @@ void _showInRoomSearch(BuildContext context, WidgetRef ref, String roomId) {
     builder: (ctx) => InRoomSearchSheet(
       roomId: roomId,
       onResultTap: (messageId) {
-        Navigator.of(ctx).pop();
         GoRouter.of(context).go('/chat/$roomId?messageId=$messageId');
       },
     ),
