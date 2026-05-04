@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/ui_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/font_scale_provider.dart';
@@ -1645,7 +1646,6 @@ class _InviteMemberModal extends ConsumerStatefulWidget {
 }
 
 class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
-  static const int _maxParticipants = 10;
   final _searchCtrl = TextEditingController();
   List<Map<String, dynamic>> _results = [];
   bool _searching = false;
@@ -1684,7 +1684,7 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
   }
 
   Future<void> _invite(Map<String, dynamic> user) async {
-    if (widget.currentCount >= _maxParticipants) {
+    if (widget.currentCount >= UIConstants.maxParticipants) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('채팅방이 만석입니다 (최대 10명).')),
@@ -1717,7 +1717,7 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isFull = widget.currentCount >= _maxParticipants;
+    final isFull = widget.currentCount >= UIConstants.maxParticipants;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -1753,7 +1753,7 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${widget.currentCount}/$_maxParticipants명',
+                    '${widget.currentCount}/${UIConstants.maxParticipants}명',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

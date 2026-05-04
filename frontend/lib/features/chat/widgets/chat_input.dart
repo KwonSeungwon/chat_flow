@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
+import '../../../core/constants/ui_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
@@ -50,8 +51,6 @@ class _ChatInputState extends State<ChatInput> {
   final _controller = TextEditingController();
   final _focusNode  = FocusNode();
   final _keyboardFocusNode = FocusNode();
-  static const _maxLength     = 1000;
-  static const _warnThreshold = 800;
   bool _aiMode = false;
   String _priority = 'ROUTINE';
   bool _isSending = false; // Guard against Korean IME double-send
@@ -242,7 +241,7 @@ class _ChatInputState extends State<ChatInput> {
                   itemBuilder: (_, i) => InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () {
-                      if (_controller.text.length < _maxLength) {
+                      if (_controller.text.length < UIConstants.maxChatLength) {
                         final text = _controller.text;
                         final sel = _controller.selection;
                         final insertAt = (sel.baseOffset >= 0 &&
@@ -440,11 +439,11 @@ class _ChatInputState extends State<ChatInput> {
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '$len/$_maxLength',
+                      '$len/${UIConstants.maxChatLength}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: len >= _warnThreshold
-                            ? (len >= _maxLength ? AppColors.error : const Color(0xFFF57C00))
+                        color: len >= UIConstants.chatWarnThreshold
+                            ? (len >= UIConstants.maxChatLength ? AppColors.error : const Color(0xFFF57C00))
                             : cs.onSurfaceVariant.withAlpha(120),
                       ),
                     ),
@@ -728,7 +727,7 @@ class _ChatInputState extends State<ChatInput> {
                           maxLines: 5,
                           minLines: 1,
                           inputFormatters: [
-                            LengthLimitingTextInputFormatter(_maxLength),
+                            LengthLimitingTextInputFormatter(UIConstants.maxChatLength),
                           ],
                           textInputAction: kIsWeb
                               ? TextInputAction.none
