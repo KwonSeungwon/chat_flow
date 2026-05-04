@@ -21,6 +21,8 @@ void main() {
           '\u{1F44D}': ['user-1', 'user-2'],
         },
         localId: 'local-1',
+        priority: 'URGENT',
+        isAiGenerated: true,
       );
 
       final json = original.toJson();
@@ -39,6 +41,8 @@ void main() {
       expect(restored.username, 'tester');
       expect(restored.content, 'hello');
       expect(restored.type, 'CHAT');
+      expect(restored.priority, 'URGENT');
+      expect(restored.isAiGenerated, true);
     });
 
     test('fromJson이 localId를 올바르게 파싱', () {
@@ -64,6 +68,12 @@ void main() {
       expect(json.containsKey('messageId'), false);
       expect(json.containsKey('editedAt'), false);
       expect(json.containsKey('localId'), false);
+      expect(json.containsKey('fileUrl'), false);
+      expect(json.containsKey('fileName'), false);
+      expect(json.containsKey('fileContentType'), false);
+      expect(json.containsKey('parentMessageId'), false);
+      expect(json.containsKey('parentMessagePreview'), false);
+      expect(json.containsKey('forwardedFrom'), false);
     });
 
     test('empty reactions are excluded from toJson', () {
