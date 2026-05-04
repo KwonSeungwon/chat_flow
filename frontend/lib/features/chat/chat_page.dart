@@ -920,12 +920,19 @@ class ChatPage extends ConsumerWidget {
                 child: ChatRoomSidebar(
                   currentRoomId: effectiveRoomId ?? '',
                   onRoomSelected: () => Navigator.of(context).pop(),
+                  onSearchInRoom: (roomId) {
+                    Navigator.of(context).pop();
+                    _showInRoomSearch(context, ref, roomId);
+                  },
                 ),
               ),
             ),
       body: Row(
         children: [
-          if (isWide) ChatRoomSidebar(currentRoomId: effectiveRoomId ?? ''),
+          if (isWide) ChatRoomSidebar(
+            currentRoomId: effectiveRoomId ?? '',
+            onSearchInRoom: (roomId) => _showInRoomSearch(context, ref, roomId),
+          ),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
             child: Center(
