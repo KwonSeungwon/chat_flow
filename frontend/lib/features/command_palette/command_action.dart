@@ -64,7 +64,9 @@ class GoToRoomAction extends CommandAction {
 
   @override
   Future<void> execute(BuildContext context, WidgetRef ref) async {
-    GoRouter.of(context).go('/chat/$roomId');
+    // Capture router synchronously — context may become invalid after await.
+    final router = GoRouter.of(context);
+    router.go('/chat/$roomId');
   }
 }
 
@@ -127,18 +129,34 @@ class QuickAction extends CommandAction {
 
   @override
   Future<void> execute(BuildContext context, WidgetRef ref) async {
+    // Capture router synchronously before any async gap.
+    final router = GoRouter.of(context);
     switch (type) {
       case QuickActionType.createRoom:
-        showDialog(
-          context: context,
-          builder: (_) => const CreateRoomDialog(),
-        );
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => const CreateRoomDialog(),
+          );
+        }
       case QuickActionType.goSearch:
-        GoRouter.of(context).push('/search');
+        router.push('/search');
       case QuickActionType.toggleTheme:
-        await ref.read(themeModeProvider.notifier).toggle();
+        try {
+          await ref.read(themeModeProvider.notifier).toggle();
+        } catch (e) {
+          debugPrint('[CommandPalette] toggleTheme error: $e');
+        }
       case QuickActionType.logout:
-        await ref.read(authProvider.notifier).logout();
+        try {
+          await ref.read(authProvider.notifier).logout();
+          // Mirror chat_page.dart pattern — navigate to login after logout.
+          if (context.mounted) {
+            router.go('/login');
+          }
+        } catch (e) {
+          debugPrint('[CommandPalette] logout error: $e');
+        }
     }
   }
 

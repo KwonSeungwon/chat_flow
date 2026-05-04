@@ -78,8 +78,13 @@ class _CommandPaletteBodyState extends ConsumerState<_CommandPaletteBody> {
   void _executeSelected(List<CommandAction> results) {
     if (results.isEmpty) return;
     final action = results[_highlightIndex.clamp(0, results.length - 1)];
+    // Fix I3: Capture parent context before popping the dialog to avoid
+    // passing a defunct BuildContext to execute().
+    final parentContext = Navigator.of(context).context;
     Navigator.of(context).pop();
-    action.execute(context, ref);
+    if (parentContext.mounted) {
+      action.execute(parentContext, ref);
+    }
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -119,15 +124,20 @@ class _CommandPaletteBodyState extends ConsumerState<_CommandPaletteBody> {
 
   @override
   Widget build(BuildContext context) {
+    // Fix I1: Clamp _highlightIndex via ref.listen instead of mutating during build.
+    ref.listen<CommandPaletteState>(commandPaletteProvider, (prev, next) {
+      final len = next.results.length;
+      if (len == 0 && _highlightIndex != 0) {
+        setState(() => _highlightIndex = 0);
+      } else if (len > 0 && _highlightIndex >= len) {
+        setState(() => _highlightIndex = len - 1);
+      }
+    });
+
     final paletteState = ref.watch(commandPaletteProvider);
     final results = paletteState.results;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    // Ensure highlight index stays in bounds
-    if (_highlightIndex >= results.length && results.isNotEmpty) {
-      _highlightIndex = results.length - 1;
-    }
 
     return Focus(
       onKeyEvent: _handleKeyEvent,
@@ -210,8 +220,12 @@ class _CommandPaletteBodyState extends ConsumerState<_CommandPaletteBody> {
                       action: action,
                       isHighlighted: isHighlighted,
                       onTap: () {
+                        // Fix I3: Capture parent context before pop.
+                        final parentCtx = Navigator.of(context).context;
                         Navigator.of(context).pop();
-                        action.execute(context, ref);
+                        if (parentCtx.mounted) {
+                          action.execute(parentCtx, ref);
+                        }
                       },
                       onHover: () {
                         if (_highlightIndex != index) {
