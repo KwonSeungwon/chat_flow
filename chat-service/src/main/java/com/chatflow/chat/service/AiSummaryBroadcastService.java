@@ -1,6 +1,7 @@
 package com.chatflow.chat.service;
 
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,7 @@ public class AiSummaryBroadcastService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "ai-summaries", groupId = "chat-service-ai-broadcast")
+    @KafkaListener(topics = KafkaTopics.AI_SUMMARIES, groupId = "chat-service-ai-broadcast")
     public void onAiSummary(String messageJson) {
         try {
             ChatMessage summary = objectMapper.readValue(messageJson, ChatMessage.class);

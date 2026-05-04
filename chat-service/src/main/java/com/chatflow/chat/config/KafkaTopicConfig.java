@@ -1,5 +1,6 @@
 package com.chatflow.chat.config;
 
+import com.chatflow.common.dto.KafkaTopics;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +20,7 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic chatMessagesTopic() {
-        return TopicBuilder.name("chat-messages")
+        return TopicBuilder.name(KafkaTopics.CHAT_MESSAGES)
                 .partitions(PARTITIONS)
                 .replicas(REPLICATION)
                 .build();
@@ -27,7 +28,7 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic aiSummaryRequestsTopic() {
-        return TopicBuilder.name("ai-summary-requests")
+        return TopicBuilder.name(KafkaTopics.AI_SUMMARY_REQUESTS)
                 .partitions(PARTITIONS)
                 .replicas(REPLICATION)
                 .build();
@@ -35,7 +36,7 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic aiSummariesTopic() {
-        return TopicBuilder.name("ai-summaries")
+        return TopicBuilder.name(KafkaTopics.AI_SUMMARIES)
                 .partitions(PARTITIONS)
                 .replicas(REPLICATION)
                 .build();
