@@ -129,6 +129,9 @@ public class SearchController {
         if (!hasAny) {
             throw new IllegalArgumentException("최소 하나의 검색 조건이 필요합니다.");
         }
+        if ((startDate != null) != (endDate != null)) {
+            throw new IllegalArgumentException("startDate와 endDate는 함께 제공되어야 합니다.");
+        }
         if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("시작 시간은 종료 시간보다 이전이어야 합니다.");
         }

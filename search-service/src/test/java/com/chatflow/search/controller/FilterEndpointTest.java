@@ -112,4 +112,19 @@ class FilterEndpointTest {
                 .param("endDate", "2025-05-01T12:00:00"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void filter_withUsername_passesUsernameParam() throws Exception {
+        Page<ChatMessageDocument> empty = new PageImpl<>(new ArrayList<>(), PageRequest.of(0, 50), 0);
+        when(koreanSearchService.searchWithFilters(
+                eq("room1"), isNull(), eq("홍길동"), isNull(), isNull(), isNull(), any(Pageable.class)))
+            .thenReturn(empty);
+
+        mockMvc.perform(get("/api/search/rooms/room1/filter")
+                .param("username", "홍길동"))
+                .andExpect(status().isOk());
+
+        verify(koreanSearchService).searchWithFilters(
+                eq("room1"), isNull(), eq("홍길동"), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
 }
