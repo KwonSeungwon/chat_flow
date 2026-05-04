@@ -922,7 +922,7 @@ class ChatPage extends ConsumerWidget {
                   onRoomSelected: () => Navigator.of(context).pop(),
                   onSearchInRoom: (roomId) {
                     Navigator.of(context).pop();
-                    _showInRoomSearch(context, ref, roomId);
+                    if (context.mounted) _showInRoomSearch(context, ref, roomId);
                   },
                 ),
               ),
