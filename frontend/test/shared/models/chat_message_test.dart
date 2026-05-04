@@ -34,6 +34,20 @@ void main() {
       expect(restored.pinned, true);
       expect(restored.reactions['\u{1F44D}'], ['user-1', 'user-2']);
       expect(restored.localId, 'local-1');
+      expect(restored.chatRoomId, 'room-1');
+      expect(restored.userId, 'user-1');
+      expect(restored.username, 'tester');
+      expect(restored.content, 'hello');
+      expect(restored.type, 'CHAT');
+    });
+
+    test('fromJson이 localId를 올바르게 파싱', () {
+      final json = {
+        'chatRoomId': 'r', 'userId': 'u', 'username': 'n',
+        'content': 'c', 'timestamp': 't', 'type': 'CHAT', 'localId': 'local-99',
+      };
+      final msg = ChatMessage.fromJson(json);
+      expect(msg.localId, 'local-99');
     });
 
     test('null optional fields are excluded from toJson', () {

@@ -124,6 +124,7 @@ class ChatMessage {
     }
   }
 
+  // deliveryStatus는 로컬 UI 상태 전용 — 서버 왕복에서 제외
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
     if (messageId != null) 'messageId': messageId,
