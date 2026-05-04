@@ -201,7 +201,7 @@ public class KoreanSearchService {
 
             if (username != null && !username.isBlank()) {
                 final String u = username.trim();
-                boolBuilder.filter(f -> f.match(m -> m.field("username").query(u)));
+                boolBuilder.filter(f -> f.term(t -> t.field("username").value(u)));
             }
 
             if (startDate != null && endDate != null) {
