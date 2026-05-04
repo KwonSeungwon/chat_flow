@@ -7,8 +7,10 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch._types.FieldValue;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.exception.SearchException;
+import com.chatflow.search.util.SearchConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,16 +44,8 @@ public class KoreanSearchService {
             )._toQuery();
 
             // Build bool query: must match content + filter by type + optional room
-            BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder()
-                    .must(multiMatchQuery)
-                    .mustNot(mn -> mn.terms(t -> t
-                            .field("messageType")
-                            .terms(tv -> tv.value(List.of(
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
-                            )))
-                    ));
+            BoolQuery.Builder boolQueryBuilder = excludeSystemMessages(
+                    new BoolQuery.Builder().must(multiMatchQuery));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
                 boolQueryBuilder.filter(f -> f
@@ -65,7 +59,7 @@ public class KoreanSearchService {
             Query finalQuery = boolQueryBuilder.build()._toQuery();
 
             SearchRequest searchRequest = SearchRequest.of(s -> s
-                    .index("chat_messages")
+                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
                     .query(finalQuery)
                     .from((int) pageable.getOffset())
                     .size(pageable.getPageSize())
@@ -77,8 +71,8 @@ public class KoreanSearchService {
                     )
                     .highlight(h -> h
                             .fields("content", hf -> hf
-                                    .preTags("<mark>")
-                                    .postTags("</mark>")
+                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
+                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
                             )
                     )
             );
@@ -115,16 +109,8 @@ public class KoreanSearchService {
                     .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
             )._toQuery();
 
-            BoolQuery.Builder boolQueryBuilder = new BoolQuery.Builder()
-                    .must(ngramQuery)
-                    .mustNot(mn -> mn.terms(t -> t
-                            .field("messageType")
-                            .terms(tv -> tv.value(List.of(
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
-                                    co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
-                            )))
-                    ));
+            BoolQuery.Builder boolQueryBuilder = excludeSystemMessages(
+                    new BoolQuery.Builder().must(ngramQuery));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
                 boolQueryBuilder.filter(f -> f
@@ -138,7 +124,7 @@ public class KoreanSearchService {
             Query finalQuery = boolQueryBuilder.build()._toQuery();
 
             SearchRequest searchRequest = SearchRequest.of(s -> s
-                    .index("chat_messages")
+                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
                     .query(finalQuery)
                     .minScore(0.5)
                     .from((int) pageable.getOffset())
@@ -151,8 +137,8 @@ public class KoreanSearchService {
                     )
                     .highlight(h -> h
                             .fields("content.ngram", hf -> hf
-                                    .preTags("<mark>")
-                                    .postTags("</mark>")
+                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
+                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
                             )
                     )
             );
@@ -217,17 +203,11 @@ public class KoreanSearchService {
                 final String mt = messageType.trim();
                 boolBuilder.filter(f -> f.term(t -> t.field("messageType").value(mt)));
             } else {
-                boolBuilder.mustNot(mn -> mn.terms(t -> t
-                        .field("messageType")
-                        .terms(tv -> tv.value(List.of(
-                                co.elastic.clients.elasticsearch._types.FieldValue.of("JOIN"),
-                                co.elastic.clients.elasticsearch._types.FieldValue.of("LEAVE"),
-                                co.elastic.clients.elasticsearch._types.FieldValue.of("SYSTEM")
-                        )))));
+                excludeSystemMessages(boolBuilder);
             }
 
             SearchRequest request = SearchRequest.of(s -> s
-                    .index("chat_messages")
+                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
                     .query(boolBuilder.build()._toQuery())
                     .from((int) pageable.getOffset())
                     .size(pageable.getPageSize())
@@ -250,5 +230,16 @@ public class KoreanSearchService {
             log.error("Error in searchWithFilters for roomId: {}", roomId, e);
             throw new SearchException("검색 중 오류가 발생했습니다.", e);
         }
+    }
+
+    private static BoolQuery.Builder excludeSystemMessages(BoolQuery.Builder builder) {
+        return builder.mustNot(mn -> mn.terms(t -> t
+                .field("messageType")
+                .terms(tv -> tv.value(
+                        SearchConstants.EXCLUDED_MESSAGE_TYPES.stream()
+                                .map(FieldValue::of)
+                                .toList()
+                ))
+        ));
     }
 }
