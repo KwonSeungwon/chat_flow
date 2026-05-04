@@ -34,99 +34,116 @@ public class UserPresenceService {
     public void join(ChatMessage message, String sessionId) {
         String currentUserId = message.getUserId() != null ? message.getUserId() : "";
 
-        // Ban gate — banned users cannot rejoin
-        if (!currentUserId.isEmpty() && roomBanService.isBanned(message.getChatRoomId(), currentUserId)) {
-            log.warn("User {} attempted to join banned room {}", message.getUsername(), message.getChatRoomId());
-            messagingTemplate.convertAndSend(
-                    "/topic/chat/" + message.getChatRoomId() + "/errors",
-                    Map.of("type", "ROOM_BANNED",
-                            "roomId", message.getChatRoomId()));
+        if (checkBanGate(currentUserId, message.getChatRoomId(), message.getUsername())) {
             return;
         }
 
-        // 본인이 이미 다른 세션으로 참여 중인지 — 만석 분기 skip + system JOIN 노이즈 억제용
         Set<String> existingUserIds = getRoomParticipantUserIds(message.getChatRoomId());
         boolean alreadyJoined = !currentUserId.isEmpty() && existingUserIds.contains(currentUserId);
 
-        if (participantService.isRoomFull(message.getChatRoomId())) {
-            if (!alreadyJoined) {
-                ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
-
-                // DM(DIRECT) 방은 자동 분할하지 않음 -- 제3자 입장만 거부, 기존 멤버 재입장은 허용.
-                // 멤버십 판정: room_members 테이블에 명시 등록된 멤버만 허용.
-                if (room != null && room.getRoomType() == RoomType.DIRECT) {
-                    boolean isExistingMember = !currentUserId.isEmpty() &&
-                            roomMemberRepository.existsByRoomIdAndUserId(
-                                    message.getChatRoomId(), currentUserId);
-                    if (!isExistingMember) {
-                        log.warn("DM room {} is full, rejecting non-member {}",
-                                message.getChatRoomId(), message.getUsername());
-                        messagingTemplate.convertAndSend(
-                                "/topic/chat/" + message.getChatRoomId() + "/errors",
-                                java.util.Map.of("type", "ROOM_FULL_DM",
-                                        "roomId", message.getChatRoomId(),
-                                        "roomName", room.getName()));
-                        return;
-                    }
-                    log.info("DM {} full but {} is existing member — allowing re-entry",
-                            message.getChatRoomId(), message.getUsername());
-                    // 분기 통과: 아래 Redis entry 등록 후 정상 join 흐름 진행
-                } else {
-                    // non-DM 방: 만석이면 사용 가능한 방으로 redirect
-                    String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
-                    ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
-
-                    log.info("Room {} full, redirecting user {} to {}",
-                            message.getChatRoomId(), message.getUsername(), newRoom.getId());
-                    messagingTemplate.convertAndSend(
-                            "/topic/chat/" + message.getChatRoomId() + "/errors",
-                            java.util.Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
-
-                    message.setChatRoomId(newRoom.getId());
-                }
-            }
-            // alreadyJoined이면 분기 통과 — 동일 방에 추가 entry만 등록 (sessionId 다름)
+        if (handleRoomFullIfNeeded(message, currentUserId, alreadyJoined)) {
+            return;
         }
 
-        // Track participant in Redis SET using sessionId for multi-tab deduplication
-        String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
-        String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
-        String safeSessionId = sessionId != null ? sessionId : "unknown";
-        String entry = safeUserId + ":" + safeSessionId + ":" + message.getUsername();
-        redisTemplate.opsForSet().add(participantKey, entry);
-        // Safety-net TTL: if the server crashes without a clean leave, stale keys expire in 7 days.
-        // Refreshed on every join, so active rooms are never evicted.
-        redisTemplate.expire(participantKey, 7, TimeUnit.DAYS);
-
-        // Sync DB participantCount from Redis SET (unique user count)
-        syncParticipantCount(message.getChatRoomId());
-
-        // 멤버십 자동 등록 (idempotent — PK 중복은 무시)
-        String safeUsername = message.getUsername() != null ? message.getUsername() : "anonymous";
-        if (!safeUserId.equals("anonymous")) {
-            try {
-                if (!roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), safeUserId)) {
-                    roomMemberRepository.save(RoomMemberEntity.builder()
-                            .roomId(message.getChatRoomId())
-                            .userId(safeUserId)
-                            .username(safeUsername)
-                            .joinedAt(LocalDateTime.now())
-                            .build());
-                }
-            } catch (Exception e) {
-                log.debug("Failed to register room membership: roomId={} userId={} reason={}",
-                        message.getChatRoomId(), safeUserId, e.getMessage());
-            }
-        }
+        registerParticipant(message, sessionId);
 
         if (alreadyJoined) {
-            // 다른 세션(탭/디바이스)에서 같은 사용자가 재입장 — 시스템 JOIN/presence 노이즈 억제.
-            // entry는 위에서 이미 추가됐고, count는 unique userId 기준이라 변동 없음.
             log.debug("User {} reconnected to room {} via additional session — suppressing JOIN broadcast",
                     message.getUsername(), message.getChatRoomId());
             return;
         }
 
+        broadcastJoin(message);
+    }
+
+    /**
+     * @return true if the user is banned and join should be aborted
+     */
+    private boolean checkBanGate(String userId, String chatRoomId, String username) {
+        if (!userId.isEmpty() && roomBanService.isBanned(chatRoomId, userId)) {
+            log.warn("User {} attempted to join banned room {}", username, chatRoomId);
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + chatRoomId + "/errors",
+                    Map.of("type", "ROOM_BANNED",
+                            "roomId", chatRoomId));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 만석인 경우 처리. DM은 기존 멤버만 허용, 일반 방은 redirect.
+     * @return true if join should be aborted (non-member DM full)
+     */
+    private boolean handleRoomFullIfNeeded(ChatMessage message, String currentUserId, boolean alreadyJoined) {
+        if (!participantService.isRoomFull(message.getChatRoomId())) {
+            return false;
+        }
+        if (alreadyJoined) {
+            return false;
+        }
+
+        ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
+
+        if (room != null && room.getRoomType() == RoomType.DIRECT) {
+            boolean isExistingMember = !currentUserId.isEmpty() &&
+                    roomMemberRepository.existsByRoomIdAndUserId(
+                            message.getChatRoomId(), currentUserId);
+            if (!isExistingMember) {
+                log.warn("DM room {} is full, rejecting non-member {}",
+                        message.getChatRoomId(), message.getUsername());
+                messagingTemplate.convertAndSend(
+                        "/topic/chat/" + message.getChatRoomId() + "/errors",
+                        Map.of("type", "ROOM_FULL_DM",
+                                "roomId", message.getChatRoomId(),
+                                "roomName", room.getName()));
+                return true;
+            }
+            log.info("DM {} full but {} is existing member — allowing re-entry",
+                    message.getChatRoomId(), message.getUsername());
+        } else {
+            String baseName = room != null ? room.getName().replaceAll("-\\d+$", "") : "일반";
+            ChatRoom newRoom = participantService.findOrCreateAvailableRoom(baseName);
+
+            log.info("Room {} full, redirecting user {} to {}",
+                    message.getChatRoomId(), message.getUsername(), newRoom.getId());
+            messagingTemplate.convertAndSend(
+                    "/topic/chat/" + message.getChatRoomId() + "/errors",
+                    Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+
+            message.setChatRoomId(newRoom.getId());
+        }
+        return false;
+    }
+
+    private void registerParticipant(ChatMessage message, String sessionId) {
+        String participantKey = "chatflow:room:participants:" + message.getChatRoomId();
+        String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
+        String safeSessionId = sessionId != null ? sessionId : "unknown";
+        String entry = safeUserId + ":" + safeSessionId + ":" + message.getUsername();
+
+        redisTemplate.opsForSet().add(participantKey, entry);
+        redisTemplate.expire(participantKey, 7, TimeUnit.DAYS);
+        syncParticipantCount(message.getChatRoomId());
+
+        if (!safeUserId.equals("anonymous") &&
+                !roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), safeUserId)) {
+            try {
+                String safeUsername = message.getUsername() != null ? message.getUsername() : "anonymous";
+                roomMemberRepository.save(RoomMemberEntity.builder()
+                        .roomId(message.getChatRoomId())
+                        .userId(safeUserId)
+                        .username(safeUsername)
+                        .joinedAt(LocalDateTime.now())
+                        .build());
+            } catch (Exception e) {
+                log.debug("Failed to register room membership: roomId={} userId={} reason={}",
+                        message.getChatRoomId(), safeUserId, e.getMessage());
+            }
+        }
+    }
+
+    private void broadcastJoin(ChatMessage message) {
         message.setType(ChatMessage.MessageType.JOIN);
         message.setTimestamp(LocalDateTime.now());
         message.setMessageId(UUID.randomUUID().toString());
@@ -134,11 +151,9 @@ public class UserPresenceService {
 
         log.info("User {} joined chat room {}", message.getUsername(), message.getChatRoomId());
 
-        // Broadcast presence JOIN event to room subscribers
         Set<String> participantIds = getRoomParticipantUserIds(message.getChatRoomId());
         messagingTemplate.convertAndSend("/topic/chat/" + message.getChatRoomId() + "/presence",
-                java.util.Map.of(
-                        "type", "JOIN",
+                Map.of("type", "JOIN",
                         "roomId", message.getChatRoomId(),
                         "username", message.getUsername(),
                         "participantCount", participantIds.size(),

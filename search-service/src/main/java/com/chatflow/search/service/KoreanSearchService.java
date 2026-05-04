@@ -203,12 +203,14 @@ public class KoreanSearchService {
                 final String mt = messageType.trim();
                 boolBuilder.filter(f -> f.term(t -> t.field("messageType").value(mt)));
             } else {
-                excludeSystemMessages(boolBuilder);
+                boolBuilder = excludeSystemMessages(boolBuilder);
             }
+
+            final Query builtQuery = boolBuilder.build()._toQuery();
 
             SearchRequest request = SearchRequest.of(s -> s
                     .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                    .query(boolBuilder.build()._toQuery())
+                    .query(builtQuery)
                     .from((int) pageable.getOffset())
                     .size(pageable.getPageSize())
                     .sort(sort -> sort.field(f -> f
