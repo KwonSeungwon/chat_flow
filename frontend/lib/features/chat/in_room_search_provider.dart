@@ -69,6 +69,7 @@ class InRoomSearchNotifier extends StateNotifier<InRoomSearchState> {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    if (_dioClient == null) return;  // forTest instance guard
     final hasAny = (query?.trim().isNotEmpty ?? false) ||
         (username?.trim().isNotEmpty ?? false) ||
         startDate != null ||
@@ -89,7 +90,7 @@ class InRoomSearchNotifier extends StateNotifier<InRoomSearchState> {
         'size': 50,
       };
 
-      final resp = await _dioClient!.dio.get(
+      final resp = await _dioClient.dio.get(
         '/api/search/rooms/$_roomId/filter',
         queryParameters: params,
       );
