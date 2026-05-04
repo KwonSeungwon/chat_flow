@@ -341,8 +341,16 @@ class _ChatInputState extends State<ChatInput> {
     final btnSize = isNarrow ? 34.0 : 40.0;
     final btnGap = isNarrow ? 4.0 : 6.0;
 
+    // On mobile-web PWA (standalone), the virtual keyboard may not always
+    // trigger Scaffold's resizeToAvoidBottomInset reliably. Apply
+    // viewInsets.bottom as explicit bottom padding so the input row stays
+    // visible above the on-screen keyboard.  On desktop-web / native where
+    // the Scaffold resize *does* work, viewInsets.bottom is 0 when no
+    // keyboard is shown, so this adds no extra space.
+    final bottomInset = kIsWeb ? MediaQuery.of(context).viewInsets.bottom : 0.0;
+
     final inputContent = Container(
-      padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 8, isNarrow ? 8 : 12, 8),
+      padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 8, isNarrow ? 8 : 12, 8 + bottomInset),
       decoration: BoxDecoration(
         color: cs.surface,
         border: Border(
@@ -351,7 +359,7 @@ class _ChatInputState extends State<ChatInput> {
       ),
       child: SafeArea(
         top: false,
-        bottom: false, // Scaffold's resizeToAvoidBottomInset handles keyboard; avoiding double inset on mobile web
+        bottom: true, // Respect safe-area bottom (home indicator on notched devices)
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

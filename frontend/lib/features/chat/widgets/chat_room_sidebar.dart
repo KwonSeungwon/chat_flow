@@ -210,11 +210,23 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                         sortedRooms.sort((a, b) => a.name.compareTo(b.name));
                     }
                     return sortedRooms.isEmpty
-                        ? _EmptyRoomState(
-                            onCreateTap: () => _showCreateDialog(context))
+                        ? RefreshIndicator(
+                            onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) => SingleChildScrollView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                                  child: _EmptyRoomState(
+                                      onCreateTap: () => _showCreateDialog(context)),
+                                ),
+                              ),
+                            ),
+                          )
                         : RefreshIndicator(
                             onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
                             child: ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.symmetric(
                                 vertical: 8, horizontal: 8),
                             itemCount: sortedRooms.length,
