@@ -5,6 +5,9 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
+import '../helpers/pasted_image.dart';
+import '../helpers/web_drop_target.dart';
+import 'drop_zone_overlay.dart';
 import 'patient_card_input_dialog.dart';
 import 'sbar_input_dialog.dart';
 
@@ -61,6 +64,8 @@ class _ChatInputState extends State<ChatInput> {
   List<Map<String, dynamic>> _mentionSuggestions = [];
   bool _showMentions = false;
   String _mentionQuery = '';
+  // Drag-drop overlay state
+  bool _isDragHovering = false;
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -108,6 +113,28 @@ class _ChatInputState extends State<ChatInput> {
       selection: TextSelection.collapsed(offset: atIdx + username.length + 2),
     );
     setState(() => _showMentions = false);
+  }
+
+  void _handleImageDrop(PastedImage image) {
+    if (widget.onFilePick == null || _isUploading) return;
+    if (!_isImageMime(image.mimeType)) return;
+    _submitImage(image);
+  }
+
+  void _submitImage(PastedImage image) {
+    setState(() {
+      _pendingFileName = image.name;
+      _pendingFileBytes = image.bytes;
+      _pendingFileMimeType = image.mimeType;
+    });
+    _focusNode.requestFocus();
+  }
+
+  bool _isImageMime(String mime) {
+    return mime == 'image/png' ||
+        mime == 'image/jpeg' ||
+        mime == 'image/gif' ||
+        mime == 'image/webp';
   }
 
   void _clearController() {
@@ -312,7 +339,7 @@ class _ChatInputState extends State<ChatInput> {
     final btnSize = isNarrow ? 34.0 : 40.0;
     final btnGap = isNarrow ? 4.0 : 6.0;
 
-    return Container(
+    final inputContent = Container(
       padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 8, isNarrow ? 8 : 12, 8),
       decoration: BoxDecoration(
         color: cs.surface,
@@ -782,6 +809,22 @@ class _ChatInputState extends State<ChatInput> {
             ),
           ],
         ),
+      ),
+    );
+
+    // Wrap with drag-drop and clipboard paste support (web only; no-op on native)
+    if (widget.onFilePick == null) return inputContent;
+
+    return WebDropTarget(
+      onImageDrop: _handleImageDrop,
+      onHoverChanged: (hovering) {
+        if (mounted) setState(() => _isDragHovering = hovering);
+      },
+      child: Stack(
+        children: [
+          inputContent,
+          DropZoneOverlay(active: _isDragHovering),
+        ],
       ),
     );
   }

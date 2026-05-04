@@ -1,0 +1,161 @@
+import 'dart:async';
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:html' as html;
+import 'dart:typed_data';
+
+import 'package:flutter/widgets.dart';
+
+import 'pasted_image.dart';
+
+/// Web implementation: wraps [child] and listens to HTML5 drag/drop events
+/// and paste events on the document body for image files.
+class WebDropTarget extends StatefulWidget {
+  final Widget child;
+  final void Function(PastedImage image)? onImageDrop;
+  final ValueChanged<bool>? onHoverChanged;
+
+  const WebDropTarget({
+    super.key,
+    required this.child,
+    this.onImageDrop,
+    this.onHoverChanged,
+  });
+
+  @override
+  State<WebDropTarget> createState() => _WebDropTargetState();
+}
+
+class _WebDropTargetState extends State<WebDropTarget> {
+  final List<StreamSubscription<html.Event>> _subs = [];
+  int _dragCounter = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final body = html.document.body;
+    if (body == null) return;
+
+    _subs.add(body.onDragEnter.listen(_onDragEnter));
+    _subs.add(body.onDragOver.listen(_onDragOver));
+    _subs.add(body.onDragLeave.listen(_onDragLeave));
+    _subs.add(body.onDrop.listen(_onDrop));
+    // Listen for paste events (Ctrl+V / Cmd+V with image in clipboard)
+    _subs.add(html.document.onPaste.listen(_onPaste));
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subs) {
+      sub.cancel();
+    }
+    _subs.clear();
+    super.dispose();
+  }
+
+  void _onDragEnter(html.MouseEvent event) {
+    event.preventDefault();
+    _dragCounter++;
+    if (_dragCounter == 1) {
+      widget.onHoverChanged?.call(true);
+    }
+  }
+
+  void _onDragOver(html.MouseEvent event) {
+    // Must preventDefault to allow drop
+    event.preventDefault();
+  }
+
+  void _onDragLeave(html.MouseEvent event) {
+    event.preventDefault();
+    _dragCounter--;
+    if (_dragCounter <= 0) {
+      _dragCounter = 0;
+      widget.onHoverChanged?.call(false);
+    }
+  }
+
+  Future<void> _onDrop(html.MouseEvent event) async {
+    event.preventDefault();
+    event.stopPropagation();
+    _dragCounter = 0;
+    widget.onHoverChanged?.call(false);
+
+    if (widget.onImageDrop == null) return;
+
+    final dataTransfer = event.dataTransfer;
+    final files = dataTransfer.files;
+    if (files == null || files.isEmpty) return;
+
+    for (final file in files) {
+      final mimeType = file.type;
+      if (mimeType.startsWith('image/')) {
+        final bytes = await _readFileAsBytes(file);
+        if (bytes != null && bytes.isNotEmpty) {
+          widget.onImageDrop!(PastedImage(
+            name: file.name,
+            bytes: bytes,
+            mimeType: mimeType,
+          ));
+          return; // Only handle the first image
+        }
+      }
+    }
+  }
+
+  Future<void> _onPaste(html.ClipboardEvent event) async {
+    if (widget.onImageDrop == null) return;
+
+    final clipboardData = event.clipboardData;
+    if (clipboardData == null) return;
+
+    final files = clipboardData.files;
+    if (files == null || files.isEmpty) return;
+
+    for (final file in files) {
+      final mimeType = file.type;
+      if (mimeType.startsWith('image/')) {
+        // Prevent the browser from inserting the image as an <img> tag or
+        // pasting garbled text into the Flutter text field.
+        event.preventDefault();
+        final bytes = await _readFileAsBytes(file);
+        if (bytes != null && bytes.isNotEmpty) {
+          final ext = _mimeToExt(mimeType);
+          widget.onImageDrop!(PastedImage(
+            name: 'clipboard_image.$ext',
+            bytes: bytes,
+            mimeType: mimeType,
+          ));
+          return; // Only handle the first image
+        }
+      }
+    }
+  }
+
+  Future<Uint8List?> _readFileAsBytes(html.File file) async {
+    final reader = html.FileReader();
+    reader.readAsArrayBuffer(file);
+    await reader.onLoadEnd.first;
+    final result = reader.result;
+    if (result is Uint8List) return result;
+    if (result is ByteBuffer) return result.asUint8List();
+    return null;
+  }
+
+  String _mimeToExt(String mime) {
+    switch (mime) {
+      case 'image/png':
+        return 'png';
+      case 'image/jpeg':
+        return 'jpg';
+      case 'image/gif':
+        return 'gif';
+      case 'image/webp':
+        return 'webp';
+      default:
+        return 'png';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
