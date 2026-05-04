@@ -99,7 +99,7 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final df = DateFormat('MM/dd');
+    final df = DateFormat('yy/MM/dd');
     final state = ref.watch(inRoomSearchProvider(widget.roomId));
 
     return Padding(
@@ -182,21 +182,33 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                 return ChoiceChip(
                   label: Text(label),
                   selected: selected,
-                  onSelected: (_) => ref
-                      .read(inRoomSearchProvider(widget.roomId).notifier)
-                      .setMessageTypeFilter(value),
+                  onSelected: (_) {
+                    final wasSearched = state.hasSearched;
+                    ref
+                        .read(inRoomSearchProvider(widget.roomId).notifier)
+                        .setMessageTypeFilter(value);
+                    if (wasSearched) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _search();
+                      });
+                    }
+                  },
                 );
               }).toList(),
             ),
             const SizedBox(height: 8),
             FilledButton.icon(
-              icon: const Icon(Icons.search),
-              label: const Text('검색'),
+              icon: state.isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.search),
+              label: Text(state.isLoading ? '검색 중...' : '검색'),
               onPressed: state.isLoading ? null : _search,
             ),
             const SizedBox(height: 8),
-            if (state.isLoading)
-              const Center(child: CircularProgressIndicator()),
             if (state.error != null)
               Text(state.error!,
                   style: const TextStyle(color: Colors.red, fontSize: 12)),
@@ -204,15 +216,34 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
               const Center(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Text('검색 결과 없음',
-                      style: TextStyle(color: Colors.grey)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.search_off, size: 32, color: Colors.grey),
+                      SizedBox(height: 8),
+                      Text('검색 결과가 없습니다',
+                          style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                      SizedBox(height: 4),
+                      Text('검색어, 발신자, 날짜 조건을 확인해보세요',
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
                 ),
               ),
             if (!state.isLoading && state.results.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text('${state.total}개 결과',
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${state.total}개 결과',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                    if (state.results.length >= 50)
+                      Text('최대 50개 표시 — 검색어를 구체적으로 입력하면 더 정확한 결과를 볼 수 있습니다',
+                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                  ],
+                ),
               ),
               Flexible(
                 child: ListView.separated(
@@ -238,13 +269,45 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                         ),
                       ),
                       title: Row(children: [
-                        Text(msg.username,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 12)),
+                        Flexible(
+                          child: Text(msg.username,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                        ),
                         const SizedBox(width: 6),
                         Text(ts,
                             style: TextStyle(
                                 fontSize: 10, color: cs.onSurfaceVariant)),
+                        if (msg.type == 'FILE') ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: cs.secondaryContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('파일',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    color: cs.onSecondaryContainer,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ] else if (msg.type == 'AI_SUMMARY') ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: cs.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('AI',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    color: cs.onTertiaryContainer,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ],
                       ]),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -271,7 +334,7 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
   String _formatTs(String ts) {
     try {
       final dt = DateTime.parse(ts).toLocal();
-      return DateFormat('MM/dd HH:mm').format(dt);
+      return DateFormat('yy/MM/dd HH:mm').format(dt);
     } catch (_) {
       return '';
     }

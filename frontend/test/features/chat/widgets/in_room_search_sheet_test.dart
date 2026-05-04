@@ -53,7 +53,7 @@ void main() {
     expect(stub.state.messageTypeFilter, isNull);
   });
 
-  testWidgets('hasSearched=true + 결과 없으면 "검색 결과 없음" 표시', (tester) async {
+  testWidgets('hasSearched=true + 결과 없으면 "검색 결과가 없습니다" 표시', (tester) async {
     final stub = _StubNotifier();
     stub.setStateForTest(stub.state.copyWith(hasSearched: true));
     await tester.pumpWidget(_wrap(
@@ -61,7 +61,8 @@ void main() {
       stub: stub,
     ));
     await tester.pump();
-    expect(find.text('검색 결과 없음'), findsOneWidget);
+    expect(find.text('검색 결과가 없습니다'), findsOneWidget);
+    expect(find.text('검색어, 발신자, 날짜 조건을 확인해보세요'), findsOneWidget);
   });
 
   testWidgets('발신자 필드 Key("sender_field") 존재', (tester) async {
