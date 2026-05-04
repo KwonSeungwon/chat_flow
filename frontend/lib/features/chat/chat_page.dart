@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/chat_strings.dart';
 import '../../core/constants/ui_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
@@ -1687,7 +1688,7 @@ class _InviteMemberModalState extends ConsumerState<_InviteMemberModal> {
     if (widget.currentCount >= UIConstants.maxParticipants) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('채팅방이 만석입니다 (최대 10명).')),
+          SnackBar(content: Text(ChatStrings.roomFull(UIConstants.maxParticipants))),
         );
       }
       return;
