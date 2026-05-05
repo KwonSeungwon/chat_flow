@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1083,10 +1084,26 @@ class _ChatBubble extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: _quickReactions.map((e) => GestureDetector(
-                    onTap: () { Navigator.of(context).pop(); onReaction!(e); },
-                    child: Text(e, style: const TextStyle(fontSize: 24)),
-                  )).toList(),
+                  children: [
+                    ..._quickReactions.map((e) => GestureDetector(
+                      onTap: () { Navigator.of(context).pop(); onReaction!(e); },
+                      child: Text(e, style: const TextStyle(fontSize: 24)),
+                    )),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _showEmojiPicker(context);
+                      },
+                      child: Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: const Icon(Icons.add, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             if (onReply != null)
@@ -1153,6 +1170,45 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 
+  void _showEmojiPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        height: 280,
+        decoration: BoxDecoration(
+          color: Theme.of(sheetCtx).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: EmojiPicker(
+          onEmojiSelected: (_, emoji) {
+            Navigator.of(sheetCtx).pop();
+            onReaction?.call(emoji.emoji);
+          },
+          config: Config(
+            height: 256,
+            checkPlatformCompatibility: true,
+            emojiViewConfig: EmojiViewConfig(
+              columns: 8,
+              emojiSizeMax: 28,
+              backgroundColor: Theme.of(sheetCtx).colorScheme.surface,
+            ),
+            categoryViewConfig: CategoryViewConfig(
+              backgroundColor: Theme.of(sheetCtx).colorScheme.surface,
+              iconColorSelected: Theme.of(sheetCtx).colorScheme.primary,
+              indicatorColor: Theme.of(sheetCtx).colorScheme.primary,
+            ),
+            bottomActionBarConfig: const BottomActionBarConfig(enabled: false),
+            searchViewConfig: SearchViewConfig(
+              backgroundColor: Theme.of(sheetCtx).colorScheme.surface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showContextMenu(BuildContext context, Offset position) {
     final canReport = !isMine && !msg.deleted;
     final items = <PopupMenuEntry<String>>[];
@@ -1161,10 +1217,25 @@ class _ChatBubble extends StatelessWidget {
         enabled: false,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: _quickReactions.map((e) => GestureDetector(
-            onTap: () { Navigator.of(context).pop('react_$e'); },
-            child: Text(e, style: const TextStyle(fontSize: 20)),
-          )).toList(),
+          children: [
+            ..._quickReactions.map((e) => GestureDetector(
+              onTap: () { Navigator.of(context).pop('react_$e'); },
+              child: Text(e, style: const TextStyle(fontSize: 20)),
+            )),
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).pop('emoji_picker');
+              },
+              child: Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.add, size: 18),
+              ),
+            ),
+          ],
         ),
       ));
       items.add(const PopupMenuDivider());
@@ -1200,6 +1271,7 @@ class _ChatBubble extends StatelessWidget {
       items: items,
     ).then((value) {
       if (value == null) return;
+      if (value == 'emoji_picker') { if (context.mounted) _showEmojiPicker(context); return; }
       if (value.startsWith('react_')) { onReaction?.call(value.substring(6)); return; }
       if (value == 'copy') {
         Clipboard.setData(ClipboardData(text: msg.content));
