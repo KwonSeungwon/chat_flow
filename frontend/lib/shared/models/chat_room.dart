@@ -1,3 +1,5 @@
+import '../../core/constants/ui_constants.dart';
+
 class ChatRoom {
   final String id;
   final String name;
@@ -22,7 +24,7 @@ class ChatRoom {
     this.allowedRoles,
     this.isPrivate = false,
     required this.participantCount,
-    this.maxParticipants = 10,
+    this.maxParticipants = UIConstants.maxParticipants,
     this.createdBy,
     this.createdAt,
     this.lastMessageAt,
@@ -39,7 +41,7 @@ class ChatRoom {
       allowedRoles: json['allowedRoles']?.toString(),
       isPrivate: json['isPrivate'] == true || json['private'] == true,
       participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
-      maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? 10,
+      maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? UIConstants.maxParticipants,
       createdBy: json['createdBy']?.toString(),
       createdAt: json['createdAt']?.toString(),
       lastMessageAt: json['lastMessageAt']?.toString(),

@@ -2,6 +2,7 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -117,7 +118,7 @@ class UserPresenceServiceBanGateTest {
 
         // Verify persistence was called
         verify(chatPersistenceService).saveOutboxEventAndPublish(
-                any(ChatMessage.class), eq("chat-messages"), eq("USER_JOINED"));
+                any(ChatMessage.class), eq(KafkaTopics.CHAT_MESSAGES), eq("USER_JOINED"));
     }
 
     // ── Anonymous user (empty userId) ──────────────────────────

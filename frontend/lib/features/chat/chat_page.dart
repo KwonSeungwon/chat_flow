@@ -55,7 +55,7 @@ Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
       await ref.read(authProvider.notifier).updateProfileImage(fileUrl);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('프로필 이미지가 변경되었습니다.')));
+          const SnackBar(content: Text(ChatStrings.profileImageChanged)));
       }
     }
   } catch (_) {
@@ -246,7 +246,7 @@ Future<void> _copyInviteLink(BuildContext context, WidgetRef ref, String roomId)
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('초대 링크가 클립보드에 복사되었습니다 (24시간 유효)'),
+          content: const Text(ChatStrings.inviteLinkCopied),
           duration: Duration(seconds: 3),
         ),
       );
@@ -277,7 +277,7 @@ void _showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId,
       if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
       ref.read(chatRoomsProvider.notifier).fetchRooms();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('채팅방 설정이 변경되었습니다.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(ChatStrings.roomSettingsChanged)));
       }
     } catch (_) {
       if (context.mounted) {

@@ -11,6 +11,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import com.chatflow.search.util.SearchConstants;
+
 import java.io.InputStream;
 import java.io.StringReader;
 import java.util.Map;
@@ -32,7 +34,7 @@ public class IndexInitializer {
 
     private void createChatMessagesIndex() {
         try {
-            String indexName = "chat_messages";
+            String indexName = SearchConstants.CHAT_MESSAGES_INDEX;
 
             // Check if index already exists
             boolean exists = elasticsearchClient.indices()
