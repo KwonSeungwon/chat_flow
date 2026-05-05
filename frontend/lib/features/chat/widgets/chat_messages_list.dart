@@ -976,7 +976,7 @@ class _AiLoadingBubble extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────
 // Chat bubble
 // ─────────────────────────────────────────────────────────────────
-class _ChatBubble extends StatelessWidget {
+class _ChatBubble extends StatefulWidget {
   final ChatMessage msg;
   final bool isMine;
   final String time;
@@ -1016,6 +1016,13 @@ class _ChatBubble extends StatelessWidget {
     this.showAvatar = true,
     this.showTime = true,
   });
+
+  @override
+  State<_ChatBubble> createState() => _ChatBubbleState();
+}
+
+class _ChatBubbleState extends State<_ChatBubble> {
+  bool _hovered = false;
 
   Color _avatarColor(String name) =>
       AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
@@ -1079,14 +1086,14 @@ class _ChatBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            if (onReaction != null && !msg.deleted)
+            if (widget.onReaction != null && !widget.msg.deleted)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ..._quickReactions.map((e) => GestureDetector(
-                      onTap: () { Navigator.of(context).pop(); onReaction!(e); },
+                      onTap: () { Navigator.of(context).pop(); widget.onReaction!(e); },
                       child: Text(e, style: const TextStyle(fontSize: 24)),
                     )),
                     GestureDetector(
@@ -1106,61 +1113,61 @@ class _ChatBubble extends StatelessWidget {
                   ],
                 ),
               ),
-            if (onReply != null)
+            if (widget.onReply != null)
               ListTile(
                 leading: const Icon(Icons.reply),
                 title: const Text('답글'),
-                onTap: () { Navigator.of(context).pop(); onReply?.call(); },
+                onTap: () { Navigator.of(context).pop(); widget.onReply?.call(); },
               ),
-            if (onForward != null)
+            if (widget.onForward != null)
               ListTile(
                 leading: const Icon(Icons.forward_outlined),
                 title: const Text('전달'),
-                onTap: () { Navigator.of(context).pop(); onForward?.call(); },
+                onTap: () { Navigator.of(context).pop(); widget.onForward?.call(); },
               ),
-            if (onPin != null)
+            if (widget.onPin != null)
               ListTile(
-                leading: Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined),
-                title: Text(msg.pinned ? '고정 해제' : '메시지 고정'),
-                onTap: () { Navigator.of(context).pop(); onPin?.call(); },
+                leading: Icon(widget.msg.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+                title: Text(widget.msg.pinned ? '고정 해제' : '메시지 고정'),
+                onTap: () { Navigator.of(context).pop(); widget.onPin?.call(); },
               ),
-            if (onBookmark != null)
+            if (widget.onBookmark != null)
               ListTile(
-                leading: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border),
-                title: Text(isBookmarked ? '북마크 해제' : '북마크'),
-                onTap: () { Navigator.of(context).pop(); onBookmark?.call(); },
+                leading: Icon(widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border),
+                title: Text(widget.isBookmarked ? '북마크 해제' : '북마크'),
+                onTap: () { Navigator.of(context).pop(); widget.onBookmark?.call(); },
               ),
-            if (!msg.deleted)
+            if (!widget.msg.deleted)
               ListTile(
                 leading: const Icon(Icons.copy_outlined),
                 title: const Text('복사'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  Clipboard.setData(ClipboardData(text: msg.content));
+                  Clipboard.setData(ClipboardData(text: widget.msg.content));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('메시지가 복사되었습니다.'), duration: Duration(seconds: 1)));
                 },
               ),
-            if (onEdit != null)
+            if (widget.onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('메시지 수정'),
-                onTap: () { Navigator.of(context).pop(); onEdit?.call(); },
+                onTap: () { Navigator.of(context).pop(); widget.onEdit?.call(); },
               ),
-            if (onDelete != null)
+            if (widget.onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
                 title: const Text('메시지 삭제', style: TextStyle(color: Colors.red)),
-                onTap: () { Navigator.of(context).pop(); onDelete?.call(); },
+                onTap: () { Navigator.of(context).pop(); widget.onDelete?.call(); },
               ),
             // 자기 메시지 / 삭제된 메시지에는 신고 노출 안 함.
-            if (!isMine && !msg.deleted)
+            if (!widget.isMine && !widget.msg.deleted)
               ListTile(
                 leading: const Icon(Icons.flag_outlined, color: Colors.orange),
                 title: const Text('신고', style: TextStyle(color: Colors.orange)),
                 onTap: () {
                   Navigator.of(context).pop();
-                  showMessageReportDialog(context, msg.effectiveId);
+                  showMessageReportDialog(context, widget.msg.effectiveId);
                 },
               ),
             const SizedBox(height: 8),
@@ -1184,7 +1191,7 @@ class _ChatBubble extends StatelessWidget {
         child: EmojiPicker(
           onEmojiSelected: (_, emoji) {
             Navigator.of(sheetCtx).pop();
-            onReaction?.call(emoji.emoji);
+            widget.onReaction?.call(emoji.emoji);
           },
           config: Config(
             height: 256,
@@ -1210,9 +1217,9 @@ class _ChatBubble extends StatelessWidget {
   }
 
   void _showContextMenu(BuildContext context, Offset position) {
-    final canReport = !isMine && !msg.deleted;
+    final canReport = !widget.isMine && !widget.msg.deleted;
     final items = <PopupMenuEntry<String>>[];
-    if (onReaction != null && !msg.deleted) {
+    if (widget.onReaction != null && !widget.msg.deleted) {
       items.add(PopupMenuItem(
         enabled: false,
         child: Row(
@@ -1240,25 +1247,25 @@ class _ChatBubble extends StatelessWidget {
       ));
       items.add(const PopupMenuDivider());
     }
-    if (onReply != null) {
+    if (widget.onReply != null) {
       items.add(const PopupMenuItem(value: 'reply', child: Row(children: [Icon(Icons.reply, size: 18), SizedBox(width: 8), Text('답글')])));
     }
-    if (onForward != null) {
+    if (widget.onForward != null) {
       items.add(const PopupMenuItem(value: 'forward', child: Row(children: [Icon(Icons.forward_outlined, size: 18), SizedBox(width: 8), Text('전달')])));
     }
-    if (onPin != null) {
-      items.add(PopupMenuItem(value: 'pin', child: Row(children: [Icon(msg.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18), const SizedBox(width: 8), Text(msg.pinned ? '고정 해제' : '고정')])));
+    if (widget.onPin != null) {
+      items.add(PopupMenuItem(value: 'pin', child: Row(children: [Icon(widget.msg.pinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18), const SizedBox(width: 8), Text(widget.msg.pinned ? '고정 해제' : '고정')])));
     }
-    if (onBookmark != null) {
-      items.add(PopupMenuItem(value: 'bookmark', child: Row(children: [Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border, size: 18), const SizedBox(width: 8), Text(isBookmarked ? '북마크 해제' : '북마크')])));
+    if (widget.onBookmark != null) {
+      items.add(PopupMenuItem(value: 'bookmark', child: Row(children: [Icon(widget.isBookmarked ? Icons.bookmark : Icons.bookmark_border, size: 18), const SizedBox(width: 8), Text(widget.isBookmarked ? '북마크 해제' : '북마크')])));
     }
-    if (!msg.deleted) {
+    if (!widget.msg.deleted) {
       items.add(const PopupMenuItem(value: 'copy', child: Row(children: [Icon(Icons.copy_outlined, size: 18), SizedBox(width: 8), Text('복사')])));
     }
-    if (onEdit != null) {
+    if (widget.onEdit != null) {
       items.add(const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('수정')])));
     }
-    if (onDelete != null) {
+    if (widget.onDelete != null) {
       items.add(const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('삭제', style: TextStyle(color: Colors.red))])));
     }
     if (canReport) {
@@ -1272,20 +1279,20 @@ class _ChatBubble extends StatelessWidget {
     ).then((value) {
       if (value == null) return;
       if (value == 'emoji_picker') { if (context.mounted) _showEmojiPicker(context); return; }
-      if (value.startsWith('react_')) { onReaction?.call(value.substring(6)); return; }
+      if (value.startsWith('react_')) { widget.onReaction?.call(value.substring(6)); return; }
       if (value == 'copy') {
-        Clipboard.setData(ClipboardData(text: msg.content));
+        Clipboard.setData(ClipboardData(text: widget.msg.content));
         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('메시지가 복사되었습니다.'), duration: Duration(seconds: 1)));
         return;
       }
-      if (value == 'reply') onReply?.call();
-      if (value == 'forward') onForward?.call();
-      if (value == 'pin') onPin?.call();
-      if (value == 'bookmark') onBookmark?.call();
-      if (value == 'edit') onEdit?.call();
-      if (value == 'delete') onDelete?.call();
-      if (value == 'report') showMessageReportDialog(context, msg.effectiveId);
+      if (value == 'reply') widget.onReply?.call();
+      if (value == 'forward') widget.onForward?.call();
+      if (value == 'pin') widget.onPin?.call();
+      if (value == 'bookmark') widget.onBookmark?.call();
+      if (value == 'edit') widget.onEdit?.call();
+      if (value == 'delete') widget.onDelete?.call();
+      if (value == 'report') showMessageReportDialog(context, widget.msg.effectiveId);
     });
   }
 
@@ -1299,19 +1306,19 @@ class _ChatBubble extends StatelessWidget {
     final radius = BorderRadius.only(
       topLeft: const Radius.circular(20),
       topRight: const Radius.circular(20),
-      bottomLeft: Radius.circular(isMine ? 20 : 5),
-      bottomRight: Radius.circular(isMine ? 5 : 20),
+      bottomLeft: Radius.circular(widget.isMine ? 20 : 5),
+      bottomRight: Radius.circular(widget.isMine ? 5 : 20),
     );
 
     // Deleted message — compact tombstone bubble
-    if (msg.deleted) {
+    if (widget.msg.deleted) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
-          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
-            if (!isMine) ...[
-              _Avatar(name: msg.username, color: _avatarColor(msg.username)),
+            if (!widget.isMine) ...[
+              _Avatar(name: widget.msg.username, color: _avatarColor(widget.msg.username)),
               const SizedBox(width: 8),
             ],
             Container(
@@ -1338,16 +1345,16 @@ class _ChatBubble extends StatelessWidget {
                 ],
               ),
             ),
-            if (isMine) const SizedBox(width: 6),
+            if (widget.isMine) const SizedBox(width: 6),
           ],
         ),
       );
     }
 
-    final isUrgent = msg.priority.toUpperCase() == 'URGENT' || msg.priority.toUpperCase() == 'STAT';
+    final isUrgent = widget.msg.priority.toUpperCase() == 'URGENT' || widget.msg.priority.toUpperCase() == 'STAT';
 
-    final canReport = !isMine && !msg.deleted;
-    final hasActions = canReport || onDelete != null || onEdit != null || onReply != null || onReaction != null || onForward != null || onPin != null || onBookmark != null;
+    final canReport = !widget.isMine && !widget.msg.deleted;
+    final hasActions = canReport || widget.onDelete != null || widget.onEdit != null || widget.onReply != null || widget.onReaction != null || widget.onForward != null || widget.onPin != null || widget.onBookmark != null;
 
     final bubble = GestureDetector(
       onLongPress: hasActions ? () => _showDeleteSheet(context) : null,
@@ -1355,15 +1362,15 @@ class _ChatBubble extends StatelessWidget {
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
       child: Padding(
-      padding: EdgeInsets.only(top: showAvatar ? 3 : 1, bottom: showAvatar ? 3 : 1),
+      padding: EdgeInsets.only(top: widget.showAvatar ? 3 : 1, bottom: widget.showAvatar ? 3 : 1),
       child: Row(
         mainAxisAlignment:
-            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+            widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMine) ...[
-            if (showAvatar)
-              _Avatar(name: msg.username, color: _avatarColor(msg.username))
+          if (!widget.isMine) ...[
+            if (widget.showAvatar)
+              _Avatar(name: widget.msg.username, color: _avatarColor(widget.msg.username))
             else
               const SizedBox(width: 32), // placeholder for alignment
             const SizedBox(width: 8),
@@ -1371,7 +1378,7 @@ class _ChatBubble extends StatelessWidget {
           Flexible(
             child: Column(
               crossAxisAlignment:
-                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  widget.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 if (isUrgent)
                   Padding(
@@ -1389,21 +1396,21 @@ class _ChatBubble extends StatelessWidget {
                           const Icon(Icons.priority_high, size: 12, color: Colors.red),
                           const SizedBox(width: 2),
                           Text(
-                            msg.priority.toUpperCase(),
+                            widget.msg.priority.toUpperCase(),
                             style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.red),
                           ),
                         ],
                       ),
                     ),
                   ),
-                if (!isMine && showAvatar)
+                if (!widget.isMine && widget.showAvatar)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 3),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          msg.username,
+                          widget.msg.username,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1412,28 +1419,28 @@ class _ChatBubble extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (msg.priority == 'URGENT' || msg.priority == 'STAT') ...[
+                        if (widget.msg.priority == 'URGENT' || widget.msg.priority == 'STAT') ...[
                           const SizedBox(width: 5),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
-                              color: msg.priority == 'STAT'
+                              color: widget.msg.priority == 'STAT'
                                   ? const Color(0xFFD32F2F).withAlpha(20)
                                   : const Color(0xFFF57C00).withAlpha(20),
                               borderRadius: BorderRadius.circular(3),
                               border: Border.all(
-                                color: msg.priority == 'STAT'
+                                color: widget.msg.priority == 'STAT'
                                     ? const Color(0xFFD32F2F)
                                     : const Color(0xFFF57C00),
                                 width: 0.5,
                               ),
                             ),
                             child: Text(
-                              msg.priority,
+                              widget.msg.priority,
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
-                                color: msg.priority == 'STAT'
+                                color: widget.msg.priority == 'STAT'
                                     ? const Color(0xFFD32F2F)
                                     : const Color(0xFFF57C00),
                               ),
@@ -1443,7 +1450,7 @@ class _ChatBubble extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (isMine && (msg.priority == 'URGENT' || msg.priority == 'STAT'))
+                if (widget.isMine && (widget.msg.priority == 'URGENT' || widget.msg.priority == 'STAT'))
                   Padding(
                     padding: const EdgeInsets.only(right: 4, bottom: 3),
                     child: Align(
@@ -1451,18 +1458,18 @@ class _ChatBubble extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                         decoration: BoxDecoration(
-                          color: msg.priority == 'STAT'
+                          color: widget.msg.priority == 'STAT'
                               ? const Color(0xFFD32F2F).withAlpha(20)
                               : const Color(0xFFF57C00).withAlpha(20),
                           borderRadius: BorderRadius.circular(3),
                           border: Border.all(
-                            color: msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
+                            color: widget.msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
                             width: 0.5,
                           ),
                         ),
-                        child: Text(msg.priority, style: TextStyle(
+                        child: Text(widget.msg.priority, style: TextStyle(
                           fontSize: 9, fontWeight: FontWeight.w700,
-                          color: msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
+                          color: widget.msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
                         )),
                       ),
                     ),
@@ -1471,18 +1478,18 @@ class _ChatBubble extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (isMine)
+                    if (widget.isMine)
                       Padding(
                         padding: const EdgeInsets.only(right: 5, bottom: 3),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (readCount > 0)
+                            if (widget.readCount > 0)
                               GestureDetector(
-                                onTap: onReadCountTap,
+                                onTap: widget.onReadCountTap,
                                 child: Text(
-                                  '읽음 $readCount',
+                                  '읽음 ${widget.readCount}',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Theme.of(context).colorScheme.primary.withAlpha(180),
@@ -1490,7 +1497,7 @@ class _ChatBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            if (msg.edited && showTime)
+                            if (widget.msg.edited && widget.showTime)
                               Text(
                                 '수정됨',
                                 style: TextStyle(
@@ -1498,9 +1505,9 @@ class _ChatBubble extends StatelessWidget {
                                   color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
                                 ),
                               ),
-                            if (showTime)
+                            if (widget.showTime)
                               Text(
-                                time,
+                                widget.time,
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
@@ -1510,22 +1517,22 @@ class _ChatBubble extends StatelessWidget {
                         ),
                       ),
                     Flexible(
-                      child: isMine
+                      child: widget.isMine
                           ? Container(
                               constraints:
                                   BoxConstraints(maxWidth: bubbleMaxWidth),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                gradient: msg.priority == 'STAT'
+                                gradient: widget.msg.priority == 'STAT'
                                     ? const LinearGradient(
                                         colors: [Color(0xFFE53935), Color(0xFFC62828)],
                                       )
-                                    : msg.priority == 'URGENT'
+                                    : widget.msg.priority == 'URGENT'
                                         ? const LinearGradient(
                                             colors: [Color(0xFFFB8C00), Color(0xFFE65100)],
                                           )
-                                        : isAiQuestion
+                                        : widget.isAiQuestion
                                             ? const LinearGradient(
                                                 colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
                                               )
@@ -1533,11 +1540,11 @@ class _ChatBubble extends StatelessWidget {
                                 borderRadius: radius,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: msg.priority == 'STAT'
+                                    color: widget.msg.priority == 'STAT'
                                         ? const Color(0xFFD32F2F).withAlpha(90)
-                                        : msg.priority == 'URGENT'
+                                        : widget.msg.priority == 'URGENT'
                                             ? const Color(0xFFF57C00).withAlpha(70)
-                                            : (isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
+                                            : (widget.isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
                                     blurRadius: 10,
                                     offset: const Offset(0, 3),
                                   ),
@@ -1546,7 +1553,7 @@ class _ChatBubble extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (msg.forwardedFrom != null)
+                                  if (widget.msg.forwardedFrom != null)
                                     Container(
                                       margin: const EdgeInsets.only(bottom: 4),
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1560,7 +1567,7 @@ class _ChatBubble extends StatelessWidget {
                                           Icon(Icons.forward, size: 12, color: Colors.white.withAlpha(160)),
                                           const SizedBox(width: 4),
                                           Flexible(child: Text(
-                                            msg.forwardedFrom!,
+                                            widget.msg.forwardedFrom!,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(fontSize: 11, color: Colors.white.withAlpha(160)),
@@ -1568,9 +1575,9 @@ class _ChatBubble extends StatelessWidget {
                                         ],
                                       ),
                                     ),
-                                  if (msg.isReply) ...[
+                                  if (widget.msg.isReply) ...[
                                     GestureDetector(
-                                      onTap: onScrollToParent,
+                                      onTap: widget.onScrollToParent,
                                       child: Container(
                                         margin: const EdgeInsets.only(bottom: 6),
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1582,7 +1589,7 @@ class _ChatBubble extends StatelessWidget {
                                           ),
                                         ),
                                         child: Text(
-                                          msg.parentMessagePreview ?? '원본 메시지',
+                                          widget.msg.parentMessagePreview ?? '원본 메시지',
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -1594,7 +1601,7 @@ class _ChatBubble extends StatelessWidget {
                                       ),
                                     ),
                                   ],
-                                  if (isAiQuestion)
+                                  if (widget.isAiQuestion)
                                     Padding(
                                       padding: const EdgeInsets.only(bottom: 4),
                                       child: Row(
@@ -1608,7 +1615,7 @@ class _ChatBubble extends StatelessWidget {
                                     ),
                                   _buildContentRichText(
                                     context,
-                                    isAiQuestion ? msg.content.replaceFirst('[AI에게] ', '') : msg.content,
+                                    widget.isAiQuestion ? widget.msg.content.replaceFirst('[AI에게] ', '') : widget.msg.content,
                                     const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
                                     invertColors: true,
                                   ),
@@ -1621,24 +1628,24 @@ class _ChatBubble extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: msg.priority == 'STAT'
+                                color: widget.msg.priority == 'STAT'
                                     ? const Color(0xFFD32F2F).withAlpha(18)
-                                    : msg.priority == 'URGENT'
+                                    : widget.msg.priority == 'URGENT'
                                         ? const Color(0xFFF57C00).withAlpha(18)
                                         : Theme.of(context).colorScheme.surfaceContainer,
                                 borderRadius: radius,
                                 border: Border.all(
-                                    color: msg.priority == 'STAT'
+                                    color: widget.msg.priority == 'STAT'
                                         ? const Color(0xFFD32F2F)
-                                        : msg.priority == 'URGENT'
+                                        : widget.msg.priority == 'URGENT'
                                             ? const Color(0xFFF57C00)
                                             : Theme.of(context).colorScheme.outline.withAlpha(80),
-                                    width: (msg.priority == 'STAT' || msg.priority == 'URGENT') ? 1.5 : 1),
+                                    width: (widget.msg.priority == 'STAT' || widget.msg.priority == 'URGENT') ? 1.5 : 1),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (msg.forwardedFrom != null)
+                                  if (widget.msg.forwardedFrom != null)
                                     Container(
                                       margin: const EdgeInsets.only(bottom: 4),
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1652,7 +1659,7 @@ class _ChatBubble extends StatelessWidget {
                                           Icon(Icons.forward, size: 12, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
                                           const SizedBox(width: 4),
                                           Flexible(child: Text(
-                                            msg.forwardedFrom!,
+                                            widget.msg.forwardedFrom!,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
@@ -1660,9 +1667,9 @@ class _ChatBubble extends StatelessWidget {
                                         ],
                                       ),
                                     ),
-                                  if (msg.isReply) ...[
+                                  if (widget.msg.isReply) ...[
                                     GestureDetector(
-                                      onTap: onScrollToParent,
+                                      onTap: widget.onScrollToParent,
                                       child: Container(
                                         margin: const EdgeInsets.only(bottom: 6),
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1674,7 +1681,7 @@ class _ChatBubble extends StatelessWidget {
                                           ),
                                         ),
                                         child: Text(
-                                          msg.parentMessagePreview ?? '원본 메시지',
+                                          widget.msg.parentMessagePreview ?? '원본 메시지',
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -1688,7 +1695,7 @@ class _ChatBubble extends StatelessWidget {
                                   ],
                                   _buildContentRichText(
                                     context,
-                                    msg.content,
+                                    widget.msg.content,
                                     TextStyle(
                                         color: Theme.of(context).colorScheme.onSurface,
                                         fontSize: 14,
@@ -1699,14 +1706,14 @@ class _ChatBubble extends StatelessWidget {
                               ),
                             ),
                     ),
-                    if (!isMine && showTime)
+                    if (!widget.isMine && widget.showTime)
                       Padding(
                         padding: const EdgeInsets.only(left: 5, bottom: 3),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (msg.edited)
+                            if (widget.msg.edited)
                               Text(
                                 '수정됨',
                                 style: TextStyle(
@@ -1714,14 +1721,14 @@ class _ChatBubble extends StatelessWidget {
                                   color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
                                 ),
                               ),
-                            Text(time,
+                            Text(widget.time,
                                 style: TextStyle(
                                     fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
-                            if (isMine && msg.deliveryStatus == MessageDeliveryStatus.sending)
+                            if (widget.isMine && widget.msg.deliveryStatus == MessageDeliveryStatus.sending)
                               Padding(padding: const EdgeInsets.only(left: 3), child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
-                            if (isMine && msg.deliveryStatus == MessageDeliveryStatus.failed)
+                            if (widget.isMine && widget.msg.deliveryStatus == MessageDeliveryStatus.failed)
                               GestureDetector(
-                                onTap: onRetry,
+                                onTap: widget.onRetry,
                                 child: const Padding(
                                     padding: EdgeInsets.only(left: 3),
                                     child: Tooltip(
@@ -1735,16 +1742,16 @@ class _ChatBubble extends StatelessWidget {
                   ],
                 ),
                 // Reaction chips inside bubble area
-                if (msg.reactions.isNotEmpty)
+                if (widget.msg.reactions.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Wrap(
                       spacing: 4,
-                      children: msg.reactions.entries.map((e) {
+                      children: widget.msg.reactions.entries.map((e) {
                         final emoji = e.key;
                         final users = e.value;
                         return GestureDetector(
-                          onTap: () => onReaction?.call(emoji),
+                          onTap: () => widget.onReaction?.call(emoji),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -1758,11 +1765,11 @@ class _ChatBubble extends StatelessWidget {
                       }).toList(),
                     ),
                   ),
-                if (onReply != null)
+                if (widget.onReply != null)
                   Align(
-                    alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
                     child: GestureDetector(
-                      onTap: onReply,
+                      onTap: widget.onReply,
                       child: Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Icon(
@@ -1776,7 +1783,7 @@ class _ChatBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (isMine) const SizedBox(width: 6),
+          if (widget.isMine) const SizedBox(width: 6),
         ],
       ),
     ),  // Padding
@@ -1785,17 +1792,17 @@ class _ChatBubble extends StatelessWidget {
     // Swipe gestures: right = reply, left = action menu
     Widget result = bubble;
 
-    if (!msg.deleted && (onReply != null || hasActions)) {
+    if (!widget.msg.deleted && (widget.onReply != null || hasActions)) {
       result = Dismissible(
-        key: ValueKey('swipe-${msg.effectiveId}'),
-        direction: onReply != null && hasActions
+        key: ValueKey('swipe-${widget.msg.effectiveId}'),
+        direction: widget.onReply != null && hasActions
             ? DismissDirection.horizontal
-            : onReply != null
+            : widget.onReply != null
                 ? DismissDirection.startToEnd
                 : DismissDirection.endToStart,
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.startToEnd) {
-            onReply?.call();
+            widget.onReply?.call();
           } else if (direction == DismissDirection.endToStart) {
             _showDeleteSheet(context);
           }
@@ -1819,7 +1826,63 @@ class _ChatBubble extends StatelessWidget {
       );
     }
 
-    return result;
+    // Desktop/web hover reaction bar
+    final showHoverBar = kIsWeb && widget.onReaction != null && !widget.msg.deleted;
+    if (!showHoverBar) return result;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          result,
+          if (_hovered)
+            Positioned(
+              top: -32,
+              right: widget.isMine ? 0 : null,
+              left: widget.isMine ? null : 0,
+              child: _HoverReactionBar(
+                reactions: _quickReactions,
+                onReaction: widget.onReaction!,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Desktop hover reaction bar (Slack/Discord style)
+// ─────────────────────────────────────────────────────────────────
+class _HoverReactionBar extends StatelessWidget {
+  final List<String> reactions;
+  final void Function(String emoji) onReaction;
+
+  const _HoverReactionBar({required this.reactions, required this.onReaction});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: reactions.map((emoji) => GestureDetector(
+          onTap: () => onReaction(emoji),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: Text(emoji, style: const TextStyle(fontSize: 18)),
+          ),
+        )).toList(),
+      ),
+    );
   }
 }
 
