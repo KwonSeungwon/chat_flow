@@ -44,7 +44,31 @@ public class MessageReadService {
 
     private ChatMessageEntity decryptEntity(ChatMessageEntity entity) {
         if (entity.getContent() == null) return entity;
-        entity.setContent(messageEncryptor.decrypt(entity.getContent()));
-        return entity;
+        // IMPORTANT: never mutate the managed entity in a readOnly transaction —
+        // Hibernate dirty checking would otherwise issue UPDATE statements on every
+        // page read and could persist the plaintext back to the row. Build a
+        // detached copy via the Lombok @Builder and return that instead.
+        return ChatMessageEntity.builder()
+                .messageId(entity.getMessageId())
+                .chatRoomId(entity.getChatRoomId())
+                .userId(entity.getUserId())
+                .username(entity.getUsername())
+                .content(messageEncryptor.decrypt(entity.getContent()))
+                .timestamp(entity.getTimestamp())
+                .type(entity.getType())
+                .priority(entity.getPriority())
+                .isAiGenerated(entity.isAiGenerated())
+                .fileUrl(entity.getFileUrl())
+                .fileName(entity.getFileName())
+                .fileContentType(entity.getFileContentType())
+                .parentMessageId(entity.getParentMessageId())
+                .parentMessagePreview(entity.getParentMessagePreview())
+                .forwardedFrom(entity.getForwardedFrom())
+                .deleted(entity.isDeleted())
+                .edited(entity.isEdited())
+                .editedAt(entity.getEditedAt())
+                .pinned(entity.isPinned())
+                .reactions(entity.getReactions())
+                .build();
     }
 }
