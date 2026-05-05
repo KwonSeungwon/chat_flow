@@ -19,6 +19,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -113,7 +115,26 @@ class MessageReadServiceReadOnlyTest {
         Page<ChatMessageEntity> result = service.getMessages("room-1", pageable);
 
         assertThat(result.getContent().get(0).getContent()).isNull();
-        // decrypt should never have been called for null content. Mockito with
-        // strict stubs would fail if it were — so reaching this line is the assertion.
+        verify(messageEncryptor, never()).decrypt(any());
+    }
+
+    @Test
+    void decryptedCopy_preservesIsNewFlag_matchingSourceEntity() {
+        // Regression for I-1: managed entities have isNew=false after @PostLoad.
+        // toBuilder() must preserve that on the detached copy so JSON serialization
+        // ("new": false) stays consistent with non-encrypted reads.
+        ChatMessageEntity loaded = entity("m-1", "ENC[abc]");
+        loaded.setNew(false); // simulate @PostLoad effect
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<ChatMessageEntity> page = new PageImpl<>(List.of(loaded), pageable, 1);
+
+        when(chatMessageRepository.findByChatRoomIdOrderByTimestampDesc("room-1", pageable))
+                .thenReturn(page);
+        when(messageEncryptor.isEnabled()).thenReturn(true);
+        when(messageEncryptor.decrypt("ENC[abc]")).thenReturn("hello");
+
+        Page<ChatMessageEntity> result = service.getMessages("room-1", pageable);
+
+        assertThat(result.getContent().get(0).isNew()).isFalse();
     }
 }
