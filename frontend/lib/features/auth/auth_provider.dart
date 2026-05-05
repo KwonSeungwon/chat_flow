@@ -191,6 +191,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState(isHydrated: true);
   }
 
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    await _dioClient.dio.put('/api/auth/password', data: {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+    });
+  }
+
   Future<void> updateProfileImage(String profileImageUrl) async {
     await _dioClient.dio.put('/api/auth/profile', data: {
       'username': state.username,
