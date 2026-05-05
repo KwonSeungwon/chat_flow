@@ -20,6 +20,25 @@ DateTime parseMutedUntil(dynamic data) {
   return DateTime.tryParse(raw ?? '') ?? DateTime.now();
 }
 
+/// Extract `reportId` from a possibly ApiResponse-wrapped payload.
+/// Backend returns `{success, data: {reportId}, ...}`. Older code paths
+/// may have returned `{reportId}` at the root, so we accept both.
+/// Returns 0 when the payload is malformed or the id is missing.
+int parseReportId(dynamic data) {
+  num? rawId;
+  if (data is Map) {
+    final inner = data['data'];
+    if (inner is Map) {
+      final v = inner['reportId'];
+      rawId = v is num ? v : null;
+    } else {
+      final v = data['reportId'];
+      rawId = v is num ? v : null;
+    }
+  }
+  return rawId?.toInt() ?? 0;
+}
+
 class RoomAdminApiException implements Exception {
   final String code;
   final String message;
@@ -161,8 +180,7 @@ class RoomAdminApi {
           if (comment != null) 'comment': comment,
         },
       );
-      final data = resp.data;
-      return (data is Map ? (data['reportId'] as num?)?.toInt() : null) ?? 0;
+      return parseReportId(resp.data);
     } on DioException catch (e) {
       throw _mapError(e);
     }
