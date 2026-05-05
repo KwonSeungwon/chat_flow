@@ -139,10 +139,13 @@ public class UserPresenceService {
                         .username(safeUsername)
                         .joinedAt(LocalDateTime.now())
                         .build());
-            } catch (Exception e) {
-                log.debug("Failed to register room membership: roomId={} userId={} reason={}",
-                        message.getChatRoomId(), safeUserId, e.getMessage());
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                // Benign: another session inserted the same (roomId, userId) row first.
+                log.info("RoomMember already exists (concurrent insert): roomId={} userId={}",
+                        message.getChatRoomId(), safeUserId);
             }
+            // NOTE: any other exception (e.g. DB outage) propagates — Redis state
+            // alone would otherwise diverge from the room_members table.
         }
     }
 
