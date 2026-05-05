@@ -130,6 +130,7 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
               Navigator.of(ctx).pop();
               showDialog(
                 context: context,
+                barrierDismissible: false,
                 builder: (_) => const ChangePasswordDialog(),
               );
             },
@@ -776,6 +777,7 @@ class ChatPage extends ConsumerWidget {
                 if (context.mounted) {
                   showDialog(
                     context: context,
+                    barrierDismissible: false,
                     builder: (_) => const ChangePasswordDialog(),
                   );
                 }

@@ -13,7 +13,9 @@ class ChatStrings {
   static const String profileImageChangeFailed = '프로필 이미지 변경에 실패했습니다.';
   static const String passwordChanged = '비밀번호가 변경되었습니다.';
   static const String passwordChangeFailed = '비밀번호 변경에 실패했습니다.';
+  static const String passwordChangeFailedHint = '비밀번호 변경에 실패했습니다. 현재 비밀번호를 확인해주세요.';
   static const String passwordMismatch = '새 비밀번호가 일치하지 않습니다.';
+  static const String passwordTooShort = '비밀번호는 8자 이상이어야 합니다.';
 
   // 초대
   static const String inviteLinkCopied = '초대 링크가 클립보드에 복사되었습니다 (24시간 유효)';
