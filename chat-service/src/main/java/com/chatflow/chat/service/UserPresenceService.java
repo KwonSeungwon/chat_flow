@@ -73,6 +73,9 @@ public class UserPresenceService {
 
     /**
      * 만석인 경우 처리. DM은 기존 멤버만 허용, 일반 방은 redirect.
+     * <p><b>Side effect:</b> 일반 방 redirect 시 {@code message.chatRoomId}를 새 방 ID로 변경한다.
+     * 이후 코드에서 {@code message.getChatRoomId()}가 달라질 수 있으므로 주의.
+     *
      * @return true if join should be aborted (non-member DM full)
      */
     private boolean handleRoomFullIfNeeded(ChatMessage message, String currentUserId, boolean alreadyJoined) {
@@ -213,7 +216,7 @@ public class UserPresenceService {
         if (!userStillPresent) {
             Set<String> remainingUserIds = getRoomParticipantUserIds(roomId);
             messagingTemplate.convertAndSend("/topic/chat/" + roomId + "/presence",
-                    java.util.Map.of(
+                    Map.of(
                             "type", "LEAVE",
                             "roomId", roomId,
                             "username", username,
