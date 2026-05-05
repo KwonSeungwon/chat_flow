@@ -4,6 +4,22 @@ import '../../../shared/models/room_ban.dart';
 import '../../../shared/models/room_member.dart';
 import '../../../shared/models/room_role.dart';
 
+/// Extract `mutedUntil` from a possibly ApiResponse-wrapped payload.
+/// Backend returns `{success, data: {mutedUntil}, ...}`. Older code paths
+/// may have returned `{mutedUntil}` at the root, so we accept both.
+DateTime parseMutedUntil(dynamic data) {
+  String? raw;
+  if (data is Map) {
+    final inner = data['data'];
+    if (inner is Map) {
+      raw = inner['mutedUntil']?.toString();
+    } else {
+      raw = data['mutedUntil']?.toString();
+    }
+  }
+  return DateTime.tryParse(raw ?? '') ?? DateTime.now();
+}
+
 class RoomAdminApiException implements Exception {
   final String code;
   final String message;
@@ -70,9 +86,7 @@ class RoomAdminApi {
         '/api/chat/rooms/$roomId/members/$userId/mute',
         data: {'minutes': minutes},
       );
-      final data = resp.data;
-      final raw = data is Map ? data['mutedUntil']?.toString() : null;
-      return DateTime.tryParse(raw ?? '') ?? DateTime.now();
+      return parseMutedUntil(resp.data);
     } on DioException catch (e) {
       throw _mapError(e);
     }
