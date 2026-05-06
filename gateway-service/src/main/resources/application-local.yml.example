@@ -1,0 +1,102 @@
+# Gateway Service - Local Development Environment (TEMPLATE)
+#
+# This file is tracked. The actual `application-local.yml` is gitignored
+# (root .gitignore line 34). On a fresh checkout, copy this template:
+#
+#   cp gateway-service/src/main/resources/application-local.yml.example \
+#      gateway-service/src/main/resources/application-local.yml
+#
+# Then edit the local copy for any developer-specific overrides
+# (port conflicts, DB credentials, etc.).
+server:
+  port: 8000
+
+spring:
+  profiles:
+    active: local
+  codec:
+    max-in-memory-size: 55MB
+  cloud:
+    gateway:
+      routes:
+        - id: chat-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/chat/**
+        - id: ai-summary-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/ai-summary/**
+        - id: search-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/search/**
+        - id: websocket
+          uri: ws://localhost:8080
+          predicates:
+            - Path=/ws/**
+        - id: websocket-native
+          uri: ws://localhost:8080
+          predicates:
+            - Path=/ws-native,/ws-native/**
+        - id: file-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/files/**
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+
+  # Valkey Configuration (using Spring Data Redis for compatibility)
+  data:
+    redis:  # Redis-compatible API for Valkey
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      database: 0
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/chatflow
+    username: chatflow
+    password: chatflow
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+
+jwt:
+  secret: chatflow-local-jwt-secret-key-must-be-at-least-32-bytes-long
+  expiration-ms: 86400000
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    com.chatflow: DEBUG

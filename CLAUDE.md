@@ -92,6 +92,12 @@ docker compose -f docker-compose.local.yml down
 ./gradlew jacocoTestReport            # 커버리지 리포트
 ```
 
+> **Local 프로필 설정**: 각 서비스의 `src/main/resources/application-local.yml`은 개발자별 오버라이드 용도로 gitignored 상태다. 신규 체크아웃 시 gateway-service는 `application-local.yml.example`을 복사해서 시작한다 (`/ws-native` 라우트 등 정상 동작에 필요한 기본 라우팅 포함):
+> ```bash
+> cp gateway-service/src/main/resources/application-local.yml.example \
+>    gateway-service/src/main/resources/application-local.yml
+> ```
+
 ### Frontend (Flutter)
 
 ```bash
