@@ -1,5 +1,6 @@
 package com.chatflow.common.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -13,5 +14,7 @@ import lombok.experimental.SuperBuilder;
 @EqualsAndHashCode(callSuper = true)
 public class ChatMessage extends BaseMessage {
     private String messageId;
+
+    @JsonProperty("isAiGenerated")
     private boolean isAiGenerated;
 }
