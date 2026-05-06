@@ -38,6 +38,10 @@ spring:
         - id: websocket-native
           uri: ws://localhost:8080
           predicates:
+            # Match both bare /ws-native (where the STOMP handshake actually
+            # lands) AND prefixed paths. application-prod.yml currently has
+            # only /ws-native/** which is likely a latent prod bug — fix
+            # there separately if confirmed.
             - Path=/ws-native,/ws-native/**
         - id: file-service
           uri: http://localhost:8080

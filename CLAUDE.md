@@ -92,11 +92,12 @@ docker compose -f docker-compose.local.yml down
 ./gradlew jacocoTestReport            # 커버리지 리포트
 ```
 
-> **Local 프로필 설정**: 각 서비스의 `src/main/resources/application-local.yml`은 개발자별 오버라이드 용도로 gitignored 상태다. 신규 체크아웃 시 gateway-service는 `application-local.yml.example`을 복사해서 시작한다 (`/ws-native` 라우트 등 정상 동작에 필요한 기본 라우팅 포함):
+> **Local 프로필 설정 (gateway-service)**: gateway-service의 `src/main/resources/application-local.yml`은 개발자별 오버라이드 용도로 gitignored 상태다. 신규 체크아웃 시 STOMP WebSocket 라우트(`/ws-native`)가 빠진 채로 시작되어 로컬 dev에서 STOMP가 404로 떨어질 수 있으니, 우선 `application-local.yml.example`을 복사해서 시작한다:
 > ```bash
 > cp gateway-service/src/main/resources/application-local.yml.example \
 >    gateway-service/src/main/resources/application-local.yml
 > ```
+> 다른 서비스(chat-service / ai-summary-service / search-service)도 `application-local.yml`이 동일하게 gitignored이지만 누락 시 가시적인 오류를 내므로 별도 템플릿은 제공하지 않는다.
 
 ### Frontend (Flutter)
 
