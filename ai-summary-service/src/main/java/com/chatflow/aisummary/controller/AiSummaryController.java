@@ -20,9 +20,9 @@ public class AiSummaryController {
     private final AiSummaryService aiSummaryService;
 
     @GetMapping("/room/{roomId}")
-    public ResponseEntity<List<ChatMessage>> getRoomSummaries(@PathVariable String roomId) {
+    public ResponseEntity<ApiResponse<List<ChatMessage>>> getRoomSummaries(@PathVariable String roomId) {
         List<ChatMessage> summaries = aiSummaryService.getSummaries(roomId);
-        return ResponseEntity.ok(summaries);
+        return ResponseEntity.ok(ApiResponse.ok(summaries));
     }
 
     @PostMapping("/ask")

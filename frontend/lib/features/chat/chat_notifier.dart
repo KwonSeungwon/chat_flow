@@ -21,6 +21,28 @@ import 'room_keywords_provider.dart';
 import 'admin/admin_event_state.dart';
 import 'admin/room_members_provider.dart';
 
+/// Parse a `/api/ai-summary/room/{id}` response into a list of summaries.
+///
+/// Accepts three shapes:
+/// - ApiResponse-wrapped: `{success, data: [...], message}` — the canonical
+///   shape after the backend was unified to use ApiResponse.
+/// - Bare list: `[...]` — kept for backward compatibility with cached
+///   responses or older deployments.
+/// - Anything else (error envelope, null, malformed) → empty list.
+List<ChatMessage> parseSummariesResponse(dynamic data) {
+  if (data is Map && data['data'] is List) {
+    return (data['data'] as List)
+        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+  if (data is List) {
+    return data
+        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+  return const <ChatMessage>[];
+}
+
 // ---------------------------------------------------------------------------
 // Chat Messages
 // ---------------------------------------------------------------------------
@@ -539,18 +561,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Future<void> _fetchSummaries(String roomId) async {
     try {
       final resp = await _dioClient.dio.get('/api/ai-summary/room/$roomId');
-      final data = resp.data;
-      List<dynamic> items;
-      if (data is List) {
-        items = data;
-      } else if (data is Map && data['data'] is List) {
-        items = data['data'] as List;
-      } else {
-        return;
-      }
-      final summaries = items
-          .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final summaries = parseSummariesResponse(resp.data);
       if (summaries.isEmpty || !mounted) return;
       final existing = state.messages;
       final merged = [...existing, ...summaries];
