@@ -190,9 +190,9 @@ void _showBookmarksDialog(BuildContext context, WidgetRef ref) {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.bookmark_border, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(100)),
+                            Icon(Icons.bookmark_border, size: 48, color: Theme.of(ctx).colorScheme.onSurfaceVariant.withAlpha(100)),
                             const SizedBox(height: 12),
-                            Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
                           ],
                         ),
                       );
