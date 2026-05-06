@@ -83,15 +83,15 @@ void _showProfileDialog(BuildContext context, WidgetRef ref) {
           Text(auth.username.isNotEmpty ? auth.username : '사용자',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 4),
-          Text(auth.role, style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text(auth.role, style: TextStyle(fontSize: 14, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           if (auth.userId != null)
-            Text('ID: ${auth.userId}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
+            Text('ID: ${auth.userId}', style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant.withAlpha(120))),
           const SizedBox(height: 16),
           // Font scale selector
           Align(
             alignment: Alignment.centerLeft,
-            child: Text('글꼴 크기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            child: Text('글꼴 크기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
           ),
           const SizedBox(height: 6),
           Consumer(builder: (_, ref, __) {
