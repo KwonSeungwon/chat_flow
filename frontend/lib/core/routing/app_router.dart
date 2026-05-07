@@ -5,6 +5,7 @@ import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
+import '../../features/chat/screens/mentions_screen.dart';
 import '../../features/chat/screens/scheduled_messages_screen.dart';
 import '../../features/search/search_page.dart';
 
@@ -78,6 +79,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/scheduled',
         builder: (context, state) => const ScheduledMessagesScreen(),
+      ),
+      GoRoute(
+        path: '/mentions',
+        builder: (context, state) => const MentionsScreen(),
       ),
       GoRoute(
         path: '/invite/:token',

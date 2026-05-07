@@ -8,6 +8,7 @@ import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
 import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, NotificationPolicyX, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider, keywordAlertProvider, KeywordAlert;
+import '../mentions_provider.dart';
 import 'create_room_dialog.dart';
 
 
@@ -680,6 +681,57 @@ class _SidebarHeader extends StatelessWidget {
               ],
             ),
           const SizedBox(width: 2),
+          Consumer(builder: (_, ref, __) {
+            final unread = ref.watch(mentionsProvider).unreadCount;
+            return Tooltip(
+              message: unread > 0 ? '내 멘션 ($unread)' : '내 멘션',
+              child: InkWell(
+                onTap: () => context.go('/mentions'),
+                borderRadius: BorderRadius.circular(8),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: cs.surfaceContainer,
+                        border: Border.all(color: cs.outline.withAlpha(80)),
+                      ),
+                      child: Icon(Icons.alternate_email,
+                          size: 16, color: cs.onSurfaceVariant),
+                    ),
+                    if (unread > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          constraints: const BoxConstraints(
+                              minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            color: cs.error,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: cs.surface, width: 1),
+                          ),
+                          child: Text(
+                            unread > 99 ? '99+' : '$unread',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(width: 6),
           Tooltip(
             message: '예약된 메시지',
             child: InkWell(
