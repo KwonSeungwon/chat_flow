@@ -11,6 +11,7 @@ import '../helpers/web_drop_target.dart';
 import 'drop_zone_overlay.dart';
 import 'patient_card_input_dialog.dart';
 import 'sbar_input_dialog.dart';
+import 'schedule_send_sheet.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
@@ -26,6 +27,10 @@ class ChatInput extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> Function(String query)? onMentionSearch;
   /// 음소거 상태 — null이거나 과거 시각이면 정상, 미래 시각이면 입력창 비활성화.
   final DateTime? mutedUntil;
+  /// Optional schedule-send callback. When set, long-pressing the send
+  /// button opens a time picker; on commit the parent posts to the
+  /// schedule API and clears the input. Null disables the long-press.
+  final Future<void> Function(String content, DateTime scheduledAt)? onScheduleSend;
 
   const ChatInput({
     super.key,
@@ -41,6 +46,7 @@ class ChatInput extends StatefulWidget {
     this.onTyping,
     this.onMentionSearch,
     this.mutedUntil,
+    this.onScheduleSend,
   });
 
   @override
@@ -166,6 +172,29 @@ class _ChatInputState extends State<ChatInput> {
       selection: TextSelection.collapsed(offset: 0),
       composing: TextRange.empty,
     );
+  }
+
+  Future<void> _handleScheduleSend() async {
+    if (widget.onScheduleSend == null) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+
+    final picked = await showScheduleSendSheet(context);
+    if (picked == null || !mounted) return;
+
+    try {
+      await widget.onScheduleSend!(text, picked);
+      if (!mounted) return;
+      _controller.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('메시지가 예약되었습니다.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('예약 실패: $e')),
+      );
+    }
   }
 
   Future<void> _send() async {
@@ -823,6 +852,9 @@ class _ChatInputState extends State<ChatInput> {
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: canSend ? _send : null,
+                          onLongPress: canSend && widget.onScheduleSend != null
+                              ? _handleScheduleSend
+                              : null,
                           borderRadius: BorderRadius.circular(20),
                           child: Icon(
                             Icons.send_rounded,

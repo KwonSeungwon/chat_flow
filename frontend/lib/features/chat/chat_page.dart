@@ -15,6 +15,7 @@ import '../../core/utils/url_helper.dart';
 import '../auth/auth_provider.dart';
 import 'bookmark_provider.dart';
 import 'chat_provider.dart';
+import 'scheduled_messages_provider.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/chat_room.dart';
 import 'widgets/chat_room_sidebar.dart';
@@ -1386,6 +1387,13 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                 mimeType: mimeType,
                 content: content,
               ),
+          onScheduleSend: (content, scheduledAt) async {
+            await ref.read(scheduledMessagesProvider.notifier).schedule(
+                  chatRoomId: widget.roomId,
+                  content: content,
+                  scheduledAt: scheduledAt,
+                );
+          },
         ),
       ],
     ),
