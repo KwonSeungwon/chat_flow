@@ -121,6 +121,28 @@ class _ChatInputState extends State<ChatInput> {
     _submitImage(image);
   }
 
+  Future<void> _handleFileDrop(String name, Uint8List bytes, String mimeType) async {
+    if (!mounted) return;
+    if (widget.onFilePick == null || _isUploading) return;
+    // Same 50MB cap that the file picker enforces upstream (server limit).
+    const maxBytes = 50 * 1024 * 1024;
+    if (bytes.length > maxBytes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('파일 크기가 너무 큽니다 (최대 50MB).')),
+      );
+      return;
+    }
+    // Stage the file the same way _pickFile does: as a "pending" preview
+    // that the user then sends with their next message. This matches both
+    // the click-to-upload UX and the existing image-paste UX.
+    setState(() {
+      _pendingFileName = name;
+      _pendingFileBytes = bytes;
+      _pendingFileMimeType = mimeType;
+    });
+    _focusNode.requestFocus();
+  }
+
   void _submitImage(PastedImage image) {
     if (!mounted) return;
     setState(() {
@@ -826,6 +848,7 @@ class _ChatInputState extends State<ChatInput> {
 
     return WebDropTarget(
       onImageDrop: _handleImageDrop,
+      onFileDrop: _handleFileDrop,
       onHoverChanged: (hovering) {
         if (mounted) setState(() => _isDragHovering = hovering);
       },
