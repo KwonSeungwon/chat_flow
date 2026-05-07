@@ -1,6 +1,8 @@
 package com.chatflow.aisummary.controller;
 
+import com.chatflow.aisummary.dto.QuickReplyResponse;
 import com.chatflow.aisummary.service.AiSummaryService;
+import com.chatflow.aisummary.service.QuickReplyService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import java.util.Map;
 public class AiSummaryController {
 
     private final AiSummaryService aiSummaryService;
+    private final QuickReplyService quickReplyService;
 
     @GetMapping("/room/{roomId}")
     public ResponseEntity<ApiResponse<List<ChatMessage>>> getRoomSummaries(@PathVariable String roomId) {
@@ -52,6 +55,21 @@ public class AiSummaryController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(429).body(ApiResponse.error(e.getMessage()));
         }
+    }
+
+    @PostMapping("/quick-replies")
+    public ResponseEntity<ApiResponse<QuickReplyResponse>> quickReplies(
+            @RequestBody Map<String, String> body) {
+        String roomId = body.get("chatRoomId");
+        String latestMessageId = body.get("latestMessageId");
+        if (roomId == null || roomId.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("chatRoomId is required"));
+        }
+        if (latestMessageId == null || latestMessageId.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("latestMessageId is required"));
+        }
+        QuickReplyResponse result = quickReplyService.generateQuickReplies(roomId, latestMessageId);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping("/request")
