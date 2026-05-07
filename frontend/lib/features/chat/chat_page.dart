@@ -1360,6 +1360,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
         ChatInput(
           isConnected: chatState.isConnected,
           isAiLoading: chatState.isAiLoading,
+          roomId: widget.roomId,
           mutedUntil: ref.watch(mutedEventProvider(widget.roomId))?.mutedUntil,
           isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
             data: (rooms) =>

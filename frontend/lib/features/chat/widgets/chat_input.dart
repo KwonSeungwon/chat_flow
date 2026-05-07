@@ -10,6 +10,7 @@ import '../helpers/pasted_image.dart';
 import '../helpers/web_drop_target.dart';
 import 'drop_zone_overlay.dart';
 import 'patient_card_input_dialog.dart';
+import 'quick_reply_chips.dart';
 import 'sbar_input_dialog.dart';
 import 'schedule_send_sheet.dart';
 
@@ -31,6 +32,9 @@ class ChatInput extends StatefulWidget {
   /// button opens a time picker; on commit the parent posts to the
   /// schedule API and clears the input. Null disables the long-press.
   final Future<void> Function(String content, DateTime scheduledAt)? onScheduleSend;
+  /// When non-null, renders QuickReplyChips above the input.
+  /// Required for the per-room provider lookup.
+  final String? roomId;
 
   const ChatInput({
     super.key,
@@ -47,6 +51,7 @@ class ChatInput extends StatefulWidget {
     this.onMentionSearch,
     this.mutedUntil,
     this.onScheduleSend,
+    this.roomId,
   });
 
   @override
@@ -413,6 +418,18 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Smart Reply suggestions — shown when backend has fresh suggestions for
+            // the latest non-self message. Returns SizedBox.shrink when empty.
+            if (widget.roomId != null)
+              QuickReplyChips(
+                roomId: widget.roomId!,
+                onTap: (suggestion) {
+                  _controller.text = suggestion;
+                  _controller.selection =
+                      TextSelection.collapsed(offset: suggestion.length);
+                  _focusNode.requestFocus();
+                },
+              ),
             // Mention suggestions
             if (_showMentions && _mentionSuggestions.isNotEmpty)
               Container(

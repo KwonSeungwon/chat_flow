@@ -17,6 +17,7 @@ import 'chat_rooms_provider.dart';
 import 'helpers/offline_message_queue.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
+import 'quick_reply_provider.dart';
 import 'room_keywords_provider.dart';
 import 'admin/admin_event_state.dart';
 import 'admin/room_members_provider.dart';
@@ -148,6 +149,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final Map<String, Timer> _sendingTimers = {};
   final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
   String? _currentRoomId;
+  Timer? _quickReplyDebounce;
 
   ChatNotifier(
     this._dioClient, {
@@ -486,6 +488,22 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Auto read-receipt: mark as read when message arrives (user is viewing room)
     if (msg.userId != _userId && _currentRoomId != null) {
       _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
+    }
+    // Smart Reply: refresh suggestions when a non-self message arrives.
+    // Debounce 1s — multiple rapid messages collapse to a single Gemini call.
+    if (msg.userId != _userId && _currentRoomId != null) {
+      final id = msg.messageId ?? msg.localId ?? '';
+      if (id.isNotEmpty) {
+        _quickReplyDebounce?.cancel();
+        _quickReplyDebounce = Timer(const Duration(seconds: 1), () {
+          if (!mounted || _currentRoomId == null) return;
+          try {
+            _ref
+                .read(quickReplyProvider(_currentRoomId!).notifier)
+                .refresh(id);
+          } catch (_) {/* best-effort */}
+        });
+      }
     }
   }
 
@@ -949,6 +967,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     _typing.dispose();
     for (final t in _sendingTimers.values) { t.cancel(); }
     _sendingTimers.clear();
+    _quickReplyDebounce?.cancel();
     _stompService.dispose();
     super.dispose();
   }
