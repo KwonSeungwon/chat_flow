@@ -1,6 +1,8 @@
 -- V7: Scheduled messages table for the schedule-send feature.
 -- Status lifecycle: PENDING -> SENT (success) | CANCELED (user) | FAILED (error)
 -- Pending rows are polled every 30s by ScheduledMessageService.
+-- @Version optimistic lock prevents duplicate sends when chat-service runs
+-- with multiple replicas (the @Scheduled poller fires on every replica).
 
 CREATE TABLE IF NOT EXISTS scheduled_messages (
     id              BIGSERIAL PRIMARY KEY,
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
     error_message   TEXT,
+    version         BIGINT       NOT NULL DEFAULT 0,
     CONSTRAINT fk_scheduled_messages_room
         FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
 );

@@ -50,6 +50,10 @@ public class ScheduledMessageEntity {
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @PrePersist
     void prePersist() {
         LocalDateTime now = LocalDateTime.now();
