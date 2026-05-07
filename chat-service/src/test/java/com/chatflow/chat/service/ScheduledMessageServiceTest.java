@@ -137,6 +137,16 @@ class ScheduledMessageServiceTest {
         when(repository.findDueForSending(any())).thenReturn(List.of(row));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        // Mirror MessageSenderService.send()'s real contract: it assigns
+        // messageId + timestamp on the ChatMessage it receives. The service
+        // under test relies on this — capturing messageId AFTER send() returns.
+        doAnswer(inv -> {
+            ChatMessage m = inv.getArgument(0);
+            m.setMessageId("fake-server-uuid");
+            m.setTimestamp(java.time.LocalDateTime.now());
+            return null;
+        }).when(messageSenderService).send(any());
+
         service.deliverDue();
 
         ArgumentCaptor<ChatMessage> sent = ArgumentCaptor.forClass(ChatMessage.class);

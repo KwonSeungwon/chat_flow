@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -81,13 +80,14 @@ public class ScheduledMessageService {
         for (ScheduledMessageEntity row : due) {
             try {
                 ChatMessage msg = new ChatMessage();
-                msg.setMessageId(UUID.randomUUID().toString());
+                // NOTE: messageSenderService.send() owns messageId + timestamp — it
+                // assigns both on entry. Setting them here would be dead writes; relying
+                // on send()'s contract keeps that ownership in one place.
                 msg.setChatRoomId(row.getChatRoomId());
                 msg.setUserId(row.getUserId());
                 msg.setUsername(row.getUsername());
                 msg.setContent(row.getContent());
                 msg.setType(ChatMessage.MessageType.CHAT);
-                msg.setTimestamp(LocalDateTime.now());
 
                 messageSenderService.send(msg);
 
