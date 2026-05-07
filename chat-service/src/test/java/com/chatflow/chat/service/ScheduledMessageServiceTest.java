@@ -26,12 +26,13 @@ class ScheduledMessageServiceTest {
 
     @Mock private ScheduledMessageRepository repository;
     @Mock private MessageSenderService messageSenderService;
+    @Mock private RoomPermissionService roomPermissionService;
 
     private ScheduledMessageService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScheduledMessageService(repository, messageSenderService);
+        service = new ScheduledMessageService(repository, messageSenderService, roomPermissionService);
     }
 
     private ScheduledMessageEntity sample(Long id, ScheduledMessageStatus status, LocalDateTime when) {

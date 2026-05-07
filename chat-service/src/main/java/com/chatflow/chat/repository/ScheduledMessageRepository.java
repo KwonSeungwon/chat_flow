@@ -28,4 +28,6 @@ public interface ScheduledMessageRepository extends JpaRepository<ScheduledMessa
             String userId, ScheduledMessageStatus status);
 
     Optional<ScheduledMessageEntity> findByIdAndUserId(Long id, String userId);
+
+    long countByUserIdAndStatus(String userId, ScheduledMessageStatus status);
 }

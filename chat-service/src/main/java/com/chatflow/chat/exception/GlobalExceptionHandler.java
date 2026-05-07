@@ -69,4 +69,33 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
         return ResponseEntity.status(HttpStatus.LOCKED)
                 .body(ErrorResponse.of(423, "MUTED", e.getMessage()));
     }
+
+    /**
+     * scheduledAt parsing failures from ScheduledMessageController. Maps to a
+     * stable 400 + machine-readable code so the frontend can surface a
+     * format hint instead of relying on Jackson's raw exception text.
+     */
+    @ExceptionHandler(java.time.format.DateTimeParseException.class)
+    public ResponseEntity<ErrorResponse> handleDateTimeParse(
+            java.time.format.DateTimeParseException e) {
+        log.warn("DateTimeParse error: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ErrorResponse.of(
+                400, "INVALID_DATETIME",
+                "scheduledAt must be ISO-8601 LOCAL_DATE_TIME format (e.g. 2026-05-07T14:30:00)"));
+    }
+
+    /**
+     * IllegalStateException for resource-cap / quota violations
+     * (e.g. ScheduledMessageService.MAX_PENDING_PER_USER). 429 is the right
+     * code for "you've hit the limit, slow down". Note: controllers that
+     * use IllegalStateException for not-found masking (see
+     * ScheduledMessageController.cancel) MUST catch it locally before it
+     * reaches this handler.
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException e) {
+        log.warn("Illegal state (cap/quota): {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ErrorResponse.of(429, "QUOTA_EXCEEDED", e.getMessage()));
+    }
 }

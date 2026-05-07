@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.ScheduledMessageEntity;
 import com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus;
 import com.chatflow.chat.repository.ScheduledMessageRepository;
@@ -22,13 +23,40 @@ public class ScheduledMessageService {
 
     private final ScheduledMessageRepository repository;
     private final MessageSenderService messageSenderService;
+    private final RoomPermissionService roomPermissionService;
+
+    /**
+     * Per-user cap on PENDING scheduled messages. Defends against a user
+     * scheduling millions of rows. Cancel/delivery prunes the count.
+     */
+    private static final int MAX_PENDING_PER_USER = 100;
+
+    /**
+     * Hard cap on scheduled message content length. The TEXT column allows
+     * megabytes; this keeps each row bounded in memory and on the wire.
+     */
+    private static final int MAX_CONTENT_LENGTH = 4000;
 
     @Transactional
     public ScheduledMessageEntity schedule(
             String chatRoomId, String userId, String username,
             String content, LocalDateTime scheduledAt) {
+        if (content.length() > MAX_CONTENT_LENGTH) {
+            throw new IllegalArgumentException(
+                    "content too long (max " + MAX_CONTENT_LENGTH + " chars)");
+        }
         if (scheduledAt.isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("scheduledAt must be in the future");
+        }
+        // Membership check — non-members must NOT be able to schedule into
+        // a room they don't belong to (long-fuse abuse vector).
+        roomPermissionService.requireRole(chatRoomId, userId,
+                RoomRole.OWNER, RoomRole.MODERATOR, RoomRole.MEMBER);
+        long pending = repository.countByUserIdAndStatus(
+                userId, ScheduledMessageStatus.PENDING);
+        if (pending >= MAX_PENDING_PER_USER) {
+            throw new IllegalStateException(
+                    "scheduled message limit reached (max " + MAX_PENDING_PER_USER + ")");
         }
         ScheduledMessageEntity entity = ScheduledMessageEntity.builder()
                 .chatRoomId(chatRoomId)
