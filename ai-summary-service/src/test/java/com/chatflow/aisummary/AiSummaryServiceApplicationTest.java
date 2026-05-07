@@ -1,6 +1,7 @@
 package com.chatflow.aisummary;
 
 import com.chatflow.aisummary.client.ChatModelClient;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -19,6 +20,9 @@ class AiSummaryServiceApplicationTest {
 
     @MockBean
     private ChatModelClient chatModelClient;
+
+    @MockBean
+    private ChatLanguageModel chatLanguageModel;
 
     @MockBean
     private StringRedisTemplate stringRedisTemplate;
