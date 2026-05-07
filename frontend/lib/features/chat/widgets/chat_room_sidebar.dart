@@ -680,6 +680,25 @@ class _SidebarHeader extends StatelessWidget {
               ],
             ),
           const SizedBox(width: 2),
+          Tooltip(
+            message: '예약된 메시지',
+            child: InkWell(
+              onTap: () => context.go('/scheduled'),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: cs.surfaceContainer,
+                  border: Border.all(color: cs.outline.withAlpha(80)),
+                ),
+                child: Icon(Icons.schedule_send_outlined,
+                    size: 16, color: cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           if (onDmTap != null)
             Tooltip(
               message: '새 DM',
@@ -791,14 +810,6 @@ class _RoomTileState extends State<_RoomTile> {
               },
             )),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.schedule_send_outlined),
-              title: const Text('예약된 메시지'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.go('/scheduled');
-              },
-            ),
             if (widget.onSearchTap != null)
               ListTile(
                 leading: const Icon(Icons.search),
