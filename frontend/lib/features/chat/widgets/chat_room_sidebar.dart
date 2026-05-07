@@ -791,6 +791,14 @@ class _RoomTileState extends State<_RoomTile> {
               },
             )),
             const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.schedule_send_outlined),
+              title: const Text('예약된 메시지'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.go('/scheduled');
+              },
+            ),
             if (widget.onSearchTap != null)
               ListTile(
                 leading: const Icon(Icons.search),

@@ -5,6 +5,7 @@ import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
+import '../../features/chat/screens/scheduled_messages_screen.dart';
 import '../../features/search/search_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
@@ -73,6 +74,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/search',
         builder: (context, state) => const SearchPage(),
+      ),
+      GoRoute(
+        path: '/scheduled',
+        builder: (context, state) => const ScheduledMessagesScreen(),
       ),
       GoRoute(
         path: '/invite/:token',
