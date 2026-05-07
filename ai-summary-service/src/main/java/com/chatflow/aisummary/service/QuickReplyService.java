@@ -1,10 +1,10 @@
 package com.chatflow.aisummary.service;
 
+import com.chatflow.aisummary.client.ChatModelClient;
 import com.chatflow.aisummary.dto.QuickReplyResponse;
 import com.chatflow.common.dto.ChatMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 @Service
 public class QuickReplyService {
 
-    private final ChatLanguageModel chatModelClient;
+    private final ChatModelClient chatModelClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -32,7 +32,7 @@ public class QuickReplyService {
 
     @Autowired
     public QuickReplyService(
-            ChatLanguageModel chatModelClient,
+            ChatModelClient chatModelClient,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper) {
         this.chatModelClient = chatModelClient;

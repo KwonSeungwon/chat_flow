@@ -1,9 +1,9 @@
 package com.chatflow.aisummary.service;
 
+import com.chatflow.aisummary.client.ChatModelClient;
 import com.chatflow.aisummary.dto.QuickReplyResponse;
 import com.chatflow.common.dto.ChatMessage;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class QuickReplyServiceTest {
 
-    @Mock private ChatLanguageModel chatModelClient;
+    @Mock private ChatModelClient chatModelClient;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ListOperations<String, String> listOps;
     @Mock private ValueOperations<String, String> valueOps;
