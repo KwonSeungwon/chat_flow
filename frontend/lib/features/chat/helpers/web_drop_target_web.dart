@@ -20,13 +20,25 @@ import 'pasted_image.dart';
 /// scope to a specific element or a class-level static before adding a second consumer.
 class WebDropTarget extends StatefulWidget {
   final Widget child;
+
+  /// Fires for clipboard paste of images (always).
+  /// Also fires for drag-dropped images, but only when [onFileDrop] is null
+  /// (backward compat for the existing ChatInput consumer).
   final void Function(PastedImage image)? onImageDrop;
+
+  /// When set, ALL drag-dropped files (images and non-images) route here
+  /// instead of [onImageDrop]. Clipboard paste continues to go to
+  /// [onImageDrop] regardless. Use this for generic file uploads or
+  /// chat-area-wide drop overlays that need to handle non-image files.
+  final Future<void> Function(String fileName, Uint8List bytes, String mimeType)? onFileDrop;
+
   final ValueChanged<bool>? onHoverChanged;
 
   const WebDropTarget({
     super.key,
     required this.child,
     this.onImageDrop,
+    this.onFileDrop,
     this.onHoverChanged,
   });
 
@@ -99,25 +111,31 @@ class _WebDropTargetState extends State<WebDropTarget> {
     _dragCounter = 0;
     widget.onHoverChanged?.call(false);
 
-    if (widget.onImageDrop == null) return;
-
     final dataTransfer = event.dataTransfer;
     final files = dataTransfer.files;
     if (files == null || files.isEmpty) return;
 
-    for (final file in files) {
-      final mimeType = file.type;
-      if (mimeType.startsWith('image/')) {
-        final bytes = await _readFileAsBytes(file);
-        if (bytes != null && bytes.isNotEmpty) {
-          widget.onImageDrop!(PastedImage(
-            name: file.name,
-            bytes: bytes,
-            mimeType: mimeType,
-          ));
-          return; // Only handle the first image
-        }
-      }
+    final file = files.first;
+    final mimeType = file.type;
+    final bytes = await _readFileAsBytes(file);
+    if (bytes == null || bytes.isEmpty) return;
+
+    if (widget.onFileDrop != null) {
+      await widget.onFileDrop!(
+        file.name,
+        bytes,
+        mimeType.isEmpty ? 'application/octet-stream' : mimeType,
+      );
+      return;
+    }
+    // Backward-compat fall-through: drag-dropped images still hit onImageDrop
+    // when the consumer hasn't opted into the generic onFileDrop route.
+    if (widget.onImageDrop != null && mimeType.startsWith('image/')) {
+      widget.onImageDrop!(PastedImage(
+        name: file.name,
+        bytes: bytes,
+        mimeType: mimeType,
+      ));
     }
   }
 
