@@ -56,4 +56,14 @@ class FcmControllerTest {
                 .content("{\"token\":\"\"}"))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void unsubscribeAll_rejects_token_below_min_size() throws Exception {
+        String body = objectMapper.writeValueAsString(
+            Map.of("token", "x".repeat(99)));
+        mockMvc.perform(post("/api/fcm/unsubscribe-all")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isBadRequest());
+    }
 }
