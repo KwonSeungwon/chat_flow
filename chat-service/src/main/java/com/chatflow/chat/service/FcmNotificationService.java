@@ -7,14 +7,17 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Firebase Cloud Messaging — topic-based push notifications.
@@ -25,11 +28,15 @@ import java.util.List;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FcmNotificationService {
+
+    static final String ROOMS_KEY_PREFIX = "chatflow:fcm:rooms:";
 
     @Value("${firebase.service-account-path:classpath:firebase-service-account.json}")
     private Resource serviceAccountResource;
 
+    private final StringRedisTemplate redisTemplate;
     private FirebaseMessaging messaging;
 
     @PostConstruct
@@ -83,6 +90,7 @@ public class FcmNotificationService {
 
     @Async("persistenceExecutor")
     public void subscribeToRoom(String token, String roomId) {
+        redisTemplate.opsForSet().add(ROOMS_KEY_PREFIX + token, roomId);
         if (messaging == null) return;
         try {
             messaging.subscribeToTopicAsync(List.of(token), "room-" + roomId);
@@ -94,6 +102,7 @@ public class FcmNotificationService {
 
     @Async("persistenceExecutor")
     public void unsubscribeFromRoom(String token, String roomId) {
+        redisTemplate.opsForSet().remove(ROOMS_KEY_PREFIX + token, roomId);
         if (messaging == null) return;
         try {
             messaging.unsubscribeFromTopicAsync(List.of(token), "room-" + roomId);
@@ -101,6 +110,34 @@ public class FcmNotificationService {
         } catch (Exception e) {
             log.warn("FCM unsubscribe failed: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Removes the token from every room topic it was subscribed to.
+     * Used on tab-close so push notifications stop arriving while the user is away.
+     * Intentionally synchronous — the tab-close caller (fetch keepalive) needs the
+     * call to complete before the request thread returns.
+     *
+     * FCM topic unsubscriptions are fired via unsubscribeFromTopicAsync; the
+     * Valkey set is deleted after all calls are started but before they settle.
+     * Best-effort: on abrupt JVM termination after the delete, the token may
+     * remain subscribed at FCM until the next explicit unsubscribeFromRoom call.
+     */
+    public void unsubscribeAll(String token) {
+        String key = ROOMS_KEY_PREFIX + token;
+        Set<String> rooms = redisTemplate.opsForSet().members(key);
+        if (rooms == null || rooms.isEmpty()) return;
+        if (messaging != null) {
+            for (String roomId : rooms) {
+                try {
+                    messaging.unsubscribeFromTopicAsync(List.of(token), "room-" + roomId);
+                } catch (Exception e) {
+                    log.warn("FCM unsubscribe-all (room {}) failed: {}", roomId, e.getMessage());
+                }
+            }
+        }
+        redisTemplate.delete(key);
+        log.debug("FCM unsubscribed token from {} rooms", rooms.size());
     }
 
     public boolean isEnabled() {

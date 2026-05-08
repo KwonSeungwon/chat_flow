@@ -9,9 +9,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/keyboard/app_shortcuts.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
+import 'core/services/web_unload_handler.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
+import 'features/auth/auth_provider.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -40,7 +42,26 @@ Future<void> main() async {
       return false;
     };
 
-    runApp(const ProviderScope(child: ChatFlowApp()));
+    final container = ProviderContainer();
+    runApp(UncontrolledProviderScope(
+      container: container,
+      child: const ChatFlowApp(),
+    ));
+
+    // On web, fire POST /api/fcm/unsubscribe-all with keepalive before the tab
+    // closes. sendBeacon cannot carry an Authorization header, so fetch+keepalive
+    // is the only viable primitive here. The stub is a no-op on native platforms.
+    WebUnloadHandler.register(
+      jwtProvider: () => container.read(authProvider).token ?? '',
+      fcmTokenProvider: FcmService.getToken,
+      // On web the app runs on the same origin as the gateway, so an empty
+      // string resolves to a relative URL (/api/fcm/unsubscribe-all).
+      // Native builds use API_BASE_URL from the .env file.
+      apiBaseUrl: kIsWeb
+          ? ''
+          : const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
+    );
+
     _initFirebaseInBackground();
   }, (error, stack) {
     if (isHarmlessFocusTraversalError(error, stack)) return;

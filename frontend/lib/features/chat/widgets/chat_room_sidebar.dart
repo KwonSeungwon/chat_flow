@@ -680,96 +680,72 @@ class _SidebarHeader extends StatelessWidget {
                 ),
               ],
             ),
-          const SizedBox(width: 2),
+          const SizedBox(width: 6),
           Consumer(builder: (_, ref, __) {
             final unread = ref.watch(mentionsProvider).unreadCount;
-            return Tooltip(
-              message: unread > 0 ? '내 멘션 ($unread)' : '내 멘션',
-              child: InkWell(
-                onTap: () => context.go('/mentions'),
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: cs.surfaceContainer,
-                        border: Border.all(color: cs.outline.withAlpha(80)),
-                      ),
-                      child: Icon(Icons.alternate_email,
-                          size: 16, color: cs.onSurfaceVariant),
-                    ),
-                    if (unread > 0)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          constraints: const BoxConstraints(
-                              minWidth: 16, minHeight: 16),
-                          decoration: BoxDecoration(
-                            color: cs.error,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: cs.surface, width: 1),
-                          ),
-                          child: Text(
-                            unread > 99 ? '99+' : '$unread',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700),
-                          ),
+            return PopupMenuButton<String>(
+              tooltip: '더 보기',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(Icons.more_horiz, size: 18, color: cs.onSurfaceVariant),
+                  if (unread > 0)
+                    Positioned(
+                      key: const Key('sidebar-header-more-badge'),
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: cs.error,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: cs.surface, width: 1),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
+              onSelected: (value) {
+                if (value == 'mentions') {
+                  context.go('/mentions');
+                } else if (value == 'scheduled') {
+                  context.go('/scheduled');
+                } else if (value == 'dm' && onDmTap != null) {
+                  onDmTap!();
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'mentions',
+                  child: Row(children: [
+                    const Icon(Icons.alternate_email, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(unread > 0 ? '내 멘션 ($unread)' : '내 멘션')),
+                  ]),
+                ),
+                const PopupMenuItem(
+                  value: 'scheduled',
+                  child: Row(children: [
+                    Icon(Icons.schedule_send_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('예약된 메시지'),
+                  ]),
+                ),
+                if (onDmTap != null)
+                  const PopupMenuItem(
+                    value: 'dm',
+                    child: Row(children: [
+                      Icon(Icons.person_add_outlined, size: 18),
+                      SizedBox(width: 8),
+                      Text('새 DM'),
+                    ]),
+                  ),
+              ],
             );
           }),
-          const SizedBox(width: 6),
-          Tooltip(
-            message: '예약된 메시지',
-            child: InkWell(
-              onTap: () => context.go('/scheduled'),
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  color: cs.surfaceContainer,
-                  border: Border.all(color: cs.outline.withAlpha(80)),
-                ),
-                child: Icon(Icons.schedule_send_outlined,
-                    size: 16, color: cs.onSurfaceVariant),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          if (onDmTap != null)
-            Tooltip(
-              message: '새 DM',
-              child: InkWell(
-                onTap: onDmTap,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: cs.surfaceContainer,
-                    border: Border.all(color: cs.outline.withAlpha(80)),
-                  ),
-                  child: Icon(Icons.person_add_outlined,
-                      size: 16, color: cs.onSurfaceVariant),
-                ),
-              ),
-            ),
           const SizedBox(width: 6),
           Tooltip(
             message: '새 채팅방',
