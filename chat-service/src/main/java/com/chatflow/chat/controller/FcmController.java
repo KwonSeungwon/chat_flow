@@ -36,6 +36,12 @@ public class FcmController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @PostMapping("/unsubscribe-all")
+    public ResponseEntity<ApiResponse<Void>> unsubscribeAll(@Valid @RequestBody UnsubscribeAllRequest req) {
+        fcmNotificationService.unsubscribeAll(req.getToken());
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<Boolean>> status() {
         return ResponseEntity.ok(ApiResponse.ok(fcmNotificationService.isEnabled()));
@@ -45,5 +51,10 @@ public class FcmController {
     public static class SubscribeRequest {
         @NotBlank @Size(min = 100, max = 300) private String token;
         @NotBlank @Pattern(regexp = "^[a-zA-Z0-9_\\-]{1,64}$") private String roomId;
+    }
+
+    @Data
+    public static class UnsubscribeAllRequest {
+        @NotBlank @Size(min = 100, max = 300) private String token;
     }
 }
