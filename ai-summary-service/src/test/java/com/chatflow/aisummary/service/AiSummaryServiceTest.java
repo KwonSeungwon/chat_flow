@@ -8,10 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.ListOperations;
-import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.time.LocalDateTime;
@@ -25,9 +22,6 @@ class AiSummaryServiceTest {
     @Mock private ChatModelClient chatModelClient;
     @Mock private KafkaTemplate<String, Object> kafkaTemplate;
     @Mock private StringRedisTemplate redisTemplate;
-    @Mock private ListOperations<String, String> listOps;
-    @Mock private ValueOperations<String, String> valueOps;
-    @Mock private SetOperations<String, String> setOps;
 
     // Inline executor runs tasks synchronously in tests
     private final Executor syncExecutor = Runnable::run;
