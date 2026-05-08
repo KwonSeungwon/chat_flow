@@ -64,6 +64,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
            "WHERE m.content LIKE CONCAT('%@', :username, '%') " +
            "  AND m.timestamp >= :since " +
            "  AND m.username <> :username " +
+           "  AND m.isAiGenerated = false " +
+           "  AND m.deleted = false " +
            "ORDER BY m.timestamp DESC")
     List<ChatMessageEntity> findMentionsOf(
             @Param("username") String username,

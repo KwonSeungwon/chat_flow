@@ -496,12 +496,17 @@ class _ChatInputState extends State<ChatInput> {
                 ),
               ),
 
-            // Character counter (shows only near limit)
+            // Character counter — hidden during normal typing.
+            // Only surfaces when within 200 chars of the limit (warn threshold)
+            // so it stops competing for vertical space on every keystroke.
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _controller,
               builder: (_, value, __) {
                 final len = value.text.length;
-                if (len == 0) return const SizedBox.shrink();
+                if (len < UIConstants.chatWarnThreshold) {
+                  return const SizedBox.shrink();
+                }
+                final isOver = len >= UIConstants.maxChatLength;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Align(
@@ -510,9 +515,8 @@ class _ChatInputState extends State<ChatInput> {
                       '$len/${UIConstants.maxChatLength}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: len >= UIConstants.chatWarnThreshold
-                            ? (len >= UIConstants.maxChatLength ? AppColors.error : const Color(0xFFF57C00))
-                            : cs.onSurfaceVariant.withAlpha(120),
+                        fontWeight: isOver ? FontWeight.w600 : FontWeight.w500,
+                        color: isOver ? AppColors.error : const Color(0xFFF57C00),
                       ),
                     ),
                   ),
