@@ -8,4 +8,8 @@ class WebUnloadHandler {
   }) {
     // intentionally empty
   }
+
+  static void unregister() {
+    // intentionally empty
+  }
 }
