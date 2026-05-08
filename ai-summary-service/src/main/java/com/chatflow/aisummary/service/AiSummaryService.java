@@ -89,6 +89,13 @@ public class AiSummaryService {
     }
 
     private void addMessageAndCheckTrigger(ChatMessage message) {
+        // Only real user CHAT messages contribute to the summary buffer.
+        // JOIN/LEAVE/SYSTEM/FILE/AI_SUMMARY would inflate the 10-msg trigger
+        // and pollute the summary content.
+        if (message.getType() != ChatMessage.MessageType.CHAT) {
+            return;
+        }
+
         String roomId = message.getChatRoomId();
         String bufferKey = REDIS_BUFFER_PREFIX + roomId;
         String timeKey = REDIS_BUFFER_TIME_PREFIX + roomId;
