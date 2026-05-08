@@ -1,5 +1,6 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.FcmNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +33,9 @@ class FcmControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
