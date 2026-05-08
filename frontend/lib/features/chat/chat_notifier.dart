@@ -347,6 +347,22 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  /// Best-effort unsubscribe from a room's FCM topic. Mirrors
+  /// _subscribeFcmToRoom — called from leaveRoom so push notifications stop
+  /// arriving once the user has explicitly left.
+  Future<void> _unsubscribeFcmFromRoom(String roomId) async {
+    try {
+      final token = await FcmService.getToken();
+      if (token == null) return;
+      await _dioClient.dio.delete('/api/fcm/subscribe', data: {
+        'token': token,
+        'roomId': roomId,
+      });
+    } catch (_) {
+      // Best-effort — FCM failure must not interrupt room leave
+    }
+  }
+
   Future<void> loadMoreHistory(String roomId) async {
     if (state.isLoadingHistory || !state.hasMoreHistory) return;
     state = state.copyWith(isLoadingHistory: true);
@@ -558,6 +574,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Future<bool> leaveRoom(String roomId) async {
     try {
       await _dioClient.dio.delete('/api/chat/rooms/$roomId/members/me');
+      // Stop FCM push for this room (mirror of joinRoom's _subscribeFcmToRoom)
+      await _unsubscribeFcmFromRoom(roomId);
       _stompService.disconnect();
       state = const ChatMessagesState();
       // Clean up per-room storage for the left room

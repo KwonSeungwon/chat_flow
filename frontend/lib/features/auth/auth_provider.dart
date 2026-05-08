@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/services/fcm_service.dart';
 import '../../core/utils/url_helper.dart';
 
 class AuthState {
@@ -183,6 +184,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       debugPrint('[AuthNotifier] logout error: $e');
     }
+    // Invalidate the FCM token so pushes stop arriving for the previously
+    // logged-in user. Firebase auto-evicts the dead token from any topic
+    // subscriptions on the next push attempt — no need to enumerate
+    // per-room subscriptions here.
+    await FcmService.deleteToken();
     await _storage.delete(key: StorageKeys.token);
     await _storage.delete(key: StorageKeys.userId);
     await _storage.delete(key: StorageKeys.username);

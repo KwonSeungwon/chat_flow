@@ -86,6 +86,20 @@ class FcmService {
     return _messaging.getToken();
   }
 
+  /// Invalidates the current FCM token. Subsequent `getToken()` will issue
+  /// a fresh one. Firebase auto-evicts the old token from any topic
+  /// subscriptions on the next push attempt that returns INVALID_REGISTRATION
+  /// — so calling this on logout effectively stops all pushes for the
+  /// previously logged-in user without us having to enumerate every room
+  /// subscription server-side.
+  static Future<void> deleteToken() async {
+    try {
+      await _messaging.deleteToken();
+    } catch (e) {
+      debugPrint('[FCM] deleteToken failed: $e');
+    }
+  }
+
   /// Listen for token refreshes (device token can change).
   static Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
