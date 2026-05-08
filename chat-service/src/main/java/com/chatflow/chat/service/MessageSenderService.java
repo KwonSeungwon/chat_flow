@@ -128,8 +128,13 @@ public class MessageSenderService {
     }
 
     private boolean shouldRequestAISummary(ChatMessage message) {
-        if (MessageType.FILE.equals(message.getType())) return false;
+        if (message.getType() != MessageType.CHAT) return false;
         return message.getContent() != null && message.getContent().length() > 100;
+    }
+
+    // Test seam — package-private to avoid making the rule public.
+    boolean shouldRequestAISummaryForTest(ChatMessage message) {
+        return shouldRequestAISummary(message);
     }
 
     private String buildPreview(String username, String content) {
