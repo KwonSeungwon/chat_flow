@@ -690,7 +690,7 @@ class _SidebarHeader extends StatelessWidget {
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Icon(Icons.more_horiz, size: 20, color: cs.onSurfaceVariant),
+                  Icon(Icons.more_horiz, size: 18, color: cs.onSurfaceVariant),
                   if (unread > 0)
                     Positioned(
                       key: const Key('sidebar-header-more-badge'),
