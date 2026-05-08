@@ -39,10 +39,10 @@ class RoomTile extends StatefulWidget {
   });
 
   @override
-  State<RoomTile> createState() => RoomTileState();
+  State<RoomTile> createState() => _RoomTileState();
 }
 
-class RoomTileState extends State<RoomTile> {
+class _RoomTileState extends State<RoomTile> {
   bool _hovered = false;
 
   void _showRoomMenu(BuildContext context) {

@@ -92,6 +92,10 @@ class SidebarHeader extends StatelessWidget {
               ],
             ),
           const SizedBox(width: 6),
+          // Local Consumer (vs making the whole widget a ConsumerWidget) so
+          // only the popup icon rebuilds when mentionsProvider.unreadCount
+          // changes — keeps the static brand row and sort/new-room buttons
+          // out of the rebuild path.
           Consumer(builder: (_, ref, __) {
             final unread = ref.watch(mentionsProvider).unreadCount;
             return PopupMenuButton<String>(
