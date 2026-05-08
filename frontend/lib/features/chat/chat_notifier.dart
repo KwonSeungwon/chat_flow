@@ -505,9 +505,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (msg.userId != _userId && _currentRoomId != null) {
       _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
     }
-    // Smart Reply: refresh suggestions when a non-self message arrives.
-    // Debounce 1s — multiple rapid messages collapse to a single Gemini call.
-    if (msg.userId != _userId && _currentRoomId != null) {
+    // Smart Reply: refresh suggestions when a non-self HUMAN message arrives.
+    // AI summaries / Q&A responses must be excluded — otherwise the AI is
+    // asked to suggest replies to its own message, which wastes a Gemini call
+    // and produces nonsensical chips.
+    final isAi = msg.type == 'AI_SUMMARY' || msg.isAiGenerated;
+    if (msg.userId != _userId && _currentRoomId != null && !isAi) {
       final id = msg.messageId ?? msg.localId ?? '';
       if (id.isNotEmpty) {
         _quickReplyDebounce?.cancel();
