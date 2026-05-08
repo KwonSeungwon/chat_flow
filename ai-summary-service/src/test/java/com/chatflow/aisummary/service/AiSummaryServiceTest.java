@@ -17,11 +17,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import java.time.LocalDateTime;
 import java.util.concurrent.Executor;
 
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class AiSummaryServiceTest {
@@ -47,20 +43,18 @@ class AiSummaryServiceTest {
 
     @Test
     void addMessage_skips_non_chat_types() throws Exception {
-        String roomId = "room-filter";
-        String bufferKey = "chatflow:buffer:" + roomId;
-
-        // No stubs needed: the filter returns before any Redis call.
-        // Verify directly on listOps — it must never receive rightPush for
-        // a non-CHAT message.
+        // The filter at the top of addMessageAndCheckTrigger must return
+        // before any Redis interaction. Asserting "no interactions on
+        // redisTemplate" is the strongest contract — covers opsForList,
+        // opsForSet, opsForValue, expire, delete, all of them.
         ChatMessage join = ChatMessage.builder()
-                .chatRoomId(roomId).userId("u1").username("alice")
+                .chatRoomId("room-filter").userId("u1").username("alice")
                 .content("alice joined").type(ChatMessage.MessageType.JOIN)
                 .timestamp(LocalDateTime.now())
                 .build();
 
         service.handleChatMessage(objectMapper.writeValueAsString(join));
 
-        verify(listOps, never()).rightPush(eq(bufferKey), anyString());
+        verifyNoInteractions(redisTemplate);
     }
 }
