@@ -22,8 +22,9 @@ public class MessageThreadService {
     private final ChatMessageRepository chatMessageRepository;
 
     @Transactional(readOnly = true)
-    public List<ChatMessageEntity> findReplies(String parentMessageId) {
+    public List<ChatMessageEntity> findReplies(String chatRoomId, String parentMessageId) {
         return chatMessageRepository
-            .findByParentMessageIdAndDeletedFalseOrderByTimestampAsc(parentMessageId);
+            .findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc(
+                chatRoomId, parentMessageId);
     }
 }

@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/fcm_service.dart';
+import '../../core/services/web_unload_handler.dart';
 import '../../core/utils/url_helper.dart';
 
 class AuthState {
@@ -189,6 +190,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // subscriptions on the next push attempt — no need to enumerate
     // per-room subscriptions here.
     await FcmService.deleteToken();
+    // Detach the beforeunload handler so a future tab close after logout
+    // doesn't fire POST /api/fcm/unsubscribe-all with a stale/empty JWT.
+    WebUnloadHandler.unregister();
     await _storage.delete(key: StorageKeys.token);
     await _storage.delete(key: StorageKeys.userId);
     await _storage.delete(key: StorageKeys.username);

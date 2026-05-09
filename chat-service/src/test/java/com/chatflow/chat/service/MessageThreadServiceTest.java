@@ -38,14 +38,14 @@ class MessageThreadServiceTest {
             .edited(true).editedAt(LocalDateTime.now())
             .pinned(true)
             .build();
-        when(repo.findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1"))
+        when(repo.findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc("room-1", "p1"))
             .thenReturn(List.of(reply));
 
-        List<ChatMessageEntity> replies = service.findReplies("p1");
+        List<ChatMessageEntity> replies = service.findReplies("room-1", "p1");
 
         // The service is intentionally a thin pass-through to the deleted=false
         // repo method — verify both the result and the exact repo call.
-        verify(repo).findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1");
+        verify(repo).findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc("room-1", "p1");
         assertThat(replies).hasSize(1);
         assertThat(replies.get(0).getMessageId()).isEqualTo("r1");
         assertThat(replies.get(0).getParentMessageId()).isEqualTo("p1");
@@ -59,9 +59,9 @@ class MessageThreadServiceTest {
 
     @Test
     void findReplies_empty_when_no_replies() {
-        when(repo.findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1"))
+        when(repo.findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc("room-1", "p1"))
             .thenReturn(List.of());
 
-        assertThat(service.findReplies("p1")).isEmpty();
+        assertThat(service.findReplies("room-1", "p1")).isEmpty();
     }
 }

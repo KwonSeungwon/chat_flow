@@ -46,6 +46,14 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
      */
     List<ChatMessageEntity> findByParentMessageIdAndDeletedFalseOrderByTimestampAsc(String parentMessageId);
 
+    /**
+     * Same as above but scoped to a specific chat room — defense in depth so
+     * a guessed messageId from another room cannot leak replies.
+     */
+    List<ChatMessageEntity>
+        findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc(
+            String chatRoomId, String parentMessageId);
+
     @Query("SELECT COUNT(m) FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp > :after AND m.type = 'CHAT' AND m.deleted = false")
     long countNewChatMessages(@Param("roomId") String roomId, @Param("after") LocalDateTime after);
 

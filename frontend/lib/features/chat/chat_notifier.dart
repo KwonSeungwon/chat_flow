@@ -255,7 +255,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
                     .toList();
                 state = state.copyWith(messages: cleaned);
               },
-              onSend: (msg) => _stompService.sendMessage(msg),
+              // _localId is a client-only marker for optimistic-message dedup.
+              // Strip it before forwarding so STOMP doesn't carry a contract-leak field.
+              onSend: (msg) => _stompService.sendMessage(
+                  Map<String, dynamic>.from(msg)..remove('_localId')),
             );
           }
         }
@@ -824,10 +827,20 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (msg.deliveryStatus != MessageDeliveryStatus.failed) return;
     final list = state.messages.where((m) => m.localId != msg.localId).toList();
     state = state.copyWith(messages: list);
+    // Preserve thread association on retry — without replyOverride, a failed
+    // reply would silently re-post as a top-level message.
+    final parent = msg.parentMessageId == null
+        ? null
+        : state.messages
+            .cast<ChatMessage?>()
+            .firstWhere(
+                (m) => m?.effectiveId == msg.parentMessageId,
+                orElse: () => null);
     sendMessage(
       roomId: msg.chatRoomId,
       content: msg.content,
       priority: msg.priority,
+      replyOverride: parent,
     );
   }
 

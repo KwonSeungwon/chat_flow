@@ -66,16 +66,11 @@ public class AiSummaryService {
         this.geminiExecutor = geminiExecutor;
     }
 
-    @KafkaListener(topics = KafkaTopics.AI_SUMMARY_REQUESTS)
-    public void handleSummaryRequest(String messageJson) {
-        try {
-            ChatMessage message = objectMapper.readValue(messageJson, ChatMessage.class);
-            log.info("Received summary request for room: {}", message.getChatRoomId());
-            addMessageAndCheckTrigger(message);
-        } catch (JsonProcessingException e) {
-            log.error("요약 요청 메시지 역직렬화 실패", e);
-        }
-    }
+    // The AI_SUMMARY_REQUESTS topic listener was removed — MessageSenderService
+    // publishes long CHAT messages to BOTH chat-messages and ai-summary-requests,
+    // so listening on both buffered every long message twice (the 10-message
+    // trigger fired after 5 real messages, summary prompt had duplicates).
+    // chat-messages alone covers every CHAT message.
 
     @KafkaListener(topics = KafkaTopics.CHAT_MESSAGES)
     public void handleChatMessage(String messageJson) {
