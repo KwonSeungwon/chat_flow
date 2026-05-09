@@ -383,10 +383,21 @@ public class ChatRoomController {
         msg.setUsername(username != null ? username : userId);
         msg.setContent(content);
         msg.setType(ChatMessage.MessageType.CHAT);
-        msg.setPriority("ROUTINE");
+        String priority = body.get("priority");
+        msg.setPriority(priority != null && !priority.isBlank() ? priority : "ROUTINE");
+        String parentMessageId = body.get("parentMessageId");
+        if (parentMessageId != null && !parentMessageId.isBlank()) {
+            msg.setParentMessageId(parentMessageId);
+        }
         String forwardedFrom = body.get("forwardedFrom");
         if (forwardedFrom != null && !forwardedFrom.isBlank()) {
             msg.setForwardedFrom(forwardedFrom);
+        }
+        String fileUrl = body.get("fileUrl");
+        if (fileUrl != null && !fileUrl.isBlank()) {
+            msg.setFileUrl(fileUrl);
+            msg.setFileName(body.get("fileName"));
+            msg.setFileContentType(body.get("fileContentType"));
         }
         messageSenderService.send(msg);
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지를 전송했습니다."));
