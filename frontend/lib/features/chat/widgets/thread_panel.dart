@@ -56,10 +56,20 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      // Localized message — do not leak the raw exception class to users.
+      const msg = '네트워크 오류로 답글을 불러오지 못했습니다';
+      if (mounted) setState(() => _error = msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _retry() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    await _fetchReplies();
   }
 
   @override
@@ -117,8 +127,21 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
-                            child:
-                                Text('답글 불러오기 실패: $_error'),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_error!,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        color: cs.onSurfaceVariant)),
+                                const SizedBox(height: 12),
+                                TextButton.icon(
+                                  onPressed: _retry,
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('다시 시도'),
+                                ),
+                              ],
+                            ),
                           ),
                         )
                       : ListView(
@@ -152,7 +175,9 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
               child: ChatInput(
                 roomId: widget.roomId,
                 replyTarget: widget.parent,
-                onCancelReply: () {},
+                // Cancel closes the panel — the parent banner is the panel
+                // itself; dismissing the reply means leaving the thread.
+                onCancelReply: () => Navigator.of(context).pop(),
                 onSend: (content, {String priority = 'ROUTINE'}) {
                   // replyOverride pins parentMessageId without mutating
                   // state.replyTarget (owned by the main chat input).
@@ -165,7 +190,9 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                         replyOverride: widget.parent,
                       );
                 },
-                isConnected: true,
+                isConnected: ref
+                    .watch(chatNotifierProvider(widget.roomId))
+                    .isConnected,
               ),
             ),
           ],
