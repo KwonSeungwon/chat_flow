@@ -31,6 +31,7 @@ import 'admin/admin_event_state.dart';
 import 'admin/current_room_role_provider.dart';
 import '../../shared/models/room_role.dart';
 import '../profile/widgets/profile_edit_dialog.dart';
+import 'widgets/thread_panel.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -1334,6 +1335,13 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                   .map((e) => e.messageId)
                   .toSet(),
               lastReadMessageId: chatState.lastReadMessageId,
+              onOpenThread: (parent) => ThreadPanel.show(
+                context,
+                roomId: widget.roomId,
+                parent: parent,
+              ),
+              replyCountFor: (id) =>
+                  ref.read(chatNotifierProvider(widget.roomId).notifier).replyCountFor(id),
             ),
           ),
         // Typing indicator with animated dots

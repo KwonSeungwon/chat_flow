@@ -643,6 +643,29 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  /// Number of replies in the currently loaded message buffer for a given
+  /// parent. Used to render the reply chip on parent messages — approximate
+  /// (only counts what's loaded). The thread panel fetches the authoritative
+  /// list from the backend on open.
+  int replyCountFor(String parentMessageId) {
+    if (parentMessageId.isEmpty) return 0;
+    return state.messages.where((m) {
+      final pid = m.parentMessageId;
+      return pid != null && pid == parentMessageId && !m.deleted;
+    }).length;
+  }
+
+  /// Inserts a message into state if not already present (by effectiveId).
+  /// Used by ThreadPanel to seed state with server-fetched replies that may
+  /// not have arrived via STOMP yet.
+  void mergeMessage(ChatMessage msg) {
+    final existing = state.messages;
+    if (existing.any((m) => m.effectiveId == msg.effectiveId)) return;
+    final updated = [...existing, msg]
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    state = state.copyWith(messages: updated);
+  }
+
   /// Called when user enters a room. Clears local unread count and persists last-read position.
   /// 메시지 미로드 상태에서도 서버 readAt을 NOW로 갱신해야 sidebar timer 폴링이 count를 덮어쓰지 않음.
   void markRoomRead(String roomId) {
