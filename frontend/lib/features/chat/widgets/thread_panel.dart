@@ -77,6 +77,15 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
     final cs = Theme.of(context).colorScheme;
     final messages =
         ref.watch(chatNotifierProvider(widget.roomId)).messages;
+    // Re-read the parent from current state so MESSAGE_DELETED / MESSAGE_EDITED
+    // broadcasts arriving while the panel is open are reflected. Falls back to
+    // the captured snapshot if the message is no longer in the buffer.
+    final liveParent = messages
+            .cast<ChatMessage?>()
+            .firstWhere(
+                (m) => m?.effectiveId == widget.parent.effectiveId,
+                orElse: () => null) ??
+        widget.parent;
     final replies = messages
         .where((m) =>
             m.parentMessageId == widget.parent.effectiveId && !m.deleted)
@@ -148,7 +157,7 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                           controller: scrollCtrl,
                           padding: const EdgeInsets.all(12),
                           children: [
-                            _ParentSummary(parent: widget.parent),
+                            _ParentSummary(parent: liveParent),
                             const SizedBox(height: 12),
                             if (replies.isEmpty)
                               Padding(

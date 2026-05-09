@@ -496,6 +496,8 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 isMine: isMine,
                 time: _formatTime(msg.timestamp),
                 readCount: readCount,
+                onOpenThread: widget.onOpenThread,
+                replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
               );
             } else {
               // SBAR structured message detection
@@ -2413,12 +2415,16 @@ class _FileBubble extends StatelessWidget {
   final bool isMine;
   final String time;
   final int readCount;
+  final void Function(ChatMessage parent)? onOpenThread;
+  final int replyCount;
 
   const _FileBubble({
     required this.msg,
     required this.isMine,
     required this.time,
     this.readCount = 0,
+    this.onOpenThread,
+    this.replyCount = 0,
   });
 
   Color _avatarColor(String name) =>
@@ -2751,6 +2757,38 @@ class _FileBubble extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (replyCount > 0 && onOpenThread != null)
+                  Padding(
+                    padding: EdgeInsets.only(
+                        top: 4, left: isMine ? 0 : 4, right: isMine ? 4 : 0),
+                    child: GestureDetector(
+                      onTap: () => onOpenThread!(msg),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer.withAlpha(60),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: Theme.of(context).colorScheme.primary.withAlpha(80),
+                              width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.forum_outlined,
+                                size: 13,
+                                color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 4),
+                            Text('$replyCount개 답글',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context).colorScheme.primary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
