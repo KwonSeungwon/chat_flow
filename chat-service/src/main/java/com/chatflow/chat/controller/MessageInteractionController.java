@@ -4,6 +4,8 @@ import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
+import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.service.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -23,6 +26,7 @@ public class MessageInteractionController {
     private final MessageReactionService messageReactionService;
     private final MessagePinService messagePinService;
     private final LinkPreviewService linkPreviewService;
+    private final MessageThreadService messageThreadService;
 
     @DeleteMapping("/{roomId}/messages/{messageId}")
     public ResponseEntity<ApiResponse<Void>> deleteMessage(
@@ -76,6 +80,13 @@ public class MessageInteractionController {
         if (emoji == null || userId == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji와 userId가 필요합니다."));
         boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
         return ResponseEntity.ok(ApiResponse.ok(ok));
+    }
+
+    @GetMapping("/{roomId}/messages/{messageId}/replies")
+    public ResponseEntity<ApiResponse<List<ChatMessageEntity>>> getReplies(
+            @PathVariable String roomId,
+            @PathVariable String messageId) {
+        return ResponseEntity.ok(ApiResponse.ok(messageThreadService.findReplies(messageId)));
     }
 
     @PutMapping("/{roomId}/pin")

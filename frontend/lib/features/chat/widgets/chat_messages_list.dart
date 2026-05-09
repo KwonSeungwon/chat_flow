@@ -40,6 +40,8 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(ChatMessage msg)? onBookmarkToggle;
   final Set<String> bookmarkedMessageIds;
   final String? lastReadMessageId;
+  final void Function(ChatMessage parent)? onOpenThread;
+  final int Function(String parentMessageId)? replyCountFor;
 
   const ChatMessagesList({
     super.key,
@@ -64,6 +66,8 @@ class ChatMessagesList extends StatefulWidget {
     this.onBookmarkToggle,
     this.bookmarkedMessageIds = const {},
     this.lastReadMessageId,
+    this.onOpenThread,
+    this.replyCountFor,
   });
 
   @override
@@ -480,6 +484,8 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                   onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
                       ? () => widget.onReadCountTap!(msg.effectiveId)
                       : null,
+                  onOpenThread: widget.onOpenThread,
+                  replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
                 );
               }
             } else if (msg.isFileMessage) {
@@ -565,6 +571,8 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 isBookmarked: widget.bookmarkedMessageIds.contains(msg.effectiveId),
                 showAvatar: isFirstInGroup,
                 showTime: showTime,
+                onOpenThread: widget.onOpenThread,
+                replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
               );
               } // end non-SBAR else
             }
@@ -995,6 +1003,8 @@ class _ChatBubble extends StatefulWidget {
   final bool isBookmarked;
   final bool showAvatar;
   final bool showTime;
+  final void Function(ChatMessage parent)? onOpenThread;
+  final int replyCount;
 
   const _ChatBubble({
     required this.msg,
@@ -1015,6 +1025,8 @@ class _ChatBubble extends StatefulWidget {
     this.isBookmarked = false,
     this.showAvatar = true,
     this.showTime = true,
+    this.onOpenThread,
+    this.replyCount = 0,
   });
 
   @override
@@ -1741,6 +1753,52 @@ class _ChatBubbleState extends State<_ChatBubble> {
                       ),
                   ],
                 ),
+                // Reply count chip — shown when there are replies in the buffer
+                if (widget.replyCount > 0 && widget.onOpenThread != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: GestureDetector(
+                      onTap: () => widget.onOpenThread!(widget.msg),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withAlpha(60),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withAlpha(80),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.forum_outlined,
+                              size: 13,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${widget.replyCount}개 답글',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 // Reaction chips inside bubble area
                 if (widget.msg.reactions.isNotEmpty)
                   Padding(
