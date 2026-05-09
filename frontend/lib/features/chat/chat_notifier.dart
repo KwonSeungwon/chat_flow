@@ -764,8 +764,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     state = state.copyWith(clearReplyTarget: true);
   }
 
-  void sendMessage({required String roomId, required String content, String priority = 'ROUTINE'}) {
-    final reply = state.replyTarget;
+  void sendMessage({
+    required String roomId,
+    required String content,
+    String priority = 'ROUTINE',
+    ChatMessage? replyOverride,
+  }) {
+    // replyOverride lets ThreadPanel post replies without mutating
+    // state.replyTarget (which is owned by the main chat input).
+    final reply = replyOverride ?? state.replyTarget;
     final localId = const Uuid().v4();
     final msg = {
       'chatRoomId': roomId,
@@ -794,7 +801,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } else {
       _offlineQueue.enqueue(msg);
     }
-    if (reply != null) clearReplyTarget();
+    // Only clear when the reply came from state (main chat input).
+    // Override callers (ThreadPanel) manage their own state.
+    if (reply != null && replyOverride == null) clearReplyTarget();
     // 10초 내 서버 확인(동일 localId 메시지가 sent로 교체) 없으면 failed로 표시
     _sendingTimers[localId] = Timer(const Duration(seconds: 10), () {
       _sendingTimers.remove(localId);

@@ -154,12 +154,15 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                 replyTarget: widget.parent,
                 onCancelReply: () {},
                 onSend: (content, {String priority = 'ROUTINE'}) {
+                  // replyOverride pins parentMessageId without mutating
+                  // state.replyTarget (owned by the main chat input).
                   ref
                       .read(chatNotifierProvider(widget.roomId).notifier)
                       .sendMessage(
                         roomId: widget.roomId,
                         content: content,
                         priority: priority,
+                        replyOverride: widget.parent,
                       );
                 },
                 isConnected: true,
