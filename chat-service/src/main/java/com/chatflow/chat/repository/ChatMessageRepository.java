@@ -39,6 +39,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
 
     List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
 
+    /**
+     * Reply chain for the thread view — soft-deleted replies excluded at the
+     * database level (vs in-memory filter), and reactions/edited/pinned
+     * fields all carried by the entity directly.
+     */
+    List<ChatMessageEntity> findByParentMessageIdAndDeletedFalseOrderByTimestampAsc(String parentMessageId);
+
     @Query("SELECT COUNT(m) FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId AND m.timestamp > :after AND m.type = 'CHAT' AND m.deleted = false")
     long countNewChatMessages(@Param("roomId") String roomId, @Param("after") LocalDateTime after);
 

@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,43 +29,37 @@ class MessageThreadServiceTest {
     }
 
     @Test
-    void findReplies_returns_dto_list_for_parent() {
+    void findReplies_delegates_to_db_filtered_query() {
         ChatMessageEntity reply = ChatMessageEntity.builder()
             .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
             .content("got it").type(ChatMessage.MessageType.CHAT.name())
             .parentMessageId("p1").timestamp(LocalDateTime.now())
-            .deleted(false)
+            .reactions("{\"\\uD83D\\uDC4D\":[\"u9\"]}")
+            .edited(true).editedAt(LocalDateTime.now())
+            .pinned(true)
             .build();
-        when(repo.findByParentMessageIdOrderByTimestampAsc("p1"))
+        when(repo.findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1"))
             .thenReturn(List.of(reply));
 
-        List<ChatMessage> replies = service.findReplies("p1");
+        List<ChatMessageEntity> replies = service.findReplies("p1");
 
+        // The service is intentionally a thin pass-through to the deleted=false
+        // repo method — verify both the result and the exact repo call.
+        verify(repo).findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1");
         assertThat(replies).hasSize(1);
         assertThat(replies.get(0).getMessageId()).isEqualTo("r1");
         assertThat(replies.get(0).getParentMessageId()).isEqualTo("p1");
         assertThat(replies.get(0).getContent()).isEqualTo("got it");
-    }
-
-    @Test
-    void findReplies_filters_deleted() {
-        ChatMessageEntity deleted = ChatMessageEntity.builder()
-            .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
-            .content("got it").type(ChatMessage.MessageType.CHAT.name())
-            .parentMessageId("p1").timestamp(LocalDateTime.now())
-            .deleted(true)
-            .build();
-        when(repo.findByParentMessageIdOrderByTimestampAsc("p1"))
-            .thenReturn(List.of(deleted));
-
-        List<ChatMessage> replies = service.findReplies("p1");
-
-        assertThat(replies).isEmpty();
+        // Critical fields the thread panel depends on — these are entity-only
+        // and would have been dropped by an earlier DTO-mapping draft.
+        assertThat(replies.get(0).getReactions()).isNotNull();
+        assertThat(replies.get(0).isEdited()).isTrue();
+        assertThat(replies.get(0).isPinned()).isTrue();
     }
 
     @Test
     void findReplies_empty_when_no_replies() {
-        when(repo.findByParentMessageIdOrderByTimestampAsc("p1"))
+        when(repo.findByParentMessageIdAndDeletedFalseOrderByTimestampAsc("p1"))
             .thenReturn(List.of());
 
         assertThat(service.findReplies("p1")).isEmpty();

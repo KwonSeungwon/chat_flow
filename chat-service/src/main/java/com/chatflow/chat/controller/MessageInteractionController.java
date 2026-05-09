@@ -4,9 +4,9 @@ import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.service.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
-import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -83,7 +83,7 @@ public class MessageInteractionController {
     }
 
     @GetMapping("/{roomId}/messages/{messageId}/replies")
-    public ResponseEntity<ApiResponse<List<ChatMessage>>> getReplies(
+    public ResponseEntity<ApiResponse<List<ChatMessageEntity>>> getReplies(
             @PathVariable String roomId,
             @PathVariable String messageId) {
         return ResponseEntity.ok(ApiResponse.ok(messageThreadService.findReplies(messageId)));

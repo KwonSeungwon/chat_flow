@@ -1,5 +1,6 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
@@ -45,11 +46,14 @@ class MessageInteractionControllerThreadTest {
     }
 
     @Test
-    void getReplies_returns_list() throws Exception {
-        ChatMessage reply = ChatMessage.builder()
+    void getReplies_returns_list_with_entity_only_fields() throws Exception {
+        ChatMessageEntity reply = ChatMessageEntity.builder()
             .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
-            .content("got it").type(ChatMessage.MessageType.CHAT)
+            .content("got it").type(ChatMessage.MessageType.CHAT.name())
             .parentMessageId("p1").timestamp(LocalDateTime.now())
+            .reactions("{\"\\uD83D\\uDC4D\":[\"u9\"]}")
+            .edited(true)
+            .pinned(true)
             .build();
         when(messageThreadService.findReplies("p1")).thenReturn(List.of(reply));
 
@@ -57,7 +61,12 @@ class MessageInteractionControllerThreadTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data[0].messageId").value("r1"))
-            .andExpect(jsonPath("$.data[0].parentMessageId").value("p1"));
+            .andExpect(jsonPath("$.data[0].parentMessageId").value("p1"))
+            // Entity-only fields must be present in the JSON response —
+            // these are the reason we return entity directly.
+            .andExpect(jsonPath("$.data[0].reactions").exists())
+            .andExpect(jsonPath("$.data[0].edited").value(true))
+            .andExpect(jsonPath("$.data[0].pinned").value(true));
     }
 
     @Test
