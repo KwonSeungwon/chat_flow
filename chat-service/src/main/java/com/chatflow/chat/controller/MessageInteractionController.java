@@ -1,10 +1,11 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
-import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.service.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class MessageInteractionController {
     private final MessagePinService messagePinService;
     private final LinkPreviewService linkPreviewService;
     private final MessageThreadService messageThreadService;
+    private final RoomMemberRepository roomMemberRepository;
 
     @DeleteMapping("/{roomId}/messages/{messageId}")
     public ResponseEntity<ApiResponse<Void>> deleteMessage(
@@ -85,8 +87,18 @@ public class MessageInteractionController {
     @GetMapping("/{roomId}/messages/{messageId}/replies")
     public ResponseEntity<ApiResponse<List<ChatMessageEntity>>> getReplies(
             @PathVariable String roomId,
-            @PathVariable String messageId) {
-        return ResponseEntity.ok(ApiResponse.ok(messageThreadService.findReplies(messageId)));
+            @PathVariable String messageId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("방 멤버가 아닙니다."));
+        }
+        return ResponseEntity.ok(
+                ApiResponse.ok(messageThreadService.findReplies(roomId, messageId)));
     }
 
     @PutMapping("/{roomId}/pin")
