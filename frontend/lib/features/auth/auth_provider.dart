@@ -142,6 +142,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
       await _saveCredentials(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
       state = AuthState(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl, isHydrated: true);
+      // Re-arm the beforeunload handler — was unregistered on previous logout,
+      // and main.dart only registers once at startup. Without this, FCM topics
+      // would not be detached on tab close for the new session.
+      _armBeforeUnloadHandler();
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 401
@@ -152,6 +156,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       debugPrint('[AuthNotifier] login error: $e');
       state = AuthState(isLoading: false, error: '로그인 실패. 네트워크를 확인해주세요.', isHydrated: true);
     }
+  }
+
+  void _armBeforeUnloadHandler() {
+    WebUnloadHandler.register(
+      jwtProvider: () => state.token ?? '',
+      fcmTokenProvider: FcmService.getToken,
+      apiBaseUrl: '',
+    );
   }
 
   Future<void> register(String username, String password, {String role = 'NURSE'}) async {
@@ -167,6 +179,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
       await _saveCredentials(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
       state = AuthState(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl, isHydrated: true);
+      _armBeforeUnloadHandler();
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       final msg = code == 400

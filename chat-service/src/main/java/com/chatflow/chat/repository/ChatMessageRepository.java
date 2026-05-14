@@ -37,18 +37,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("SELECT m FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId ORDER BY m.timestamp DESC")
     List<ChatMessageEntity> findLatestByChatRoomId(@Param("roomId") String roomId, Pageable pageable);
 
-    List<ChatMessageEntity> findByParentMessageIdOrderByTimestampAsc(String parentMessageId);
-
     /**
-     * Reply chain for the thread view — soft-deleted replies excluded at the
-     * database level (vs in-memory filter), and reactions/edited/pinned
-     * fields all carried by the entity directly.
-     */
-    List<ChatMessageEntity> findByParentMessageIdAndDeletedFalseOrderByTimestampAsc(String parentMessageId);
-
-    /**
-     * Same as above but scoped to a specific chat room — defense in depth so
-     * a guessed messageId from another room cannot leak replies.
+     * Reply chain for the thread view — scoped to a specific chat room so a
+     * messageId guessed from another room cannot leak replies, and
+     * soft-deleted replies excluded at the database level.
+     * Entity is returned directly so reactions/edited/pinned all flow to the
+     * frontend.
      */
     List<ChatMessageEntity>
         findByChatRoomIdAndParentMessageIdAndDeletedFalseOrderByTimestampAsc(
