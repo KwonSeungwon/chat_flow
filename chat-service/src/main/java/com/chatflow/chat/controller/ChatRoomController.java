@@ -95,8 +95,13 @@ public class ChatRoomController {
     @PostMapping
     public ResponseEntity<ApiResponse<ChatRoom>> createRoom(
             @Valid @RequestBody ChatRoom request,
-            @RequestHeader(value = "X-User-Id", required = false) String creatorId) {
-        ChatRoom saved = chatRoomService.createRoom(request, creatorId);
+            @RequestHeader(value = "X-User-Id", required = false) String creatorId,
+            @RequestHeader(value = "X-Username", required = false) String creatorUsername) {
+        if (creatorId == null || creatorId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        ChatRoom saved = chatRoomService.createRoom(request, creatorId, creatorUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(saved, "채팅방이 생성되었습니다."));
     }
 
@@ -148,10 +153,16 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/verify")
     public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
         String password = request.get("password");
         boolean valid = chatRoomService.verifyRoomPassword(roomId, password);
         if (valid) {
+            // Seed membership so subsequent member-gated endpoints work.
+            if (userId != null && !userId.isBlank()) {
+                chatRoomService.addMemberIfAbsent(roomId, userId, username);
+            }
             return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
         }
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -315,6 +326,10 @@ public class ChatRoomController {
             return ResponseEntity.badRequest().body(ApiResponse.error("userId, targetUserId, targetUsername이 필요합니다."));
         }
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
+        // Seed both DM participants — they may both want to call member-gated
+        // endpoints without sending a STOMP message first.
+        chatRoomService.addMemberIfAbsent(dm.getId(), userId, username);
+        chatRoomService.addMemberIfAbsent(dm.getId(), targetUserId, targetUsername);
         return ResponseEntity.ok(ApiResponse.ok(dm));
     }
 
@@ -436,7 +451,8 @@ public class ChatRoomController {
     @PostMapping("/join-by-invite")
     public ResponseEntity<ApiResponse<Map<String, String>>> joinByInvite(
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
         if (userId == null || userId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.error("인증이 필요합니다."));
@@ -460,6 +476,8 @@ public class ChatRoomController {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
         }
+        // Seed membership — invite link is a valid access grant.
+        chatRoomService.addMemberIfAbsent(room.getId(), userId, username);
         Map<String, String> data = new LinkedHashMap<>();
         data.put("roomId", room.getId());
         data.put("roomName", room.getName());
