@@ -1,6 +1,8 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
@@ -29,6 +31,24 @@ public class MessageInteractionController {
     private final LinkPreviewService linkPreviewService;
     private final MessageThreadService messageThreadService;
     private final RoomMemberRepository roomMemberRepository;
+    private final ChatRoomRepository chatRoomRepository;
+
+    /**
+     * Same membership semantics as ChatRoomController.requireMember:
+     * 401 if no userId, 403 if not a member (with legacy bridge for
+     * pre-seed room creators).
+     */
+    private ResponseEntity<ApiResponse<?>> requireMember(String roomId, String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
+        ChatRoom room = chatRoomRepository.findById(roomId).orElse(null);
+        if (room != null && userId.equals(room.getCreatedBy())) return null;
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("방 멤버가 아닙니다."));
+    }
 
     @DeleteMapping("/{roomId}/messages/{messageId}")
     public ResponseEntity<ApiResponse<Void>> deleteMessage(
@@ -73,45 +93,48 @@ public class MessageInteractionController {
     }
 
     @PostMapping("/{roomId}/messages/{messageId}/reactions")
-    public ResponseEntity<ApiResponse<Boolean>> toggleReaction(
+    public ResponseEntity<?> toggleReaction(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         String emoji = body.get("emoji");
-        if (emoji == null || userId == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji와 userId가 필요합니다."));
+        if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
         boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
         return ResponseEntity.ok(ApiResponse.ok(ok));
     }
 
     @GetMapping("/{roomId}/messages/{messageId}/replies")
-    public ResponseEntity<ApiResponse<List<ChatMessageEntity>>> getReplies(
+    public ResponseEntity<?> getReplies(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
-        if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("방 멤버가 아닙니다."));
-        }
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         return ResponseEntity.ok(
                 ApiResponse.ok(messageThreadService.findReplies(roomId, messageId)));
     }
 
     @PutMapping("/{roomId}/pin")
-    public ResponseEntity<ApiResponse<Boolean>> pinMessage(
+    public ResponseEntity<?> pinMessage(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         String messageId = body.get("messageId");
         if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
         return ResponseEntity.ok(ApiResponse.ok(messagePinService.pinMessage(roomId, messageId)));
     }
 
     @DeleteMapping("/{roomId}/pin")
-    public ResponseEntity<ApiResponse<Boolean>> unpinMessage(@PathVariable String roomId) {
+    public ResponseEntity<?> unpinMessage(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         return ResponseEntity.ok(ApiResponse.ok(messagePinService.unpinMessage(roomId)));
     }
 

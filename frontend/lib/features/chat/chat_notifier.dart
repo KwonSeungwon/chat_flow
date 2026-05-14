@@ -829,13 +829,28 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     state = state.copyWith(messages: list);
     // Preserve thread association on retry — without replyOverride, a failed
     // reply would silently re-post as a top-level message.
-    final parent = msg.parentMessageId == null
-        ? null
-        : state.messages
-            .cast<ChatMessage?>()
-            .firstWhere(
-                (m) => m?.effectiveId == msg.parentMessageId,
-                orElse: () => null);
+    ChatMessage? parent;
+    if (msg.parentMessageId != null) {
+      parent = state.messages
+          .cast<ChatMessage?>()
+          .firstWhere(
+              (m) => m?.effectiveId == msg.parentMessageId,
+              orElse: () => null);
+      // Parent evicted from the 500-message buffer (or deleted) — build a
+      // minimal stub so the wire-format still carries parentMessageId.
+      // The backend computes parentMessagePreview from the parent's stored
+      // row, so a stub with only messageId set is sufficient.
+      parent ??= ChatMessage(
+        chatRoomId: msg.chatRoomId,
+        userId: '',
+        username: '',
+        content: '',
+        type: 'CHAT',
+        priority: 'ROUTINE',
+        timestamp: msg.timestamp,
+        messageId: msg.parentMessageId,
+      );
+    }
     sendMessage(
       roomId: msg.chatRoomId,
       content: msg.content,

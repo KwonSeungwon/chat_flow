@@ -2,8 +2,10 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +38,7 @@ public class ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final RoomMemberRepository roomMemberRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisHealthTracker redisHealth;
@@ -80,7 +83,7 @@ public class ChatRoomService {
         return room;
     }
 
-    public ChatRoom createRoom(ChatRoom request, String creatorId) {
+    public ChatRoom createRoom(ChatRoom request, String creatorId, String creatorUsername) {
         ChatRoom room = ChatRoom.builder()
                 .id("room_" + UUID.randomUUID().toString())
                 .name(request.getName().trim())
@@ -99,9 +102,37 @@ public class ChatRoomService {
                 .build();
 
         ChatRoom saved = chatRoomRepository.save(room);
+        // Seed room_members with the creator so subsequent membership checks
+        // (replies endpoint, etc.) recognize them without waiting for a STOMP
+        // join. Without this, the creator can chat in their own room but cannot
+        // call any endpoint that requires existsByRoomIdAndUserId.
+        addMemberIfAbsent(saved.getId(), creatorId,
+                creatorUsername != null && !creatorUsername.isBlank() ? creatorUsername : creatorId);
         roomCacheEvictor.evict(saved.getId());
         log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
         return saved;
+    }
+
+    /**
+     * Idempotently inserts a (roomId, userId) row into room_members.
+     * Called from every access-granting path (create, invite-join, password
+     * verify, DM create) so the room_members table tracks every legitimate
+     * member, not just users who happened to send a STOMP message.
+     */
+    public void addMemberIfAbsent(String roomId, String userId, String username) {
+        if (userId == null || userId.isBlank()) return;
+        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
+        try {
+            roomMemberRepository.save(RoomMemberEntity.builder()
+                    .roomId(roomId)
+                    .userId(userId)
+                    .username(username != null && !username.isBlank() ? username : userId)
+                    .joinedAt(LocalDateTime.now())
+                    .build());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Benign — concurrent insert race
+            log.debug("Concurrent member insert race: room={} user={}", roomId, userId);
+        }
     }
 
     public ChatRoom getOrCreateByExternalId(String externalId, String name, String description) {
