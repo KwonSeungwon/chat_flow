@@ -3,6 +3,7 @@ package com.chatflow.chat.service;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomMemberEntity;
+import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
@@ -106,11 +107,22 @@ public class ChatRoomService {
         // (replies endpoint, etc.) recognize them without waiting for a STOMP
         // join. Without this, the creator can chat in their own room but cannot
         // call any endpoint that requires existsByRoomIdAndUserId.
+        // Creator gets OWNER so they can use moderation features
+        // (mute/ban/role-transfer) without an extra promotion step.
         addMemberIfAbsent(saved.getId(), creatorId,
-                creatorUsername != null && !creatorUsername.isBlank() ? creatorUsername : creatorId);
+                creatorUsername != null && !creatorUsername.isBlank() ? creatorUsername : creatorId,
+                RoomRole.OWNER);
         roomCacheEvictor.evict(saved.getId());
         log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
         return saved;
+    }
+
+    /**
+     * Idempotently inserts a (roomId, userId) row into room_members.
+     * Default role is MEMBER. Use the 4-arg overload to set OWNER/MODERATOR.
+     */
+    public void addMemberIfAbsent(String roomId, String userId, String username) {
+        addMemberIfAbsent(roomId, userId, username, RoomRole.MEMBER);
     }
 
     /**
@@ -119,7 +131,7 @@ public class ChatRoomService {
      * verify, DM create) so the room_members table tracks every legitimate
      * member, not just users who happened to send a STOMP message.
      */
-    public void addMemberIfAbsent(String roomId, String userId, String username) {
+    public void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
         if (userId == null || userId.isBlank()) return;
         if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
         try {
@@ -127,6 +139,7 @@ public class ChatRoomService {
                     .roomId(roomId)
                     .userId(userId)
                     .username(username != null && !username.isBlank() ? username : userId)
+                    .role(role != null ? role : RoomRole.MEMBER)
                     .joinedAt(LocalDateTime.now())
                     .build());
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
