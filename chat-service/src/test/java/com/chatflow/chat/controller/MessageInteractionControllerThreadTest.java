@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
@@ -38,6 +39,7 @@ class MessageInteractionControllerThreadTest {
     @Mock private LinkPreviewService linkPreviewService;
     @Mock private MessageThreadService messageThreadService;
     @Mock private RoomMemberRepository roomMemberRepository;
+    @Mock private ChatRoomRepository chatRoomRepository;
 
     @InjectMocks
     private MessageInteractionController controller;

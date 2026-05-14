@@ -54,6 +54,31 @@ public class ChatRoomController {
     private final RoomVisibilityService roomVisibilityService;
     private final MessageSenderService messageSenderService;
     private final InviteLinkService inviteLinkService;
+    private final com.chatflow.chat.repository.RoomMemberRepository roomMemberRepository;
+
+    /**
+     * Membership gate: 401 if no userId header, 403 if not a member.
+     * Returns the failure response, or null if the caller is authorized.
+     *
+     * Legacy bridge: pre-seeding patch, room_members was only populated on
+     * STOMP join. To unbreak users who created/joined rooms before the
+     * member-seeding fix landed, also accept room.createdBy == userId.
+     */
+    private ResponseEntity<ApiResponse<?>> requireMember(String roomId, String userId) {
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
+        ChatRoom legacy = chatRoomService.getRoom(roomId).orElse(null);
+        if (legacy != null && userId.equals(legacy.getCreatedBy())) {
+            // Backfill the missing row on first hit so subsequent checks are O(1).
+            chatRoomService.addMemberIfAbsent(roomId, userId, null);
+            return null;
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("방 멤버가 아닙니다."));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
@@ -115,12 +140,14 @@ public class ChatRoomController {
     }
 
     @GetMapping("/{roomId}/messages")
-    public ResponseEntity<ApiResponse<Page<ChatMessageEntity>>> getMessages(
+    public ResponseEntity<?> getMessages(
             @PathVariable String roomId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         size = Math.min(size, 100);
         Page<ChatMessageEntity> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size));
         auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
@@ -132,10 +159,13 @@ public class ChatRoomController {
      * before 파라미터 없으면 최신 메시지부터 반환.
      */
     @GetMapping("/{roomId}/messages/cursor")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getMessagesByCursor(
+    public ResponseEntity<?> getMessagesByCursor(
             @PathVariable String roomId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
-            @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "50") int size,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         size = Math.min(size, 100);
         List<ChatMessageEntity> messages = messageReadService.getMessagesByCursor(roomId, before, size);
 
@@ -309,8 +339,11 @@ public class ChatRoomController {
     }
 
     @GetMapping("/{roomId}/readers")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getRoomReaders(
-            @PathVariable String roomId) {
+    public ResponseEntity<?> getRoomReaders(
+            @PathVariable String roomId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         Map<String, String> positions = readReceiptService.getRoomReadPositions(roomId);
         return ResponseEntity.ok(ApiResponse.ok(positions));
     }
@@ -334,9 +367,24 @@ public class ChatRoomController {
     }
 
     @PutMapping("/{roomId}/settings")
-    public ResponseEntity<ApiResponse<Boolean>> updateRoomSettings(
+    public ResponseEntity<?> updateRoomSettings(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        // Settings change is owner-only — load the room and compare createdBy.
+        if (userId == null || userId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("인증이 필요합니다."));
+        }
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (!userId.equals(room.getCreatedBy())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("방장만 설정을 변경할 수 있습니다."));
+        }
         return ResponseEntity.ok(ApiResponse.ok(
                 chatRoomService.updateRoomSettings(roomId, body.get("name"), body.get("description"))));
     }
@@ -355,14 +403,13 @@ public class ChatRoomController {
     }
 
     @PutMapping("/{roomId}/last-read")
-    public ResponseEntity<ApiResponse<Void>> updateLastRead(
+    public ResponseEntity<?> updateLastRead(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.ok(ApiResponse.ok(null));
-        }
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         String lastReadMessageId = body.get("lastReadMessageId");
         if (lastReadMessageId == null || lastReadMessageId.isBlank()) {
             // 메시지가 아직 로드되지 않은 방 입장 시점에도 unread count를 초기화하도록 readAt만 갱신
@@ -378,15 +425,13 @@ public class ChatRoomController {
      * Also used for forwarded messages with forwardedFrom metadata.
      */
     @PostMapping("/{roomId}/messages")
-    public ResponseEntity<ApiResponse<Void>> sendMessage(
+    public ResponseEntity<?> sendMessage(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         String content = body.get("content");
         if (content == null || content.isBlank()) {
             return ResponseEntity.badRequest()
