@@ -72,8 +72,11 @@ public class ChatRoomController {
         if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
         ChatRoom legacy = chatRoomService.getRoom(roomId).orElse(null);
         if (legacy != null && userId.equals(legacy.getCreatedBy())) {
-            // Backfill the missing row on first hit so subsequent checks are O(1).
-            chatRoomService.addMemberIfAbsent(roomId, userId, null);
+            // Backfill the missing row as OWNER on first hit. Without the
+            // role hint, the creator would land as MEMBER and lose access to
+            // moderation features (mute/ban) until manually re-promoted.
+            chatRoomService.addMemberIfAbsent(roomId, userId, null,
+                    com.chatflow.chat.entity.RoomRole.OWNER);
             return null;
         }
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -110,7 +113,11 @@ public class ChatRoomController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ChatRoom>> getRoom(@PathVariable String id) {
+    public ResponseEntity<?> getRoom(
+            @PathVariable String id,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(id, userId);
+        if (gate != null) return gate;
         return chatRoomService.getRoom(id)
                 .map(room -> ResponseEntity.ok(ApiResponse.ok(room)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
