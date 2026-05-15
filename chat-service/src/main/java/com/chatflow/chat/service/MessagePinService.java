@@ -27,9 +27,17 @@ public class MessagePinService {
     @Transactional
     public boolean pinMessage(String roomId, String messageId) {
         return chatRoomRepository.findById(roomId).map(room -> {
+            // Validate the message exists AND belongs to this room before
+            // pinning. Without this, a stale or attacker-supplied messageId
+            // would land in chat_rooms.pinned_message_id, breaking the UI.
+            var msgOpt = chatMessageRepository.findById(messageId)
+                    .filter(m -> roomId.equals(m.getChatRoomId()) && !m.isDeleted());
+            if (msgOpt.isEmpty()) {
+                return false;
+            }
             room.setPinnedMessageId(messageId);
             chatRoomRepository.save(room);
-            chatMessageRepository.findById(messageId).ifPresent(msg -> {
+            msgOpt.ifPresent(msg -> {
                 msg.setPinned(true);
                 chatMessageRepository.save(msg);
             });

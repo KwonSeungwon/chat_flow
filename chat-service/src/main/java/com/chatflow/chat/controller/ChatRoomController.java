@@ -475,17 +475,22 @@ public class ChatRoomController {
      * POST /api/chat/rooms/{roomId}/invite-link
      */
     @PostMapping("/{roomId}/invite-link")
-    public ResponseEntity<ApiResponse<Map<String, String>>> createInviteLink(
+    public ResponseEntity<?> createInviteLink(
             @PathVariable String roomId,
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
+        // Only members may generate an invite token — previously this was
+        // open to any authenticated user who knew the roomId, which let
+        // outsiders mint join tokens for private rooms.
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (!room.isAllowInvites()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("이 방은 초대 링크 생성이 비활성화되어 있습니다."));
         }
         String token = inviteLinkService.createInviteToken(roomId);
         String url = inviteLinkService.getInviteUrl(token);

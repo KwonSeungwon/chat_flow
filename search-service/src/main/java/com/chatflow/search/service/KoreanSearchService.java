@@ -48,10 +48,17 @@ public class KoreanSearchService {
                     new BoolQuery.Builder().must(multiMatchQuery));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
+                // Use match rather than term — the live chat_messages index in
+                // some environments was created before the keyword annotation
+                // was set on chatRoomId, leaving the field as the auto-mapped
+                // text type. term() does not analyze the query, so it cannot
+                // match the analyzed tokens. match() works regardless: against
+                // a keyword field it matches the single token, against text it
+                // re-tokenizes and matches the produced tokens.
                 boolQueryBuilder.filter(f -> f
-                        .term(t -> t
+                        .match(t -> t
                                 .field("chatRoomId")
-                                .value(chatRoomId)
+                                .query(chatRoomId)
                         )
                 );
             }
@@ -113,10 +120,17 @@ public class KoreanSearchService {
                     new BoolQuery.Builder().must(ngramQuery));
 
             if (chatRoomId != null && !chatRoomId.isEmpty()) {
+                // Use match rather than term — the live chat_messages index in
+                // some environments was created before the keyword annotation
+                // was set on chatRoomId, leaving the field as the auto-mapped
+                // text type. term() does not analyze the query, so it cannot
+                // match the analyzed tokens. match() works regardless: against
+                // a keyword field it matches the single token, against text it
+                // re-tokenizes and matches the produced tokens.
                 boolQueryBuilder.filter(f -> f
-                        .term(t -> t
+                        .match(t -> t
                                 .field("chatRoomId")
-                                .value(chatRoomId)
+                                .query(chatRoomId)
                         )
                 );
             }
@@ -183,7 +197,8 @@ public class KoreanSearchService {
                 boolBuilder.must(q -> q.matchAll(m -> m));
             }
 
-            boolBuilder.filter(f -> f.term(t -> t.field("chatRoomId").value(roomId)));
+            // See searchKoreanContent for why this is match() not term()
+            boolBuilder.filter(f -> f.match(t -> t.field("chatRoomId").query(roomId)));
 
             if (username != null && !username.isBlank()) {
                 final String u = username.trim();
