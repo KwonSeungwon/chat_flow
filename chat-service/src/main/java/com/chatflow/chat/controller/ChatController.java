@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.repository.ChatRoomRepository;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.common.dto.ChatMessage;
@@ -26,6 +28,33 @@ public class ChatController {
     private final ReadReceiptService readReceiptService;
     private final Validator validator;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RoomMemberRepository roomMemberRepository;
+    private final ChatRoomRepository chatRoomRepository;
+
+    /**
+     * STOMP-level membership check. Mirrors ChatRoomController.requireMember
+     * semantics: true if user is a row in room_members OR is the room creator
+     * (legacy bridge for pre-seed rooms). The session is authenticated by the
+     * gateway, but session alone says nothing about which rooms the user may
+     * touch — without this check, an authenticated user can send messages,
+     * mark-read, or broadcast typing into ANY room they know the id of.
+     */
+    private boolean isMember(String roomId, String userId) {
+        if (roomId == null || userId == null || userId.isBlank()) return false;
+        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return true;
+        return chatRoomRepository.findById(roomId)
+                .map(r -> userId.equals(r.getCreatedBy()))
+                .orElse(false);
+    }
+
+    private void rejectNonMember(String userId, String roomId, String op) {
+        log.warn("STOMP {} rejected: non-member user={} room={}", op, userId, roomId);
+        if (userId != null && !userId.isBlank()) {
+            messagingTemplate.convertAndSendToUser(userId, "/queue/errors",
+                    Map.of("type", "NOT_A_MEMBER", "operation", op, "roomId",
+                            roomId != null ? roomId : ""));
+        }
+    }
 
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(@Payload ChatMessage chatMessage,
@@ -37,6 +66,12 @@ public class ChatController {
             String sessionUserId = (String) sessionAttrs.get("userId");
             if (sessionUsername != null) chatMessage.setUsername(sessionUsername);
             if (sessionUserId != null) chatMessage.setUserId(sessionUserId);
+        }
+        // Membership gate — without this, an authenticated user could send
+        // messages into ANY room id by spoofing the chatRoomId field.
+        if (!isMember(chatMessage.getChatRoomId(), chatMessage.getUserId())) {
+            rejectNonMember(chatMessage.getUserId(), chatMessage.getChatRoomId(), "sendMessage");
+            return;
         }
         Set<ConstraintViolation<ChatMessage>> violations = validator.validate(chatMessage);
         if (!violations.isEmpty()) {
@@ -79,6 +114,12 @@ public class ChatController {
         String roomId = payload.get("chatRoomId");
         if (roomId == null) return;
         Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+        String userId = (sessionAttrs != null) ? (String) sessionAttrs.get("userId") : null;
+        // Membership gate — non-member could inject fake "X is typing..." spam.
+        if (!isMember(roomId, userId)) {
+            rejectNonMember(userId, roomId, "typing");
+            return;
+        }
         // 세션 username 우선, null/blank이면 payload로 fallback — 빈 username 브로드캐스트 방지
         String username = (sessionAttrs != null) ? (String) sessionAttrs.get("username") : null;
         if (username == null || username.isBlank()) {
@@ -103,6 +144,12 @@ public class ChatController {
         String username = sessionAttrs != null ? (String) sessionAttrs.get("username") : null;
         if (userId == null) {
             log.warn("markRead: 세션에 userId 없음 — 거부 (roomId={})", roomId);
+            return;
+        }
+        // Membership gate — non-member could corrupt others' read-state UI by
+        // broadcasting fake read-receipts.
+        if (!isMember(roomId, userId)) {
+            rejectNonMember(userId, roomId, "markRead");
             return;
         }
         readReceiptService.markRead(roomId, userId, username, lastReadMessageId);

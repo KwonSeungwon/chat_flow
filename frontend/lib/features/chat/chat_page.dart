@@ -32,6 +32,7 @@ import 'admin/current_room_role_provider.dart';
 import '../../shared/models/room_role.dart';
 import '../profile/widgets/profile_edit_dialog.dart';
 import 'widgets/thread_panel.dart';
+import 'widgets/edit_history_sheet.dart';
 
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
@@ -1304,6 +1305,11 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                   chatNotifier.deleteMessage(widget.roomId, messageId),
               onEditMessage: (messageId, currentContent) =>
                   _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
+              onViewEditHistory: (messageId, currentContent) =>
+                  EditHistorySheet.show(context,
+                      roomId: widget.roomId,
+                      messageId: messageId,
+                      currentContent: currentContent),
               onReadCountTap: (messageId) =>
                   _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
               onReaction: (messageId, emoji) =>

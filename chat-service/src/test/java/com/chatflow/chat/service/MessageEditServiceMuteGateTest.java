@@ -38,6 +38,7 @@ class MessageEditServiceMuteGateTest {
     @Mock private RoomMemberRepository roomMemberRepository;
     @Mock private MessageEncryptor messageEncryptor;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private com.chatflow.chat.repository.MessageEditHistoryRepository editHistoryRepository;
 
     @InjectMocks private MessageEditService service;
 

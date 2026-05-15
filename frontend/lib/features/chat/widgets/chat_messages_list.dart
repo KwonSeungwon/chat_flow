@@ -32,6 +32,7 @@ class ChatMessagesList extends StatefulWidget {
   final void Function(String parentMessageId)? onScrollToParentMessage;
   final void Function(String messageId)? onDeleteMessage;
   final void Function(String messageId, String currentContent)? onEditMessage;
+  final void Function(String messageId, String currentContent)? onViewEditHistory;
   final void Function(String messageId)? onReadCountTap;
   final void Function(String messageId, String emoji)? onReaction;
   final void Function(ChatMessage msg)? onForward;
@@ -58,6 +59,7 @@ class ChatMessagesList extends StatefulWidget {
     this.onScrollToParentMessage,
     this.onDeleteMessage,
     this.onEditMessage,
+    this.onViewEditHistory,
     this.onReadCountTap,
     this.onReaction,
     this.onForward,
@@ -481,6 +483,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                   onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
                       ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
                       : null,
+                  onViewEditHistory: (msg.edited && !msg.deleted && widget.onViewEditHistory != null)
+                      ? () => widget.onViewEditHistory!(msg.effectiveId, msg.content)
+                      : null,
                   onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
                       ? () => widget.onReadCountTap!(msg.effectiveId)
                       : null,
@@ -551,6 +556,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                     : null,
                 onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
                     ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
+                    : null,
+                onViewEditHistory: (msg.edited && !msg.deleted && widget.onViewEditHistory != null)
+                    ? () => widget.onViewEditHistory!(msg.effectiveId, msg.content)
                     : null,
                 onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
                     ? () => widget.onReadCountTap!(msg.effectiveId)
@@ -996,6 +1004,7 @@ class _ChatBubble extends StatefulWidget {
   final VoidCallback? onScrollToParent;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
+  final VoidCallback? onViewEditHistory;
   final VoidCallback? onReadCountTap;
   final void Function(String emoji)? onReaction;
   final VoidCallback? onForward;
@@ -1018,6 +1027,7 @@ class _ChatBubble extends StatefulWidget {
     this.onScrollToParent,
     this.onDelete,
     this.onEdit,
+    this.onViewEditHistory,
     this.onReadCountTap,
     this.onReaction,
     this.onForward,
@@ -1168,6 +1178,12 @@ class _ChatBubbleState extends State<_ChatBubble> {
                 title: const Text('메시지 수정'),
                 onTap: () { Navigator.of(context).pop(); widget.onEdit?.call(); },
               ),
+            if (widget.onViewEditHistory != null)
+              ListTile(
+                leading: const Icon(Icons.history),
+                title: const Text('수정 이력'),
+                onTap: () { Navigator.of(context).pop(); widget.onViewEditHistory?.call(); },
+              ),
             if (widget.onDelete != null)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
@@ -1279,6 +1295,9 @@ class _ChatBubbleState extends State<_ChatBubble> {
     if (widget.onEdit != null) {
       items.add(const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_outlined, size: 18), SizedBox(width: 8), Text('수정')])));
     }
+    if (widget.onViewEditHistory != null) {
+      items.add(const PopupMenuItem(value: 'history', child: Row(children: [Icon(Icons.history, size: 18), SizedBox(width: 8), Text('수정 이력')])));
+    }
     if (widget.onDelete != null) {
       items.add(const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('삭제', style: TextStyle(color: Colors.red))])));
     }
@@ -1305,6 +1324,7 @@ class _ChatBubbleState extends State<_ChatBubble> {
       if (value == 'pin') widget.onPin?.call();
       if (value == 'bookmark') widget.onBookmark?.call();
       if (value == 'edit') widget.onEdit?.call();
+      if (value == 'history') widget.onViewEditHistory?.call();
       if (value == 'delete') widget.onDelete?.call();
       if (value == 'report') showMessageReportDialog(context, widget.msg.effectiveId);
     });
@@ -1368,7 +1388,7 @@ class _ChatBubbleState extends State<_ChatBubble> {
     final isUrgent = widget.msg.priority.toUpperCase() == 'URGENT' || widget.msg.priority.toUpperCase() == 'STAT';
 
     final canReport = !widget.isMine && !widget.msg.deleted;
-    final hasActions = canReport || widget.onDelete != null || widget.onEdit != null || widget.onReply != null || widget.onReaction != null || widget.onForward != null || widget.onPin != null || widget.onBookmark != null;
+    final hasActions = canReport || widget.onDelete != null || widget.onEdit != null || widget.onViewEditHistory != null || widget.onReply != null || widget.onReaction != null || widget.onForward != null || widget.onPin != null || widget.onBookmark != null;
 
     final bubble = GestureDetector(
       onLongPress: hasActions ? () => _showDeleteSheet(context) : null,

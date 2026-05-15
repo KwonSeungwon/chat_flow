@@ -2,7 +2,9 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.repository.ChatRoomRepository;
+import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
@@ -32,6 +34,7 @@ public class MessageInteractionController {
     private final MessageThreadService messageThreadService;
     private final RoomMemberRepository roomMemberRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final MessageEditHistoryRepository editHistoryRepository;
 
     /**
      * Same membership semantics as ChatRoomController.requireMember:
@@ -104,6 +107,22 @@ public class MessageInteractionController {
         if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
         boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
         return ResponseEntity.ok(ApiResponse.ok(ok));
+    }
+
+    /**
+     * Returns the edit history of a message — newest-first list of pre-edit
+     * content snapshots. Empty list if the message has never been edited.
+     */
+    @GetMapping("/{roomId}/messages/{messageId}/edits")
+    public ResponseEntity<?> getEditHistory(
+            @PathVariable String roomId,
+            @PathVariable String messageId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        ResponseEntity<ApiResponse<?>> gate = requireMember(roomId, userId);
+        if (gate != null) return gate;
+        List<MessageEditHistoryEntity> history =
+                editHistoryRepository.findByMessageIdOrderByEditedAtDesc(messageId);
+        return ResponseEntity.ok(ApiResponse.ok(history));
     }
 
     @GetMapping("/{roomId}/messages/{messageId}/replies")

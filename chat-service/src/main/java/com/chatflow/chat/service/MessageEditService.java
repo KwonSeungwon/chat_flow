@@ -1,7 +1,9 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.util.MessageEncryptor;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class MessageEditService {
     private final RoomMemberRepository roomMemberRepository;
     private final MessageEncryptor messageEncryptor;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MessageEditHistoryRepository editHistoryRepository;
 
     @Transactional
     public boolean deleteMessage(String messageId, String requestingUserId) {
@@ -66,6 +69,20 @@ public class MessageEditService {
                         requestingUserId, messageId, entity.getChatRoomId());
                 return false;
             }
+            // Record the OLD content into history BEFORE overwriting. Store
+            // the decrypted form so the viewer can render it directly without
+            // needing the runtime encryption key (matches the convention used
+            // by the live MESSAGE_EDITED broadcast which sends plaintext).
+            String previousPlain = messageEncryptor.isEnabled()
+                    ? messageEncryptor.decrypt(entity.getContent())
+                    : entity.getContent();
+            editHistoryRepository.save(MessageEditHistoryEntity.builder()
+                    .messageId(messageId)
+                    .previousContent(previousPlain)
+                    .editedAt(LocalDateTime.now())
+                    .editedBy(requestingUserId)
+                    .build());
+
             entity.setContent(messageEncryptor.isEnabled() ? messageEncryptor.encrypt(newContent) : newContent);
             entity.setEdited(true);
             entity.setEditedAt(LocalDateTime.now());
