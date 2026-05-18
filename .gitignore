@@ -150,3 +150,7 @@ firebase-service-account.json
 # Playwright MCP scratch files
 .playwright-mcp/
 qa-*.png
+audit-*.png
+
+# Local operational notes (deploy logs, ad-hoc runbooks)
+_workspace/
