@@ -2,11 +2,9 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.ChatRoom;
-import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.chat.repository.RoomMemberRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,9 +21,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Room CRUD + cache. Membership-related lifecycle (addMemberIfAbsent,
+ * leaveRoom, sendInviteMessage) lives in RoomMembershipService.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,14 +40,13 @@ public class ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final RoomMemberRepository roomMemberRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisHealthTracker redisHealth;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
-    private final ParticipantService participantService;
     private final RoomCacheEvictor roomCacheEvictor;
+    private final RoomMembershipService roomMembershipService;
 
     public List<ChatRoom> getAllRooms() {
         if (!redisHealth.isCircuitOpen()) {
@@ -109,43 +109,12 @@ public class ChatRoomService {
         // call any endpoint that requires existsByRoomIdAndUserId.
         // Creator gets OWNER so they can use moderation features
         // (mute/ban/role-transfer) without an extra promotion step.
-        addMemberIfAbsent(saved.getId(), creatorId,
+        roomMembershipService.addMemberIfAbsent(saved.getId(), creatorId,
                 creatorUsername != null && !creatorUsername.isBlank() ? creatorUsername : creatorId,
                 RoomRole.OWNER);
         roomCacheEvictor.evict(saved.getId());
         log.info("Chat room created: {} ({})", saved.getName(), saved.getId());
         return saved;
-    }
-
-    /**
-     * Idempotently inserts a (roomId, userId) row into room_members.
-     * Default role is MEMBER. Use the 4-arg overload to set OWNER/MODERATOR.
-     */
-    public void addMemberIfAbsent(String roomId, String userId, String username) {
-        addMemberIfAbsent(roomId, userId, username, RoomRole.MEMBER);
-    }
-
-    /**
-     * Idempotently inserts a (roomId, userId) row into room_members.
-     * Called from every access-granting path (create, invite-join, password
-     * verify, DM create) so the room_members table tracks every legitimate
-     * member, not just users who happened to send a STOMP message.
-     */
-    public void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
-        if (userId == null || userId.isBlank()) return;
-        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
-        try {
-            roomMemberRepository.save(RoomMemberEntity.builder()
-                    .roomId(roomId)
-                    .userId(userId)
-                    .username(username != null && !username.isBlank() ? username : userId)
-                    .role(role != null ? role : RoomRole.MEMBER)
-                    .joinedAt(LocalDateTime.now())
-                    .build());
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Benign — concurrent insert race
-            log.debug("Concurrent member insert race: room={} user={}", roomId, userId);
-        }
     }
 
     public ChatRoom getOrCreateByExternalId(String externalId, String name, String description) {
@@ -189,19 +158,6 @@ public class ChatRoomService {
                 .orElse(false);
     }
 
-    public void sendInviteMessage(String roomId, String inviterName, String targetUsername) {
-        Map<String, Object> msg = new LinkedHashMap<>();
-        msg.put("type", "SYSTEM");
-        msg.put("chatRoomId", roomId);
-        msg.put("username", "SYSTEM");
-        msg.put("messageId", UUID.randomUUID().toString());
-        msg.put("timestamp", LocalDateTime.now().toString());
-        msg.put("content", (inviterName != null ? inviterName : "누군가") +
-                "님이 " + targetUsername + "님을 채팅방에 초대했습니다.");
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId, msg);
-        log.info("Invite message sent: {} invited {} to room {}", inviterName, targetUsername, roomId);
-    }
-
     @Transactional
     public void deleteRoom(String id) {
         // 삭제 전 STOMP 브로드캐스트 -- 연결된 클라이언트가 퇴장 처리
@@ -222,38 +178,6 @@ public class ChatRoomService {
         }
         roomCacheEvictor.evict(id);
         log.info("Chat room deleted: {}", id);
-    }
-
-    @Transactional
-    public void leaveRoom(String roomId, String userId, String username) {
-        // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
-        String participantKey = "chatflow:room:participants:" + roomId;
-        if (!redisHealth.isCircuitOpen()) {
-            try {
-                Set<String> members = redisTemplate.opsForSet().members(participantKey);
-                if (members != null) {
-                    members.stream()
-                        .filter(e -> e.startsWith(userId + ":"))
-                        .forEach(e -> redisTemplate.opsForSet().remove(participantKey, e));
-                }
-                redisHealth.recordSuccess();
-            } catch (Exception e) {
-                redisHealth.recordFailure(e);
-            }
-        }
-        // 퇴장 시스템 메시지 브로드캐스트
-        Map<String, Object> leaveMsg = new LinkedHashMap<>();
-        leaveMsg.put("type", "LEAVE");
-        leaveMsg.put("chatRoomId", roomId);
-        leaveMsg.put("username", username);
-        leaveMsg.put("messageId", UUID.randomUUID().toString());
-        leaveMsg.put("timestamp", LocalDateTime.now().toString());
-        leaveMsg.put("content", username + "님이 채팅방을 나갔습니다.");
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId, leaveMsg);
-        // 참가자 수 동기화 (Redis SET 기반 unique user count로 설정 -- UserPresenceService와 동일 패턴)
-        participantService.syncParticipantCountFromRedis(roomId);
-        roomCacheEvictor.evict(roomId);
-        log.info("User {} left room {} via REST API", username, roomId);
     }
 
     private <T> void cacheValue(String key, T value, Duration ttl) {
