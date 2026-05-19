@@ -8,6 +8,7 @@ import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.DmRoomService;
 import com.chatflow.chat.service.MessageReadService;
 import com.chatflow.chat.service.MessageSenderService;
+import com.chatflow.chat.service.RoomMembershipService;
 import com.chatflow.chat.service.RoomVisibilityService;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
+    private final RoomMembershipService roomMembershipService;
     private final MessageReadService messageReadService;
     private final DmRoomService dmRoomService;
     private final AuditService auditService;
@@ -151,7 +153,7 @@ public class ChatRoomController {
         if (valid) {
             // Seed membership so subsequent member-gated endpoints work.
             if (userId != null && !userId.isBlank()) {
-                chatRoomService.addMemberIfAbsent(roomId, userId, username);
+                roomMembershipService.addMemberIfAbsent(roomId, userId, username);
             }
             return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
         }
@@ -222,7 +224,7 @@ public class ChatRoomController {
         if (username == null || username.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
         }
-        chatRoomService.leaveRoom(roomId, userId, username);
+        roomMembershipService.leaveRoom(roomId, userId, username);
         return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
     }
 
@@ -270,8 +272,8 @@ public class ChatRoomController {
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
         // Seed both DM participants — they may both want to call member-gated
         // endpoints without sending a STOMP message first.
-        chatRoomService.addMemberIfAbsent(dm.getId(), userId, username);
-        chatRoomService.addMemberIfAbsent(dm.getId(), targetUserId, targetUsername);
+        roomMembershipService.addMemberIfAbsent(dm.getId(), userId, username);
+        roomMembershipService.addMemberIfAbsent(dm.getId(), targetUserId, targetUsername);
         return ResponseEntity.ok(ApiResponse.ok(dm));
     }
 

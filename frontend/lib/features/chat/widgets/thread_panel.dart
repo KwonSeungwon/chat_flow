@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/chat_message.dart';
+import '../../auth/auth_provider.dart';
 import '../chat_provider.dart' show chatNotifierProvider;
 import 'chat_input.dart';
+import 'edit_history_sheet.dart';
 
 /// Modal sheet showing all replies to a parent message.
 class ThreadPanel extends ConsumerStatefulWidget {
@@ -90,6 +93,7 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
         .where((m) =>
             m.parentMessageId == widget.parent.effectiveId && !m.deleted)
         .toList();
+    final currentUsername = ref.watch(authProvider).username;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -172,7 +176,11 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                                 ),
                               )
                             else
-                              ...replies.map((r) => _ReplyTile(msg: r)),
+                              ...replies.map((r) => _ReplyTile(
+                                    msg: r,
+                                    roomId: widget.roomId,
+                                    isMine: r.username == currentUsername,
+                                  )),
                           ],
                         ),
             ),
@@ -218,6 +226,7 @@ class _ParentSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDeleted = parent.deleted;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -236,46 +245,234 @@ class _ParentSummary extends StatelessWidget {
                 color: cs.primary),
           ),
           const SizedBox(height: 4),
-          Text(parent.content,
-              maxLines: 4, overflow: TextOverflow.ellipsis),
+          Text(
+            isDeleted ? '삭제된 메시지입니다.' : parent.content,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: isDeleted
+                ? TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: cs.onSurfaceVariant.withAlpha(160))
+                : null,
+          ),
+          if (parent.edited && !isDeleted) ...[
+            const SizedBox(height: 4),
+            Text(
+              '(수정됨)',
+              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _ReplyTile extends StatelessWidget {
+class _ReplyTile extends ConsumerWidget {
   final ChatMessage msg;
-  const _ReplyTile({required this.msg});
+  final String roomId;
+  final bool isMine;
+
+  const _ReplyTile({
+    required this.msg,
+    required this.roomId,
+    required this.isMine,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                msg.username,
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _fmtTime(msg.timestamp),
-                style: TextStyle(
-                    fontSize: 11, color: cs.onSurfaceVariant),
-              ),
-            ],
+    final hasActions = isMine && !msg.deleted;
+    return GestureDetector(
+      onLongPress: hasActions ? () => _openMenu(context, ref) : null,
+      onSecondaryTapUp: hasActions
+          ? (details) => _openMenu(context, ref, anchor: details.globalPosition)
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  msg.username,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _fmtTime(msg.timestamp),
+                  style: TextStyle(
+                      fontSize: 11, color: cs.onSurfaceVariant),
+                ),
+                if (msg.edited && !msg.deleted) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '(수정됨)',
+                    style: TextStyle(
+                        fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              msg.deleted ? '삭제된 메시지입니다.' : msg.content,
+              style: msg.deleted
+                  ? TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: cs.onSurfaceVariant.withAlpha(160))
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openMenu(BuildContext context, WidgetRef ref, {Offset? anchor}) {
+    final position = anchor ?? Offset.zero;
+    final items = <PopupMenuEntry<String>>[
+      const PopupMenuItem(
+        value: 'copy',
+        child: Row(children: [
+          Icon(Icons.copy_outlined, size: 18),
+          SizedBox(width: 8),
+          Text('복사'),
+        ]),
+      ),
+      const PopupMenuItem(
+        value: 'edit',
+        child: Row(children: [
+          Icon(Icons.edit_outlined, size: 18),
+          SizedBox(width: 8),
+          Text('수정'),
+        ]),
+      ),
+      if (msg.edited)
+        const PopupMenuItem(
+          value: 'history',
+          child: Row(children: [
+            Icon(Icons.history, size: 18),
+            SizedBox(width: 8),
+            Text('수정 이력'),
+          ]),
+        ),
+      const PopupMenuItem(
+        value: 'delete',
+        child: Row(children: [
+          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+          SizedBox(width: 8),
+          Text('삭제', style: TextStyle(color: Colors.red)),
+        ]),
+      ),
+    ];
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx, position.dy),
+      items: items,
+    ).then((value) {
+      if (!context.mounted || value == null) return;
+      switch (value) {
+        case 'copy':
+          Clipboard.setData(ClipboardData(text: msg.content));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('메시지가 복사되었습니다.'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+          break;
+        case 'edit':
+          _showEditDialog(context, ref);
+          break;
+        case 'history':
+          EditHistorySheet.show(
+            context,
+            roomId: roomId,
+            messageId: msg.effectiveId,
+            currentContent: msg.content,
+          );
+          break;
+        case 'delete':
+          _confirmDelete(context, ref);
+          break;
+      }
+    });
+  }
+
+  void _showEditDialog(BuildContext context, WidgetRef ref) {
+    final ctrl = TextEditingController(text: msg.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('답글 수정'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 5,
+          minLines: 1,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '수정할 내용을 입력하세요',
+            border: OutlineInputBorder(),
           ),
-          const SizedBox(height: 2),
-          Text(msg.content),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newContent = ctrl.text.trim();
+              if (newContent.isEmpty) return;
+              Navigator.of(ctx).pop();
+              final ok = await ref
+                  .read(chatNotifierProvider(roomId).notifier)
+                  .editMessage(roomId, msg.effectiveId, newContent);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('답글 수정에 실패했습니다.')),
+                );
+              }
+            },
+            child: const Text('수정'),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('답글 삭제'),
+        content: const Text('이 답글을 삭제할까요? 되돌릴 수 없습니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final ok = await ref
+        .read(chatNotifierProvider(roomId).notifier)
+        .deleteMessage(roomId, msg.effectiveId);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('답글 삭제에 실패했습니다.')),
+      );
+    }
   }
 
   String _fmtTime(String iso) {

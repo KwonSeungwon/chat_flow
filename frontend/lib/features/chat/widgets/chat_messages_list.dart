@@ -1414,6 +1414,40 @@ class _ChatBubbleState extends State<_ChatBubble> {
               crossAxisAlignment:
                   widget.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                if (widget.msg.forwardedFrom != null && widget.msg.forwardedFrom!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer.withAlpha(160),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.secondary.withAlpha(120),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.forward_outlined,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '전달됨 · ${widget.msg.forwardedFrom!}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (isUrgent)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 3),

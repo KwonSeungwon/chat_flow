@@ -4,6 +4,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.InviteLinkService;
 import com.chatflow.chat.service.ParticipantService;
+import com.chatflow.chat.service.RoomMembershipService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ import java.util.Set;
 public class RoomInviteController {
 
     private final ChatRoomService chatRoomService;
+    private final RoomMembershipService roomMembershipService;
     private final InviteLinkService inviteLinkService;
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
@@ -70,7 +72,7 @@ public class RoomInviteController {
                         .body(ApiResponse.error(targetUsername + "님은 이미 채팅방에 참여 중입니다."));
             }
         }
-        chatRoomService.sendInviteMessage(roomId, inviterName, targetUsername);
+        roomMembershipService.sendInviteMessage(roomId, inviterName, targetUsername);
         return ResponseEntity.ok(ApiResponse.ok(null, "초대 메시지를 보냈습니다."));
     }
 
@@ -138,7 +140,7 @@ public class RoomInviteController {
                     .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
         }
         // Seed membership — invite link is a valid access grant.
-        chatRoomService.addMemberIfAbsent(room.getId(), userId, username);
+        roomMembershipService.addMemberIfAbsent(room.getId(), userId, username);
         Map<String, String> data = new LinkedHashMap<>();
         data.put("roomId", room.getId());
         data.put("roomName", room.getName());

@@ -4,6 +4,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.RoomMembershipService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
 public class RoomMembershipGuard {
 
     private final ChatRoomService chatRoomService;
+    private final RoomMembershipService roomMembershipService;
     private final RoomMemberRepository roomMemberRepository;
 
     /**
@@ -38,7 +40,7 @@ public class RoomMembershipGuard {
         if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
         ChatRoom legacy = chatRoomService.getRoom(roomId).orElse(null);
         if (legacy != null && userId.equals(legacy.getCreatedBy())) {
-            chatRoomService.addMemberIfAbsent(roomId, userId, null, RoomRole.OWNER);
+            roomMembershipService.addMemberIfAbsent(roomId, userId, null, RoomRole.OWNER);
             return null;
         }
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
