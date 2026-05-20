@@ -1,0 +1,85 @@
+name: Deploy to K3s (manual)
+
+# Pulls a service image from GHCR onto the K3s node and rolls out the
+# matching Deployment. Manually triggered to keep deploy intent explicit
+# — develop-build.yml only produces the image; this workflow ships it.
+#
+# The K3s node logs into GHCR itself (sudo k3s ctr login), pulls into
+# containerd, then we kubectl set image to force a fresh rollout against
+# the pinned sha-* tag. The mutable develop-latest tag is *not* used at
+# deploy time so two consecutive deploys with the same image still
+# trigger pod recreation via the sha-* digest.
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   K3S_HOST            — e.g. node.chatflow.ai.kr
+#   K3S_USER            — e.g. ksw
+#   K3S_SSH_KEY         — private key (PEM), no passphrase
+#   K3S_GHCR_USERNAME   — GitHub user with read:packages on this repo's GHCR
+#   K3S_GHCR_TOKEN      — PAT (classic) with read:packages OR a fine-grained token
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        type: choice
+        options:
+          - chat-service
+          - gateway-service
+          - ai-summary-service
+          - search-service
+          - frontend
+        required: true
+      tag:
+        description: 'Image tag (e.g. sha-<full-sha> or develop-latest)'
+        type: string
+        required: true
+        default: 'develop-latest'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/chatflow
+  NAMESPACE: chatflow
+
+jobs:
+  rollout:
+    runs-on: ubuntu-latest
+    environment: k3s-prod
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.K3S_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.K3S_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Pull image into K3s containerd
+        run: |
+          IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
+          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+            "echo '${{ secrets.K3S_GHCR_TOKEN }}' | sudo k3s ctr image pull \
+              --user '${{ secrets.K3S_GHCR_USERNAME }}:${{ secrets.K3S_GHCR_TOKEN }}' \
+              '${IMAGE}'"
+          echo "Pulled ${IMAGE} into k3s containerd"
+
+      - name: Rollout Deployment
+        run: |
+          DEPLOY="chatflow-${{ github.event.inputs.service }}"
+          IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
+          # container name inside the pod matches the service name (Helm convention)
+          CONTAINER="${{ github.event.inputs.service }}"
+          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+            "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+              -n ${{ env.NAMESPACE }} set image deployment/${DEPLOY} \
+              ${CONTAINER}=${IMAGE} --record"
+          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+            "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+              -n ${{ env.NAMESPACE }} rollout status deployment/${DEPLOY} --timeout=5m"
+
+      - name: Verify pod
+        run: |
+          DEPLOY="chatflow-${{ github.event.inputs.service }}"
+          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+            "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+              -n ${{ env.NAMESPACE }} get pods -l app.kubernetes.io/name=${{ github.event.inputs.service }} \
+              -o wide"

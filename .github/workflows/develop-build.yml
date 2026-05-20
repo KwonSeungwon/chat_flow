@@ -1,0 +1,143 @@
+name: Develop Build (GHCR)
+
+# Push of develop → build every service amd64 image and push to GHCR.
+# Replaces the local "buildx --platform linux/amd64 --load" flow that
+# put Docker Desktop on the critical path (see 2026-05-19 hang incident).
+#
+# Tags:
+#   - sha-<short>  (immutable, points to this commit)
+#   - develop-latest (mutable, always tracks the freshest develop build)
+#
+# Deployment to K3s is a separate workflow (deploy-k3s.yml) — keeps the
+# build path side-effect-free and reusable from manual triggers.
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/chatflow
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Tests gate — release.yaml already runs this on release/* and hotfix/*;
+  # ci.yml runs it on every PR/push. We re-run only the test job here to
+  # ensure the image we push corresponds to a green commit, even when the
+  # PR-merge skipped checks.
+  # ---------------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+      - name: Run backend tests
+        run: |
+          chmod +x gradlew
+          ./gradlew test
+
+  # ---------------------------------------------------------------------------
+  # Backend services — matrix build, amd64 only (K3s node arch).
+  # ---------------------------------------------------------------------------
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: [test]
+    strategy:
+      matrix:
+        service: [gateway-service, chat-service, ai-summary-service, search-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build JAR
+        run: |
+          chmod +x gradlew
+          ./gradlew :${{ matrix.service }}:bootJar -x test
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: SERVICE_NAME=${{ matrix.service }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:develop-latest
+
+      - name: Output image refs
+        run: |
+          echo "Pushed:"
+          echo "  ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:sha-${{ github.sha }}"
+          echo "  ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:develop-latest"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Flutter Web inside the frontend/Dockerfile multi-stage.
+  # ---------------------------------------------------------------------------
+  build-frontend:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/frontend:sha-${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/frontend:develop-latest

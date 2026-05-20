@@ -214,33 +214,29 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
 **도메인**: https://app.chatflow.ai.kr (Cloudflare → K3s)  
 **네임스페이스**: `chatflow`  
-**이미지 레지스트리**: `docker.io/chatflow` (pullPolicy: Never — containerd 직접 주입)
+**이미지 레지스트리**: 
+- 신규(권장): `ghcr.io/<owner>/chatflow/<service>` — GH Actions가 push, K3s containerd가 pull
+- 레거시: `docker.io/chatflow` (pullPolicy: Never — `scripts/deploy-k3s.sh`가 ctr import)
 
 > 배포 서버 접속 정보, Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md` (로컬 전용) 참고.
 
-### 전체 배포 (스크립트)
+### 권장 흐름 — GH Actions (로컬 Docker daemon 불필요)
+
+1. **develop 머지 → 자동 빌드**: `.github/workflows/develop-build.yml`이 매 develop push 시 모든 서비스(amd64)를 GHCR로 push. 태그: `sha-<full>`(immutable) + `develop-latest`(mutable).
+2. **수동 배포**: GitHub Actions → "Deploy to K3s (manual)" → service + tag 선택. SSH로 K3s node에서 GHCR pull + `kubectl set image` + rollout 검증.
+3. **프론트엔드 배포 후 Cloudflare 캐시 퍼지** 필수 (아래).
+
+필요 GitHub Secrets (Settings → Secrets and variables → Actions):
+- `K3S_HOST`, `K3S_USER`, `K3S_SSH_KEY` (private key)
+- `K3S_GHCR_USERNAME`, `K3S_GHCR_TOKEN` (read:packages PAT)
+
+### 레거시 흐름 — 로컬 cross-build (Docker daemon 필요)
 ```bash
 ./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
 ./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import
 ./scripts/deploy-k3s.sh helm     # Helm 배포만
 ```
-
-### 개별 서비스 배포 (일부 변경 시)
-```bash
-# 1. 변경된 서비스 이미지 빌드 (amd64 크로스 빌드)
-# 백엔드:
-./gradlew :chat-service:bootJar --no-daemon
-docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=chat-service \
-  -t docker.io/chatflow/chat-service:latest --load .
-
-# 프론트엔드:
-cd frontend && flutter build web --release && cd ..
-docker buildx build --platform linux/amd64 \
-  -t docker.io/chatflow/frontend:latest --load frontend/
-
-# 2~4. 이미지 전송 → K3s import → Helm upgrade
-# 상세 명령은 .claude/CLAUDE.md 참고
-```
+이 흐름은 로컬 Docker Desktop이 응답할 때만 사용 — daemon hang 같은 SPOF 노출됨.
 
 ### 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 ```bash
