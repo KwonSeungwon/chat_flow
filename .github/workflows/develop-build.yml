@@ -19,7 +19,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/chatflow
+  # GHCR requires lowercase repo paths. `github.repository_owner` keeps
+  # the original casing (KwonSeungwon), so the prefix is hardcoded —
+  # release.yaml has the same latent bug but has not been exercised yet.
+  IMAGE_PREFIX: ghcr.io/kwonseungwon/chatflow
 
 permissions:
   contents: read
