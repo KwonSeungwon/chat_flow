@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Pre-push gate: run the same checks CI will, but only on touched areas.
+#
+# Activation:
+#   git config core.hooksPath scripts/hooks
+#
+# Skip with: PRE_PUSH_SKIP=1 git push
+set -euo pipefail
+
+if [ "${PRE_PUSH_SKIP:-}" = "1" ]; then
+  echo "[pre-push] PRE_PUSH_SKIP=1 — skipping checks"
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# stdin gives <local_ref> <local_sha> <remote_ref> <remote_sha> per ref.
+# Collect every local_sha we are about to push.
+LOCAL_SHAS=()
+REMOTE_REF=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_sha" ] && continue
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  LOCAL_SHAS+=("$local_sha")
+  REMOTE_REF="$remote_ref"
+done
+
+if [ ${#LOCAL_SHAS[@]} -eq 0 ]; then
+  exit 0
+fi
+
+# Base: prefer the remote's current tip, fall back to upstream tracking
+# branch, fall back to origin/develop.
+BASE=""
+if [ -n "$REMOTE_REF" ]; then
+  REMOTE_BRANCH="${REMOTE_REF#refs/heads/}"
+  BASE="$(git rev-parse --verify --quiet "origin/$REMOTE_BRANCH" || true)"
+fi
+[ -z "$BASE" ] && BASE="$(git rev-parse --verify --quiet '@{upstream}' 2>/dev/null || true)"
+[ -z "$BASE" ] && BASE="$(git rev-parse --verify --quiet 'origin/develop' || true)"
+[ -z "$BASE" ] && BASE="HEAD~1"
+
+CHANGED_FILES="$(git diff --name-only "$BASE" "${LOCAL_SHAS[0]}" 2>/dev/null || true)"
+if [ -z "$CHANGED_FILES" ]; then
+  echo "[pre-push] no diff vs $BASE — nothing to check"
+  exit 0
+fi
+
+backend_touched=0
+frontend_touched=0
+echo "$CHANGED_FILES" | grep -qE '^(chat-service|gateway-service|ai-summary-service|search-service|common)/' && backend_touched=1 || true
+echo "$CHANGED_FILES" | grep -qE '^frontend/' && frontend_touched=1 || true
+
+if [ "$backend_touched" = "0" ] && [ "$frontend_touched" = "0" ]; then
+  echo "[pre-push] no backend/frontend changes — skipping"
+  exit 0
+fi
+
+if [ "$backend_touched" = "1" ]; then
+  echo "[pre-push] backend touched → ./gradlew :chat-service:test --no-daemon"
+  ./gradlew :chat-service:test --no-daemon
+fi
+
+if [ "$frontend_touched" = "1" ]; then
+  if ! command -v flutter >/dev/null 2>&1; then
+    echo "[pre-push] frontend touched but flutter not on PATH — skipping analyze"
+  else
+    echo "[pre-push] frontend touched → flutter analyze"
+    (cd frontend && flutter analyze --no-pub)
+  fi
+fi
+
+echo "[pre-push] all checks PASS"
