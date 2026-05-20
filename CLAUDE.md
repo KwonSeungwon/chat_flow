@@ -137,6 +137,15 @@ docker buildx build --platform linux/amd64 \
 - **플랫폼 분기**: `kIsWeb` 조건부 로직 (WS URL 파생, APK 다운로드 버튼)
 - **조건부 import**: `apk_downloader.dart` → `dart:html` web/stub 3파일 패턴
 
+### Dev harness scripts
+
+- **`scripts/status.sh`** — 현재 branch / develop 대비 ahead-behind / working tree dirtiness / 마지막 `develop-build.yml` 실행 결과 / TODO 카운트를 한 화면에. 새 세션 시작 시 `/load-context` 다음에 실행하면 컨텍스트가 1초만에 잡힌다.
+- **`scripts/hooks/pre-push`** — touched area에 따라 backend test / flutter analyze를 자동 실행. 활성화:
+  ```bash
+  git config core.hooksPath scripts/hooks
+  ```
+  필요 시 `PRE_PUSH_SKIP=1 git push`로 건너뛸 수 있다.
+
 ### Git Workflow
 
 - **브랜치 전략**: Git Flow (`main`, `develop`, `feature/*`, `release/*`, `hotfix/*`)
