@@ -117,13 +117,26 @@ jobs:
           echo "  ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:develop-latest"
 
   # ---------------------------------------------------------------------------
-  # Frontend — Flutter Web inside the frontend/Dockerfile multi-stage.
+  # Frontend — Dockerfile copies a pre-built build/web, so we run
+  # `flutter build web --release` in the workflow first, then the
+  # docker build is just nginx:alpine + COPY.
   # ---------------------------------------------------------------------------
   build-frontend:
     runs-on: ubuntu-latest
     needs: [test]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter build web
+        working-directory: ./frontend
+        run: |
+          flutter pub get
+          flutter build web --release
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
