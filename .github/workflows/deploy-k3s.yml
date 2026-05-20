@@ -38,7 +38,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/chatflow
+  # GHCR requires lowercase repo paths — keep aligned with develop-build.yml
+  IMAGE_PREFIX: ghcr.io/kwonseungwon/chatflow
   NAMESPACE: chatflow
 
 jobs:
