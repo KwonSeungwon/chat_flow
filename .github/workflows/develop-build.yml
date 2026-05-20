@@ -132,6 +132,18 @@ jobs:
         with:
           channel: stable
 
+      - name: Seed .env asset
+        working-directory: ./frontend
+        # .env is gitignored but declared as a pubspec asset, so it
+        # must exist at build time. The values are non-secret public
+        # endpoints (production app.chatflow.ai.kr) used by native
+        # Android only — web derives the URL from window.location.
+        run: |
+          cat > .env <<'ENV'
+          API_BASE_URL=https://app.chatflow.ai.kr
+          WS_URL=wss://app.chatflow.ai.kr/ws-native
+          ENV
+
       - name: Flutter build web
         working-directory: ./frontend
         run: |
