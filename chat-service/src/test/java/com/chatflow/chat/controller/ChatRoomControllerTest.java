@@ -1,8 +1,10 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
+import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.ChatRoomService;
@@ -32,7 +34,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -56,6 +62,7 @@ class ChatRoomControllerTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private RoomVisibilityService roomVisibilityService;
     @Mock private MessageSenderService messageSenderService;
+    @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks
     private ChatRoomController controller;
@@ -64,6 +71,7 @@ class ChatRoomControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -129,6 +137,7 @@ class ChatRoomControllerTest {
 
         @Test
         void returns_200_when_room_exists() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
             when(chatRoomService.getRoom("r1"))
                     .thenReturn(Optional.of(room("r1", "Test", RoomType.GENERAL, "user-1")));
 
@@ -147,7 +156,21 @@ class ChatRoomControllerTest {
         }
 
         @Test
+        void returns_403_when_not_room_member() throws Exception {
+            doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                    .when(membershipGuard).requireMember("r1", "outsider");
+
+            mockMvc.perform(get("/api/chat/rooms/r1")
+                            .header("X-User-Id", "outsider"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.success").value(false));
+
+            verify(chatRoomService, never()).getRoom(anyString());
+        }
+
+        @Test
         void returns_404_when_room_missing() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r-gone", "user-1");
             when(chatRoomService.getRoom("r-gone")).thenReturn(Optional.empty());
 
             mockMvc.perform(get("/api/chat/rooms/r-gone")
