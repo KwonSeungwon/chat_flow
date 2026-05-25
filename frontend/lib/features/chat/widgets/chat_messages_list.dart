@@ -14,6 +14,7 @@ import '../../../shared/models/patient_card.dart';
 import '../admin/widgets/message_report_dialog.dart';
 import 'bubbles/ai_summary_bubble.dart';
 import 'bubbles/avatar.dart';
+import 'bubbles/hover_reaction_bar.dart';
 import 'bubbles/system_bubble.dart';
 import 'dividers/date_divider.dart';
 import 'dividers/unread_divider.dart';
@@ -1622,7 +1623,7 @@ class _ChatBubbleState extends State<_ChatBubble> {
               top: -32,
               right: widget.isMine ? 0 : null,
               left: widget.isMine ? null : 0,
-              child: _HoverReactionBar(
+              child: HoverReactionBar(
                 reactions: _quickReactions,
                 onReaction: widget.onReaction!,
               ),
@@ -1636,36 +1637,6 @@ class _ChatBubbleState extends State<_ChatBubble> {
 // ─────────────────────────────────────────────────────────────────
 // Desktop hover reaction bar (Slack/Discord style)
 // ─────────────────────────────────────────────────────────────────
-class _HoverReactionBar extends StatelessWidget {
-  final List<String> reactions;
-  final void Function(String emoji) onReaction;
-
-  const _HoverReactionBar({required this.reactions, required this.onReaction});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(30), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: reactions.map((emoji) => GestureDetector(
-          onTap: () => onReaction(emoji),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: Text(emoji, style: const TextStyle(fontSize: 18)),
-          ),
-        )).toList(),
-      ),
-    );
-  }
-}
-
 // SBAR structured card
 // ─────────────────────────────────────────────────────────────────
 class _SbarCardWidget extends StatelessWidget {
