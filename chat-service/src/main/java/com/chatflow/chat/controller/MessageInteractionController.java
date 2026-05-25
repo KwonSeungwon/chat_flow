@@ -115,7 +115,9 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         String messageId = body.get("messageId");
         if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
-        return ResponseEntity.ok(ApiResponse.ok(messagePinService.pinMessage(roomId, messageId)));
+        Result<Void, ChatErrorCode> result = messagePinService.pinMessage(roomId, messageId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(true));
     }
 
     @RequireMember
@@ -123,7 +125,9 @@ public class MessageInteractionController {
     public ResponseEntity<?> unpinMessage(
             @PathVariable String roomId,
             @AuthenticatedUser String userId) {
-        return ResponseEntity.ok(ApiResponse.ok(messagePinService.unpinMessage(roomId)));
+        Result<Void, ChatErrorCode> result = messagePinService.unpinMessage(roomId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(true));
     }
 
     @GetMapping("/link-preview")

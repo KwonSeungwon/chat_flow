@@ -5,6 +5,8 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -87,9 +90,9 @@ class MessagePinServiceTest {
             when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
+            Result<Void, ChatErrorCode> result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
 
             // Capture saved room and assert pinnedMessageId
             ArgumentCaptor<ChatRoom> roomCaptor = ArgumentCaptor.forClass(ChatRoom.class);
@@ -111,9 +114,10 @@ class MessagePinServiceTest {
             when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
+            Result<Void, ChatErrorCode> result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
 
-            assertFalse(result);
+            assertThat(result.isFailure()).isTrue();
+            assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
             verify(chatRoomRepository, never()).save(any());
         }
 
@@ -125,9 +129,10 @@ class MessagePinServiceTest {
             when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
+            Result<Void, ChatErrorCode> result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
 
-            assertFalse(result);
+            assertThat(result.isFailure()).isTrue();
+            assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
             verify(chatRoomRepository, never()).save(any());
         }
 
@@ -138,9 +143,10 @@ class MessagePinServiceTest {
             when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.empty());
 
-            boolean result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
+            Result<Void, ChatErrorCode> result = messagePinService.pinMessage(ROOM_ID, MESSAGE_ID);
 
-            assertFalse(result);
+            assertThat(result.isFailure()).isTrue();
+            assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
             verify(chatRoomRepository, never()).save(any());
         }
     }
@@ -161,9 +167,9 @@ class MessagePinServiceTest {
             when(chatMessageRepository.findById(MESSAGE_ID))
                     .thenReturn(Optional.of(sampleMessage(MESSAGE_ID, ROOM_ID, false)));
 
-            boolean result = messagePinService.unpinMessage(ROOM_ID);
+            Result<Void, ChatErrorCode> result = messagePinService.unpinMessage(ROOM_ID);
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
 
             // Capture saved room and assert pinnedMessageId cleared
             ArgumentCaptor<ChatRoom> roomCaptor = ArgumentCaptor.forClass(ChatRoom.class);
