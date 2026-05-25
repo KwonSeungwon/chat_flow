@@ -1,12 +1,14 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
+import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.chat.service.UnreadCountService;
-import com.chatflow.common.dto.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,9 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -28,7 +28,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +59,8 @@ class RoomReadStateControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -109,20 +114,27 @@ class RoomReadStateControllerTest {
     class Readers {
 
         @Test
-        void returns_403_when_guard_blocks() throws Exception {
-            ResponseEntity<ApiResponse<?>> forbidden = ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("방 멤버가 아닙니다."));
-            when(membershipGuard.requireMember("r1", "outsider")).thenReturn(forbidden);
+        void returns_401_when_no_userId_header() throws Exception {
+            mockMvc.perform(get("/api/chat/rooms/r1/readers"))
+                    .andExpect(status().isUnauthorized());
+            verify(readReceiptService, never()).getRoomReadPositions(anyString());
+        }
+
+        @Test
+        void returns_403_when_not_room_member() throws Exception {
+            doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                    .when(membershipGuard).requireMember("r1", "outsider");
 
             mockMvc.perform(get("/api/chat/rooms/r1/readers")
                             .header("X-User-Id", "outsider"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
+            verify(readReceiptService, never()).getRoomReadPositions(anyString());
         }
 
         @Test
         void returns_200_with_userId_to_lastReadMessageId_map_when_member() throws Exception {
-            when(membershipGuard.requireMember("r1", "user-1")).thenReturn(null);
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
             when(readReceiptService.getRoomReadPositions("r1"))
                     .thenReturn(Map.of("user-1", "msg-42", "user-2", "msg-40"));
 
@@ -150,8 +162,40 @@ class RoomReadStateControllerTest {
         }
 
         @Test
+        void putLastRead_returns_401_when_no_userId_header() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("lastReadMessageId", "msg-99"));
+
+            mockMvc.perform(put("/api/chat/rooms/r1/last-read")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isUnauthorized());
+            verify(readReceiptService, never()).markRead(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void putLastRead_returns_403_when_not_room_member() throws Exception {
+            doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                    .when(membershipGuard).requireMember("r1", "outsider");
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("lastReadMessageId", "msg-99"));
+
+            mockMvc.perform(put("/api/chat/rooms/r1/last-read")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "outsider")
+                            .header("X-Username", "eve"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.success").value(false));
+            verify(readReceiptService, never()).markRead(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
         void putLastRead_calls_markRead_when_lastReadMessageId_provided() throws Exception {
-            when(membershipGuard.requireMember("r1", "user-1")).thenReturn(null);
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
 
             String body = objectMapper.writeValueAsString(
                     Map.of("lastReadMessageId", "msg-99"));
@@ -169,7 +213,7 @@ class RoomReadStateControllerTest {
 
         @Test
         void putLastRead_calls_updateReadAt_only_when_lastReadMessageId_blank() throws Exception {
-            when(membershipGuard.requireMember("r1", "user-1")).thenReturn(null);
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
 
             String body = objectMapper.writeValueAsString(
                     Map.of("lastReadMessageId", ""));

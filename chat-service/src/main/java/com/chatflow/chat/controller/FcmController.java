@@ -1,8 +1,7 @@
 package com.chatflow.chat.controller;
 
-import com.chatflow.chat.entity.ChatRoom;
-import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.service.FcmNotificationService;
 import com.chatflow.common.dto.ApiResponse;
 import jakarta.validation.Valid;
@@ -12,7 +11,6 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,32 +25,14 @@ import org.springframework.web.bind.annotation.*;
 public class FcmController {
 
     private final FcmNotificationService fcmNotificationService;
-    private final RoomMemberRepository roomMemberRepository;
-    private final ChatRoomRepository chatRoomRepository;
-
-    /**
-     * Same membership semantics as the room controllers: 401 if no userId,
-     * 403 if not a member (with legacy createdBy bridge for rooms created
-     * before the room_members seeding patch landed).
-     */
-    private ResponseEntity<ApiResponse<Void>> requireMember(String roomId, String userId) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
-        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
-        ChatRoom room = chatRoomRepository.findById(roomId).orElse(null);
-        if (room != null && userId.equals(room.getCreatedBy())) return null;
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("방 멤버가 아닙니다."));
-    }
+    private final RoomMembershipGuard membershipGuard;
 
     @PostMapping("/subscribe")
+    @RequireAuth
     public ResponseEntity<ApiResponse<Void>> subscribe(
             @Valid @RequestBody SubscribeRequest req,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        ResponseEntity<ApiResponse<Void>> gate = requireMember(req.getRoomId(), userId);
-        if (gate != null) return gate;
+            @AuthenticatedUser String userId) {
+        membershipGuard.requireMember(req.getRoomId(), userId);
         fcmNotificationService.subscribeToRoom(req.getToken(), req.getRoomId());
         return ResponseEntity.ok(ApiResponse.ok(null));
     }

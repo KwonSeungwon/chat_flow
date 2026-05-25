@@ -1,9 +1,10 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
-import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
@@ -22,6 +23,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,8 +42,7 @@ class MessageInteractionControllerThreadTest {
     @Mock private MessagePinService messagePinService;
     @Mock private LinkPreviewService linkPreviewService;
     @Mock private MessageThreadService messageThreadService;
-    @Mock private RoomMemberRepository roomMemberRepository;
-    @Mock private ChatRoomRepository chatRoomRepository;
+    @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks
     private MessageInteractionController controller;
@@ -47,13 +50,15 @@ class MessageInteractionControllerThreadTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+            .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+            .addInterceptors(new AuthInterceptor(membershipGuard))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     }
 
     @Test
     void getReplies_returns_list_with_entity_only_fields() throws Exception {
-        when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "u1")).thenReturn(true);
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
         ChatMessageEntity reply = ChatMessageEntity.builder()
             .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
             .content("got it").type(ChatMessage.MessageType.CHAT.name())
@@ -77,7 +82,7 @@ class MessageInteractionControllerThreadTest {
 
     @Test
     void getReplies_empty_returns_empty_list() throws Exception {
-        when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "u1")).thenReturn(true);
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
         when(messageThreadService.findReplies("room-1", "p1")).thenReturn(List.of());
 
         mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
@@ -92,19 +97,17 @@ class MessageInteractionControllerThreadTest {
     void getReplies_returns_401_when_user_id_missing() throws Exception {
         mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies"))
             .andExpect(status().isUnauthorized());
-        verify(messageThreadService, never()).findReplies(org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
+        verify(messageThreadService, never()).findReplies(anyString(), anyString());
     }
 
     @Test
     void getReplies_returns_403_when_not_room_member() throws Exception {
-        when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "u-outsider"))
-                .thenReturn(false);
+        doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                .when(membershipGuard).requireMember("room-1", "u-outsider");
 
         mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
                 .header("X-User-Id", "u-outsider"))
             .andExpect(status().isForbidden());
-        verify(messageThreadService, never()).findReplies(org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString());
+        verify(messageThreadService, never()).findReplies(anyString(), anyString());
     }
 }
