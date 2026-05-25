@@ -1,5 +1,8 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
+import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.InviteLinkService;
@@ -33,13 +36,13 @@ public class RoomInviteController {
     private final InviteLinkService inviteLinkService;
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
-    private final RoomMembershipGuard membershipGuard;
 
+    @RequireAuth
     @PostMapping("/{roomId}/invite")
     public ResponseEntity<ApiResponse<Void>> inviteUser(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String inviterId,
+            @AuthenticatedUser String inviterId,
             @RequestHeader(value = "X-Username", required = false) String inviterName) {
         // 채팅방 존재 여부 확인
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
@@ -80,15 +83,11 @@ public class RoomInviteController {
      * 초대 링크 생성. 24시간 유효한 토큰을 발급하고 초대 URL을 반환한다.
      * POST /api/chat/rooms/{roomId}/invite-link
      */
+    @RequireMember
     @PostMapping("/{roomId}/invite-link")
     public ResponseEntity<?> createInviteLink(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        // Only members may generate an invite token — previously this was
-        // open to any authenticated user who knew the roomId, which let
-        // outsiders mint join tokens for private rooms.
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
+            @AuthenticatedUser String userId) {
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -111,15 +110,12 @@ public class RoomInviteController {
      * POST /api/chat/rooms/join-by-invite
      * Body: {"token": "uuid"}
      */
+    @RequireAuth
     @PostMapping("/join-by-invite")
     public ResponseEntity<ApiResponse<Map<String, String>>> joinByInvite(
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
         String token = body.get("token");
         if (token == null || token.isBlank()) {
             return ResponseEntity.badRequest()
