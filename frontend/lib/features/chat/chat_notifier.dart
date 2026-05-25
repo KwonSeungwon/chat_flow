@@ -17,6 +17,7 @@ import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 import 'chat_rooms_provider.dart';
 import 'helpers/offline_message_queue.dart';
+import 'internal/read_state_helper.dart';
 import 'internal/stomp_message_dispatcher.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
@@ -62,6 +63,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   String? _currentRoomId;
   Timer? _quickReplyDebounce;
   late final StompMessageDispatcher _dispatcher;
+  late final ReadStateHelper _readState;
 
   ChatNotifier(
     this._dioClient, {
@@ -74,13 +76,24 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         _username = username,
         _userId = userId,
         super(const ChatMessagesState()) {
+    _readState = ReadStateHelper(
+      getCurrentState: () => state,
+      setState: (s) => state = s,
+      mounted: () => mounted,
+      dioClient: _dioClient,
+      userId: _userId,
+      readUnreadCounts: () =>
+          Map<String, int>.from(_ref.read(roomUnreadCountsProvider)),
+      writeUnreadCounts: (counts) =>
+          _ref.read(roomUnreadCountsProvider.notifier).state = counts,
+    );
     _dispatcher = StompMessageDispatcher(
       getCurrentState: () => state,
       setState: (s) => state = s,
       mounted: () => mounted,
       userId: _userId,
       currentRoomId: () => _currentRoomId,
-      computeReadCounts: _computeReadCounts,
+      computeReadCounts: _readState.computeReadCounts,
       onIncomingChatMessage: _afterChatMessageReceived,
       onPinChanged: () => _ref.read(chatRoomsProvider.notifier).fetchRooms(),
       onSendingConfirmed: (localId) {
@@ -105,7 +118,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     );
 
     // Fetch initial read positions for this room (non-blocking, best effort)
-    _fetchInitialReadPositions(roomId);
+    _readState.fetchInitialReadPositions(roomId);
 
     // Load history
     try {
@@ -155,7 +168,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     await _fetchSummaries(roomId);
 
     // Fetch last-read position and compute unread count for this session
-    await _fetchLastReadAndUpdateUnread(roomId);
+    await _readState.fetchLastReadAndUpdateUnread(roomId);
 
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
@@ -189,18 +202,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           }
         }
       },
-      onReadReceipt: (positions) {
-        if (!mounted) return;
-        // 본인 id 제외한 다른 참여자의 포지션만 유지 (본인 메시지에 본인이 카운트되지 않도록)
-        final filtered = <String, String>{};
-        positions.forEach((uid, msgId) {
-          if (uid != _userId && msgId.isNotEmpty) filtered[uid] = msgId;
-        });
-        state = state.copyWith(
-          readPositions: filtered,
-          readCounts: _computeReadCounts(state.messages, filtered),
-        );
-      },
+      onReadReceipt: (positions) => _readState.handleReadReceipt(positions),
       onTyping: (username, {bool stop = false}) {
         if (!mounted) return;
         _onTypingReceived(username, stop: stop);
@@ -462,35 +464,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  Future<void> _fetchLastReadAndUpdateUnread(String roomId) async {
-    try {
-      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/last-read');
-      final data = resp.data;
-      final lastReadId = data is Map
-          ? ((data['data'] as Map?)?['lastReadMessageId']?.toString() ?? '')
-          : '';
-      if (!mounted) return;
-
-      // Find how many CHAT messages are after the lastRead position (exclude JOIN/LEAVE/AI_SUMMARY)
-      int unreadCount = 0;
-      if (lastReadId.isNotEmpty) {
-        final chatMsgs = state.messages.where((m) => m.type == 'CHAT').toList();
-        final idx = chatMsgs.indexWhere((m) => m.effectiveId == lastReadId);
-        if (idx >= 0 && idx < chatMsgs.length - 1) {
-          unreadCount = chatMsgs.length - idx - 1;
-        }
-        state = state.copyWith(lastReadMessageId: lastReadId);
-      }
-
-      // Update global unread counts map
-      final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
-      current[roomId] = unreadCount;
-      _ref.read(roomUnreadCountsProvider.notifier).state = current;
-    } catch (_) {
-      // Non-critical — best effort
-    }
-  }
-
   /// Number of replies in the currently loaded message buffer for a given
   /// parent. Used to render the reply chip on parent messages — approximate
   /// (only counts what's loaded). The thread panel fetches the authoritative
@@ -515,28 +488,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   /// Called when user enters a room. Clears local unread count and persists last-read position.
-  /// 메시지 미로드 상태에서도 서버 readAt을 NOW로 갱신해야 sidebar timer 폴링이 count를 덮어쓰지 않음.
-  void markRoomRead(String roomId) {
-    final current = Map<String, int>.from(_ref.read(roomUnreadCountsProvider));
-    current[roomId] = 0;
-    _ref.read(roomUnreadCountsProvider.notifier).state = current;
-
-    // 항상 서버에 readAt을 갱신 — 메시지가 아직 로드되지 않았어도 빈 lastReadMessageId로 호출
-    final chatMsgs = state.messages.where((m) => m.type == 'CHAT').toList();
-    final lastReadId = chatMsgs.isNotEmpty ? chatMsgs.last.effectiveId : '';
-    _persistLastRead(roomId, lastReadId);
-  }
-
-  Future<void> _persistLastRead(String roomId, String lastReadMessageId) async {
-    try {
-      await _dioClient.dio.put(
-        '/api/chat/rooms/$roomId/last-read',
-        data: {'lastReadMessageId': lastReadMessageId},
-      );
-    } catch (_) {
-      // Best-effort — failure must not interrupt room viewing
-    }
-  }
+  void markRoomRead(String roomId) => _readState.markRoomRead(roomId);
 
   Future<String> requestSummary(String roomId) async {
     state = state.copyWith(isSummaryLoading: true);
@@ -704,29 +656,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     );
   }
 
-  Future<void> _fetchInitialReadPositions(String roomId) async {
-    try {
-      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/readers');
-      final data = resp.data;
-      if (data is Map && data['data'] is Map) {
-        final raw = data['data'] as Map;
-        final positions = <String, String>{};
-        raw.forEach((k, v) {
-          final uid = k.toString();
-          final mid = v?.toString() ?? '';
-          if (uid != _userId && mid.isNotEmpty) positions[uid] = mid;
-        });
-        if (!mounted) return;
-        state = state.copyWith(
-          readPositions: positions,
-          readCounts: _computeReadCounts(state.messages, positions),
-        );
-      }
-    } catch (_) {
-      // best-effort
-    }
-  }
-
   void sendPatientCard(String roomId, PatientCard card) {
     _stompService.sendMessage({
       'chatRoomId': roomId,
@@ -850,37 +779,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         state = state.copyWith(typingUsers: updated);
       },
     );
-  }
-
-  /// readPositions(userId → lastReadMessageId)와 messages 타임라인으로부터
-  /// 메시지별 readCount 맵을 계산. messageId가 특정 메시지 이후(또는 동일)면 해당 사용자는 그 메시지를 읽은 것.
-  Map<String, int> _computeReadCounts(
-      List<ChatMessage> messages, Map<String, String> positions) {
-    if (messages.isEmpty || positions.isEmpty) return const {};
-    final indexById = <String, int>{};
-    for (int i = 0; i < messages.length; i++) {
-      final id = messages[i].effectiveId;
-      if (id.isNotEmpty) indexById[id] = i;
-    }
-    // 각 사용자의 마지막 읽은 메시지 인덱스
-    final userReadIndexes = <int>[];
-    positions.forEach((_, msgId) {
-      final idx = indexById[msgId];
-      if (idx != null) userReadIndexes.add(idx);
-    });
-    if (userReadIndexes.isEmpty) return const {};
-    // 메시지 i에 대해 readIndex >= i 인 사용자 수를 계산
-    final counts = <String, int>{};
-    for (int i = 0; i < messages.length; i++) {
-      final id = messages[i].effectiveId;
-      if (id.isEmpty) continue;
-      int c = 0;
-      for (final idx in userReadIndexes) {
-        if (idx >= i) c++;
-      }
-      if (c > 0) counts[id] = c;
-    }
-    return counts;
   }
 
   void disconnect() {
