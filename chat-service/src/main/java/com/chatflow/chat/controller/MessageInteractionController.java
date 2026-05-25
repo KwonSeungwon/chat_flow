@@ -132,10 +132,9 @@ public class MessageInteractionController {
     }
 
     @GetMapping("/link-preview")
-    public ResponseEntity<ApiResponse<Map<String, String>>> linkPreview(@RequestParam String url) {
-        if (url == null || url.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("url이 필요합니다."));
-        }
-        return ResponseEntity.ok(ApiResponse.ok(linkPreviewService.fetch(url)));
+    public ResponseEntity<?> linkPreview(@RequestParam String url) {
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
 }

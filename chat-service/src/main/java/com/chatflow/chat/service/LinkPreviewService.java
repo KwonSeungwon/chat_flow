@@ -1,5 +1,7 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -85,13 +87,16 @@ public class LinkPreviewService {
         }
     }
 
-    public Map<String, String> fetch(String url) {
+    public Result<Map<String, String>, ChatErrorCode> fetch(String url) {
+        if (url == null || url.isBlank()) {
+            return Result.err(ChatErrorCode.INVALID_INPUT, "url이 필요합니다.");
+        }
         Map<String, String> result = new LinkedHashMap<>();
         String cacheKey = CACHE_PREFIX + (url.length() > 200 ? url.substring(0, 200) : url);
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             try {
-                return objectMapper.readValue(cached, new TypeReference<Map<String, String>>() {});
+                return Result.ok(objectMapper.readValue(cached, new TypeReference<Map<String, String>>() {}));
             } catch (Exception e) {
                 log.debug("Cache parse failed, refetching: {}", e.getMessage());
             }
@@ -134,8 +139,9 @@ public class LinkPreviewService {
             }
         } catch (Exception e) {
             log.debug("Link preview fetch failed: {}", e.getMessage());
+            return Result.err(ChatErrorCode.INTERNAL_ERROR, "링크 미리보기를 불러올 수 없습니다.");
         }
-        return result;
+        return Result.ok(result);
     }
 
     private void extractOg(String html, String property, Map<String, String> result, String key) {

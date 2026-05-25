@@ -6,6 +6,8 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.InviteLinkService;
 import com.chatflow.chat.service.ParticipantService;
@@ -269,7 +271,8 @@ class RoomInviteControllerTest {
 
         @Test
         void _410_when_token_expired() throws Exception {
-            when(inviteLinkService.resolveToken("tok-expired")).thenReturn(null);
+            when(inviteLinkService.resolveToken("tok-expired"))
+                    .thenReturn(Result.err(ChatErrorCode.GONE, "초대 링크가 만료되었거나 유효하지 않습니다."));
 
             String body = objectMapper.writeValueAsString(
                     Map.of("token", "tok-expired"));
@@ -285,7 +288,7 @@ class RoomInviteControllerTest {
 
         @Test
         void _400_when_room_full() throws Exception {
-            when(inviteLinkService.resolveToken("tok-abc")).thenReturn("r1");
+            when(inviteLinkService.resolveToken("tok-abc")).thenReturn(Result.ok("r1"));
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
             when(participantService.isRoomFull("r1")).thenReturn(true);
 
@@ -303,7 +306,7 @@ class RoomInviteControllerTest {
 
         @Test
         void _200_and_addMemberIfAbsent_called_on_success() throws Exception {
-            when(inviteLinkService.resolveToken("tok-abc")).thenReturn("r1");
+            when(inviteLinkService.resolveToken("tok-abc")).thenReturn(Result.ok("r1"));
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
             when(participantService.isRoomFull("r1")).thenReturn(false);
 
