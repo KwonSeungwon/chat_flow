@@ -35,7 +35,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (member != null) {
             String roomId = pathVar(request, member.pathVar());
             if (roomId == null) {
-                throw new IllegalStateException(
+                throw new MissingRoomPathVariableException(
                         "@RequireMember on " + hm.getMethod()
                                 + " but no '" + member.pathVar() + "' path variable resolved");
             }
