@@ -8,6 +8,9 @@ import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.InviteLinkService;
 import com.chatflow.chat.service.ParticipantService;
 import com.chatflow.chat.service.RoomMembershipService;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.ErrorResponses;
+import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -112,7 +115,7 @@ public class RoomInviteController {
      */
     @RequireAuth
     @PostMapping("/join-by-invite")
-    public ResponseEntity<ApiResponse<Map<String, String>>> joinByInvite(
+    public ResponseEntity<?> joinByInvite(
             @RequestBody Map<String, String> body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
@@ -121,11 +124,11 @@ public class RoomInviteController {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("token이 필요합니다."));
         }
-        String roomId = inviteLinkService.resolveToken(token);
-        if (roomId == null) {
-            return ResponseEntity.status(HttpStatus.GONE)
-                    .body(ApiResponse.error("초대 링크가 만료되었거나 유효하지 않습니다."));
+        Result<String, ChatErrorCode> resolved = inviteLinkService.resolveToken(token);
+        if (resolved.isFailure()) {
+            return ErrorResponses.from(resolved);
         }
+        String roomId = resolved.value();
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
