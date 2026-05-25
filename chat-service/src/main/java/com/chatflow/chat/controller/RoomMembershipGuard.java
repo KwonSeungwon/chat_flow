@@ -2,13 +2,12 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.exception.ForbiddenException;
+import com.chatflow.chat.exception.UnauthorizedException;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.RoomMembershipService;
-import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,21 +28,24 @@ public class RoomMembershipGuard {
     private final RoomMemberRepository roomMemberRepository;
 
     /**
-     * Returns null when the caller is authorized, otherwise the failure
-     * ResponseEntity (401 if unauthenticated, 403 if not a member).
+     * Asserts the caller is authenticated AND a member of the room.
+     * Throws UnauthorizedException (401) if userId is missing/blank,
+     * ForbiddenException (403) if the caller is not a member.
+     *
+     * Legacy bridge: room.createdBy == userId is accepted as membership, and
+     * the missing room_members row is backfilled as OWNER to preserve
+     * moderation features for pre-seed creators.
      */
-    public ResponseEntity<ApiResponse<?>> requireMember(String roomId, String userId) {
+    public void requireMember(String roomId, String userId) {
         if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
+            throw new UnauthorizedException("인증이 필요합니다.");
         }
-        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return null;
+        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
         ChatRoom legacy = chatRoomService.getRoom(roomId).orElse(null);
         if (legacy != null && userId.equals(legacy.getCreatedBy())) {
             roomMembershipService.addMemberIfAbsent(roomId, userId, null, RoomRole.OWNER);
-            return null;
+            return;
         }
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("방 멤버가 아닙니다."));
+        throw new ForbiddenException("방 멤버가 아닙니다.");
     }
 }
