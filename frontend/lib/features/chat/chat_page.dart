@@ -25,6 +25,7 @@ import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
+import 'widgets/profile_avatar.dart';
 import 'admin/widgets/room_members_sheet.dart';
 import 'admin/widgets/moderator_queue_sheet.dart';
 import 'admin/admin_event_listener.dart';

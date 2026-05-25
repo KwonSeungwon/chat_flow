@@ -6,35 +6,9 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/theme/font_scale_provider.dart';
 import '../../../core/utils/url_helper.dart';
 import '../../auth/auth_provider.dart';
-import '../dialogs/change_password_dialog.dart';
+import '../widgets/profile_avatar.dart';
+import 'change_password_dialog.dart';
 import 'bookmarks_dialog.dart';
-
-/// Reusable profile avatar widget used by both [showProfileDialog] and [ChatPage].
-class ProfileAvatar extends StatelessWidget {
-  final String? url;
-  final double radius;
-  const ProfileAvatar({super.key, required this.url, required this.radius});
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-      child: ClipOval(
-        child: (url != null && url!.isNotEmpty)
-            ? Image.network(
-                url!,
-                width: radius * 2,
-                height: radius * 2,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Icon(Icons.person, size: radius),
-              )
-            : Icon(Icons.person, size: radius),
-      ),
-    );
-  }
-}
 
 Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
   try {
