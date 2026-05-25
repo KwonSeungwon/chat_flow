@@ -24,7 +24,7 @@ import 'dialogs/room_settings_dialog.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
-import 'widgets/create_room_dialog.dart';
+import 'widgets/lobby_placeholder.dart';
 import 'widgets/participant_badge.dart';
 import 'widgets/profile_avatar.dart';
 import 'admin/widgets/room_members_sheet.dart';
@@ -437,7 +437,7 @@ class ChatPage extends ConsumerWidget {
                         username: auth.username,
                         scrollToMessageId: scrollToMessageId,
                       )
-                    : const _LobbyPlaceholder(),
+                    : const LobbyPlaceholder(),
               ),
             ),
           ),
@@ -940,72 +940,6 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
             child: const Text('수정'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Lobby placeholder — shown when no room is selected
-// ---------------------------------------------------------------------------
-class _LobbyPlaceholder extends StatelessWidget {
-  const _LobbyPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primary.withAlpha(30),
-                    AppColors.secondary.withAlpha(20),
-                  ],
-                ),
-                border: Border.all(
-                    color: AppColors.primary.withAlpha(60), width: 1),
-              ),
-              child: const Icon(Icons.forum_outlined,
-                  size: 40, color: AppColors.primary),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '채팅을 시작하세요',
-              style: TextStyle(
-                color: colorScheme.onSurface,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '채팅방을 선택하거나 새로 만들어\n대화를 시작할 수 있습니다',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: colorScheme.onSurfaceVariant, fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: () => showDialog(
-                context: context,
-                builder: (_) => const CreateRoomDialog(),
-              ),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('새 채팅방 만들기'),
-            ),
-          ],
-        ),
       ),
     );
   }
