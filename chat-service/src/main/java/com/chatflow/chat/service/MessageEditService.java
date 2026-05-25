@@ -55,13 +55,14 @@ public class MessageEditService {
     }
 
     @Transactional
-    public boolean editMessage(String messageId, String requestingUserId, String newContent) {
-        return chatMessageRepository.findById(messageId).map(entity -> {
+    public Result<Void, ChatErrorCode> editMessage(String messageId, String requestingUserId, String newContent) {
+        return chatMessageRepository.findById(messageId).<Result<Void, ChatErrorCode>>map(entity -> {
             if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
-                return false;
+                return Result.<Void, ChatErrorCode>err(ChatErrorCode.FORBIDDEN, "수정 권한이 없습니다.");
             }
-            if (entity.isDeleted()) return false;
-            // mutedUntil == now ⇒ 만료 (mute 종료 순간부터 편집 허용)
+            if (entity.isDeleted()) {
+                return Result.<Void, ChatErrorCode>err(ChatErrorCode.DELETED, "삭제된 메시지는 수정할 수 없습니다.");
+            }
             RoomMemberEntity member = roomMemberRepository
                     .findByRoomIdAndUserId(entity.getChatRoomId(), requestingUserId)
                     .orElse(null);
@@ -69,7 +70,7 @@ public class MessageEditService {
                     && member.getMutedUntil().isAfter(LocalDateTime.now())) {
                 log.warn("Muted user {} tried to edit message {} in room {}",
                         requestingUserId, messageId, entity.getChatRoomId());
-                return false;
+                return Result.<Void, ChatErrorCode>err(ChatErrorCode.MUTED, "음소거 상태입니다.");
             }
             // Record the OLD content into history BEFORE overwriting. Store
             // the decrypted form so the viewer can render it directly without
@@ -100,7 +101,7 @@ public class MessageEditService {
             broadcast.put("editedAt", entity.getEditedAt().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
             log.info("Message edited: {} by user {}", messageId, requestingUserId);
-            return true;
-        }).orElse(false);
+            return Result.<ChatErrorCode>ok();
+        }).orElse(Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));
     }
 }

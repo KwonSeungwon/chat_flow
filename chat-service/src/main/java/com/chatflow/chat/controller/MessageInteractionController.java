@@ -16,7 +16,6 @@ import com.chatflow.chat.service.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,7 +50,7 @@ public class MessageInteractionController {
 
     @RequireAuth
     @PutMapping("/{roomId}/messages/{messageId}")
-    public ResponseEntity<ApiResponse<Void>> editMessage(
+    public ResponseEntity<ApiResponse<?>> editMessage(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @RequestBody Map<String, String> body,
@@ -63,10 +62,9 @@ public class MessageInteractionController {
         if (newContent.length() > 10_000) {
             return ResponseEntity.badRequest().body(ApiResponse.error("메시지는 10,000자를 초과할 수 없습니다."));
         }
-        boolean edited = messageEditService.editMessage(messageId, userId, newContent.trim());
-        if (!edited) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("수정 권한이 없거나 메시지를 찾을 수 없습니다."));
+        Result<Void, ChatErrorCode> result = messageEditService.editMessage(messageId, userId, newContent.trim());
+        if (result.isFailure()) {
+            return ErrorResponses.from(result);
         }
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 수정되었습니다."));
     }

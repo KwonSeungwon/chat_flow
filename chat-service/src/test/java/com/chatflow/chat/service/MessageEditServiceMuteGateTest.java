@@ -5,6 +5,8 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.chatflow.common.util.MessageEncryptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,8 +20,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -67,15 +68,16 @@ class MessageEditServiceMuteGateTest {
     }
 
     @Test
-    @DisplayName("mute 활성 상태면 editMessage가 false 반환 + 저장 안 됨")
+    @DisplayName("mute 활성 상태면 editMessage가 MUTED 반환 + 저장 안 됨")
     void editMessage_muted_isRejected() {
         when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                 .thenReturn(Optional.of(member(LocalDateTime.now().plusMinutes(10))));
 
-        boolean result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
+        Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
 
-        assertFalse(result);
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.error()).isEqualTo(ChatErrorCode.MUTED);
         verify(chatMessageRepository, never()).save(any());
         verify(messagingTemplate, never()).convertAndSend(anyString(), (Object) any());
     }
@@ -88,9 +90,9 @@ class MessageEditServiceMuteGateTest {
                 .thenReturn(Optional.of(member(LocalDateTime.now().minusMinutes(1))));
         when(messageEncryptor.isEnabled()).thenReturn(false);
 
-        boolean result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
+        Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
 
-        assertTrue(result);
+        assertThat(result.isSuccess()).isTrue();
         verify(chatMessageRepository).save(msg);
     }
 
@@ -102,9 +104,9 @@ class MessageEditServiceMuteGateTest {
                 .thenReturn(Optional.of(member(null)));
         when(messageEncryptor.isEnabled()).thenReturn(false);
 
-        boolean result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
+        Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
 
-        assertTrue(result);
+        assertThat(result.isSuccess()).isTrue();
         verify(chatMessageRepository).save(msg);
     }
 
@@ -116,8 +118,8 @@ class MessageEditServiceMuteGateTest {
                 .thenReturn(Optional.empty());
         when(messageEncryptor.isEnabled()).thenReturn(false);
 
-        boolean result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
+        Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
 
-        assertTrue(result);
+        assertThat(result.isSuccess()).isTrue();
     }
 }
