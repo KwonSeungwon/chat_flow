@@ -6,6 +6,9 @@ import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.service.LinkPreviewService;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.ErrorResponses;
+import com.chatflow.chat.result.Result;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
@@ -35,14 +38,13 @@ public class MessageInteractionController {
 
     @RequireAuth
     @DeleteMapping("/{roomId}/messages/{messageId}")
-    public ResponseEntity<ApiResponse<Void>> deleteMessage(
+    public ResponseEntity<ApiResponse<?>> deleteMessage(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @AuthenticatedUser String userId) {
-        boolean deleted = messageEditService.deleteMessage(messageId, userId);
-        if (!deleted) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("삭제 권한이 없거나 메시지를 찾을 수 없습니다."));
+        Result<Void, ChatErrorCode> result = messageEditService.deleteMessage(messageId, userId);
+        if (result.isFailure()) {
+            return ErrorResponses.from(result);
         }
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 삭제되었습니다."));
     }

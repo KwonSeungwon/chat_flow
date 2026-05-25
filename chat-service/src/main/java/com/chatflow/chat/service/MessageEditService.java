@@ -5,6 +5,8 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.chatflow.common.util.MessageEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,10 +33,10 @@ public class MessageEditService {
     private final MessageEditHistoryRepository editHistoryRepository;
 
     @Transactional
-    public boolean deleteMessage(String messageId, String requestingUserId) {
-        return chatMessageRepository.findById(messageId).map(entity -> {
+    public Result<Void, ChatErrorCode> deleteMessage(String messageId, String requestingUserId) {
+        return chatMessageRepository.findById(messageId).<Result<Void, ChatErrorCode>>map(entity -> {
             if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
-                return false;
+                return Result.err(ChatErrorCode.FORBIDDEN, "삭제 권한이 없습니다.");
             }
             entity.setDeleted(true);
             entity.setContent("삭제된 메시지입니다.");
@@ -48,8 +50,8 @@ public class MessageEditService {
             broadcast.put("timestamp", entity.getTimestamp().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
             log.info("Message deleted: {} by user {}", messageId, requestingUserId);
-            return true;
-        }).orElse(false);
+            return Result.<ChatErrorCode>ok();
+        }).orElse(Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));
     }
 
     @Transactional
