@@ -1,5 +1,8 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
+import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
@@ -48,11 +51,10 @@ public class ChatRoomController {
     private final StringRedisTemplate redisTemplate;
     private final RoomVisibilityService roomVisibilityService;
     private final MessageSenderService messageSenderService;
-    private final RoomMembershipGuard membershipGuard;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+            @AuthenticatedUser(required = false) String userId) {
         List<ChatRoom> rooms = chatRoomService.getAllRooms();
         if (userId == null || userId.isBlank()) {
             return ResponseEntity.ok(ApiResponse.ok(rooms));
@@ -67,27 +69,23 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(visible));
     }
 
+    @RequireMember(pathVar = "id")
     @GetMapping("/{id}")
     public ResponseEntity<?> getRoom(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(id, userId);
-        if (gate != null) return gate;
+            @AuthenticatedUser String userId) {
         return chatRoomService.getRoom(id)
                 .map(room -> ResponseEntity.ok(ApiResponse.ok(room)))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error("채팅방을 찾을 수 없습니다.")));
     }
 
+    @RequireAuth
     @PostMapping
     public ResponseEntity<ApiResponse<ChatRoom>> createRoom(
             @Valid @RequestBody ChatRoom request,
-            @RequestHeader(value = "X-User-Id", required = false) String creatorId,
+            @AuthenticatedUser String creatorId,
             @RequestHeader(value = "X-Username", required = false) String creatorUsername) {
-        if (creatorId == null || creatorId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
         ChatRoom saved = chatRoomService.createRoom(request, creatorId, creatorUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(saved, "채팅방이 생성되었습니다."));
     }
@@ -101,15 +99,14 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(room));
     }
 
+    @RequireMember
     @GetMapping("/{roomId}/messages")
     public ResponseEntity<?> getMessages(
             @PathVariable String roomId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
         size = Math.min(size, 100);
         Page<ChatMessageEntity> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size));
         auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
@@ -120,14 +117,13 @@ public class ChatRoomController {
      * 커서 기반 페이징 — 무한 스크롤에 최적화.
      * before 파라미터 없으면 최신 메시지부터 반환.
      */
+    @RequireMember
     @GetMapping("/{roomId}/messages/cursor")
     public ResponseEntity<?> getMessagesByCursor(
             @PathVariable String roomId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
             @RequestParam(defaultValue = "50") int size,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
+            @AuthenticatedUser String userId) {
         size = Math.min(size, 100);
         List<ChatMessageEntity> messages = messageReadService.getMessagesByCursor(roomId, before, size);
 
@@ -146,7 +142,7 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
             @PathVariable String roomId,
             @RequestBody Map<String, String> request,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser(required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         String password = request.get("password");
         boolean valid = chatRoomService.verifyRoomPassword(roomId, password);
@@ -190,14 +186,11 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
+    @RequireAuth
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteRoom(
             @PathVariable String id,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
+            @AuthenticatedUser String userId) {
         ChatRoom room = chatRoomService.getRoom(id).orElse(null);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -212,15 +205,12 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
     }
 
+    @RequireAuth
     @DeleteMapping("/{roomId}/members/me")
     public ResponseEntity<ApiResponse<Void>> leaveRoom(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
         if (username == null || username.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
         }
@@ -233,16 +223,12 @@ public class ChatRoomController {
      * 상대가 새 메시지 보내면 자동 재출현 (lastMessageAt > hidden_at).
      * 단체방/HANDOFF는 hide 불가 -- 기존 leave 사용.
      */
+    @RequireAuth
     @PostMapping("/{roomId}/hide")
     public ResponseEntity<ApiResponse<Void>> hideRoom(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (userId == null || userId.isBlank()) {
-            auditService.logAccess("unknown", "unknown", roomId, AuditEvent.ROOM_HIDE_DENIED);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
             auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDE_DENIED);
@@ -259,15 +245,16 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(null, "방을 숨겼습니다"));
     }
 
+    @RequireAuth
     @PostMapping("/dm")
     public ResponseEntity<ApiResponse<ChatRoom>> createDm(
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         String targetUserId = body.get("targetUserId");
         String targetUsername = body.get("targetUsername");
-        if (userId == null || targetUserId == null || targetUsername == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("userId, targetUserId, targetUsername이 필요합니다."));
+        if (targetUserId == null || targetUsername == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("targetUserId, targetUsername이 필요합니다."));
         }
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
         // Seed both DM participants — they may both want to call member-gated
@@ -277,16 +264,13 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.ok(dm));
     }
 
+    @RequireAuth
     @PutMapping("/{roomId}/settings")
     public ResponseEntity<?> updateRoomSettings(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
+            @AuthenticatedUser String userId) {
         // Settings change is owner-only — load the room and compare createdBy.
-        if (userId == null || userId.isBlank()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ApiResponse.error("인증이 필요합니다."));
-        }
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -304,14 +288,13 @@ public class ChatRoomController {
      * REST fallback for sending a message when STOMP is disconnected.
      * Also used for forwarded messages with forwardedFrom metadata.
      */
+    @RequireMember
     @PostMapping("/{roomId}/messages")
     public ResponseEntity<?> sendMessage(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
         String content = body.get("content");
         if (content == null || content.isBlank()) {
             return ResponseEntity.badRequest()
