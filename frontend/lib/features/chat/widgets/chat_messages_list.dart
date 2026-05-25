@@ -12,6 +12,7 @@ import '../../../core/utils/url_helper.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import '../admin/widgets/message_report_dialog.dart';
+import 'bubbles/system_bubble.dart';
 import 'patient_card_widget.dart';
 import 'pdf_viewer_dialog.dart';
 
@@ -448,7 +449,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
 
             Widget bubble;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
-              bubble = _SystemBubble(msg: msg);
+              bubble = SystemBubble(msg: msg);
             } else if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
               bubble = _AiSummaryCard(msg: msg);
             } else if (type == 'PATIENT_CARD') {
@@ -651,69 +652,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             ),
           ),
       ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// System message (JOIN / LEAVE / SYSTEM)
-// ─────────────────────────────────────────────────────────────────
-class _SystemBubble extends StatelessWidget {
-  final ChatMessage msg;
-  const _SystemBubble({required this.msg});
-
-  String get _text {
-    final type = msg.type.toUpperCase();
-    if (type == 'JOIN') return '${msg.username}님이 입장했습니다';
-    if (type == 'LEAVE') return '${msg.username}님이 퇴장했습니다';
-    return msg.content;
-  }
-
-  IconData? get _alertIcon {
-    if (msg.content.startsWith('[처방알림]')) return Icons.medication_rounded;
-    if (msg.content.startsWith('[검사알림]')) return Icons.science_rounded;
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final icon = _alertIcon;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.85,
-          ),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainer,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outline.withAlpha(80)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 13, color: cs.onSurfaceVariant.withAlpha(160)),
-                  const SizedBox(width: 5),
-                ],
-                Flexible(
-                  child: Text(
-                    _text,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant.withAlpha(160),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
