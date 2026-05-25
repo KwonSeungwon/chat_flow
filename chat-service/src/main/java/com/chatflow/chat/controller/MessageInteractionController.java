@@ -6,6 +6,9 @@ import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.service.LinkPreviewService;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.ErrorResponses;
+import com.chatflow.chat.result.Result;
 import com.chatflow.chat.service.MessageEditService;
 import com.chatflow.chat.service.MessagePinService;
 import com.chatflow.chat.service.MessageReactionService;
@@ -13,7 +16,6 @@ import com.chatflow.chat.service.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,21 +37,20 @@ public class MessageInteractionController {
 
     @RequireAuth
     @DeleteMapping("/{roomId}/messages/{messageId}")
-    public ResponseEntity<ApiResponse<Void>> deleteMessage(
+    public ResponseEntity<ApiResponse<?>> deleteMessage(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @AuthenticatedUser String userId) {
-        boolean deleted = messageEditService.deleteMessage(messageId, userId);
-        if (!deleted) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("삭제 권한이 없거나 메시지를 찾을 수 없습니다."));
+        Result<Void, ChatErrorCode> result = messageEditService.deleteMessage(messageId, userId);
+        if (result.isFailure()) {
+            return ErrorResponses.from(result);
         }
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 삭제되었습니다."));
     }
 
     @RequireAuth
     @PutMapping("/{roomId}/messages/{messageId}")
-    public ResponseEntity<ApiResponse<Void>> editMessage(
+    public ResponseEntity<ApiResponse<?>> editMessage(
             @PathVariable String roomId,
             @PathVariable String messageId,
             @RequestBody Map<String, String> body,
@@ -61,10 +62,9 @@ public class MessageInteractionController {
         if (newContent.length() > 10_000) {
             return ResponseEntity.badRequest().body(ApiResponse.error("메시지는 10,000자를 초과할 수 없습니다."));
         }
-        boolean edited = messageEditService.editMessage(messageId, userId, newContent.trim());
-        if (!edited) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("수정 권한이 없거나 메시지를 찾을 수 없습니다."));
+        Result<Void, ChatErrorCode> result = messageEditService.editMessage(messageId, userId, newContent.trim());
+        if (result.isFailure()) {
+            return ErrorResponses.from(result);
         }
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지가 수정되었습니다."));
     }
@@ -78,8 +78,9 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         String emoji = body.get("emoji");
         if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
-        boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
-        return ResponseEntity.ok(ApiResponse.ok(ok));
+        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(messageId, emoji, userId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
 
     /**
@@ -115,7 +116,9 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         String messageId = body.get("messageId");
         if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
-        return ResponseEntity.ok(ApiResponse.ok(messagePinService.pinMessage(roomId, messageId)));
+        Result<Void, ChatErrorCode> result = messagePinService.pinMessage(roomId, messageId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(true));
     }
 
     @RequireMember
@@ -123,14 +126,15 @@ public class MessageInteractionController {
     public ResponseEntity<?> unpinMessage(
             @PathVariable String roomId,
             @AuthenticatedUser String userId) {
-        return ResponseEntity.ok(ApiResponse.ok(messagePinService.unpinMessage(roomId)));
+        Result<Void, ChatErrorCode> result = messagePinService.unpinMessage(roomId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(true));
     }
 
     @GetMapping("/link-preview")
-    public ResponseEntity<ApiResponse<Map<String, String>>> linkPreview(@RequestParam String url) {
-        if (url == null || url.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("url이 필요합니다."));
-        }
-        return ResponseEntity.ok(ApiResponse.ok(linkPreviewService.fetch(url)));
+    public ResponseEntity<?> linkPreview(@RequestParam String url) {
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
 }

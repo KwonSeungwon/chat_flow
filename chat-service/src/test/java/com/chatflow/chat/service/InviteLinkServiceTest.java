@@ -1,5 +1,7 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -74,20 +76,34 @@ class InviteLinkServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.get("chatflow:invite:" + token)).thenReturn(ROOM_ID);
 
-            String result = inviteLinkService.resolveToken(token);
+            Result<String, ChatErrorCode> result = inviteLinkService.resolveToken(token);
 
-            assertEquals(ROOM_ID, result);
+            assertTrue(result.isSuccess());
+            assertEquals(ROOM_ID, result.value());
         }
 
         @Test
-        void resolveToken_returns_null_when_key_expired_or_missing() {
+        void resolveToken_returns_GONE_when_key_expired_or_missing() {
             String token = "expired-or-missing-token";
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.get("chatflow:invite:" + token)).thenReturn(null);
 
-            String result = inviteLinkService.resolveToken(token);
+            Result<String, ChatErrorCode> result = inviteLinkService.resolveToken(token);
 
-            assertNull(result);
+            assertTrue(result.isFailure());
+            assertEquals(ChatErrorCode.GONE, result.error());
+        }
+
+        @Test
+        void resolveToken_returns_GONE_when_key_blank() {
+            String token = "blank-value-token";
+            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+            when(valueOperations.get("chatflow:invite:" + token)).thenReturn("  ");
+
+            Result<String, ChatErrorCode> result = inviteLinkService.resolveToken(token);
+
+            assertTrue(result.isFailure());
+            assertEquals(ChatErrorCode.GONE, result.error());
         }
     }
 

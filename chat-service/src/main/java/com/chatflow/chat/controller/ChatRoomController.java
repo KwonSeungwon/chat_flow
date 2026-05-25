@@ -13,6 +13,9 @@ import com.chatflow.chat.service.MessageReadService;
 import com.chatflow.chat.service.MessageSenderService;
 import com.chatflow.chat.service.RoomMembershipService;
 import com.chatflow.chat.service.RoomVisibilityService;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.ErrorResponses;
+import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatMessage;
@@ -207,14 +210,15 @@ public class ChatRoomController {
 
     @RequireAuth
     @DeleteMapping("/{roomId}/members/me")
-    public ResponseEntity<ApiResponse<Void>> leaveRoom(
+    public ResponseEntity<ApiResponse<?>> leaveRoom(
             @PathVariable String roomId,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         if (username == null || username.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
         }
-        roomMembershipService.leaveRoom(roomId, userId, username);
+        Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(roomId, userId, username);
+        if (result.isFailure()) return ErrorResponses.from(result);
         return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
     }
 

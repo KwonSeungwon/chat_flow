@@ -1,5 +1,7 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,11 +66,12 @@ class LinkPreviewServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get(CACHE_KEY)).thenReturn(json);
 
-        Map<String, String> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        assertEquals("Cached Title", result.get("title"));
-        assertEquals("Cached Desc", result.get("description"));
-        assertEquals("https://example.com/img.png", result.get("image"));
+        assertTrue(result.isSuccess());
+        assertEquals("Cached Title", result.value().get("title"));
+        assertEquals("Cached Desc", result.value().get("description"));
+        assertEquals("https://example.com/img.png", result.value().get("image"));
 
         // RestClient must never be called when cache hits
         verifyNoInteractions(restClient);
@@ -113,13 +116,14 @@ class LinkPreviewServiceTest {
             return fn.exchange(mockReq, mockResp);
         });
 
-        Map<String, String> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
+        assertTrue(result.isSuccess());
         // OG tags take precedence over <title>
-        assertEquals("OG Title", result.get("title"));
-        assertEquals("OG Description", result.get("description"));
-        assertEquals("https://example.com/og.png", result.get("image"));
-        assertEquals(TEST_URL, result.get("url"));
+        assertEquals("OG Title", result.value().get("title"));
+        assertEquals("OG Description", result.value().get("description"));
+        assertEquals("https://example.com/og.png", result.value().get("image"));
+        assertEquals(TEST_URL, result.value().get("url"));
 
         // Verify cache write with correct key, JSON content, and 1-hour TTL
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
@@ -152,10 +156,11 @@ class LinkPreviewServiceTest {
         when(headersSpec.exchange(any(ExchangeFunction.class)))
                 .thenThrow(new RuntimeException("Connection refused"));
 
-        Map<String, String> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        // Production returns empty map (not null) on failure
-        assertTrue(result.isEmpty());
+        // Network failure → INTERNAL_ERROR
+        assertTrue(result.isFailure());
+        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
 
         // No cache write should occur
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
@@ -186,10 +191,11 @@ class LinkPreviewServiceTest {
             return fn.exchange(mockReq, mockResp);
         });
 
-        Map<String, String> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        // IOException inside exchange → caught by outer catch → empty map
-        assertTrue(result.isEmpty());
+        // IOException inside exchange → caught by outer catch → INTERNAL_ERROR
+        assertTrue(result.isFailure());
+        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
@@ -221,9 +227,32 @@ class LinkPreviewServiceTest {
             return fn.exchange(mockReq, mockResp);
         });
 
-        Map<String, String> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        assertTrue(result.isEmpty());
+        assertTrue(result.isFailure());
+        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    // ── Null/blank URL → INVALID_INPUT ──────────────────────────
+
+    @Test
+    void returns_INVALID_INPUT_for_null_url() {
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(null);
+
+        assertTrue(result.isFailure());
+        assertEquals(ChatErrorCode.INVALID_INPUT, result.error());
+        verifyNoInteractions(restClient);
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    void returns_INVALID_INPUT_for_blank_url() {
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch("  ");
+
+        assertTrue(result.isFailure());
+        assertEquals(ChatErrorCode.INVALID_INPUT, result.error());
+        verifyNoInteractions(restClient);
+        verifyNoInteractions(redisTemplate);
     }
 }

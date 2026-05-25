@@ -1,5 +1,7 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +32,11 @@ public class InviteLinkService {
         return token;
     }
 
-    public String resolveToken(String token) {
-        return redisTemplate.opsForValue().get(KEY_PREFIX + token);
+    public Result<String, ChatErrorCode> resolveToken(String token) {
+        String roomId = redisTemplate.opsForValue().get(KEY_PREFIX + token);
+        if (roomId == null || roomId.isBlank()) {
+            return Result.err(ChatErrorCode.GONE, "초대 링크가 만료되었거나 유효하지 않습니다.");
+        }
+        return Result.ok(roomId);
     }
 }

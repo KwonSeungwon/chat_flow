@@ -2,6 +2,8 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -67,9 +70,10 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, null);
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.value()).isTrue();
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
@@ -90,9 +94,10 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u2");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u2");
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.value()).isTrue();
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
@@ -114,9 +119,10 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\",\"u2\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.value()).isFalse();
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
@@ -132,9 +138,10 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            boolean result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
 
-            assertTrue(result);
+            assertThat(result.isSuccess()).isTrue();
+            assertThat(result.value()).isFalse();
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
@@ -168,6 +175,25 @@ class MessageReactionServiceTest {
             assertTrue(payload.get("reactions") instanceof Map);
             Map<String, ?> reactionsMap = (Map<String, ?>) payload.get("reactions");
             assertTrue(reactionsMap.containsKey("👍"));
+        }
+    }
+
+    // ── Error paths ────────────────────────────────────────────────
+
+    @Nested
+    class ErrorPaths {
+
+        @Test
+        void returns_NOT_FOUND_when_message_does_not_exist() {
+            when(chatMessageRepository.findById("nonexistent")).thenReturn(Optional.empty());
+
+            Result<Boolean, ChatErrorCode> result =
+                    messageReactionService.toggleReaction("nonexistent", "👍", "u1");
+
+            assertThat(result.isFailure()).isTrue();
+            assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
+            verify(chatMessageRepository, never()).save(any());
+            verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
         }
     }
 
