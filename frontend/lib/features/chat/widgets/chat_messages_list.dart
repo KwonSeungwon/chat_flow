@@ -15,6 +15,8 @@ import '../admin/widgets/message_report_dialog.dart';
 import 'bubbles/ai_summary_bubble.dart';
 import 'bubbles/avatar.dart';
 import 'bubbles/system_bubble.dart';
+import 'dividers/date_divider.dart';
+import 'dividers/unread_divider.dart';
 import 'patient_card_widget.dart';
 import 'pdf_viewer_dialog.dart';
 
@@ -413,10 +415,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               if (item == _unreadDividerMarker) {
                 return KeyedSubtree(
                   key: _unreadDividerKey,
-                  child: _UnreadDivider(),
+                  child: const UnreadDivider(),
                 );
               }
-              return _DateDivider(date: item);
+              return DateDivider(date: item);
             }
 
             final msg = item as ChatMessage;
@@ -1664,35 +1666,6 @@ class _HoverReactionBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Unread divider — "여기까지 읽었습니다"
-// ─────────────────────────────────────────────────────────────────
-class _UnreadDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: Colors.red.withAlpha(120), height: 1)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              '여기까지 읽었습니다',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.red.withAlpha(180),
-              ),
-            ),
-          ),
-          Expanded(child: Divider(color: Colors.red.withAlpha(120), height: 1)),
-        ],
-      ),
-    );
-  }
-}
-
 // SBAR structured card
 // ─────────────────────────────────────────────────────────────────
 class _SbarCardWidget extends StatelessWidget {
@@ -1936,46 +1909,6 @@ class _LinkPreviewCardState extends State<_LinkPreviewCard> {
           border: Border(left: BorderSide(color: cs.primary, width: 3)),
         ),
         child: cardContent,
-      ),
-    );
-  }
-}
-
-// Date divider
-// ─────────────────────────────────────────────────────────────────
-class _DateDivider extends StatelessWidget {
-  final String date;
-  const _DateDivider({required this.date});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: cs.outline.withAlpha(60), height: 1)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outline.withAlpha(60)),
-              ),
-              child: Text(
-                date,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurfaceVariant.withAlpha(180),
-                ),
-              ),
-            ),
-          ),
-          Expanded(child: Divider(color: cs.outline.withAlpha(60), height: 1)),
-        ],
       ),
     );
   }
