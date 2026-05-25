@@ -4,6 +4,8 @@ import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -120,6 +122,7 @@ class RoomMembershipServiceTest {
 
         @Test
         void removes_userId_prefixed_entries_from_redis_set_and_syncs_count() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
             when(redisHealth.isCircuitOpen()).thenReturn(false);
             when(redisTemplate.opsForSet()).thenReturn(setOps);
             when(setOps.members(participantKey)).thenReturn(Set.of(
@@ -128,8 +131,9 @@ class RoomMembershipServiceTest {
                     OTHER_USER_ID + ":sess-c:Bob"
             ));
 
-            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+            Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
 
+            assertTrue(result.isSuccess());
             verify(setOps).remove(participantKey, USER_ID + ":sess-a:Alice");
             verify(setOps).remove(participantKey, USER_ID + ":sess-b:Alice");
             verify(setOps, never()).remove(eq(participantKey), eq(OTHER_USER_ID + ":sess-c:Bob"));
@@ -141,12 +145,14 @@ class RoomMembershipServiceTest {
         @SuppressWarnings("unchecked")
         @Test
         void broadcasts_LEAVE_system_message() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
             when(redisHealth.isCircuitOpen()).thenReturn(false);
             when(redisTemplate.opsForSet()).thenReturn(setOps);
             when(setOps.members(participantKey)).thenReturn(Set.of());
 
-            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+            Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
 
+            assertTrue(result.isSuccess());
             ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
             verify(messagingTemplate).convertAndSend(
                     eq("/topic/chat/" + ROOM_ID), payloadCaptor.capture());
@@ -160,15 +166,33 @@ class RoomMembershipServiceTest {
 
         @Test
         void skips_redis_cleanup_when_circuit_open() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
             when(redisHealth.isCircuitOpen()).thenReturn(true);
 
-            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+            Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
 
+            assertTrue(result.isSuccess());
             verify(redisTemplate, never()).opsForSet();
 
             // broadcast and count sync STILL happen
             verify(messagingTemplate).convertAndSend(eq("/topic/chat/" + ROOM_ID), any(Map.class));
             verify(participantService).syncParticipantCountFromRedis(ROOM_ID);
+        }
+
+        @Test
+        void returns_NOT_FOUND_when_user_is_not_a_member() {
+            // existsByRoomIdAndUserId defaults to false (not stubbed to true)
+
+            Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            assertTrue(result.isFailure());
+            assertEquals(ChatErrorCode.NOT_FOUND, result.error());
+
+            // No Redis cleanup, no broadcast, no sync
+            verify(redisTemplate, never()).opsForSet();
+            verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
+            verify(participantService, never()).syncParticipantCountFromRedis(anyString());
+            verify(roomCacheEvictor, never()).evict(anyString());
         }
     }
 

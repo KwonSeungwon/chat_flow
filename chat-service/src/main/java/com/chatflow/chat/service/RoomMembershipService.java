@@ -4,6 +4,8 @@ import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.result.ChatErrorCode;
+import com.chatflow.chat.result.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -82,7 +84,10 @@ public class RoomMembershipService {
     }
 
     @Transactional
-    public void leaveRoom(String roomId, String userId, String username) {
+    public Result<Void, ChatErrorCode> leaveRoom(String roomId, String userId, String username) {
+        if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
+            return Result.err(ChatErrorCode.NOT_FOUND, "방 멤버가 아닙니다.");
+        }
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {
@@ -111,5 +116,6 @@ public class RoomMembershipService {
         participantService.syncParticipantCountFromRedis(roomId);
         roomCacheEvictor.evict(roomId);
         log.info("User {} left room {} via REST API", username, roomId);
+        return Result.<ChatErrorCode>ok();
     }
 }
