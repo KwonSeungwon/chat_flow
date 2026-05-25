@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +7,6 @@ import '../../core/constants/chat_strings.dart';
 import '../../core/constants/ui_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/theme/font_scale_provider.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/utils/url_helper.dart';
 import '../auth/auth_provider.dart';
@@ -17,13 +14,17 @@ import 'bookmark_provider.dart';
 import 'chat_provider.dart';
 import 'scheduled_messages_provider.dart';
 import '../../shared/models/chat_message.dart';
-import '../../shared/models/chat_room.dart';
+import 'dialogs/bookmarks_dialog.dart';
+import 'dialogs/change_password_dialog.dart';
+import 'dialogs/forward_dialog.dart';
+import 'dialogs/in_room_search.dart';
+import 'dialogs/profile_dialog.dart';
+import 'dialogs/readers_sheet.dart';
+import 'dialogs/room_settings_dialog.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
 import 'widgets/create_room_dialog.dart';
-import 'dialogs/change_password_dialog.dart';
-import 'widgets/in_room_search_sheet.dart';
 import 'admin/widgets/room_members_sheet.dart';
 import 'admin/widgets/moderator_queue_sheet.dart';
 import 'admin/admin_event_listener.dart';
@@ -33,207 +34,6 @@ import '../../shared/models/room_role.dart';
 import '../profile/widgets/profile_edit_dialog.dart';
 import 'widgets/thread_panel.dart';
 import 'widgets/edit_history_sheet.dart';
-
-
-Future<void> _changeProfileImage(BuildContext context, WidgetRef ref) async {
-  try {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) return;
-
-    final ext = file.extension?.toLowerCase() ?? 'jpg';
-    const mimeMap = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'};
-    final mimeType = mimeMap[ext] ?? 'image/jpeg';
-
-    final dioClient = ref.read(dioClientProvider);
-    final uploadResult = await dioClient.uploadFile(fileName: file.name, bytes: bytes, mimeType: mimeType);
-    final fileUrl = uploadResult['fileUrl']?.toString() ?? '';
-    if (fileUrl.isNotEmpty) {
-      await ref.read(authProvider.notifier).updateProfileImage(fileUrl);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ChatStrings.profileImageChanged)));
-      }
-    }
-  } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('프로필 이미지 변경에 실패했습니다.')));
-    }
-  }
-}
-
-void _showProfileDialog(BuildContext context, WidgetRef ref) {
-  final auth = ref.read(authProvider);
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('프로필 관리'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ProfileAvatar(
-            url: auth.profileImageUrl != null ? buildFullUrl(auth.profileImageUrl!) : null,
-            radius: 40,
-          ),
-          const SizedBox(height: 12),
-          Text(auth.username.isNotEmpty ? auth.username : '사용자',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          const SizedBox(height: 4),
-          Text(auth.role, style: TextStyle(fontSize: 14, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          if (auth.userId != null)
-            Text('ID: ${auth.userId}', style: TextStyle(fontSize: 11, color: Theme.of(ctx).colorScheme.onSurfaceVariant.withAlpha(120))),
-          const SizedBox(height: 16),
-          // Font scale selector
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('글꼴 크기', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-          ),
-          const SizedBox(height: 6),
-          Consumer(builder: (_, ref, __) {
-            final current = ref.watch(fontScaleProvider);
-            return SegmentedButton<FontScale>(
-              segments: FontScale.values
-                  .map((e) => ButtonSegment(value: e, label: Text(e.label)))
-                  .toList(),
-              selected: {current},
-              onSelectionChanged: (set) =>
-                  ref.read(fontScaleProvider.notifier).set(set.first),
-              style: SegmentedButton.styleFrom(
-                textStyle: const TextStyle(fontSize: 13),
-              ),
-            );
-          }),
-        ],
-      ),
-      actionsAlignment: MainAxisAlignment.center,
-      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      actions: [
-        Row(children: [
-          Expanded(child: OutlinedButton.icon(
-            icon: const Icon(Icons.camera_alt_outlined, size: 18),
-            label: const Text('이미지 변경'),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await _changeProfileImage(context, ref);
-            },
-          )),
-          const SizedBox(width: 8),
-          Expanded(child: OutlinedButton.icon(
-            icon: const Icon(Icons.lock_outline, size: 18),
-            label: const Text('비밀번호'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (_) => const ChangePasswordDialog(),
-              );
-            },
-          )),
-        ]),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.bookmark_outline, size: 18),
-            label: const Text('북마크'),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _showBookmarksDialog(context, ref);
-            },
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-void _showBookmarksDialog(BuildContext context, WidgetRef ref) {
-  showDialog(
-    context: context,
-    builder: (ctx) {
-      final mq = MediaQuery.of(ctx);
-      return Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-          child: SizedBox(
-            width: math.min(500.0, mq.size.width - 32),
-            height: math.min(600.0, mq.size.height - 120),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.bookmark, size: 20),
-                      const SizedBox(width: 8),
-                      const Text('북마크', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => Navigator.of(ctx).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: Consumer(builder: (_, ref, __) {
-                    final bookmarks = ref.watch(bookmarksProvider);
-                    if (bookmarks.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.bookmark_border, size: 48, color: Theme.of(ctx).colorScheme.onSurfaceVariant.withAlpha(100)),
-                            const SizedBox(height: 12),
-                            Text('저장된 북마크가 없습니다.', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-                          ],
-                        ),
-                      );
-                    }
-                    return ListView.separated(
-                      itemCount: bookmarks.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final b = bookmarks[i];
-                        String formattedTime = b.timestamp;
-                        try {
-                          final dt = DateTime.parse(b.timestamp).toLocal();
-                          formattedTime = '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-                        } catch (_) {}
-                        return ListTile(
-                          title: Text(b.content, maxLines: 2, overflow: TextOverflow.ellipsis),
-                          subtitle: Text('${b.username} · $formattedTime', style: const TextStyle(fontSize: 11)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            onPressed: () => ref.read(bookmarksProvider.notifier).remove(b.messageId),
-                          ),
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            GoRouter.of(context).go('/chat/${b.roomId}?messageId=${b.messageId}');
-                          },
-                        );
-                      },
-                    );
-                  }),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
 
 Future<void> _copyInviteLink(BuildContext context, WidgetRef ref, String roomId) async {
   try {
@@ -261,274 +61,6 @@ Future<void> _copyInviteLink(BuildContext context, WidgetRef ref, String roomId)
       );
     }
   }
-}
-
-void _showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, ChatRoom room) {
-  final nameCtrl = TextEditingController(text: room.name);
-  final descCtrl = TextEditingController(text: room.description ?? '');
-
-  // 모바일(<600px)은 bottom sheet + 풀 스크롤, 데스크톱은 Dialog로 분기.
-  final mq = MediaQuery.of(context);
-  final isMobile = mq.size.width < 600;
-
-  Future<void> save(BuildContext dialogCtx) async {
-    try {
-      await ref.read(dioClientProvider).dio.put('/api/chat/rooms/$roomId/settings', data: {
-        'name': nameCtrl.text.trim(),
-        'description': descCtrl.text.trim(),
-      });
-      if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-      ref.read(chatRoomsProvider.notifier).fetchRooms();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(ChatStrings.roomSettingsChanged)));
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('설정 변경에 실패했습니다.')));
-      }
-    }
-  }
-
-  Widget buildBody(BuildContext dialogCtx) {
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(
-              labelText: '채팅방 이름',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: descCtrl,
-            decoration: const InputDecoration(
-              labelText: '설명',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-            maxLines: 3,
-            minLines: 2,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text('취소'),
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: FilledButton(
-                onPressed: () => save(dialogCtx),
-                child: const Text('저장'),
-              )),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  if (isMobile) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 4,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: Text('채팅방 설정',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            ),
-            buildBody(ctx),
-          ],
-        ),
-      ),
-    );
-  } else {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: Text('채팅방 설정',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                ),
-                buildBody(ctx),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-void _showForwardDialog(BuildContext context, WidgetRef ref, ChatNotifier currentNotifier, ChatMessage msg) {
-  final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
-  showDialog(
-    context: context,
-    builder: (ctx) {
-      String filter = '';
-      return StatefulBuilder(
-        builder: (ctx, setState) {
-          final filtered = filter.isEmpty
-              ? rooms
-              : rooms.where((r) => r.name.toLowerCase().contains(filter.toLowerCase())).toList();
-          final fwdMq = MediaQuery.of(ctx);
-          final fwdMobile = fwdMq.size.width < 600;
-          return AlertDialog(
-            title: const Text('메시지 전달'),
-            content: SizedBox(
-              width: fwdMobile ? math.min(fwdMq.size.width - 64, 360.0) : 280,
-              height: math.min(360.0, fwdMq.size.height - 200),
-              child: Column(
-                children: [
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: '방 검색',
-                      prefixIcon: Icon(Icons.search, size: 20),
-                      isDense: true,
-                    ),
-                    onChanged: (v) => setState(() => filter = v),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? const Center(child: Text('일치하는 방이 없습니다.'))
-                        : ListView.builder(
-                            itemCount: filtered.length,
-                            itemBuilder: (_, i) {
-                              final room = filtered[i];
-                              return ListTile(
-                                leading: CircleAvatar(radius: 16, child: Text(room.name.isNotEmpty ? room.name[0].toUpperCase() : '#')),
-                                title: Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                onTap: () async {
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  Navigator.of(ctx).pop();
-                                  final ok = await currentNotifier.forwardMessage(room.id, msg);
-                                  messenger.showSnackBar(SnackBar(
-                                    content: Text(ok
-                                        ? '"${room.name}"에 메시지를 전달했습니다.'
-                                        : '연결 상태를 확인하고 다시 시도해주세요.'),
-                                  ));
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
-void _showInRoomSearch(BuildContext context, WidgetRef ref, String roomId) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (ctx) => InRoomSearchSheet(
-      roomId: roomId,
-      onResultTap: (messageId) {
-        GoRouter.of(context).go('/chat/$roomId?messageId=$messageId');
-      },
-    ),
-  );
-}
-
-void _showReadersSheet(BuildContext context, WidgetRef ref, String roomId, String messageId, List<ChatMessage> messages) async {
-  try {
-    final resp = await ref.read(dioClientProvider).dio.get('/api/chat/rooms/$roomId/readers');
-    final data = resp.data;
-    // positions: {userId: lastReadMessageId}
-    Map<String, String> positions = {};
-    if (data is Map && data['data'] is Map) {
-      positions = Map<String, String>.from(data['data'] as Map);
-    }
-
-    // Find the index of target message to compare read positions
-    final targetIdx = messages.indexWhere((m) => m.effectiveId == messageId);
-    if (targetIdx < 0) return;
-
-    // Users who have read at or past the target message
-    final readers = <String>[];
-    for (final entry in positions.entries) {
-      final readerLastReadId = entry.value;
-      final readerIdx = messages.indexWhere((m) => m.effectiveId == readerLastReadId);
-      if (readerIdx >= targetIdx) {
-        // Find username from messages sent by this userId
-        String? username;
-        for (final m in messages) {
-          if (m.userId == entry.key) { username = m.username; break; }
-        }
-        readers.add(username ?? entry.key);
-      }
-    }
-
-    if (!context.mounted) return;
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.withAlpha(80), borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('읽은 사람 (${readers.length}명)', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-            ),
-            if (readers.isEmpty)
-              const Padding(padding: EdgeInsets.all(16), child: Text('읽은 사용자가 없습니다.'))
-            else
-              ...readers.map((name) => ListTile(
-                leading: CircleAvatar(radius: 16, child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(fontSize: 14))),
-                title: Text(name),
-              )),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  } catch (_) {}
 }
 
 class ChatPage extends ConsumerWidget {
@@ -631,7 +163,7 @@ class ChatPage extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.settings_outlined, size: 20),
                 tooltip: '채팅방 설정',
-                onPressed: () => _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
+                onPressed: () => showRoomSettingsDialog(context, ref, effectiveRoomId, roomData),
               ),
             if (effectiveRoomId != null)
               IconButton(
@@ -645,7 +177,7 @@ class ChatPage extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.manage_search, size: 22),
                 tooltip: '방 내 검색',
-                onPressed: () => _showInRoomSearch(context, ref, effectiveRoomId),
+                onPressed: () => showInRoomSearch(context, ref, effectiveRoomId),
               ),
             IconButton(
               icon: const Icon(Icons.search),
@@ -663,7 +195,7 @@ class ChatPage extends ConsumerWidget {
                   if (value == 'invite_link') {
                     _copyInviteLink(context, ref, effectiveRoomId);
                   } else if (value == 'settings' && roomData != null) {
-                    _showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
+                    showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
                   } else if (value == 'ai_summary') {
                     ref.read(chatNotifierProvider(effectiveRoomId).notifier)
                         .requestSummary(effectiveRoomId)
@@ -680,7 +212,7 @@ class ChatPage extends ConsumerWidget {
                       }
                     });
                   } else if (value == 'room_search') {
-                    _showInRoomSearch(context, ref, effectiveRoomId);
+                    showInRoomSearch(context, ref, effectiveRoomId);
                   } else if (value == 'global_search') {
                     context.push('/search');
                   } else if (value == 'participants') {
@@ -761,7 +293,7 @@ class ChatPage extends ConsumerWidget {
               ),
           ],
           PopupMenuButton<String>(
-            icon: _ProfileAvatar(
+            icon: ProfileAvatar(
               url: auth.profileImageUrl != null
                   ? buildFullUrl(auth.profileImageUrl!)
                   : null,
@@ -771,11 +303,11 @@ class ChatPage extends ConsumerWidget {
               if (value == 'theme') {
                 ref.read(themeModeProvider.notifier).toggle();
               } else if (value == 'profile') {
-                if (context.mounted) _showProfileDialog(context, ref);
+                if (context.mounted) showProfileDialog(context, ref);
               } else if (value == 'profile_edit') {
                 if (context.mounted) showProfileEditDialog(context);
               } else if (value == 'bookmarks') {
-                if (context.mounted) _showBookmarksDialog(context, ref);
+                if (context.mounted) showBookmarksDialog(context, ref);
               } else if (value == 'password') {
                 if (context.mounted) {
                   showDialog(
@@ -795,7 +327,7 @@ class ChatPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _ProfileAvatar(
+                    ProfileAvatar(
                       url: auth.profileImageUrl != null
                           ? buildFullUrl(auth.profileImageUrl!)
                           : null,
@@ -881,7 +413,7 @@ class ChatPage extends ConsumerWidget {
                   onRoomSelected: () => Navigator.of(context).pop(),
                   onSearchInRoom: (roomId) {
                     Navigator.of(context).pop();
-                    if (context.mounted) _showInRoomSearch(context, ref, roomId);
+                    if (context.mounted) showInRoomSearch(context, ref, roomId);
                   },
                 ),
               ),
@@ -890,7 +422,7 @@ class ChatPage extends ConsumerWidget {
         children: [
           if (isWide) ChatRoomSidebar(
             currentRoomId: effectiveRoomId ?? '',
-            onSearchInRoom: (roomId) => _showInRoomSearch(context, ref, roomId),
+            onSearchInRoom: (roomId) => showInRoomSearch(context, ref, roomId),
           ),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
@@ -1311,11 +843,11 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
                       messageId: messageId,
                       currentContent: currentContent),
               onReadCountTap: (messageId) =>
-                  _showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
+                  showReadersSheet(context, ref, widget.roomId, messageId, chatState.messages),
               onReaction: (messageId, emoji) =>
                   chatNotifier.toggleReaction(widget.roomId, messageId, emoji),
               onForward: (msg) =>
-                  _showForwardDialog(context, ref, chatNotifier, msg),
+                  showForwardDialog(context, ref, chatNotifier, msg),
               onPin: (messageId) async {
                 await ref.read(dioClientProvider).dio.put(
                   '/api/chat/rooms/${widget.roomId}/pin',
@@ -1582,34 +1114,6 @@ class _AiSummaryButtonState extends ConsumerState<_AiSummaryButton> {
 }
 
 // ---------------------------------------------------------------------------
-// Profile avatar — Image.network with errorBuilder to prevent white X-box
-// ---------------------------------------------------------------------------
-class _ProfileAvatar extends StatelessWidget {
-  final String? url;
-  final double radius;
-  const _ProfileAvatar({required this.url, required this.radius});
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-      child: ClipOval(
-        child: (url != null && url!.isNotEmpty)
-            ? Image.network(
-                url!,
-                width: radius * 2,
-                height: radius * 2,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Icon(Icons.person, size: radius),
-              )
-            : Icon(Icons.person, size: radius),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Invite member modal — search users and invite to room
 // ---------------------------------------------------------------------------
