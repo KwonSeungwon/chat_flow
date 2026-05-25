@@ -21,6 +21,7 @@ import 'dialogs/in_room_search.dart';
 import 'dialogs/profile_dialog.dart';
 import 'dialogs/readers_sheet.dart';
 import 'dialogs/room_settings_dialog.dart';
+import 'widgets/ai_summary_button.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/chat_messages_list.dart';
 import 'widgets/chat_input.dart';
@@ -174,7 +175,7 @@ class ChatPage extends ConsumerWidget {
                 onPressed: () => _copyInviteLink(context, ref, effectiveRoomId),
               ),
             if (effectiveRoomId != null)
-              _AiSummaryButton(roomId: effectiveRoomId),
+              AiSummaryButton(roomId: effectiveRoomId),
             if (effectiveRoomId != null)
               IconButton(
                 icon: const Icon(Icons.manage_search, size: 22),
@@ -941,63 +942,6 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// AI summary request button
-// ---------------------------------------------------------------------------
-class _AiSummaryButton extends ConsumerStatefulWidget {
-  final String roomId;
-  const _AiSummaryButton({required this.roomId});
-
-  @override
-  ConsumerState<_AiSummaryButton> createState() => _AiSummaryButtonState();
-}
-
-class _AiSummaryButtonState extends ConsumerState<_AiSummaryButton> {
-  Future<void> _onTap() async {
-    try {
-      final msg = await ref
-          .read(chatNotifierProvider(widget.roomId).notifier)
-          .requestSummary(widget.roomId);
-      if (!mounted) return;
-      if (msg.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('AI 요약을 요청했습니다. 잠시 후 채팅방에 표시됩니다.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('요약 요청에 실패했습니다.')),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isSummaryLoading = ref.watch(
-      chatNotifierProvider(widget.roomId).select((s) => s.isSummaryLoading),
-    );
-    return IconButton(
-      icon: isSummaryLoading
-          ? const SizedBox(
-              width: 18, height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.auto_awesome, size: 20),
-      tooltip: 'AI 대화 요약',
-      onPressed: isSummaryLoading ? null : _onTap,
     );
   }
 }
