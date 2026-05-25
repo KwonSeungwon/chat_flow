@@ -13,6 +13,7 @@ import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import '../admin/widgets/message_report_dialog.dart';
 import 'bubbles/ai_summary_bubble.dart';
+import 'bubbles/avatar.dart';
 import 'bubbles/system_bubble.dart';
 import 'patient_card_widget.dart';
 import 'pdf_viewer_dialog.dart';
@@ -524,7 +525,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (!isMine) ...[
-                        _Avatar(name: msg.username, color: AppColors.avatarPalette[msg.username.hashCode.abs() % AppColors.avatarPalette.length]),
+                        Avatar(name: msg.username, color: avatarColor(msg.username)),
                         const SizedBox(width: 8),
                       ],
                       Flexible(child: Column(
@@ -713,9 +714,6 @@ class _ChatBubble extends StatefulWidget {
 
 class _ChatBubbleState extends State<_ChatBubble> {
   bool _hovered = false;
-
-  Color _avatarColor(String name) =>
-      AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
 
   static const _quickReactions = ['👍', '❤️', '😂', '😮', '😢', '✅'];
 
@@ -1018,7 +1016,7 @@ class _ChatBubbleState extends State<_ChatBubble> {
           mainAxisAlignment: widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             if (!widget.isMine) ...[
-              _Avatar(name: widget.msg.username, color: _avatarColor(widget.msg.username)),
+              Avatar(name: widget.msg.username, color: avatarColor(widget.msg.username)),
               const SizedBox(width: 8),
             ],
             Container(
@@ -1070,7 +1068,7 @@ class _ChatBubbleState extends State<_ChatBubble> {
         children: [
           if (!widget.isMine) ...[
             if (widget.showAvatar)
-              _Avatar(name: widget.msg.username, color: _avatarColor(widget.msg.username))
+              Avatar(name: widget.msg.username, color: avatarColor(widget.msg.username))
             else
               const SizedBox(width: 32), // placeholder for alignment
             const SizedBox(width: 8),
@@ -2001,9 +1999,6 @@ class _PatientCardBubble extends StatelessWidget {
     this.readCount = 0,
   });
 
-  Color _avatarColor(String name) =>
-      AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -2015,9 +2010,9 @@ class _PatientCardBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            _Avatar(
+            Avatar(
               name: msg.username,
-              color: _avatarColor(msg.username),
+              color: avatarColor(msg.username),
             ),
             const SizedBox(width: 8),
           ],
@@ -2092,40 +2087,6 @@ class _PatientCardBubble extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// User avatar (gradient circle)
-// ─────────────────────────────────────────────────────────────────
-class _Avatar extends StatelessWidget {
-  final String name;
-  final Color color;
-  const _Avatar({required this.name, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [color.withAlpha(220), color.withAlpha(140)],
-        ),
-      ),
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────
 // File bubble (image preview or download button)
@@ -2146,10 +2107,6 @@ class _FileBubble extends StatelessWidget {
     this.onOpenThread,
     this.replyCount = 0,
   });
-
-  Color _avatarColor(String name) =>
-      AppColors.avatarPalette[name.hashCode.abs() % AppColors.avatarPalette.length];
-
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
@@ -2414,7 +2371,7 @@ class _FileBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMine) ...[
-            _Avatar(name: msg.username, color: _avatarColor(msg.username)),
+            Avatar(name: msg.username, color: avatarColor(msg.username)),
             const SizedBox(width: 8),
           ],
           Flexible(
