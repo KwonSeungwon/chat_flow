@@ -78,8 +78,9 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         String emoji = body.get("emoji");
         if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
-        boolean ok = messageReactionService.toggleReaction(messageId, emoji, userId);
-        return ResponseEntity.ok(ApiResponse.ok(ok));
+        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(messageId, emoji, userId);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
 
     /**
