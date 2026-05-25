@@ -93,6 +93,18 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void requireMember_throws_IllegalState_when_pathVar_missing() throws Exception {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.addHeader("X-User-Id", "user-1");
+        // Deliberately do NOT set URI_TEMPLATE_VARIABLES_ATTRIBUTE — simulates
+        // a @RequireMember annotation on a method whose URI lacks the path var.
+        MockHttpServletResponse res = new MockHttpServletResponse();
+        assertThrows(IllegalStateException.class,
+                () -> interceptor.preHandle(req, res, handler("roomGated")));
+        verifyNoInteractions(membershipGuard);
+    }
+
+    @Test
     void requireMember_throws_Unauthorized_when_header_missing() throws Exception {
         MockHttpServletRequest req = new MockHttpServletRequest();
         req.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE,
