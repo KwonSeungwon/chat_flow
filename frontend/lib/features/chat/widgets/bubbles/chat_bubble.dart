@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/chat_message.dart';
 import 'avatar.dart';
+import 'bubble_footer.dart';
+import 'bubble_header_decorations.dart';
 import 'chat_bubble_menu.dart';
 import 'hover_reaction_bar.dart';
 
@@ -222,134 +224,12 @@ class ChatBubbleState extends State<ChatBubble> {
               crossAxisAlignment:
                   widget.isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (widget.msg.forwardedFrom != null && widget.msg.forwardedFrom!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.secondaryContainer.withAlpha(160),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.secondary.withAlpha(120),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.forward_outlined,
-                            size: 12,
-                            color: Theme.of(context).colorScheme.onSecondaryContainer,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '전달됨 · ${widget.msg.forwardedFrom!}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSecondaryContainer,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (isUrgent)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withAlpha(25),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red.withAlpha(120), width: 0.5),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.priority_high, size: 12, color: Colors.red),
-                          const SizedBox(width: 2),
-                          Text(
-                            widget.msg.priority.toUpperCase(),
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.red),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (!widget.isMine && widget.showAvatar)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 3),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.msg.username,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (widget.msg.priority == 'URGENT' || widget.msg.priority == 'STAT') ...[
-                          const SizedBox(width: 5),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: widget.msg.priority == 'STAT'
-                                  ? const Color(0xFFD32F2F).withAlpha(20)
-                                  : const Color(0xFFF57C00).withAlpha(20),
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: widget.msg.priority == 'STAT'
-                                    ? const Color(0xFFD32F2F)
-                                    : const Color(0xFFF57C00),
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Text(
-                              widget.msg.priority,
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: widget.msg.priority == 'STAT'
-                                    ? const Color(0xFFD32F2F)
-                                    : const Color(0xFFF57C00),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                if (widget.isMine && (widget.msg.priority == 'URGENT' || widget.msg.priority == 'STAT'))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4, bottom: 3),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: widget.msg.priority == 'STAT'
-                              ? const Color(0xFFD32F2F).withAlpha(20)
-                              : const Color(0xFFF57C00).withAlpha(20),
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                            color: widget.msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(widget.msg.priority, style: TextStyle(
-                          fontSize: 9, fontWeight: FontWeight.w700,
-                          color: widget.msg.priority == 'STAT' ? const Color(0xFFD32F2F) : const Color(0xFFF57C00),
-                        )),
-                      ),
-                    ),
-                  ),
+                BubbleHeaderDecorations(
+                  msg: widget.msg,
+                  isMine: widget.isMine,
+                  showAvatar: widget.showAvatar,
+                  isUrgent: isUrgent,
+                ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -617,91 +497,14 @@ class ChatBubbleState extends State<ChatBubble> {
                       ),
                   ],
                 ),
-                // Reply count chip — shown when there are replies in the buffer
-                if (widget.replyCount > 0 && widget.onOpenThread != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: GestureDetector(
-                      onTap: () => widget.onOpenThread!(widget.msg),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer
-                              .withAlpha(60),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withAlpha(80),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.forum_outlined,
-                              size: 13,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${widget.replyCount}개 답글',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                // Reaction chips inside bubble area
-                if (widget.msg.reactions.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Wrap(
-                      spacing: 4,
-                      children: widget.msg.reactions.entries.map((e) {
-                        final emoji = e.key;
-                        final users = e.value;
-                        return GestureDetector(
-                          onTap: () => widget.onReaction?.call(emoji),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surfaceContainer,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
-                            ),
-                            child: Text('$emoji ${users.length}', style: const TextStyle(fontSize: 12)),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                if (widget.onReply != null)
-                  Align(
-                    alignment: widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: widget.onReply,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Icon(
-                          Icons.reply_rounded,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
-                        ),
-                      ),
-                    ),
-                  ),
+                BubbleFooter(
+                  msg: widget.msg,
+                  isMine: widget.isMine,
+                  replyCount: widget.replyCount,
+                  onOpenThread: widget.onOpenThread,
+                  onReaction: widget.onReaction,
+                  onReply: widget.onReply,
+                ),
               ],
             ),
           ),
