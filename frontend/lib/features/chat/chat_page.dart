@@ -14,6 +14,7 @@ import 'scheduled_messages_provider.dart';
 import '../../shared/models/chat_message.dart';
 import 'dialogs/bookmarks_dialog.dart';
 import 'dialogs/change_password_dialog.dart';
+import 'dialogs/edit_message_dialog.dart';
 import 'dialogs/forward_dialog.dart';
 import 'dialogs/in_room_search.dart';
 import 'dialogs/profile_dialog.dart';
@@ -791,7 +792,7 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
               onDeleteMessage: (messageId) =>
                   chatNotifier.deleteMessage(widget.roomId, messageId),
               onEditMessage: (messageId, currentContent) =>
-                  _showEditDialog(context, ref, widget.roomId, messageId, currentContent),
+                  showEditMessageDialog(context, ref, widget.roomId, messageId, currentContent),
               onViewEditHistory: (messageId, currentContent) =>
                   EditHistorySheet.show(context,
                       roomId: widget.roomId,
@@ -899,48 +900,6 @@ class _ChatRoomContentState extends ConsumerState<_ChatRoomContent> {
         ),
       ],
     ),
-    );
-  }
-
-  void _showEditDialog(BuildContext context, WidgetRef ref, String roomId, String messageId, String currentContent) {
-    final ctrl = TextEditingController(text: currentContent);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('메시지 수정'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 5,
-          minLines: 1,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '수정할 내용을 입력하세요',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final newContent = ctrl.text.trim();
-              if (newContent.isEmpty) return;
-              Navigator.of(ctx).pop();
-              final ok = await ref
-                  .read(chatNotifierProvider(roomId).notifier)
-                  .editMessage(roomId, messageId, newContent);
-              if (!ok && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('메시지 수정에 실패했습니다.')),
-                );
-              }
-            },
-            child: const Text('수정'),
-          ),
-        ],
-      ),
     );
   }
 }
