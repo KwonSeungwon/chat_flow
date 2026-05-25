@@ -17,6 +17,7 @@ import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 import 'chat_rooms_provider.dart';
 import 'helpers/offline_message_queue.dart';
+import 'internal/stomp_message_dispatcher.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
 import 'quick_reply_provider.dart';
@@ -60,6 +61,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
   String? _currentRoomId;
   Timer? _quickReplyDebounce;
+  late final StompMessageDispatcher _dispatcher;
 
   ChatNotifier(
     this._dioClient, {
@@ -71,7 +73,21 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         _token = token,
         _username = username,
         _userId = userId,
-        super(const ChatMessagesState());
+        super(const ChatMessagesState()) {
+    _dispatcher = StompMessageDispatcher(
+      getCurrentState: () => state,
+      setState: (s) => state = s,
+      mounted: () => mounted,
+      userId: _userId,
+      currentRoomId: () => _currentRoomId,
+      computeReadCounts: _computeReadCounts,
+      onIncomingChatMessage: _afterChatMessageReceived,
+      onPinChanged: () => _ref.read(chatRoomsProvider.notifier).fetchRooms(),
+      onSendingConfirmed: (localId) {
+        if (localId != null) _sendingTimers.remove(localId)?.cancel();
+      },
+    );
+  }
 
   Future<void> joinRoom(String roomId) async {
     _stompService.disconnect();
@@ -327,93 +343,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  void _onMessage(Map<String, dynamic> rawMsg) {
-    if (!mounted) return;
-    final type = rawMsg['type']?.toString().toUpperCase();
+  void _onMessage(Map<String, dynamic> rawMsg) =>
+      _dispatcher.dispatch(rawMsg);
 
-    if (type == 'ROOM_DELETED') {
-      state = state.copyWith(exitReason: ChatExitReason.deleted);
-      return;
-    }
-
-    // Handle soft-deleted message broadcast
-    if (type == 'MESSAGE_DELETED') {
-      final deletedId = rawMsg['messageId']?.toString();
-      if (deletedId == null) return;
-      final updated = state.messages.map((m) {
-        if (m.effectiveId == deletedId || m.messageId == deletedId) {
-          return m.copyWith(content: '삭제된 메시지입니다.', deleted: true);
-        }
-        return m;
-      }).toList();
-      state = state.copyWith(messages: updated);
-      return;
-    }
-
-    if (type == 'MESSAGE_EDITED') {
-      final editedId = rawMsg['messageId']?.toString();
-      final newContent = rawMsg['content']?.toString();
-      final editedAt = rawMsg['editedAt']?.toString();
-      if (editedId == null || newContent == null) return;
-      final updated = state.messages.map((m) {
-        if (m.effectiveId == editedId || m.messageId == editedId) {
-          return m.copyWith(content: newContent, edited: true, editedAt: editedAt);
-        }
-        return m;
-      }).toList();
-      state = state.copyWith(messages: updated);
-      return;
-    }
-
-    if (type == 'REACTION_UPDATED') {
-      final msgId = rawMsg['messageId']?.toString();
-      if (msgId == null) return;
-      final reactions = ChatMessage.parseReactions(rawMsg['reactions']);
-      final updated = state.messages.map((m) {
-        if (m.effectiveId == msgId || m.messageId == msgId) {
-          return m.copyWith(reactions: reactions);
-        }
-        return m;
-      }).toList();
-      state = state.copyWith(messages: updated);
-      return;
-    }
-
-    if (type == 'MESSAGE_PINNED' || type == 'MESSAGE_UNPINNED') {
-      // Refresh room list to update pinnedMessageId
-      _ref.read(chatRoomsProvider.notifier).fetchRooms();
-      return;
-    }
-
-    final msg = ChatMessage.fromJson(rawMsg);
-    final existing = state.messages;
-    // Replace local 'sending' message with server-confirmed version
-    final sendingIdx = existing.indexWhere((m) =>
-        m.deliveryStatus == MessageDeliveryStatus.sending &&
-        m.userId == msg.userId &&
-        m.content == msg.content);
-    if (sendingIdx >= 0) {
-      final replaced = List<ChatMessage>.from(existing);
-      replaced[sendingIdx] = msg;
-      // 서버 확인됨 — 해당 localId의 타임아웃 취소
-      final localId = existing[sendingIdx].localId;
-      if (localId != null) {
-        _sendingTimers.remove(localId)?.cancel();
-      }
-      state = state.copyWith(messages: replaced);
-      return;
-    }
-    // Dedup by effectiveId
-    if (existing.any((m) => m.effectiveId == msg.effectiveId)) return;
-    final updated = [...existing, msg];
-    // Cap at 500
-    final capped =
-        updated.length > 500 ? updated.sublist(updated.length - 500) : updated;
-    // 새 메시지가 추가되면 타임라인이 변하므로 readCounts 재계산
-    state = state.copyWith(
-      messages: capped,
-      readCounts: _computeReadCounts(capped, state.readPositions),
-    );
+  /// Post-append hook for genuinely new chat messages: sends an
+  /// auto read-receipt and schedules a smart-reply refresh.
+  void _afterChatMessageReceived(ChatMessage msg) {
     // Auto read-receipt: mark as read when message arrives (user is viewing room)
     if (msg.userId != _userId && _currentRoomId != null) {
       _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
