@@ -16,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -89,6 +90,41 @@ class ParticipantRegistryServiceTest {
                 .thenThrow(new DataIntegrityViolationException("dup"));
 
         registry.register(msg, "session-1");  // must not throw
+    }
+
+    @Test
+    void register_propagates_non_DataIntegrityViolation_exceptions() {
+        ChatMessage msg = new ChatMessage();
+        msg.setChatRoomId("room-1");
+        msg.setUserId("user-1");
+        msg.setUsername("alice");
+
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(false);
+        when(roomMemberRepository.save(any(RoomMemberEntity.class)))
+                .thenThrow(new IllegalStateException("DB down"));
+
+        assertThatThrownBy(() -> registry.register(msg, "session-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("DB down");
+    }
+
+    @Test
+    void register_skips_save_when_user_is_already_a_room_member() {
+        ChatMessage msg = new ChatMessage();
+        msg.setChatRoomId("room-1");
+        msg.setUserId("user-1");
+        msg.setUsername("alice");
+
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(true);
+
+        registry.register(msg, "session-1");
+
+        // Redis SET write still happened
+        verify(setOperations).add("chatflow:room:participants:room-1", "user-1:session-1:alice");
+        // But save() never attempted
+        verify(roomMemberRepository, never()).save(any(RoomMemberEntity.class));
     }
 
     @Test
