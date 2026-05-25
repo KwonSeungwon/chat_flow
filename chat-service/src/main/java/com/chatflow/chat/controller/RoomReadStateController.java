@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.ChatRoomService;
 import com.chatflow.chat.service.ReadReceiptService;
@@ -31,12 +33,11 @@ public class RoomReadStateController {
     private final UnreadCountService unreadCountService;
     private final ReadReceiptService readReceiptService;
     private final StringRedisTemplate redisTemplate;
-    private final RoomMembershipGuard membershipGuard;
 
     @GetMapping("/unread-counts")
     public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCounts(
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        if (userId == null || userId.isBlank()) {
+            @AuthenticatedUser(required = false) String userId) {
+        if (userId == null) {
             return ResponseEntity.ok(ApiResponse.ok(Map.of()));
         }
         List<ChatRoom> rooms = chatRoomService.getAllRooms();
@@ -45,12 +46,11 @@ public class RoomReadStateController {
         return ResponseEntity.ok(ApiResponse.ok(counts));
     }
 
+    @RequireMember
     @GetMapping("/{roomId}/readers")
     public ResponseEntity<?> getRoomReaders(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
+            @AuthenticatedUser String userId) {
         Map<String, String> positions = readReceiptService.getRoomReadPositions(roomId);
         return ResponseEntity.ok(ApiResponse.ok(positions));
     }
@@ -58,8 +58,8 @@ public class RoomReadStateController {
     @GetMapping("/{roomId}/last-read")
     public ResponseEntity<ApiResponse<Map<String, String>>> getLastRead(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        if (userId == null || userId.isBlank()) {
+            @AuthenticatedUser(required = false) String userId) {
+        if (userId == null) {
             return ResponseEntity.ok(ApiResponse.ok(Map.of("lastReadMessageId", "")));
         }
         String key = "chatflow:read:" + roomId + ":" + userId;
@@ -68,14 +68,13 @@ public class RoomReadStateController {
                 Map.of("lastReadMessageId", lastReadId != null ? lastReadId : "")));
     }
 
+    @RequireMember
     @PutMapping("/{roomId}/last-read")
     public ResponseEntity<?> updateLastRead(
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
-            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        ResponseEntity<ApiResponse<?>> gate = membershipGuard.requireMember(roomId, userId);
-        if (gate != null) return gate;
         String lastReadMessageId = body.get("lastReadMessageId");
         if (lastReadMessageId == null || lastReadMessageId.isBlank()) {
             // 메시지가 아직 로드되지 않은 방 입장 시점에도 unread count를 초기화하도록 readAt만 갱신
