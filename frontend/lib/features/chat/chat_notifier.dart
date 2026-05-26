@@ -1,14 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/stomp_service.dart';
-import '../../core/services/fcm_service.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/patient_card.dart';
 import 'state/chat_messages_state.dart';
@@ -17,6 +14,8 @@ import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 import 'chat_rooms_provider.dart';
 import 'helpers/offline_message_queue.dart';
+import 'internal/fcm_room_subscription.dart';
+import 'internal/message_send_helper.dart';
 import 'internal/read_state_helper.dart';
 import 'internal/stomp_message_dispatcher.dart';
 import 'helpers/typing_controller.dart';
@@ -64,6 +63,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Timer? _quickReplyDebounce;
   late final StompMessageDispatcher _dispatcher;
   late final ReadStateHelper _readState;
+  late final MessageSendHelper _send;
+  late final FcmRoomSubscription _fcmSub;
 
   ChatNotifier(
     this._dioClient, {
@@ -99,6 +100,23 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onSendingConfirmed: (localId) {
         if (localId != null) _sendingTimers.remove(localId)?.cancel();
       },
+    );
+    _send = MessageSendHelper(
+      getCurrentState: () => state,
+      setState: (s) => state = s,
+      mounted: () => mounted,
+      userId: _userId,
+      username: _username,
+      stompService: _stompService,
+      offlineQueue: _offlineQueue,
+      sendingTimers: _sendingTimers,
+      dioClient: _dioClient,
+      clearReplyTarget: clearReplyTarget,
+    );
+    _fcmSub = FcmRoomSubscription(
+      dioClient: _dioClient,
+      getPolicyFor: (roomId) =>
+          _ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId),
     );
   }
 
@@ -263,36 +281,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     _subscribeFcmToRoom(roomId);
   }
 
-  Future<void> _subscribeFcmToRoom(String roomId) async {
-    try {
-      final policy = _ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId);
-      if (policy != NotificationPolicy.all) return; // policy says skip room topic
-      final token = await FcmService.getToken();
-      if (token == null) return;
-      await _dioClient.dio.post('/api/fcm/subscribe', data: {
-        'token': token,
-        'roomId': roomId,
-      });
-    } catch (_) {
-      // Best-effort — FCM failure must not interrupt room join
-    }
-  }
-
-  /// Best-effort unsubscribe from a room's FCM topic. Mirrors
-  /// _subscribeFcmToRoom — called from leaveRoom so push notifications stop
-  /// arriving once the user has explicitly left.
-  Future<void> _unsubscribeFcmFromRoom(String roomId) async {
-    try {
-      final token = await FcmService.getToken();
-      if (token == null) return;
-      await _dioClient.dio.delete('/api/fcm/subscribe', data: {
-        'token': token,
-        'roomId': roomId,
-      });
-    } catch (_) {
-      // Best-effort — FCM failure must not interrupt room leave
-    }
-  }
+  Future<void> _subscribeFcmToRoom(String roomId) => _fcmSub.subscribe(roomId);
+  Future<void> _unsubscribeFcmFromRoom(String roomId) => _fcmSub.unsubscribe(roomId);
 
   Future<void> loadMoreHistory(String roomId) async {
     if (state.isLoadingHistory || !state.hasMoreHistory) return;
@@ -569,104 +559,18 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     required String content,
     String priority = 'ROUTINE',
     ChatMessage? replyOverride,
-  }) {
-    // replyOverride lets ThreadPanel post replies without mutating
-    // state.replyTarget (which is owned by the main chat input).
-    final reply = replyOverride ?? state.replyTarget;
-    final localId = const Uuid().v4();
-    final msg = {
-      'chatRoomId': roomId,
-      'userId': _userId,
-      'username': _username,
-      'content': content,
-      'type': 'CHAT',
-      'priority': priority,
-      'timestamp': DateTime.now().toIso8601String(),
-      if (reply != null) 'parentMessageId': reply.effectiveId,
-      '_localId': localId,
-    };
-    // Show local message immediately with 'sending' status
-    final localMsg = ChatMessage(
-      chatRoomId: roomId, userId: _userId, username: _username,
-      content: content, type: 'CHAT', priority: priority,
-      timestamp: msg['timestamp']!,
-      parentMessageId: reply?.effectiveId,
-      localId: localId,
-      deliveryStatus: MessageDeliveryStatus.sending,
-    );
-    state = state.copyWith(messages: [...state.messages, localMsg]);
-    if (_stompService.isConnected) {
-      final sendPayload = Map<String, dynamic>.from(msg)..remove('_localId');
-      _stompService.sendMessage(sendPayload);
-    } else {
-      _offlineQueue.enqueue(msg);
-    }
-    // Only clear when the reply came from state (main chat input).
-    // Override callers (ThreadPanel) manage their own state.
-    if (reply != null && replyOverride == null) clearReplyTarget();
-    // 10초 내 서버 확인(동일 localId 메시지가 sent로 교체) 없으면 failed로 표시
-    _sendingTimers[localId] = Timer(const Duration(seconds: 10), () {
-      _sendingTimers.remove(localId);
-      if (!mounted) return;
-      final idx = state.messages.indexWhere((m) =>
-          m.localId == localId && m.deliveryStatus == MessageDeliveryStatus.sending);
-      if (idx < 0) return;
-      final m = state.messages[idx];
-      final failed = m.copyWith(deliveryStatus: MessageDeliveryStatus.failed);
-      final list = List<ChatMessage>.from(state.messages);
-      list[idx] = failed;
-      state = state.copyWith(messages: list);
-    });
-  }
-
-  /// 실패한 메시지 재전송. 기존 localMsg를 제거하고 sendMessage 재호출.
-  void retryFailedMessage(ChatMessage msg) {
-    if (msg.deliveryStatus != MessageDeliveryStatus.failed) return;
-    final list = state.messages.where((m) => m.localId != msg.localId).toList();
-    state = state.copyWith(messages: list);
-    // Preserve thread association on retry — without replyOverride, a failed
-    // reply would silently re-post as a top-level message.
-    ChatMessage? parent;
-    if (msg.parentMessageId != null) {
-      parent = state.messages
-          .cast<ChatMessage?>()
-          .firstWhere(
-              (m) => m?.effectiveId == msg.parentMessageId,
-              orElse: () => null);
-      // Parent evicted from the 500-message buffer (or deleted) — build a
-      // minimal stub so the wire-format still carries parentMessageId.
-      // The backend computes parentMessagePreview from the parent's stored
-      // row, so a stub with only messageId set is sufficient.
-      parent ??= ChatMessage(
-        chatRoomId: msg.chatRoomId,
-        userId: '',
-        username: '',
-        content: '',
-        type: 'CHAT',
-        priority: 'ROUTINE',
-        timestamp: msg.timestamp,
-        messageId: msg.parentMessageId,
+  }) =>
+      _send.sendMessage(
+        roomId: roomId,
+        content: content,
+        priority: priority,
+        replyOverride: replyOverride,
       );
-    }
-    sendMessage(
-      roomId: msg.chatRoomId,
-      content: msg.content,
-      priority: msg.priority,
-      replyOverride: parent,
-    );
-  }
 
-  void sendPatientCard(String roomId, PatientCard card) {
-    _stompService.sendMessage({
-      'chatRoomId': roomId,
-      'userId': _userId,
-      'username': _username,
-      'content': jsonEncode(card.toJson()),
-      'type': 'PATIENT_CARD',
-      'priority': 'ROUTINE',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-  }
+  void retryFailedMessage(ChatMessage msg) => _send.retryFailedMessage(msg);
+
+  void sendPatientCard(String roomId, PatientCard card) =>
+      _send.sendPatientCard(roomId, card);
 
   Future<void> uploadAndSendFile({
     required String roomId,
@@ -674,31 +578,14 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     required Uint8List bytes,
     required String mimeType,
     String content = '',
-  }) async {
-    final result = await _dioClient.uploadFile(
-      fileName: fileName,
-      bytes: bytes,
-      mimeType: mimeType,
-    );
-    final fileUrl = result['fileUrl']?.toString() ?? '';
-    final storedName = result['fileName']?.toString() ?? fileName;
-    final contentType = result['fileContentType']?.toString() ?? mimeType;
-
-    final msgContent = content.isNotEmpty ? content : '[파일] $storedName';
-
-    _stompService.sendMessage({
-      'chatRoomId': roomId,
-      'userId': _userId,
-      'username': _username,
-      'content': msgContent,
-      'type': 'FILE',
-      'fileUrl': fileUrl,
-      'fileName': storedName,
-      'fileContentType': contentType,
-      'priority': 'ROUTINE',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-  }
+  }) =>
+      _send.uploadAndSendFile(
+        roomId: roomId,
+        fileName: fileName,
+        bytes: bytes,
+        mimeType: mimeType,
+        content: content,
+      );
 
   Future<void> toggleReaction(String roomId, String messageId, String emoji) async {
     try {
@@ -707,38 +594,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (_) {}
   }
 
-  Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
-    final isFile = msg.isFileMessage;
-    final content = '[전달] ${msg.username}: ${msg.content}';
-    final forwardedFrom = '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
-
-    if (_stompService.isConnected) {
-      _stompService.sendMessage({
-        'chatRoomId': targetRoomId,
-        'userId': _userId,
-        'username': _username,
-        'content': content,
-        'type': isFile ? 'FILE' : 'CHAT',
-        'priority': 'ROUTINE',
-        'timestamp': DateTime.now().toIso8601String(),
-        'forwardedFrom': forwardedFrom,
-        if (isFile) 'fileUrl': msg.fileUrl,
-        if (isFile) 'fileName': msg.fileName,
-        if (isFile) 'fileContentType': msg.fileContentType,
-      });
-      return true;
-    }
-    // REST fallback when STOMP is disconnected
-    try {
-      await _dioClient.dio.post(
-        '/api/chat/rooms/$targetRoomId/messages',
-        data: {'content': content, 'forwardedFrom': forwardedFrom},
-      );
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) =>
+      _send.forwardMessage(targetRoomId, msg);
 
   Future<List<Map<String, dynamic>>> searchParticipants(String roomId, String query) async {
     try {
