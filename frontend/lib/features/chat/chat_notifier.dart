@@ -554,6 +554,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     state = state.copyWith(clearReplyTarget: true);
   }
 
+  void clearError() {
+    state = state.copyWith(clearErrorMessage: true);
+  }
+
   void sendMessage({
     required String roomId,
     required String content,
@@ -591,7 +595,16 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     try {
       await _dioClient.dio.post('/api/chat/rooms/$roomId/messages/$messageId/reactions',
           data: {'emoji': emoji});
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      String msg = '리액션을 추가할 수 없습니다.';
+      if (e is DioException && e.response?.data is Map) {
+        final body = e.response!.data as Map;
+        final backendMsg = body['message']?.toString();
+        if (backendMsg != null && backendMsg.isNotEmpty) msg = backendMsg;
+      }
+      state = state.copyWith(errorMessage: msg);
+    }
   }
 
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) =>

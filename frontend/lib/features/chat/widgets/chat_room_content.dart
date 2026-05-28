@@ -140,6 +140,19 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
       }
     });
 
+    // Surface transient errors (e.g. reaction failures) via SnackBar
+    ref.listen<ChatMessagesState>(chatNotifierProvider(widget.roomId), (prev, next) {
+      if (!context.mounted) return;
+      final msg = next.errorMessage;
+      if (msg != null && msg != prev?.errorMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        Future.microtask(() =>
+          ref.read(chatNotifierProvider(widget.roomId).notifier).clearError());
+      }
+    });
+
     // Determine scroll target: reply-tap > explicit search > lastRead on entry
     final scrollTarget = _replyScrollTarget ?? widget.scrollToMessageId ??
         (chatState.lastReadMessageId?.isNotEmpty == true
