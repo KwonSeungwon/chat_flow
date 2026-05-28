@@ -137,5 +137,22 @@ class ParticipantRegistryServiceTest {
 
         verify(setOperations).remove("chatflow:room:participants:room-1", "u1:s1:alice");
         verify(setOperations, never()).remove(anyString(), eq("u1:s2:alice"));
+        // Exactly one remove() call total — no spurious deletes from filter drift
+        verify(setOperations, times(1)).remove(anyString(), anyString());
+    }
+
+    @Test
+    void removeSession_removes_all_user_entries_when_sessionId_null() {
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members("chatflow:room:participants:room-1"))
+                .thenReturn(Set.of("u1:s1:alice", "u1:s2:alice", "u2:s9:bob"));
+
+        registry.removeSession("room-1", "alice", null);
+
+        // both alice entries removed (suffix match on ":alice")
+        verify(setOperations).remove("chatflow:room:participants:room-1", "u1:s1:alice");
+        verify(setOperations).remove("chatflow:room:participants:room-1", "u1:s2:alice");
+        // bob untouched
+        verify(setOperations, never()).remove(anyString(), eq("u2:s9:bob"));
     }
 }

@@ -9,8 +9,6 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 
 public class AuthenticatedUserResolver implements HandlerMethodArgumentResolver {
 
-    public static final String HEADER_NAME = "X-User-Id";
-
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
         return parameter.hasParameterAnnotation(AuthenticatedUser.class)
@@ -23,7 +21,7 @@ public class AuthenticatedUserResolver implements HandlerMethodArgumentResolver 
                                    NativeWebRequest webRequest,
                                    WebDataBinderFactory binderFactory) {
         AuthenticatedUser anno = parameter.getParameterAnnotation(AuthenticatedUser.class);
-        String value = webRequest.getHeader(HEADER_NAME);
+        String value = webRequest.getHeader(AuthHeaders.X_USER_ID);
         boolean blank = value == null || value.isBlank();
         if (blank) {
             if (anno != null && !anno.required()) return null;

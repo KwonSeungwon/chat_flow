@@ -59,7 +59,7 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
             @AuthenticatedUser(required = false) String userId) {
         List<ChatRoom> rooms = chatRoomService.getAllRooms();
-        if (userId == null || userId.isBlank()) {
+        if (userId == null) {
             return ResponseEntity.ok(ApiResponse.ok(rooms));
         }
         Map<String, Instant> hiddenMap = roomVisibilityService.getHiddenMap(userId);
