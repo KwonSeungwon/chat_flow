@@ -158,9 +158,9 @@ class LinkPreviewServiceTest {
 
         Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        // Network failure → INTERNAL_ERROR
-        assertTrue(result.isFailure());
-        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
+        // Network failure → ok(empty), not INTERNAL_ERROR (ops noise)
+        assertTrue(result.isSuccess());
+        assertTrue(result.value().isEmpty());
 
         // No cache write should occur
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
@@ -193,9 +193,9 @@ class LinkPreviewServiceTest {
 
         Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        // IOException inside exchange → caught by outer catch → INTERNAL_ERROR
-        assertTrue(result.isFailure());
-        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
+        // IOException inside exchange → caught by outer catch → ok(empty)
+        assertTrue(result.isSuccess());
+        assertTrue(result.value().isEmpty());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
@@ -229,8 +229,9 @@ class LinkPreviewServiceTest {
 
         Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
-        assertTrue(result.isFailure());
-        assertEquals(ChatErrorCode.INTERNAL_ERROR, result.error());
+        // Body stream exceeds 1MB → caught by outer catch → ok(empty)
+        assertTrue(result.isSuccess());
+        assertTrue(result.value().isEmpty());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
     }
 

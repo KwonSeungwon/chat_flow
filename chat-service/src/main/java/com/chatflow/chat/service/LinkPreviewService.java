@@ -139,7 +139,10 @@ public class LinkPreviewService {
             }
         } catch (Exception e) {
             log.debug("Link preview fetch failed: {}", e.getMessage());
-            return Result.err(ChatErrorCode.INTERNAL_ERROR, "링크 미리보기를 불러올 수 없습니다.");
+            // Treat transient fetch failures (network timeout, SSRF reject, malformed
+            // response) as Result.ok(empty) — the frontend renders missing preview
+            // gracefully and a 500 here would add ops noise without UX value.
+            // INTERNAL_ERROR is reserved for genuine internal failures.
         }
         return Result.ok(result);
     }
