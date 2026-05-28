@@ -13,6 +13,8 @@ public enum ChatErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN),
     MUTED(HttpStatus.LOCKED),
     DELETED(HttpStatus.GONE),
+    // Reserved for future room-join migration — RoomInviteController.inviteUser
+    // and join-flow services still build inline 400 responses.
     ROOM_FULL(HttpStatus.BAD_REQUEST),
     INVALID_INPUT(HttpStatus.BAD_REQUEST),
     GONE(HttpStatus.GONE),

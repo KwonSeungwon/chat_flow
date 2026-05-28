@@ -14,8 +14,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    public static final String HEADER_NAME = "X-User-Id";
-
     private final RoomMembershipGuard membershipGuard;
 
     @Override
@@ -27,7 +25,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
         if (member == null && auth == null) return true;
 
-        String userId = request.getHeader(HEADER_NAME);
+        String userId = request.getHeader(AuthHeaders.X_USER_ID);
         if (userId == null || userId.isBlank()) {
             throw new UnauthorizedException("인증이 필요합니다.");
         }

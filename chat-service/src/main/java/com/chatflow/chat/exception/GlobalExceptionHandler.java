@@ -20,6 +20,9 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
                 .body(ErrorResponse.of(404, "NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."));
     }
 
+    // ── Stage 3-A auth handlers (ApiResponse shape — mirrors pre-refactor
+    // controller bodies; Operator Toolkit handlers below use ErrorResponse
+    // intentionally for stable error codes). Do not normalize.
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<?>> handleUnauthorized(UnauthorizedException e) {
         log.warn("Unauthorized: {}", e.getMessage());
