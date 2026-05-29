@@ -1,4 +1,6 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.message;
+
+import com.chatflow.chat.service.outbox.ChatPersistenceService;
 
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;

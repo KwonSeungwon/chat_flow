@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.service.outbox.ChatPersistenceService;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.common.dto.OrderEvent;
