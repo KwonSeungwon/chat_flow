@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.room;
 
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomBanEntity;
@@ -11,6 +11,8 @@ import com.chatflow.chat.exception.SelfTargetNotAllowedException;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomBanRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.service.MemberListBroadcaster;
+import com.chatflow.chat.service.RoomPermissionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
