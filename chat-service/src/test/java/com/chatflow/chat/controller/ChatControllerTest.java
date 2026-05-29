@@ -4,7 +4,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatService;
-import com.chatflow.chat.service.ReadReceiptService;
+import com.chatflow.chat.service.read.ReadReceiptService;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;

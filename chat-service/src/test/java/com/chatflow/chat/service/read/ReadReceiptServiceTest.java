@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.read;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;

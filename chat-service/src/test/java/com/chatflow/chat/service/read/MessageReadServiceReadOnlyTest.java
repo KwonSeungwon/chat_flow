@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.read;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;

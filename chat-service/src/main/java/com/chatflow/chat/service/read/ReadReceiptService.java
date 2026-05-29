@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.read;
 
 import com.chatflow.common.dto.ReadReceipt;
 import lombok.RequiredArgsConstructor;

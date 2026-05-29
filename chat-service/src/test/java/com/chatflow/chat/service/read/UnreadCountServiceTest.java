@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.read;
 
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.repository.ChatMessageRepository;
