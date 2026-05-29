@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.notification;
 
 import com.chatflow.chat.dto.MentionItemDto;
 import com.chatflow.chat.entity.ChatMessageEntity;

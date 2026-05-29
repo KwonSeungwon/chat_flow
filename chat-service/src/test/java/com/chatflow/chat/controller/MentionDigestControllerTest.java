@@ -2,7 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.dto.MentionItemDto;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
-import com.chatflow.chat.service.MentionDigestService;
+import com.chatflow.chat.service.notification.MentionDigestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

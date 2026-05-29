@@ -1,7 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.exception.GlobalExceptionHandler;
-import com.chatflow.chat.service.ScheduledMessageService;
+import com.chatflow.chat.service.notification.ScheduledMessageService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
