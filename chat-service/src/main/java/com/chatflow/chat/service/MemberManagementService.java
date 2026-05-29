@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.service.moderation.MuteResult;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.exception.PermissionDeniedException;

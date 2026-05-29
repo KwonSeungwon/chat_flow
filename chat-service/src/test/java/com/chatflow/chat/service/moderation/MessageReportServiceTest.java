@@ -1,4 +1,6 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.moderation;
+
+import com.chatflow.chat.service.RoomPermissionService;
 
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.*;

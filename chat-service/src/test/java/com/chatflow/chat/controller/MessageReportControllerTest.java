@@ -4,7 +4,7 @@ import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.ReportReason;
 import com.chatflow.chat.entity.ReportStatus;
 import com.chatflow.chat.exception.*;
-import com.chatflow.chat.service.MessageReportService;
+import com.chatflow.chat.service.moderation.MessageReportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

@@ -5,7 +5,7 @@ import com.chatflow.chat.dto.ReportStatusUpdateRequest;
 import com.chatflow.chat.dto.ReportSubmitRequest;
 import com.chatflow.chat.entity.ReportReason;
 import com.chatflow.chat.entity.ReportStatus;
-import com.chatflow.chat.service.MessageReportService;
+import com.chatflow.chat.service.moderation.MessageReportService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

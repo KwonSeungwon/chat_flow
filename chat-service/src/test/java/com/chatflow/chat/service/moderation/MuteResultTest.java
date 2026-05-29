@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.moderation;
 
 import org.junit.jupiter.api.Test;
 
