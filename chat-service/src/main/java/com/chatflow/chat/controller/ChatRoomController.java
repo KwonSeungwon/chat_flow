@@ -9,7 +9,7 @@ import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.service.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
-import com.chatflow.chat.service.MessageReadService;
+import com.chatflow.chat.service.read.MessageReadService;
 import com.chatflow.chat.service.MessageSenderService;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
