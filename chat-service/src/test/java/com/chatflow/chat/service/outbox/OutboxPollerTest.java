@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.outbox;
 
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.repository.OutboxEventRepository;

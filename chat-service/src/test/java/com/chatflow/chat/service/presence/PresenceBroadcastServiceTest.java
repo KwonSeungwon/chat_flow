@@ -1,6 +1,6 @@
 package com.chatflow.chat.service.presence;
 
-import com.chatflow.chat.service.ChatPersistenceService;
+import com.chatflow.chat.service.outbox.ChatPersistenceService;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import org.junit.jupiter.api.BeforeEach;
