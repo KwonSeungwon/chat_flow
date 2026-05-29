@@ -1,7 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.exception.GlobalExceptionHandler;
-import com.chatflow.chat.service.FcmNotificationService;
+import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

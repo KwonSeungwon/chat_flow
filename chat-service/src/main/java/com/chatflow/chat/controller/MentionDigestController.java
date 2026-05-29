@@ -1,7 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.dto.MentionItemDto;
-import com.chatflow.chat.service.MentionDigestService;
+import com.chatflow.chat.service.notification.MentionDigestService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

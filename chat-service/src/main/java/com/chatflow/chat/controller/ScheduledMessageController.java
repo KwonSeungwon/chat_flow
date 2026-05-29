@@ -1,7 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.dto.ScheduledMessageDto;
-import com.chatflow.chat.service.ScheduledMessageService;
+import com.chatflow.chat.service.notification.ScheduledMessageService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

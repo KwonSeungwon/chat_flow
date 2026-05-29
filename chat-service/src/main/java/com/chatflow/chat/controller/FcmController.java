@@ -2,7 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireAuth;
-import com.chatflow.chat.service.FcmNotificationService;
+import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.chatflow.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
