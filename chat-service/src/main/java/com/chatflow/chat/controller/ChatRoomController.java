@@ -6,7 +6,7 @@ import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
-import com.chatflow.chat.service.AuditService;
+import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
 import com.chatflow.chat.service.read.MessageReadService;

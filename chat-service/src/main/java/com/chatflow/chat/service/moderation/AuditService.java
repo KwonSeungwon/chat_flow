@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.moderation;
 
 import com.chatflow.common.dto.AuditEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;

@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.moderation;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;

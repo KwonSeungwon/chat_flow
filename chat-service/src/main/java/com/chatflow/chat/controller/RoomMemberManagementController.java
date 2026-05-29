@@ -7,7 +7,7 @@ import com.chatflow.chat.dto.RoleChangeRequest;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.MemberManagementService;
-import com.chatflow.chat.service.MuteResult;
+import com.chatflow.chat.service.moderation.MuteResult;
 import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;

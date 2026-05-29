@@ -9,6 +9,7 @@ import com.chatflow.chat.exception.RoomTypeNotSupportedException;
 import com.chatflow.chat.exception.SelfTargetNotAllowedException;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.service.moderation.MuteResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

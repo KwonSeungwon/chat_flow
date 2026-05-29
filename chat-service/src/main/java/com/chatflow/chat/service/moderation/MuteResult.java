@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.moderation;
 
 import java.time.LocalDateTime;
 
