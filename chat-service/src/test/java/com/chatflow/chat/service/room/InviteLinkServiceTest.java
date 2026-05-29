@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.room;
 
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;

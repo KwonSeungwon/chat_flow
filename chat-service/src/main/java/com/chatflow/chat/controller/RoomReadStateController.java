@@ -3,7 +3,7 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatRoom;
-import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.chat.service.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;

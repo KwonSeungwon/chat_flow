@@ -3,6 +3,7 @@ package com.chatflow.chat.service;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;

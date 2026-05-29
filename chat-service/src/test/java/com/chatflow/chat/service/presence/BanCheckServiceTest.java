@@ -1,6 +1,6 @@
 package com.chatflow.chat.service.presence;
 
-import com.chatflow.chat.service.RoomBanService;
+import com.chatflow.chat.service.room.RoomBanService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

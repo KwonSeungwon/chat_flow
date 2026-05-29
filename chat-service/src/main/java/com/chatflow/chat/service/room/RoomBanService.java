@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.room;
 
 import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
@@ -6,6 +6,8 @@ import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.repository.RoomBanRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
+import com.chatflow.chat.service.MemberListBroadcaster;
+import com.chatflow.chat.service.RoomPermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;

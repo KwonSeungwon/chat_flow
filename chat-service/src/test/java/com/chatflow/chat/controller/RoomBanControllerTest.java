@@ -5,7 +5,7 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.exception.*;
 import com.chatflow.chat.repository.RoomMemberRepository;
-import com.chatflow.chat.service.RoomBanService;
+import com.chatflow.chat.service.room.RoomBanService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

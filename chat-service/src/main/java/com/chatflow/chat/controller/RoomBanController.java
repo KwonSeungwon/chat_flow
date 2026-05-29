@@ -4,7 +4,7 @@ import com.chatflow.chat.dto.BanDto;
 import com.chatflow.chat.dto.BanRequest;
 import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.repository.RoomMemberRepository;
-import com.chatflow.chat.service.RoomBanService;
+import com.chatflow.chat.service.room.RoomBanService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

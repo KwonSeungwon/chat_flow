@@ -7,7 +7,7 @@ import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
-import com.chatflow.chat.service.RoomCacheEvictor;
+import com.chatflow.chat.service.room.RoomCacheEvictor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

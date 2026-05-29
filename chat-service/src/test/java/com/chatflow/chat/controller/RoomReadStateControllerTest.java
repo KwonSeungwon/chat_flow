@@ -6,7 +6,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
-import com.chatflow.chat.service.ChatRoomService;
+import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.ReadReceiptService;
 import com.chatflow.chat.service.UnreadCountService;
 import com.fasterxml.jackson.databind.ObjectMapper;

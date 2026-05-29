@@ -2,7 +2,7 @@ package com.chatflow.chat.service.presence;
 
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.RoomMemberRepository;
-import com.chatflow.chat.service.ParticipantService;
+import com.chatflow.chat.service.room.ParticipantService;
 import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
