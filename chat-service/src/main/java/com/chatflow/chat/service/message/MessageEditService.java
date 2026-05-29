@@ -1,4 +1,4 @@
-package com.chatflow.chat.service;
+package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
