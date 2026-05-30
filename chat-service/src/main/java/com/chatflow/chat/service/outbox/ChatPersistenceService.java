@@ -4,6 +4,7 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.event.MessagePersistedEvent;
 import com.chatflow.chat.exception.PersistenceException;
+import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.ChatMessage;
@@ -26,6 +27,7 @@ public class ChatPersistenceService {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final MessageEncryptor messageEncryptor;
+    private final ChatMessageMapper chatMessageMapper;
 
     /**
      * 메시지 + Outbox 이벤트를 단일 TX로 영속화.
@@ -36,27 +38,10 @@ public class ChatPersistenceService {
     @Transactional
     public void persistMessageAndPublish(ChatMessage message, String chatTopic, String eventType,
                                          String aiSummaryTopic) {
-        String storedContent = messageEncryptor.isEnabled()
-                ? messageEncryptor.encrypt(message.getContent())
-                : message.getContent();
-
-        ChatMessageEntity entity = ChatMessageEntity.builder()
-                .messageId(message.getMessageId())
-                .chatRoomId(message.getChatRoomId())
-                .userId(message.getUserId())
-                .username(message.getUsername())
-                .content(storedContent)
-                .timestamp(message.getTimestamp())
-                .type(message.getType() != null ? message.getType().name() : "CHAT")
-                .priority(message.getPriority() != null ? message.getPriority() : "ROUTINE")
-                .isAiGenerated(message.isAiGenerated())
-                .fileUrl(message.getFileUrl())
-                .fileName(message.getFileName())
-                .fileContentType(message.getFileContentType())
-                .parentMessageId(message.getParentMessageId())
-                .parentMessagePreview(message.getParentMessagePreview())
-                .forwardedFrom(message.getForwardedFrom())
-                .build();
+        ChatMessageEntity entity = chatMessageMapper.toEntity(message);
+        if (messageEncryptor.isEnabled()) {
+            entity.setContent(messageEncryptor.encrypt(message.getContent()));
+        }
         chatMessageRepository.save(entity);
 
         saveOutboxEventInternal(message, chatTopic, eventType);
