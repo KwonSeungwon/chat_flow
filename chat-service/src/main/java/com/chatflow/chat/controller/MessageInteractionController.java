@@ -3,9 +3,10 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.auth.RequireMember;
-import com.chatflow.chat.entity.MessageEditHistoryEntity;
+import com.chatflow.chat.mapper.MessageEditHistoryMapper;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.service.LinkPreviewService;
+import com.chatflow.common.dto.MessageEditHistory;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
@@ -34,6 +35,7 @@ public class MessageInteractionController {
     private final LinkPreviewService linkPreviewService;
     private final MessageThreadService messageThreadService;
     private final MessageEditHistoryRepository editHistoryRepository;
+    private final MessageEditHistoryMapper messageEditHistoryMapper;
 
     @RequireAuth
     @DeleteMapping("/{roomId}/messages/{messageId}")
@@ -93,8 +95,8 @@ public class MessageInteractionController {
             @PathVariable String roomId,
             @PathVariable String messageId,
             @AuthenticatedUser String userId) {
-        List<MessageEditHistoryEntity> history =
-                editHistoryRepository.findByMessageIdOrderByEditedAtDesc(messageId);
+        List<MessageEditHistory> history = messageEditHistoryMapper.toDtoList(
+                editHistoryRepository.findByMessageIdOrderByEditedAtDesc(messageId));
         return ResponseEntity.ok(ApiResponse.ok(history));
     }
 
