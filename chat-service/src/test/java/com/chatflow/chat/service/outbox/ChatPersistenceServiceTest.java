@@ -3,6 +3,7 @@ package com.chatflow.chat.service.outbox;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.event.MessagePersistedEvent;
+import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.BaseMessage;
@@ -37,6 +38,7 @@ class ChatPersistenceServiceTest {
     @Mock private ObjectMapper objectMapper;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private MessageEncryptor messageEncryptor;
+    @Mock private ChatMessageMapper chatMessageMapper;
 
     private ChatPersistenceService chatPersistenceService;
 
@@ -49,7 +51,8 @@ class ChatPersistenceServiceTest {
     void setUp() {
         chatPersistenceService = new ChatPersistenceService(
                 chatMessageRepository, outboxEventRepository,
-                objectMapper, eventPublisher, messageEncryptor);
+                objectMapper, eventPublisher, messageEncryptor,
+                chatMessageMapper);
     }
 
     private ChatMessage sampleMessage() {
@@ -64,6 +67,18 @@ class ChatPersistenceServiceTest {
                 .build();
     }
 
+    private ChatMessageEntity sampleEntity() {
+        return ChatMessageEntity.builder()
+                .messageId(MESSAGE_ID)
+                .chatRoomId(ROOM_ID)
+                .userId("user-1")
+                .username("tester")
+                .content(RAW_CONTENT)
+                .timestamp(LocalDateTime.of(2026, 1, 1, 12, 0))
+                .type("CHAT")
+                .build();
+    }
+
     // ── Encryption ──────────────────────────────────────────────
 
     @Nested
@@ -71,6 +86,7 @@ class ChatPersistenceServiceTest {
 
         @Test
         void encrypts_content_before_save_when_encryptor_enabled() throws Exception {
+            when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(true);
             when(messageEncryptor.encrypt(RAW_CONTENT)).thenReturn(ENCRYPTED_CONTENT);
             when(objectMapper.writeValueAsString(any())).thenReturn("{}");
@@ -87,6 +103,7 @@ class ChatPersistenceServiceTest {
 
         @Test
         void passes_content_through_when_encryptor_disabled() throws Exception {
+            when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
             when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
@@ -107,6 +124,7 @@ class ChatPersistenceServiceTest {
 
         @Test
         void writes_outbox_event_with_chat_messages_topic_key() throws Exception {
+            when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
             when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
