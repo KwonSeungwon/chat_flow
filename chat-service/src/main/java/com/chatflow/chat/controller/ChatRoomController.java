@@ -6,6 +6,7 @@ import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
+import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
@@ -19,6 +20,7 @@ import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.ChatMessageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -54,6 +56,7 @@ public class ChatRoomController {
     private final StringRedisTemplate redisTemplate;
     private final RoomVisibilityService roomVisibilityService;
     private final MessageSenderService messageSenderService;
+    private final ChatMessageResponseMapper chatMessageResponseMapper;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
@@ -111,7 +114,8 @@ public class ChatRoomController {
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         size = Math.min(size, 100);
-        Page<ChatMessageEntity> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size));
+        Page<ChatMessageResponse> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size))
+                .map(chatMessageResponseMapper::toResponse);
         auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
@@ -128,15 +132,15 @@ public class ChatRoomController {
             @RequestParam(defaultValue = "50") int size,
             @AuthenticatedUser String userId) {
         size = Math.min(size, 100);
-        List<ChatMessageEntity> messages = messageReadService.getMessagesByCursor(roomId, before, size);
+        List<ChatMessageEntity> entities = messageReadService.getMessagesByCursor(roomId, before, size);
 
-        LocalDateTime nextCursor = messages.isEmpty() ? null
-                : messages.get(messages.size() - 1).getTimestamp();
+        LocalDateTime nextCursor = entities.isEmpty() ? null
+                : entities.get(entities.size() - 1).getTimestamp();
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("messages", messages);
+        result.put("messages", chatMessageResponseMapper.toResponseList(entities));
         result.put("nextCursor", nextCursor);
-        result.put("hasMore", messages.size() == size);
+        result.put("hasMore", entities.size() == size);
 
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
