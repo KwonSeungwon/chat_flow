@@ -19,6 +19,16 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query("UPDATE OutboxEvent e SET e.status = 'PROCESSED', e.processedAt = :now WHERE e.id IN :ids AND e.status = 'PENDING'")
     int markProcessed(@Param("ids") List<Long> ids, @Param("now") LocalDateTime now);
 
+    /** Bulk JPQL update — bypasses the persistence context; in-memory entities are NOT refreshed. */
+    @Modifying
+    @Query("UPDATE OutboxEvent e SET e.status = 'FAILED', e.processedAt = :now WHERE e.id IN :ids AND e.status = 'PENDING'")
+    int markFailed(@Param("ids") List<Long> ids, @Param("now") LocalDateTime now);
+
+    /** Bulk JPQL update — bypasses the persistence context; in-memory entities are NOT refreshed. */
+    @Modifying
+    @Query("UPDATE OutboxEvent e SET e.retryCount = e.retryCount + 1 WHERE e.id IN :ids AND e.status = 'PENDING'")
+    int incrementRetry(@Param("ids") List<Long> ids);
+
     @Modifying
     @Query("DELETE FROM OutboxEvent e WHERE e.status = 'PROCESSED' AND e.processedAt < :before")
     int deleteProcessedBefore(@Param("before") LocalDateTime before);
