@@ -7,6 +7,7 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.mapper.ChatMessageResponseMapper;
+import com.chatflow.chat.mapper.ChatRoomMapper;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
@@ -21,6 +22,7 @@ import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.ChatMessageResponse;
+import com.chatflow.common.dto.ChatRoomResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -57,22 +59,23 @@ public class ChatRoomController {
     private final RoomVisibilityService roomVisibilityService;
     private final MessageSenderService messageSenderService;
     private final ChatMessageResponseMapper chatMessageResponseMapper;
+    private final ChatRoomMapper chatRoomMapper;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<ChatRoom>>> getAllRooms(
+    public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getAllRooms(
             @AuthenticatedUser(required = false) String userId) {
         List<ChatRoom> rooms = chatRoomService.getAllRooms();
         if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.ok(rooms));
+            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(rooms)));
         }
         Map<String, Instant> hiddenMap = roomVisibilityService.getHiddenMap(userId);
         if (hiddenMap.isEmpty()) {
-            return ResponseEntity.ok(ApiResponse.ok(rooms));
+            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(rooms)));
         }
         List<ChatRoom> visible = rooms.stream()
                 .filter(r -> roomVisibilityService.isVisible(r, hiddenMap))
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.ok(visible));
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(visible)));
     }
 
     @RequireMember(pathVar = "id")
@@ -81,28 +84,28 @@ public class ChatRoomController {
             @PathVariable String id,
             @AuthenticatedUser String userId) {
         return chatRoomService.getRoom(id)
-                .map(room -> ResponseEntity.ok(ApiResponse.ok(room)))
+                .map(room -> ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(room))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponse.error("채팅방을 찾을 수 없습니다.")));
     }
 
     @RequireAuth
     @PostMapping
-    public ResponseEntity<ApiResponse<ChatRoom>> createRoom(
+    public ResponseEntity<ApiResponse<ChatRoomResponse>> createRoom(
             @Valid @RequestBody ChatRoom request,
             @AuthenticatedUser String creatorId,
             @RequestHeader(value = "X-Username", required = false) String creatorUsername) {
         ChatRoom saved = chatRoomService.createRoom(request, creatorId, creatorUsername);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(saved, "채팅방이 생성되었습니다."));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(chatRoomMapper.toResponse(saved), "채팅방이 생성되었습니다."));
     }
 
     @PostMapping("/get-or-create")
-    public ResponseEntity<ApiResponse<ChatRoom>> getOrCreateRoom(@RequestBody GetOrCreateRequest request) {
+    public ResponseEntity<ApiResponse<ChatRoomResponse>> getOrCreateRoom(@RequestBody GetOrCreateRequest request) {
         if (request.externalId == null || request.externalId.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("externalId는 필수입니다."));
         }
         ChatRoom room = chatRoomService.getOrCreateByExternalId(request.externalId, request.name, request.description);
-        return ResponseEntity.ok(ApiResponse.ok(room));
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(room)));
     }
 
     @RequireMember
@@ -255,7 +258,7 @@ public class ChatRoomController {
 
     @RequireAuth
     @PostMapping("/dm")
-    public ResponseEntity<ApiResponse<ChatRoom>> createDm(
+    public ResponseEntity<ApiResponse<ChatRoomResponse>> createDm(
             @RequestBody Map<String, String> body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
@@ -269,7 +272,7 @@ public class ChatRoomController {
         // endpoints without sending a STOMP message first.
         roomMembershipService.addMemberIfAbsent(dm.getId(), userId, username);
         roomMembershipService.addMemberIfAbsent(dm.getId(), targetUserId, targetUsername);
-        return ResponseEntity.ok(ApiResponse.ok(dm));
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
     }
 
     @RequireAuth
