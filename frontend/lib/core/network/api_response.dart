@@ -14,6 +14,8 @@ Map<String, dynamic>? apiResponseMap(Object? payload) {
 List<dynamic> apiResponseList(Object? payload) {
   final data = unwrapApiResponse(payload);
   if (data is List) return data;
+  // Spring Page shape: {content: [...]} (possibly nested under data:)
+  if (data is Map && data['content'] is List) return data['content'] as List;
   return const [];
 }
 
