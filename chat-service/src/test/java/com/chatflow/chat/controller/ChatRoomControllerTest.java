@@ -6,6 +6,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.mapper.ChatRoomMapper;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
@@ -13,6 +14,7 @@ import com.chatflow.chat.service.read.MessageReadService;
 import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
+import com.chatflow.common.dto.ChatRoomResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,6 +64,7 @@ class ChatRoomControllerTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private RoomVisibilityService roomVisibilityService;
     @Mock private MessageSenderService messageSenderService;
+    @Mock private ChatRoomMapper chatRoomMapper;
     @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks
@@ -88,6 +91,16 @@ class ChatRoomControllerTest {
                 .build();
     }
 
+    private static ChatRoomResponse roomResponse(String id, String name, String type, String createdBy) {
+        return ChatRoomResponse.builder()
+                .id(id)
+                .name(name)
+                .roomType(type)
+                .createdBy(createdBy)
+                .createdAt(LocalDateTime.of(2026, 5, 1, 12, 0))
+                .build();
+    }
+
     // ── GetAllRooms ─────────────────────────────────────────────
 
     @Nested
@@ -100,6 +113,9 @@ class ChatRoomControllerTest {
                     room("r1", "Room A", RoomType.GENERAL, "u1"),
                     room("r2", "Room B", RoomType.GENERAL, "u2"));
             when(chatRoomService.getAllRooms()).thenReturn(rooms);
+            when(chatRoomMapper.toResponseList(rooms)).thenReturn(List.of(
+                    roomResponse("r1", "Room A", "GENERAL", "u1"),
+                    roomResponse("r2", "Room B", "GENERAL", "u2")));
 
             mockMvc.perform(get("/api/chat/rooms"))
                     .andExpect(status().isOk())
@@ -107,6 +123,7 @@ class ChatRoomControllerTest {
                     .andExpect(jsonPath("$.data.length()").value(2));
         }
 
+        @SuppressWarnings("unchecked")
         @Test
         void filters_hidden_rooms_when_userId_present_and_visibility_returns_subset() throws Exception {
             ChatRoom visible = room("r1", "Visible", RoomType.DIRECT, "u1");
@@ -114,6 +131,8 @@ class ChatRoomControllerTest {
             List<ChatRoom> rooms = List.of(visible, hidden);
 
             when(chatRoomService.getAllRooms()).thenReturn(rooms);
+            when(chatRoomMapper.toResponseList(any(List.class))).thenReturn(List.of(
+                    roomResponse("r1", "Visible", "DIRECT", "u1")));
 
             Map<String, Instant> hiddenMap = Map.of("r2", Instant.now());
             when(roomVisibilityService.getHiddenMap("user-1")).thenReturn(hiddenMap);
@@ -137,9 +156,11 @@ class ChatRoomControllerTest {
 
         @Test
         void returns_200_when_room_exists() throws Exception {
+            ChatRoom entity = room("r1", "Test", RoomType.GENERAL, "user-1");
             doNothing().when(membershipGuard).requireMember("r1", "user-1");
-            when(chatRoomService.getRoom("r1"))
-                    .thenReturn(Optional.of(room("r1", "Test", RoomType.GENERAL, "user-1")));
+            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(entity));
+            when(chatRoomMapper.toResponse(entity))
+                    .thenReturn(roomResponse("r1", "Test", "GENERAL", "user-1"));
 
             mockMvc.perform(get("/api/chat/rooms/r1")
                             .header("X-User-Id", "user-1"))
@@ -203,6 +224,8 @@ class ChatRoomControllerTest {
             ChatRoom saved = room("r-new", "New Room", RoomType.GENERAL, "user-1");
             when(chatRoomService.createRoom(any(ChatRoom.class), eq("user-1"), eq("alice")))
                     .thenReturn(saved);
+            when(chatRoomMapper.toResponse(saved))
+                    .thenReturn(roomResponse("r-new", "New Room", "GENERAL", "user-1"));
 
             String body = objectMapper.writeValueAsString(
                     Map.of("name", "New Room"));

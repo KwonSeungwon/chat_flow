@@ -14,11 +14,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 public class OutboxPoller {
+
+    private static final int MAX_RETRIES = 10;
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -89,6 +93,40 @@ public class OutboxPoller {
                 });
             } catch (Exception e) {
                 log.error("Failed to update outbox status for batch", e);
+            }
+        }
+
+        // Phase 4: 실패한 이벤트 — retry 카운트 증가 또는 FAILED 마킹
+        Set<Long> succeededIds = succeeded.stream().map(OutboxEvent::getId).collect(Collectors.toSet());
+        List<OutboxEvent> failedEvents = pendingEvents.stream()
+                .filter(e -> !succeededIds.contains(e.getId()))
+                .toList();
+
+        if (!failedEvents.isEmpty()) {
+            List<Long> toFail = new ArrayList<>();
+            List<Long> toRetry = new ArrayList<>();
+
+            for (OutboxEvent event : failedEvents) {
+                if (event.getRetryCount() + 1 >= MAX_RETRIES) {
+                    toFail.add(event.getId());
+                } else {
+                    toRetry.add(event.getId());
+                }
+            }
+
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    if (!toFail.isEmpty()) {
+                        outboxEventRepository.markFailed(toFail, LocalDateTime.now());
+                        log.warn("Outbox events marked FAILED (poison-pill cap reached): ids={}", toFail);
+                    }
+                    if (!toRetry.isEmpty()) {
+                        outboxEventRepository.incrementRetry(toRetry);
+                        log.debug("Outbox events retry incremented: ids={}", toRetry);
+                    }
+                });
+            } catch (Exception e) {
+                log.error("Failed to update retry/failed status for outbox events", e);
             }
         }
     }

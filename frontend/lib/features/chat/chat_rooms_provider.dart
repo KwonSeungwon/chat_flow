@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/app_stomp_service.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/chat_room.dart';
@@ -44,17 +45,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
   Future<void> fetchRooms() async {
     try {
       final resp = await _dioClient.dio.get('/api/chat/rooms');
-      final data = resp.data;
-      List<dynamic> list;
-      if (data is List) {
-        list = data;
-      } else if (data is Map && data['data'] is List) {
-        list = data['data'] as List;
-      } else if (data is Map && data['content'] is List) {
-        list = data['content'] as List;
-      } else {
-        list = [];
-      }
+      final list = apiResponseList(resp.data);
       final rooms =
           list
               .map((e) => ChatRoom.fromJson(e as Map<String, dynamic>))
@@ -93,10 +84,9 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
   Future<Map<String, int>> fetchUnreadCounts() async {
     try {
       final resp = await _dioClient.dio.get('/api/chat/rooms/unread-counts');
-      final data = resp.data;
-      if (data is Map && data['data'] is Map) {
-        final raw = data['data'] as Map;
-        return raw.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+      final raw = apiResponseMap(resp.data);
+      if (raw != null) {
+        return raw.map((k, v) => MapEntry(k, (v as num).toInt()));
       }
     } catch (_) {}
     return {};
@@ -136,10 +126,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
         if (allowedRoles != null) 'allowedRoles': allowedRoles,
       });
       // Extract room ID first — fetchRooms failure must not mask successful creation
-      final data = resp.data;
-      final roomId = data is Map
-          ? (data['data']?['id'] ?? data['id'])?.toString()
-          : null;
+      final roomId = apiResponseField<Object>(resp.data, 'id')?.toString();
       try {
         await fetchRooms();
       } catch (_) {

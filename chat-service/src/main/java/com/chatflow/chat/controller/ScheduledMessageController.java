@@ -1,6 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.dto.ScheduledMessageDto;
+import com.chatflow.chat.mapper.ScheduledMessageMapper;
 import com.chatflow.chat.service.notification.ScheduledMessageService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class ScheduledMessageController {
 
     private final ScheduledMessageService service;
+    private final ScheduledMessageMapper scheduledMessageMapper;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ScheduledMessageDto>> schedule(
@@ -45,14 +47,14 @@ public class ScheduledMessageController {
                 LocalDateTime.parse(scheduledAtStr));
         log.info("Scheduled message id={} for user={} room={} at={}",
                 saved.getId(), userId, chatRoomId, saved.getScheduledAt());
-        return ResponseEntity.ok(ApiResponse.ok(ScheduledMessageDto.from(saved)));
+        return ResponseEntity.ok(ApiResponse.ok(scheduledMessageMapper.toDto(saved)));
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ScheduledMessageDto>>> list(
             @RequestHeader(value = "X-User-Id") String userId) {
         var items = service.listMine(userId).stream()
-                .map(ScheduledMessageDto::from)
+                .map(scheduledMessageMapper::toDto)
                 .toList();
         return ResponseEntity.ok(ApiResponse.ok(items));
     }
@@ -64,7 +66,7 @@ public class ScheduledMessageController {
         try {
             var canceled = service.cancel(id, userId);
             log.info("Scheduled message id={} canceled by user={}", id, userId);
-            return ResponseEntity.ok(ApiResponse.ok(ScheduledMessageDto.from(canceled)));
+            return ResponseEntity.ok(ApiResponse.ok(scheduledMessageMapper.toDto(canceled)));
         } catch (IllegalStateException e) {
             // Not-found OR not-owned — same response shape, no info leak.
             // The byte-equality test in ScheduledMessageControllerTest locks this invariant.

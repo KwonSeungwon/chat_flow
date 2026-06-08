@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/stomp_service.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/patient_card.dart';
@@ -34,17 +35,9 @@ import 'admin/room_members_provider.dart';
 ///   responses or older deployments.
 /// - Anything else (error envelope, null, malformed) → empty list.
 List<ChatMessage> parseSummariesResponse(dynamic data) {
-  if (data is Map && data['data'] is List) {
-    return (data['data'] as List)
-        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-  if (data is List) {
-    return data
-        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
-  return const <ChatMessage>[];
+  return apiResponseList(data)
+      .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+      .toList();
 }
 
 class ChatNotifier extends StateNotifier<ChatMessagesState> {
@@ -56,6 +49,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final String _userId;
   static const _storage = FlutterSecureStorage();
   final TypingController _typing = TypingController();
+
   /// localId → sending 타임아웃 타이머
   final Map<String, Timer> _sendingTimers = {};
   final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
@@ -179,7 +173,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       );
     } catch (e) {
       debugPrint('[ChatNotifier] joinRoom error: $e');
-      state = state.copyWith(isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
+      state = state.copyWith(
+          isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
     }
 
     // Load AI summaries and merge into history
@@ -231,7 +226,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         // Sync participant count to room list for sidebar display
         if (_currentRoomId != null) {
           try {
-            _ref.read(chatRoomsProvider.notifier).updateParticipantCount(_currentRoomId!, count);
+            _ref
+                .read(chatRoomsProvider.notifier)
+                .updateParticipantCount(_currentRoomId!, count);
           } catch (_) {}
         }
       },
@@ -282,13 +279,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 
   Future<void> _subscribeFcmToRoom(String roomId) => _fcmSub.subscribe(roomId);
-  Future<void> _unsubscribeFcmFromRoom(String roomId) => _fcmSub.unsubscribe(roomId);
+  Future<void> _unsubscribeFcmFromRoom(String roomId) =>
+      _fcmSub.unsubscribe(roomId);
 
   Future<void> loadMoreHistory(String roomId) async {
     if (state.isLoadingHistory || !state.hasMoreHistory) return;
     state = state.copyWith(isLoadingHistory: true);
     try {
-      final oldestTimestamp = state.messages.isNotEmpty ? state.messages.first.timestamp : null;
+      final oldestTimestamp =
+          state.messages.isNotEmpty ? state.messages.first.timestamp : null;
       final resp = await _dioClient.dio.get(
         '/api/chat/rooms/$roomId/messages/cursor',
         queryParameters: {
@@ -335,8 +334,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  void _onMessage(Map<String, dynamic> rawMsg) =>
-      _dispatcher.dispatch(rawMsg);
+  void _onMessage(Map<String, dynamic> rawMsg) => _dispatcher.dispatch(rawMsg);
 
   /// Post-append hook for genuinely new chat messages: sends an
   /// auto read-receipt and schedules a smart-reply refresh.
@@ -357,9 +355,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         _quickReplyDebounce = Timer(const Duration(seconds: 1), () {
           if (!mounted || _currentRoomId == null) return;
           try {
-            _ref
-                .read(quickReplyProvider(_currentRoomId!).notifier)
-                .refresh(id);
+            _ref.read(quickReplyProvider(_currentRoomId!).notifier).refresh(id);
           } catch (_) {/* best-effort */}
         });
       }
@@ -378,7 +374,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     state = state.copyWith(messages: updated);
 
     try {
-      await _dioClient.dio.delete('/api/chat/rooms/$roomId/messages/$messageId');
+      await _dioClient.dio
+          .delete('/api/chat/rooms/$roomId/messages/$messageId');
       return true;
     } catch (_) {
       // Rollback on failure — restore original message list
@@ -387,7 +384,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  Future<bool> editMessage(String roomId, String messageId, String newContent) async {
+  Future<bool> editMessage(
+      String roomId, String messageId, String newContent) async {
     final originalMessages = List<ChatMessage>.from(state.messages);
     // Optimistic update
     final updated = state.messages.map((m) {
@@ -429,7 +427,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       return true;
     } catch (e) {
       if (e is DioException) {
-        debugPrint('leaveRoom failed: status=${e.response?.statusCode} body=${e.response?.data}');
+        debugPrint(
+            'leaveRoom failed: status=${e.response?.statusCode} body=${e.response?.data}');
       } else {
         debugPrint('leaveRoom failed: $e');
       }
@@ -445,8 +444,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final existing = state.messages;
       final merged = [...existing, ...summaries];
       final seen = <String>{};
-      final deduped =
-          merged.where((m) => seen.add(m.effectiveId)).toList();
+      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
       deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       state = state.copyWith(messages: deduped);
     } catch (_) {
@@ -527,7 +525,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       if (msgJson != null) {
         final aiMsg = ChatMessage.fromJson(msgJson);
         if (!state.messages.any((m) => m.effectiveId == aiMsg.effectiveId)) {
-          state = state.copyWith(messages: [...state.messages, aiMsg], isAiLoading: false);
+          state = state.copyWith(
+              messages: [...state.messages, aiMsg], isAiLoading: false);
         } else {
           state = state.copyWith(isAiLoading: false);
         }
@@ -591,9 +590,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         content: content,
       );
 
-  Future<void> toggleReaction(String roomId, String messageId, String emoji) async {
+  Future<void> toggleReaction(
+      String roomId, String messageId, String emoji) async {
     try {
-      await _dioClient.dio.post('/api/chat/rooms/$roomId/messages/$messageId/reactions',
+      await _dioClient.dio.post(
+          '/api/chat/rooms/$roomId/messages/$messageId/reactions',
           data: {'emoji': emoji});
     } catch (e) {
       if (!mounted) return;
@@ -610,9 +611,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) =>
       _send.forwardMessage(targetRoomId, msg);
 
-  Future<List<Map<String, dynamic>>> searchParticipants(String roomId, String query) async {
+  Future<List<Map<String, dynamic>>> searchParticipants(
+      String roomId, String query) async {
     try {
-      final resp = await _dioClient.dio.get('/api/chat/rooms/$roomId/participants');
+      final resp =
+          await _dioClient.dio.get('/api/chat/rooms/$roomId/participants');
       final data = resp.data;
       List<dynamic> participants = [];
       if (data is Map && data['data'] is List) {
@@ -622,7 +625,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       }
       final q = query.toLowerCase();
       return participants
-          .where((p) => (p['username']?.toString() ?? '').toLowerCase().contains(q))
+          .where((p) =>
+              (p['username']?.toString() ?? '').toLowerCase().contains(q))
           .map((p) => Map<String, dynamic>.from(p as Map))
           .toList();
     } catch (_) {
@@ -659,7 +663,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   @override
   void dispose() {
     _typing.dispose();
-    for (final t in _sendingTimers.values) { t.cancel(); }
+    for (final t in _sendingTimers.values) {
+      t.cancel();
+    }
     _sendingTimers.clear();
     _quickReplyDebounce?.cancel();
     _stompService.dispose();
@@ -667,8 +673,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   }
 }
 
-final chatNotifierProvider =
-    StateNotifierProvider.autoDispose.family<ChatNotifier, ChatMessagesState, String>(
+final chatNotifierProvider = StateNotifierProvider.autoDispose
+    .family<ChatNotifier, ChatMessagesState, String>(
   (ref, roomId) {
     final auth = ref.watch(authProvider);
     final notifier = ChatNotifier(

@@ -5,6 +5,7 @@ import com.chatflow.chat.dto.MuteRequest;
 import com.chatflow.chat.dto.MuteResponse;
 import com.chatflow.chat.dto.RoleChangeRequest;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.mapper.MemberMapper;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.MemberManagementService;
 import com.chatflow.chat.service.moderation.MuteResult;
@@ -26,6 +27,7 @@ public class RoomMemberManagementController {
     private final RoomMemberRepository roomMemberRepository;
     private final MemberManagementService memberManagementService;
     private final RoomPermissionService roomPermissionService;
+    private final MemberMapper memberMapper;
 
     /**
      * GET /api/chat/rooms/{roomId}/members
@@ -39,9 +41,8 @@ public class RoomMemberManagementController {
         roomPermissionService.requireRole(roomId, callerUserId,
                 RoomRole.OWNER, RoomRole.MODERATOR, RoomRole.MEMBER);
 
-        List<MemberDto> members = roomMemberRepository.findByRoomId(roomId).stream()
-                .map(MemberDto::from)
-                .toList();
+        List<MemberDto> members = memberMapper.toDtoList(
+                roomMemberRepository.findByRoomId(roomId));
 
         return ResponseEntity.ok(ApiResponse.ok(members));
     }

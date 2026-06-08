@@ -40,6 +40,10 @@ public class OutboxEvent {
     private String payload;
 
     @Builder.Default
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
+
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OutboxStatus status = OutboxStatus.PENDING;

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../../core/network/api_response.dart';
 import '../../../shared/models/message_report.dart';
 import '../../../shared/models/room_ban.dart';
 import '../../../shared/models/room_member.dart';
@@ -8,15 +9,7 @@ import '../../../shared/models/room_role.dart';
 /// Backend returns `{success, data: {mutedUntil}, ...}`. Older code paths
 /// may have returned `{mutedUntil}` at the root, so we accept both.
 DateTime parseMutedUntil(dynamic data) {
-  String? raw;
-  if (data is Map) {
-    final inner = data['data'];
-    if (inner is Map) {
-      raw = inner['mutedUntil']?.toString();
-    } else {
-      raw = data['mutedUntil']?.toString();
-    }
-  }
+  final raw = apiResponseMap(data)?['mutedUntil']?.toString();
   return DateTime.tryParse(raw ?? '') ?? DateTime.now();
 }
 
@@ -25,17 +18,7 @@ DateTime parseMutedUntil(dynamic data) {
 /// may have returned `{reportId}` at the root, so we accept both.
 /// Returns 0 when the payload is malformed or the id is missing.
 int parseReportId(dynamic data) {
-  num? rawId;
-  if (data is Map) {
-    final inner = data['data'];
-    if (inner is Map) {
-      final v = inner['reportId'];
-      rawId = v is num ? v : null;
-    } else {
-      final v = data['reportId'];
-      rawId = v is num ? v : null;
-    }
-  }
+  final rawId = apiResponseField<num>(data, 'reportId');
   return rawId?.toInt() ?? 0;
 }
 
@@ -61,15 +44,7 @@ class RoomAdminApi {
   Future<List<RoomMember>> listMembers(String roomId) async {
     try {
       final resp = await _dio.get('/api/chat/rooms/$roomId/members');
-      final data = resp.data;
-      List<dynamic> list;
-      if (data is List) {
-        list = data;
-      } else if (data is Map && data['data'] is List) {
-        list = data['data'] as List;
-      } else {
-        list = [];
-      }
+      final list = apiResponseList(resp.data);
       return list
           .map((e) => RoomMember.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -78,8 +53,7 @@ class RoomAdminApi {
     }
   }
 
-  Future<void> changeRole(
-      String roomId, String userId, RoomRole role) async {
+  Future<void> changeRole(String roomId, String userId, RoomRole role) async {
     try {
       await _dio.patch(
         '/api/chat/rooms/$roomId/members/$userId/role',
@@ -98,8 +72,7 @@ class RoomAdminApi {
     }
   }
 
-  Future<DateTime> muteMember(
-      String roomId, String userId, int minutes) async {
+  Future<DateTime> muteMember(String roomId, String userId, int minutes) async {
     try {
       final resp = await _dio.post(
         '/api/chat/rooms/$roomId/members/$userId/mute',
@@ -126,15 +99,7 @@ class RoomAdminApi {
   Future<List<RoomBan>> listBans(String roomId) async {
     try {
       final resp = await _dio.get('/api/chat/rooms/$roomId/bans');
-      final data = resp.data;
-      List<dynamic> list;
-      if (data is List) {
-        list = data;
-      } else if (data is Map && data['data'] is List) {
-        list = data['data'] as List;
-      } else {
-        list = [];
-      }
+      final list = apiResponseList(resp.data);
       return list
           .map((e) => RoomBan.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -143,8 +108,7 @@ class RoomAdminApi {
     }
   }
 
-  Future<void> banUser(
-      String roomId, String userId, String? reason) async {
+  Future<void> banUser(String roomId, String userId, String? reason) async {
     try {
       await _dio.post(
         '/api/chat/rooms/$roomId/bans',
@@ -195,15 +159,7 @@ class RoomAdminApi {
         '/api/chat/rooms/$roomId/reports',
         queryParameters: {'status': status.apiValue},
       );
-      final data = resp.data;
-      List<dynamic> list;
-      if (data is List) {
-        list = data;
-      } else if (data is Map && data['data'] is List) {
-        list = data['data'] as List;
-      } else {
-        list = [];
-      }
+      final list = apiResponseList(resp.data);
       return list
           .map((e) => MessageReport.fromJson(e as Map<String, dynamic>))
           .toList();
