@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/scheduled_message.dart';
 
@@ -10,25 +11,11 @@ class ScheduledMessagesNotifier
     refresh();
   }
 
-  static List<dynamic> _unwrapList(dynamic data) {
-    if (data is Map && data['data'] is List) return data['data'] as List;
-    if (data is List) return data;
-    return const [];
-  }
-
-  static Map<String, dynamic>? _unwrapData(dynamic data) {
-    if (data is Map && data['data'] is Map) {
-      return (data['data'] as Map).cast<String, dynamic>();
-    }
-    if (data is Map) return data.cast<String, dynamic>();
-    return null;
-  }
-
   Future<void> refresh() async {
     state = const AsyncValue.loading();
     try {
       final resp = await _dio.get('/api/chat/scheduled-messages');
-      final raw = _unwrapList(resp.data);
+      final raw = apiResponseList(resp.data);
       final items = raw
           .map((e) => ScheduledMessage.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -53,7 +40,7 @@ class ScheduledMessagesNotifier
         'scheduledAt': scheduledAt.toIso8601String(),
       },
     );
-    final inner = _unwrapData(resp.data);
+    final inner = apiResponseMap(resp.data);
     if (inner == null) {
       throw Exception('Unexpected response shape from schedule');
     }

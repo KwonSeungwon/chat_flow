@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../core/network/api_response.dart';
 import '../../shared/models/user_profile.dart';
 
 class ProfileApi {
@@ -8,12 +9,12 @@ class ProfileApi {
 
   Future<UserProfile> getMe() async {
     final res = await _dio.get('/api/users/me');
-    return UserProfile.fromJson(_unwrap(res.data));
+    return UserProfile.fromJson(_unwrapProfile(res.data));
   }
 
   Future<UserProfile> getById(String userId) async {
     final res = await _dio.get('/api/users/$userId');
-    return UserProfile.fromJson(_unwrap(res.data));
+    return UserProfile.fromJson(_unwrapProfile(res.data));
   }
 
   /// Partial update.
@@ -30,17 +31,12 @@ class ProfileApi {
     if (bio != null) body['bio'] = bio;
 
     final res = await _dio.patch('/api/users/me', data: body);
-    return UserProfile.fromJson(_unwrap(res.data));
+    return UserProfile.fromJson(_unwrapProfile(res.data));
   }
 
-  /// 응답이 ApiResponse<T> 래퍼인 경우 data 필드 추출, 아니면 그대로 사용.
-  Map<String, dynamic> _unwrap(dynamic body) {
-    if (body is Map<String, dynamic>) {
-      if (body.containsKey('data') && body['data'] is Map<String, dynamic>) {
-        return Map<String, dynamic>.from(body['data'] as Map);
-      }
-      return body;
-    }
+  Map<String, dynamic> _unwrapProfile(Object? body) {
+    final data = apiResponseMap(body);
+    if (data != null) return data;
     throw ArgumentError('Unexpected profile response shape: $body');
   }
 }

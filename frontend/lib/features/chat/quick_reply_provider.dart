@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/quick_reply.dart';
 
@@ -22,13 +23,7 @@ class QuickReplyNotifier extends StateNotifier<QuickReplySuggestions> {
         '/api/ai-summary/quick-replies',
         data: {'chatRoomId': _roomId, 'latestMessageId': latestMessageId},
       );
-      final data = resp.data;
-      Map<String, dynamic>? inner;
-      if (data is Map && data['data'] is Map) {
-        inner = (data['data'] as Map).cast<String, dynamic>();
-      } else if (data is Map) {
-        inner = data.cast<String, dynamic>();
-      }
+      final inner = apiResponseMap(resp.data);
       if (inner == null) return;
       state = QuickReplySuggestions.fromJson(inner, latestMessageId);
     } catch (_) {
@@ -42,8 +37,8 @@ class QuickReplyNotifier extends StateNotifier<QuickReplySuggestions> {
   }
 }
 
-final quickReplyProvider = StateNotifierProvider.family<
-    QuickReplyNotifier, QuickReplySuggestions, String>((ref, roomId) {
+final quickReplyProvider = StateNotifierProvider.family<QuickReplyNotifier,
+    QuickReplySuggestions, String>((ref, roomId) {
   final dio = ref.read(dioClientProvider).dio;
   return QuickReplyNotifier(dio, roomId);
 });
