@@ -1,8 +1,10 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.dto.MemberDto;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.exception.*;
+import com.chatflow.chat.mapper.MemberMapper;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.MemberManagementService;
 import com.chatflow.chat.service.moderation.MuteResult;
@@ -40,6 +42,9 @@ class RoomMemberManagementControllerTest {
     @Mock
     private RoomPermissionService roomPermissionService;
 
+    @Mock
+    private MemberMapper memberMapper;
+
     @InjectMocks
     private RoomMemberManagementController controller;
 
@@ -73,7 +78,12 @@ class RoomMemberManagementControllerTest {
         void getMembers_returnsOkWithMemberList() throws Exception {
             RoomMemberEntity m1 = member("u1", "alice", RoomRole.OWNER);
             RoomMemberEntity m2 = member("u2", "bob", RoomRole.MEMBER);
-            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(List.of(m1, m2));
+            List<RoomMemberEntity> entities = List.of(m1, m2);
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(entities);
+            when(memberMapper.toDtoList(entities)).thenReturn(List.of(
+                    new MemberDto("u1", "alice", RoomRole.OWNER, null),
+                    new MemberDto("u2", "bob", RoomRole.MEMBER, null)
+            ));
 
             mockMvc.perform(get("/api/chat/rooms/{roomId}/members", ROOM_ID)
                             .header("X-User-Id", CALLER_ID))
