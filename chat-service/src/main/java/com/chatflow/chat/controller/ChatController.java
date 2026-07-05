@@ -3,6 +3,7 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.read.ReadReceiptService;
 import com.chatflow.chat.service.room.RoomMembershipChecker;
+import com.chatflow.chat.service.room.RoomMembershipChecker.MembershipResult;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -15,6 +16,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -60,7 +62,12 @@ public class ChatController {
         }
         // Membership gate — without this, an authenticated user could send
         // messages into ANY room id by spoofing the chatRoomId field.
-        if (!isMember(chatMessage.getChatRoomId(), chatMessage.getUserId())) {
+        // Uses findMember (single DB fetch) so the resolved entity can be
+        // forwarded to the mute-gate in MessageSenderService, avoiding a
+        // duplicate room_members lookup.
+        Optional<MembershipResult> membership = membershipChecker.findMember(
+                chatMessage.getChatRoomId(), chatMessage.getUserId());
+        if (membership.isEmpty()) {
             rejectNonMember(chatMessage.getUserId(), chatMessage.getChatRoomId(), "sendMessage");
             return;
         }
@@ -78,7 +85,9 @@ public class ChatController {
             return;
         }
         log.debug("Received message: {}", chatMessage);
-        chatService.processMessage(chatMessage);
+        // Pass the pre-fetched member entity (may be null for creator-only) to
+        // skip the duplicate findByRoomIdAndUserId in the mute gate.
+        chatService.processMessage(chatMessage, membership.get().entity());
     }
 
     @MessageMapping("/chat.addUser")

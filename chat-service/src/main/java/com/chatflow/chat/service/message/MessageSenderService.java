@@ -52,14 +52,37 @@ public class MessageSenderService {
                 .register(registry);
     }
 
+    /**
+     * Sends a message, fetching the room member from the DB for the mute check.
+     * Used by callers that have NOT already resolved the member (REST, scheduled).
+     */
     public void send(ChatMessage message) {
+        RoomMemberEntity member = null;
+        if (MessageType.CHAT.equals(message.getType()) && message.getUserId() != null) {
+            member = roomMemberRepository.findByRoomIdAndUserId(
+                    message.getChatRoomId(), message.getUserId()).orElse(null);
+        }
+        send(message, member);
+    }
+
+    /**
+     * Sends a message using a pre-resolved room member entity for the mute check.
+     * Called by the STOMP send path (via {@code ChatService.processMessage}) where
+     * the membership check already fetched the entity, and by the single-arg
+     * {@link #send(ChatMessage)} overload after self-fetching.
+     *
+     * @param resolvedMember the pre-fetched member entity used solely for the mute
+     *                       gate. {@code null} means "no mute info available" — the
+     *                       mute gate is skipped (correct for legacy creator-only
+     *                       membership where no room_members row exists, and for
+     *                       non-CHAT message types).
+     */
+    public void send(ChatMessage message, RoomMemberEntity resolvedMember) {
         // Mute gate — muted users cannot send CHAT messages
         if (MessageType.CHAT.equals(message.getType()) && message.getUserId() != null) {
-            RoomMemberEntity member = roomMemberRepository.findByRoomIdAndUserId(
-                    message.getChatRoomId(), message.getUserId()).orElse(null);
             // mutedUntil == now ⇒ 만료 (mute가 끝나는 그 순간부터는 발송 허용)
-            if (member != null && member.getMutedUntil() != null
-                    && member.getMutedUntil().isAfter(LocalDateTime.now())) {
+            if (resolvedMember != null && resolvedMember.getMutedUntil() != null
+                    && resolvedMember.getMutedUntil().isAfter(LocalDateTime.now())) {
                 log.warn("Muted user {} tried to send message to room {}",
                         message.getUsername(), message.getChatRoomId());
                 messagingTemplate.convertAndSendToUser(
@@ -67,7 +90,7 @@ public class MessageSenderService {
                         "/queue/errors",
                         Map.of("type", "MUTED",
                                 "roomId", message.getChatRoomId(),
-                                "mutedUntil", member.getMutedUntil().toString()));
+                                "mutedUntil", resolvedMember.getMutedUntil().toString()));
                 return;
             }
         }
