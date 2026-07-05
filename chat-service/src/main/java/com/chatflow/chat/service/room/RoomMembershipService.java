@@ -88,6 +88,8 @@ public class RoomMembershipService {
         if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
             return Result.err(ChatErrorCode.NOT_FOUND, "방 멤버가 아닙니다.");
         }
+        // DB row 삭제 — source of truth; Redis/broadcast 전에 수행
+        roomMemberRepository.deleteByRoomIdAndUserId(roomId, userId);
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {
