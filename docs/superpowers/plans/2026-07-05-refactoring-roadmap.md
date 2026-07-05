@@ -33,7 +33,9 @@ Cross-finding merges are noted inline — several reviewers independently hit th
 
 # TIER 0 — Correctness & Security Quick Wins (execute first)
 
-These are genuine bugs surfaced during the refactor review. All are small, high-value, and independently shippable. **This tier is fully specified below and ready for `subagent-driven-development`.** Each task is TDD where a test can pin the behavior; the ES-config and dead-code items are verify-by-inspection.
+> **STATUS: ✅ COMPLETE (2026-07-05).** All 10 tasks implemented on branch `refactor/tier0-correctness-security` via subagent-driven development (implementer + spec review + code-quality review each), plus a whole-branch final review that surfaced one cross-task seam (0.10) which was then fixed. Full backend suite green (common 9, chat-service 504, gateway 24, search 15, ai-summary 11); `flutter analyze` clean; 226 frontend tests pass. Follow-up task #10 (legacy OWNER-row backfill migration) deferred to a data-migration task. See commits `a0903a9..f220667`.
+
+These were genuine bugs surfaced during the refactor review. All small, high-value, independently shippable. Each task was TDD where a test could pin the behavior; the ES-config and dead-code items were verify-by-inspection.
 
 **Test infra note:** chat-service uses JUnit5 + AssertJ + Mockito (73 test files, `MockitoExtension` pattern — see `MessageReadServiceTest`). The `test` profile disables Flyway and uses H2 `create-drop`, so new columns/tables auto-apply in tests. Prod migrations are `chat-service/src/main/resources/db/migration/V*.sql`.
 
