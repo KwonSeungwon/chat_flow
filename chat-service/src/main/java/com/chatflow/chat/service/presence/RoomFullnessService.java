@@ -43,17 +43,21 @@ public class RoomFullnessService {
         ChatRoom room = chatRoomService.getRoom(message.getChatRoomId()).orElse(null);
 
         if (room != null && room.getRoomType() == RoomType.DIRECT) {
-            boolean isExistingMember = !currentUserId.isEmpty() &&
+            boolean isExistingMember = currentUserId != null && !currentUserId.isBlank() &&
                     roomMemberRepository.existsByRoomIdAndUserId(
                             message.getChatRoomId(), currentUserId);
             if (!isExistingMember) {
                 log.warn("DM room {} is full, rejecting non-member {}",
                         message.getChatRoomId(), message.getUsername());
-                messagingTemplate.convertAndSend(
-                        "/topic/chat/" + message.getChatRoomId() + "/errors",
-                        Map.of("type", "ROOM_FULL_DM",
-                                "roomId", message.getChatRoomId(),
-                                "roomName", room.getName()));
+                // Per-user rejection: only the rejected user gets this, never the room.
+                if (currentUserId != null && !currentUserId.isBlank()) {
+                    messagingTemplate.convertAndSendToUser(
+                            currentUserId,
+                            "/queue/errors",
+                            Map.of("type", "ROOM_FULL_DM",
+                                    "roomId", message.getChatRoomId(),
+                                    "roomName", room.getName()));
+                }
                 return true;
             }
             log.info("DM {} full but {} is existing member -- allowing re-entry",
@@ -66,9 +70,13 @@ public class RoomFullnessService {
 
         log.info("Room {} full, redirecting user {} to {}",
                 message.getChatRoomId(), message.getUsername(), newRoom.getId());
-        messagingTemplate.convertAndSend(
-                "/topic/chat/" + message.getChatRoomId() + "/errors",
-                Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+        // Per-user redirect notice: only the redirected user gets this, never the room.
+        if (currentUserId != null && !currentUserId.isBlank()) {
+            messagingTemplate.convertAndSendToUser(
+                    currentUserId,
+                    "/queue/errors",
+                    Map.of("type", "ROOM_FULL", "redirectTo", newRoom.getId(), "roomName", newRoom.getName()));
+        }
 
         message.setChatRoomId(newRoom.getId());
         return false;

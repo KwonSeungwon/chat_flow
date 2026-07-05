@@ -13,10 +13,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -64,7 +66,12 @@ class RoomFullnessServiceTest {
         msg.setUsername("alice");
 
         assertThat(fullness.handleIfFull(msg, "user-1", false)).isTrue();
-        verify(messagingTemplate).convertAndSend(eq("/topic/chat/dm-1/errors"), any(java.util.Map.class));
+        // Per-user rejection MUST go to the rejected user's queue, never the room topic
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("user-1"),
+                eq("/queue/errors"),
+                eq(Map.of("type", "ROOM_FULL_DM", "roomId", "dm-1", "roomName", "dm")));
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 
     @Test
@@ -95,6 +102,30 @@ class RoomFullnessServiceTest {
 
         assertThat(fullness.handleIfFull(msg, "user-1", false)).isFalse();
         assertThat(msg.getChatRoomId()).isEqualTo("room-2");
-        verify(messagingTemplate).convertAndSend(eq("/topic/chat/room-1/errors"), any(java.util.Map.class));
+        // Redirect notice MUST go to the redirected user's queue, never the room topic
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("user-1"),
+                eq("/queue/errors"),
+                eq(Map.of("type", "ROOM_FULL", "redirectTo", "room-2", "roomName", "일반-2")));
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
+    }
+
+    @Test
+    void general_room_full_skips_send_when_userId_blank() {
+        ChatRoom original = ChatRoom.builder().id("room-1").name("일반-1").roomType(RoomType.GENERAL).build();
+        ChatRoom newRoom = ChatRoom.builder().id("room-2").name("일반-2").roomType(RoomType.GENERAL).build();
+        when(participantService.isRoomFull("room-1")).thenReturn(true);
+        when(chatRoomService.getRoom("room-1")).thenReturn(Optional.of(original));
+        when(participantService.findOrCreateAvailableRoom("일반")).thenReturn(newRoom);
+
+        ChatMessage msg = new ChatMessage();
+        msg.setChatRoomId("room-1");
+        msg.setUsername("anon");
+
+        // Blank userId: still redirect the message, but no per-user send is possible
+        assertThat(fullness.handleIfFull(msg, "", false)).isFalse();
+        assertThat(msg.getChatRoomId()).isEqualTo("room-2");
+        verify(messagingTemplate, never()).convertAndSendToUser(anyString(), anyString(), any(Object.class));
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 }

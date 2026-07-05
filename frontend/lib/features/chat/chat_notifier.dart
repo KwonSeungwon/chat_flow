@@ -272,6 +272,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           reason: 'BANNED',
         );
       },
+      // Per-user non-fatal rejections (MUTED / NOT_A_MEMBER) — surface as a
+      // transient SnackBar via the existing errorMessage path.
+      onTransientError: (type, message) {
+        if (!mounted) return;
+        state = state.copyWith(errorMessage: message);
+      },
     );
 
     // Subscribe FCM token to room topic for push notifications (fire & forget)
