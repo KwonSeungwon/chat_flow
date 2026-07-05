@@ -1,10 +1,8 @@
 package com.chatflow.chat.controller;
 
-import com.chatflow.chat.entity.ChatRoom;
-import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.read.ReadReceiptService;
+import com.chatflow.chat.service.room.RoomMembershipChecker;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +17,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -38,8 +35,7 @@ class ChatControllerTest {
     @Mock private ReadReceiptService readReceiptService;
     @Mock private Validator validator;
     @Mock private SimpMessagingTemplate messagingTemplate;
-    @Mock private RoomMemberRepository roomMemberRepository;
-    @Mock private ChatRoomRepository chatRoomRepository;
+    @Mock private RoomMembershipChecker membershipChecker;
 
     @InjectMocks
     private ChatController chatController;
@@ -67,13 +63,7 @@ class ChatControllerTest {
     void sendMessage_rejects_non_member_via_isMember_gate() {
         ChatMessage message = buildChatMessage();
 
-        // Not a member by repo check
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(false);
-        // Not a legacy creator either
-        when(chatRoomRepository.findById(ROOM_ID))
-                .thenReturn(Optional.of(ChatRoom.builder()
-                        .id(ROOM_ID).name("Test Room").createdBy("other-user").build()));
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(false);
 
         chatController.sendMessage(message, headerAccessor);
 
@@ -89,8 +79,7 @@ class ChatControllerTest {
     void sendMessage_passes_through_when_member() {
         ChatMessage message = buildChatMessage();
 
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(true);
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
         // Validator returns no violations
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
 
@@ -104,12 +93,8 @@ class ChatControllerTest {
     void sendMessage_passes_through_via_legacy_createdBy_fallback() {
         ChatMessage message = buildChatMessage();
 
-        // Not in room_members, but is the room creator
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(false);
-        when(chatRoomRepository.findById(ROOM_ID))
-                .thenReturn(Optional.of(ChatRoom.builder()
-                        .id(ROOM_ID).name("Legacy Room").createdBy(USER_ID).build()));
+        // RoomMembershipChecker handles the legacy createdBy fallback internally
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
 
         chatController.sendMessage(message, headerAccessor);
@@ -156,8 +141,7 @@ class ChatControllerTest {
                 "chatRoomId", ROOM_ID,
                 "username", USERNAME);
 
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(true);
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
 
         chatController.typing(payload, headerAccessor);
 
@@ -173,11 +157,7 @@ class ChatControllerTest {
                 "chatRoomId", ROOM_ID,
                 "username", USERNAME);
 
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(false);
-        when(chatRoomRepository.findById(ROOM_ID))
-                .thenReturn(Optional.of(ChatRoom.builder()
-                        .id(ROOM_ID).name("Room").createdBy("other-user").build()));
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(false);
 
         chatController.typing(payload, headerAccessor);
 
@@ -198,7 +178,7 @@ class ChatControllerTest {
 
         chatController.typing(payload, headerAccessor);
 
-        verifyNoInteractions(roomMemberRepository, chatRoomRepository);
+        verifyNoInteractions(membershipChecker);
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
     }
 
@@ -211,8 +191,7 @@ class ChatControllerTest {
                 "roomId", ROOM_ID,
                 "lastReadMessageId", "msg-42");
 
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(true);
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
 
         chatController.markRead(payload, headerAccessor);
 
@@ -226,11 +205,7 @@ class ChatControllerTest {
                 "roomId", ROOM_ID,
                 "lastReadMessageId", "msg-42");
 
-        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
-                .thenReturn(false);
-        when(chatRoomRepository.findById(ROOM_ID))
-                .thenReturn(Optional.of(ChatRoom.builder()
-                        .id(ROOM_ID).name("Room").createdBy("other-user").build()));
+        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(false);
 
         chatController.markRead(payload, headerAccessor);
 

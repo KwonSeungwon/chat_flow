@@ -1,18 +1,13 @@
 package com.chatflow.chat.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.messaging.simp.stomp.StompCommand;
-import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
-import org.springframework.messaging.support.ChannelInterceptor;
-import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.WebSocketHandler;
@@ -21,12 +16,14 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
-import java.security.Principal;
 import java.util.Map;
 
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
 
     @Value("${chatflow.allowed-origins:https://app.chatflow.ai.kr,http://localhost:*,http://127.0.0.1:*}")
     private String allowedOrigins;
@@ -42,32 +39,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     /**
-     * STOMP CONNECT 프레임 시 sessionAttributes.userId를 Principal로 승격.
-     * SimpMessagingTemplate.convertAndSendToUser(userId, ...) 가 올바른 세션에 전달되도록 필수.
+     * Registers the {@link StompAuthChannelInterceptor} which handles:
+     * <ul>
+     *   <li>CONNECT — promotes sessionAttributes.userId to Principal</li>
+     *   <li>SUBSCRIBE — authorizes room-topic subscriptions against membership</li>
+     * </ul>
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new ChannelInterceptor() {
-            @Override
-            public Message<?> preSend(Message<?> message, MessageChannel channel) {
-                StompHeaderAccessor accessor =
-                        MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    Map<String, Object> attrs = accessor.getSessionAttributes();
-                    if (attrs != null) {
-                        String userId = (String) attrs.get("userId");
-                        if (userId != null && !userId.isBlank()) {
-                            final String userIdFinal = userId;
-                            Principal principal = new Principal() {
-                                @Override public String getName() { return userIdFinal; }
-                            };
-                            accessor.setUser(principal);
-                        }
-                    }
-                }
-                return message;
-            }
-        });
+        registration.interceptors(stompAuthChannelInterceptor);
     }
 
     private TaskScheduler heartbeatScheduler() {
