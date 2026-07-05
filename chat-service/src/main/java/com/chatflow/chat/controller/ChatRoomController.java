@@ -5,10 +5,12 @@ import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.mapper.ChatRoomMapper;
 import com.chatflow.chat.service.moderation.AuditService;
+import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
 import com.chatflow.chat.service.read.MessageReadService;
@@ -52,6 +54,7 @@ public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
     private final RoomMembershipService roomMembershipService;
+    private final RoomPermissionService roomPermissionService;
     private final MessageReadService messageReadService;
     private final DmRoomService dmRoomService;
     private final AuditService auditService;
@@ -201,16 +204,14 @@ public class ChatRoomController {
     public ResponseEntity<ApiResponse<Void>> deleteRoom(
             @PathVariable String id,
             @AuthenticatedUser String userId) {
-        ChatRoom room = chatRoomService.getRoom(id).orElse(null);
-        if (room == null) {
+        if (chatRoomService.getRoom(id).isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        // 방장만 삭제 가능. createdBy null인 레거시 방은 누구도 삭제 불가 (운영자 DB 직접 정리)
-        if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("채팅방 삭제 권한이 없습니다. 방장만 삭제할 수 있습니다."));
-        }
+        // 방장만 삭제 가능 — role-based. createRoom이 생성자를 OWNER로 seed하므로 정상 생성 방은
+        // OWNER 행이 존재. (이 엔드포인트는 @RequireAuth라 RoomMembershipGuard의 레거시 backfill은
+        // 걸리지 않음 — room_members 행이 없는 pre-seed 레거시 방은 데이터 backfill 필요.)
+        roomPermissionService.requireRole(id, userId, RoomRole.OWNER);
         chatRoomService.deleteRoom(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
     }
@@ -281,16 +282,14 @@ public class ChatRoomController {
             @PathVariable String roomId,
             @RequestBody Map<String, String> body,
             @AuthenticatedUser String userId) {
-        // Settings change is owner-only — load the room and compare createdBy.
-        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
-        if (room == null) {
+        if (chatRoomService.getRoom(roomId).isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        if (!userId.equals(room.getCreatedBy())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error("방장만 설정을 변경할 수 있습니다."));
-        }
+        // 방장만 설정 변경 가능 — role-based. createRoom이 생성자를 OWNER로 seed하므로 정상 생성 방은
+        // OWNER 행이 존재. (이 엔드포인트는 @RequireAuth라 RoomMembershipGuard의 레거시 backfill은
+        // 걸리지 않음 — room_members 행이 없는 pre-seed 레거시 방은 데이터 backfill 필요.)
+        roomPermissionService.requireRole(roomId, userId, RoomRole.OWNER);
         return ResponseEntity.ok(ApiResponse.ok(
                 chatRoomService.updateRoomSettings(roomId, body.get("name"), body.get("description"))));
     }

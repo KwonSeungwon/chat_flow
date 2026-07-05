@@ -3,10 +3,13 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.ChatRoom;
+import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.mapper.ChatRoomMapper;
+import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
@@ -66,6 +69,7 @@ class ChatRoomControllerTest {
     @Mock private MessageSenderService messageSenderService;
     @Mock private ChatRoomMapper chatRoomMapper;
     @Mock private RoomMembershipGuard membershipGuard;
+    @Mock private RoomPermissionService roomPermissionService;
 
     @InjectMocks
     private ChatRoomController controller;
@@ -248,31 +252,22 @@ class ChatRoomControllerTest {
     class DeleteRoom {
 
         @Test
-        void returns_403_when_createdBy_does_not_match_userId() throws Exception {
-            ChatRoom owned = room("r1", "Owner Room", RoomType.GENERAL, "owner-1");
-            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(owned));
+        void returns_403_when_user_does_not_have_OWNER_role() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Owner Room", RoomType.GENERAL, "owner-1")));
+            doThrow(new PermissionDeniedException("권한이 부족합니다."))
+                    .when(roomPermissionService).requireRole("r1", "not-owner", RoomRole.OWNER);
 
             mockMvc.perform(delete("/api/chat/rooms/r1")
                             .header("X-User-Id", "not-owner"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.success").value(false));
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        void returns_403_when_createdBy_is_null_legacy_room() throws Exception {
-            ChatRoom legacy = room("r-legacy", "Legacy", RoomType.GENERAL, null);
-            when(chatRoomService.getRoom("r-legacy")).thenReturn(Optional.of(legacy));
-
-            mockMvc.perform(delete("/api/chat/rooms/r-legacy")
-                            .header("X-User-Id", "any-user"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.success").value(false));
-        }
-
-        @Test
-        void returns_200_when_owner() throws Exception {
-            ChatRoom owned = room("r1", "My Room", RoomType.GENERAL, "owner-1");
-            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(owned));
+        void returns_200_when_user_has_OWNER_role() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "My Room", RoomType.GENERAL, "owner-1")));
+            doNothing().when(roomPermissionService).requireRole("r1", "owner-1", RoomRole.OWNER);
 
             mockMvc.perform(delete("/api/chat/rooms/r1")
                             .header("X-User-Id", "owner-1"))
@@ -280,6 +275,48 @@ class ChatRoomControllerTest {
                     .andExpect(jsonPath("$.success").value(true));
 
             verify(chatRoomService).deleteRoom("r1");
+        }
+
+        @Test
+        @DisplayName("post-transfer: new OWNER (not createdBy) CAN delete")
+        void returns_200_for_new_owner_after_transfer() throws Exception {
+            // Room was created by userA, but ownership transferred to userB.
+            // createdBy is still "userA", but userB has OWNER role.
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Transferred Room", RoomType.GENERAL, "userA")));
+            doNothing().when(roomPermissionService).requireRole("r1", "userB", RoomRole.OWNER);
+
+            mockMvc.perform(delete("/api/chat/rooms/r1")
+                            .header("X-User-Id", "userB"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(chatRoomService).deleteRoom("r1");
+        }
+
+        @Test
+        @DisplayName("post-transfer: demoted ex-owner (createdBy but MODERATOR) CANNOT delete")
+        void returns_403_for_demoted_ex_owner() throws Exception {
+            // userA created the room (createdBy=userA), but was demoted to MODERATOR.
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Transferred Room", RoomType.GENERAL, "userA")));
+            doThrow(new PermissionDeniedException("권한이 부족합니다."))
+                    .when(roomPermissionService).requireRole("r1", "userA", RoomRole.OWNER);
+
+            mockMvc.perform(delete("/api/chat/rooms/r1")
+                            .header("X-User-Id", "userA"))
+                    .andExpect(status().isForbidden());
+
+            verify(chatRoomService, never()).deleteRoom(anyString());
+        }
+
+        @Test
+        void returns_404_when_room_not_found() throws Exception {
+            when(chatRoomService.getRoom("r-gone")).thenReturn(Optional.empty());
+
+            mockMvc.perform(delete("/api/chat/rooms/r-gone")
+                            .header("X-User-Id", "any-user"))
+                    .andExpect(status().isNotFound());
         }
     }
 
@@ -290,9 +327,11 @@ class ChatRoomControllerTest {
     class UpdateRoomSettings {
 
         @Test
-        void returns_403_when_not_owner() throws Exception {
-            ChatRoom owned = room("r1", "Original", RoomType.GENERAL, "owner-1");
-            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(owned));
+        void returns_403_when_user_does_not_have_OWNER_role() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "owner-1")));
+            doThrow(new PermissionDeniedException("권한이 부족합니다."))
+                    .when(roomPermissionService).requireRole("r1", "intruder", RoomRole.OWNER);
 
             String body = objectMapper.writeValueAsString(Map.of("name", "Renamed"));
 
@@ -300,15 +339,14 @@ class ChatRoomControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body)
                             .header("X-User-Id", "intruder"))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.success").value(false));
+                    .andExpect(status().isForbidden());
         }
 
         @Test
-        void returns_200_when_owner_updates_name_only() throws Exception {
-            ChatRoom existing = room("r1", "Original", RoomType.GENERAL, "owner-1");
-
-            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(existing));
+        void returns_200_when_user_has_OWNER_role() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "owner-1")));
+            doNothing().when(roomPermissionService).requireRole("r1", "owner-1", RoomRole.OWNER);
             when(chatRoomService.updateRoomSettings("r1", "Renamed", null)).thenReturn(true);
 
             String body = objectMapper.writeValueAsString(Map.of("name", "Renamed"));
@@ -320,6 +358,58 @@ class ChatRoomControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data").value(true));
+        }
+
+        @Test
+        @DisplayName("post-transfer: new OWNER (not createdBy) CAN update settings")
+        void returns_200_for_new_owner_after_transfer() throws Exception {
+            // Room created by userA, ownership transferred to userB.
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "userA")));
+            doNothing().when(roomPermissionService).requireRole("r1", "userB", RoomRole.OWNER);
+            when(chatRoomService.updateRoomSettings("r1", "New Name", null)).thenReturn(true);
+
+            String body = objectMapper.writeValueAsString(Map.of("name", "New Name"));
+
+            mockMvc.perform(put("/api/chat/rooms/r1/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "userB"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
+        @DisplayName("post-transfer: demoted ex-owner (createdBy but MODERATOR) CANNOT update settings")
+        void returns_403_for_demoted_ex_owner() throws Exception {
+            // userA created the room but was demoted to MODERATOR.
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "userA")));
+            doThrow(new PermissionDeniedException("권한이 부족합니다."))
+                    .when(roomPermissionService).requireRole("r1", "userA", RoomRole.OWNER);
+
+            String body = objectMapper.writeValueAsString(Map.of("name", "Hijacked"));
+
+            mockMvc.perform(put("/api/chat/rooms/r1/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "userA"))
+                    .andExpect(status().isForbidden());
+
+            verify(chatRoomService, never()).updateRoomSettings(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void returns_404_when_room_not_found() throws Exception {
+            when(chatRoomService.getRoom("r-gone")).thenReturn(Optional.empty());
+
+            String body = objectMapper.writeValueAsString(Map.of("name", "X"));
+
+            mockMvc.perform(put("/api/chat/rooms/r-gone/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "any-user"))
+                    .andExpect(status().isNotFound());
         }
     }
 
