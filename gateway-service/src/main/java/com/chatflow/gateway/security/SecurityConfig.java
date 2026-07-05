@@ -33,7 +33,11 @@ public class SecurityConfig {
                         })
                 )
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/api/auth/**", "/api/chat/auth/**").permitAll()
+                        // Auth: only unauthenticated endpoints are permitAll
+                        .pathMatchers("/api/auth/register", "/api/auth/login", "/api/auth/logout").permitAll()
+                        .pathMatchers("/api/chat/auth/**").permitAll()
+                        // Mutation auth endpoints require authentication (blacklist-gated by JwtAuthenticationWebFilter)
+                        .pathMatchers(HttpMethod.PUT, "/api/auth/profile", "/api/auth/password").authenticated()
                         .pathMatchers("/ws/**").permitAll()
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
                         .pathMatchers("/actuator/health").permitAll()

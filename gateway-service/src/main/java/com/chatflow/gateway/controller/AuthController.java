@@ -3,12 +3,13 @@ package com.chatflow.gateway.controller;
 import com.chatflow.gateway.security.AuthService;
 import com.chatflow.gateway.security.AuthService.AuthRequest;
 import com.chatflow.gateway.security.AuthService.AuthResponse;
-import com.chatflow.gateway.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import reactor.core.publisher.Mono;
 
@@ -18,7 +19,6 @@ import reactor.core.publisher.Mono;
 public class AuthController {
 
     private final AuthService authService;
-    private final JwtUtil jwtUtil;
 
     @PostMapping("/register")
     public Mono<ResponseEntity<AuthResponse>> register(@RequestBody AuthRequest request) {
@@ -39,17 +39,16 @@ public class AuthController {
     @PutMapping("/profile")
     public Mono<ResponseEntity<Map<String, String>>> updateProfile(
             @RequestBody Map<String, String> body, ServerHttpRequest request) {
-        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (bearerToken == null || !bearerToken.startsWith("Bearer ")) {
+        // Identity comes from JwtAuthenticationWebFilter-injected headers (blacklist-gated)
+        String username = getAuthenticatedUsername(request);
+        if (username == null) {
             return Mono.just(ResponseEntity.status(401).build());
         }
-        String token = bearerToken.substring(7);
-        String authenticatedUsername = jwtUtil.getUsername(token);
         String profileImageUrl = body.get("profileImageUrl");
-        if (authenticatedUsername == null || profileImageUrl == null) {
+        if (profileImageUrl == null) {
             return Mono.just(ResponseEntity.badRequest().build());
         }
-        return authService.updateProfileImage(authenticatedUsername, profileImageUrl)
+        return authService.updateProfileImage(username, profileImageUrl)
                 .then(Mono.just(ResponseEntity.ok(Map.of("profileImageUrl", profileImageUrl))))
                 .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
     }
@@ -57,21 +56,33 @@ public class AuthController {
     @PutMapping("/password")
     public Mono<ResponseEntity<Map<String, String>>> changePassword(
             @RequestBody Map<String, String> body, ServerHttpRequest request) {
-        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (bearerToken == null || !bearerToken.startsWith("Bearer ")) {
+        // Identity comes from JwtAuthenticationWebFilter-injected headers (blacklist-gated)
+        String username = getAuthenticatedUsername(request);
+        if (username == null) {
             return Mono.just(ResponseEntity.status(401).build());
         }
-        String token = bearerToken.substring(7);
-        String username = jwtUtil.getUsername(token);
         String currentPassword = body.get("currentPassword");
         String newPassword = body.get("newPassword");
-        if (username == null || currentPassword == null || newPassword == null) {
+        if (currentPassword == null || newPassword == null) {
             return Mono.just(ResponseEntity.badRequest().build());
         }
         return authService.changePassword(username, currentPassword, newPassword)
                 .then(Mono.just(ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."))))
                 .onErrorResume(IllegalArgumentException.class,
                         e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
+    }
+
+    /**
+     * Read the authenticated username from filter-injected X-Username header.
+     * The header is URL-encoded by JwtAuthenticationWebFilter and only present
+     * for authenticated, non-blacklisted requests (client-supplied copies are sanitized).
+     */
+    private String getAuthenticatedUsername(ServerHttpRequest request) {
+        String encoded = request.getHeaders().getFirst("X-Username");
+        if (encoded == null || encoded.isBlank()) {
+            return null;
+        }
+        return URLDecoder.decode(encoded, StandardCharsets.UTF_8);
     }
 
     @PostMapping("/logout")
