@@ -79,11 +79,9 @@ class AuthBlacklistTest {
         when(userRepository.save(any(UserEntity.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        // Redis template stubs for cacheUser + LoginRateLimitFilter
+        // Redis template stubs for LoginRateLimitFilter
         ReactiveValueOperations<String, String> valueOps = mock(ReactiveValueOperations.class);
         lenient().when(reactiveStringRedisTemplate.opsForValue()).thenReturn(valueOps);
-        lenient().when(valueOps.set(anyString(), anyString(), any(Duration.class)))
-                .thenReturn(Mono.just(true));
         // LoginRateLimitFilter calls increment() for /login and /register
         lenient().when(valueOps.increment(anyString())).thenReturn(Mono.just(1L));
         lenient().when(reactiveStringRedisTemplate.expire(anyString(), any(Duration.class)))

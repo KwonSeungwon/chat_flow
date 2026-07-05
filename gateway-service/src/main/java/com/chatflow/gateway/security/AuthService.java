@@ -3,8 +3,6 @@ package com.chatflow.gateway.security;
 import com.chatflow.common.security.SecurityKeys;
 import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
@@ -26,11 +24,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final TokenBlacklistService tokenBlacklistService;
     private final ReactiveStringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
     private final Duration cacheTtl;
-
-    private static final String USER_KEY_PREFIX = "chatflow:user:";
 
     /**
      * Lua script: atomic rotate-active-jti.
@@ -58,23 +53,21 @@ public class AuthService {
     public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
                        TokenBlacklistService tokenBlacklistService,
                        ReactiveStringRedisTemplate redisTemplate,
-                       ObjectMapper objectMapper, UserRepository userRepository,
+                       UserRepository userRepository,
                        @Value("${jwt.expiration-ms:3600000}") long expirationMs) {
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
         this.tokenBlacklistService = tokenBlacklistService;
         this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
         this.userRepository = userRepository;
         this.cacheTtl = Duration.ofMillis(expirationMs);
     }
 
-    public record UserRecord(String userId, String username, String encodedPassword, String role, String profileImageUrl) {}
     public record AuthRequest(String username, String password, String role) {}
     public record AuthResponse(String token, String userId, String username, String role, String profileImageUrl) {}
 
     /**
-     * 회원가입: DB write → cache write-through
+     * 회원가입: DB write → active JTI 등록 → 토큰 발급
      */
     public Mono<AuthResponse> register(AuthRequest request) {
         if (request.password() == null || request.password().length() < 8) {
@@ -102,21 +95,17 @@ public class AuthService {
                             .flatMap(saved -> {
                                 String token = jwtUtil.generateToken(userId, request.username(), role);
                                 String newJti = jwtUtil.getJti(token);
-                                UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                                        null, saved.getRole(), saved.getProfileImageUrl());
                                 return rotateActiveJti(userId, newJti, cacheTtl)
-                                        .then(cacheUser(saved.getUsername(), record))
                                         .thenReturn(new AuthResponse(token, userId, request.username(), role, null));
                             });
                 });
     }
 
     /**
-     * 로그인: Cache-Aside — cache hit → return, miss → DB → cache → return
-     * 단일 세션 강제: 이전 active jti를 blacklist에 등록하여 기존 디바이스 강제 logout
+     * 로그인: DB 비밀번호 검증 → active JTI 교체 (이전 세션 무효화) → 토큰 발급
      */
     public Mono<AuthResponse> login(AuthRequest request) {
-        // 비밀번호 검증은 항상 DB에서 수행 (캐시에는 encodedPassword 미저장)
+        // 비밀번호 검증은 항상 DB에서 수행
         return userRepository.findByUsername(request.username())
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))
                 .flatMap(entity -> {
@@ -126,15 +115,13 @@ public class AuthService {
                     String role = entity.getRole() != null ? entity.getRole() : "NURSE";
                     String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
                     String newJti = jwtUtil.getJti(token);
-                    UserRecord record = new UserRecord(entity.getUserId(), entity.getUsername(), null, role, entity.getProfileImageUrl());
                     return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
-                            .then(cacheUser(entity.getUsername(), record))
                             .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
                 });
     }
 
     /**
-     * 프로필 이미지 변경: DB update → cache update
+     * 프로필 이미지 변경: DB update
      */
     public Mono<Void> updateProfileImage(String username, String profileImageUrl) {
         return userRepository.findByUsername(username)
@@ -142,11 +129,6 @@ public class AuthService {
                 .flatMap(entity -> {
                     entity.setProfileImageUrl(profileImageUrl);
                     return userRepository.save(entity);
-                })
-                .flatMap(saved -> {
-                    UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                            null, saved.getRole(), saved.getProfileImageUrl());
-                    return cacheUser(saved.getUsername(), record);
                 })
                 .then();
     }
@@ -164,11 +146,6 @@ public class AuthService {
                     }
                     entity.setEncodedPassword(passwordEncoder.encode(newPassword));
                     return userRepository.save(entity);
-                })
-                .flatMap(saved -> {
-                    UserRecord record = new UserRecord(saved.getUserId(), saved.getUsername(),
-                            null, saved.getRole(), saved.getProfileImageUrl());
-                    return cacheUser(saved.getUsername(), record);
                 })
                 .then();
     }
@@ -207,44 +184,4 @@ public class AuthService {
         return redisTemplate.delete(SecurityKeys.ACTIVE_JTI_PREFIX + userId).then();
     }
 
-    // ---- Cache-Aside helpers ----
-
-    /**
-     * Cache-Aside read: cache first, miss → DB → cache
-     */
-    private Mono<UserRecord> getUserRecord(String username) {
-        String key = USER_KEY_PREFIX + username;
-        return redisTemplate.opsForValue().get(key)
-                .flatMap(json -> {
-                    try {
-                        return Mono.just(objectMapper.readValue(json, UserRecord.class));
-                    } catch (JsonProcessingException e) {
-                        log.warn("캐시 역직렬화 실패, DB fallback: {}", username);
-                        return Mono.<UserRecord>empty();
-                    }
-                })
-                .switchIfEmpty(
-                    userRepository.findByUsername(username)
-                            .flatMap(entity -> {
-                                UserRecord record = new UserRecord(entity.getUserId(), entity.getUsername(),
-                                        null, entity.getRole(), entity.getProfileImageUrl());
-                                return cacheUser(username, record).thenReturn(record);
-                            })
-                );
-    }
-
-    private Mono<Boolean> cacheUser(String username, UserRecord record) {
-        String key = USER_KEY_PREFIX + username;
-        try {
-            String json = objectMapper.writeValueAsString(record);
-            return redisTemplate.opsForValue().set(key, json, cacheTtl)
-                    .onErrorResume(e -> {
-                        log.warn("캐시 쓰기 실패 (무시): {}", e.getMessage());
-                        return Mono.just(false);
-                    });
-        } catch (JsonProcessingException e) {
-            log.warn("캐시 직렬화 실패: {}", e.getMessage());
-            return Mono.just(false);
-        }
-    }
 }

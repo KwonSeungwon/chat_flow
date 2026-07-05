@@ -2,15 +2,12 @@ package com.chatflow.gateway.security;
 
 import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
-import org.springframework.data.redis.core.ReactiveValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import reactor.core.publisher.Flux;
@@ -19,7 +16,6 @@ import reactor.test.StepVerifier;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -32,8 +28,6 @@ class AuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private ReactiveStringRedisTemplate redisTemplate;
-    @Mock private ReactiveValueOperations<String, String> valueOps;
-    @Mock private ObjectMapper objectMapper;
     @Mock private UserRepository userRepository;
 
     private AuthService authService;
@@ -44,7 +38,7 @@ class AuthServiceTest {
     void setUp() {
         authService = new AuthService(
                 jwtUtil, passwordEncoder, tokenBlacklistService,
-                redisTemplate, objectMapper, userRepository, EXPIRATION_MS);
+                redisTemplate, userRepository, EXPIRATION_MS);
     }
 
     // ── login ────────────────────────────────────────────────────
@@ -66,14 +60,6 @@ class AuthServiceTest {
         // Lua script execution (rotateActiveJti) — returns prev jti or empty
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.just("old-jti-prev"));
-
-        // cacheUser
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        try {
-            lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        } catch (Exception ignored) {}
-        lenient().when(valueOps.set(anyString(), anyString(), any(Duration.class)))
-                .thenReturn(Mono.just(true));
 
         // when
         var req = new AuthService.AuthRequest("user1", "pass1234", null);
@@ -107,13 +93,6 @@ class AuthServiceTest {
         // Lua script handles both first-time and rotation atomically — empty = no prev session
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.empty());
-
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        try {
-            lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        } catch (Exception ignored) {}
-        lenient().when(valueOps.set(anyString(), anyString(), any(Duration.class)))
-                .thenReturn(Mono.just(true));
 
         // when
         var req = new AuthService.AuthRequest("newuser", "password", "DOCTOR");
@@ -172,13 +151,6 @@ class AuthServiceTest {
         // Lua script for rotateActiveJti — empty = first registration, no prev session
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.empty());
-
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        try {
-            lenient().when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-        } catch (Exception ignored) {}
-        lenient().when(valueOps.set(anyString(), anyString(), any(Duration.class)))
-                .thenReturn(Mono.just(true));
 
         // when
         var req = new AuthService.AuthRequest("newreg", "securepass", null);
