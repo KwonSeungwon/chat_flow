@@ -15,6 +15,7 @@ import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -40,11 +41,17 @@ public class JwtAuthenticationWebFilter implements WebFilter {
 
         String token = extractToken(sanitizedExchange.getRequest());
 
-        if (token == null || !jwtUtil.isValid(token)) {
+        if (token == null) {
             return chain.filter(sanitizedExchange);
         }
 
-        Claims claims = jwtUtil.parseToken(token);
+        // Parse and verify the JWT once — reuse Claims for blacklist check + header injection
+        Optional<Claims> maybeClaims = jwtUtil.tryParse(token);
+        if (maybeClaims.isEmpty()) {
+            return chain.filter(sanitizedExchange);
+        }
+
+        Claims claims = maybeClaims.get();
         String jti = claims.getId();
 
         // JTI가 없는 레거시 토큰은 서명 검증만으로 통과
