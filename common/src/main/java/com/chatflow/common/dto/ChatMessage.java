@@ -41,4 +41,18 @@ public class ChatMessage extends BaseMessage {
     @JsonProperty("isDeleted")
     @JsonAlias({"deleted"})
     private boolean isDeleted;
+
+    /**
+     * Edit flag. When true, the message has been edited by the author
+     * and this DTO represents the re-published MESSAGE_EDITED outbox
+     * event. search-service uses it to upsert the ES document with the
+     * new content; ai-summary-service skips it to avoid double-counting
+     * the same messageId in the summary buffer.
+     *
+     * Defaults to false so existing Kafka payloads and cached entries
+     * that predate this field are deserialized as non-edited (backward
+     * compatible).
+     */
+    @JsonProperty("edited")
+    private boolean edited;
 }

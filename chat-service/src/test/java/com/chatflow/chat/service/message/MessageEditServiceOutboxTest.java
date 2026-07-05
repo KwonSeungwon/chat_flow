@@ -112,6 +112,7 @@ class MessageEditServiceOutboxTest {
 
             ChatMessage published = captor.getValue();
             assertThat(published.isDeleted()).isTrue();
+            assertThat(published.isEdited()).isFalse();  // delete does NOT set edited
             assertThat(published.getContent()).isEqualTo("삭제된 메시지입니다.");
             assertThat(published.getMessageId()).isEqualTo(MESSAGE_ID);
             assertThat(published.getChatRoomId()).isEqualTo(ROOM_ID);
@@ -137,13 +138,15 @@ class MessageEditServiceOutboxTest {
     class EditOutbox {
 
         @Test
-        @DisplayName("produces MESSAGE_EDITED outbox event with new plaintext content and deleted=false")
+        @DisplayName("produces MESSAGE_EDITED outbox event with new plaintext content, edited=true, and deleted=false")
         void editMessage_publishesOutboxEvent() {
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                     .thenReturn(Optional.empty());
             when(messageEncryptor.isEnabled()).thenReturn(false);
 
+            // The real mapper would see entity.isEdited()==true (set at line 105
+            // before toDto at line 120), so the mock must return edited=true too.
             ChatMessage mappedDto = ChatMessage.builder()
                     .messageId(MESSAGE_ID)
                     .chatRoomId(ROOM_ID)
@@ -152,6 +155,7 @@ class MessageEditServiceOutboxTest {
                     .content("encrypted-or-new")  // mapper returns entity content; we override
                     .type(BaseMessage.MessageType.CHAT)
                     .timestamp(entity.getTimestamp())
+                    .edited(true)
                     .fileName("test.pdf")
                     .fileUrl("https://example.com/test.pdf")
                     .fileContentType("application/pdf")
@@ -173,6 +177,7 @@ class MessageEditServiceOutboxTest {
 
             ChatMessage published = captor.getValue();
             assertThat(published.isDeleted()).isFalse();
+            assertThat(published.isEdited()).isTrue();   // Task 0.10: edit DTO carries the flag
             assertThat(published.getContent()).isEqualTo(newContent);
             assertThat(published.getMessageId()).isEqualTo(MESSAGE_ID);
             assertThat(published.getChatRoomId()).isEqualTo(ROOM_ID);

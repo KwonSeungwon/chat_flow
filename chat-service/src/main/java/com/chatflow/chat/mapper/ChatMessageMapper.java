@@ -18,10 +18,11 @@ import org.mapstruct.Named;
  *   <li>{@code type}: Entity stores {@code String}, DTO stores
  *       {@link BaseMessage.MessageType} enum. Custom qualifier methods
  *       handle the bidirectional conversion with null-safe fallback.</li>
- *   <li>Entity-only fields ({@code edited}, {@code editedAt},
- *       {@code pinned}, {@code reactions}, {@code isNew}) are ignored on
- *       {@code toDto} because the DTO has no counterpart. {@code deleted}
- *       is now mapped to the DTO's {@code isDeleted} field (Task 0.7).</li>
+ *   <li>Entity-only fields ({@code editedAt}, {@code pinned},
+ *       {@code reactions}, {@code isNew}) are ignored on {@code toDto}
+ *       because the DTO has no counterpart. {@code deleted} is mapped to
+ *       the DTO's {@code isDeleted} field (Task 0.7) and {@code edited}
+ *       is mapped to the DTO's {@code edited} field (Task 0.10).</li>
  *   <li>DTO-only fields ({@code id}, {@code roomType}) are ignored on
  *       {@code toEntity} because the entity has no counterpart.</li>
  * </ul>
@@ -36,6 +37,7 @@ public interface ChatMessageMapper {
     @Mapping(target = "type", source = "type", qualifiedByName = "stringToMessageType")
     @Mapping(target = "isAiGenerated", expression = "java(entity.isAiGenerated())")
     @Mapping(target = "isDeleted", expression = "java(entity.isDeleted())")
+    @Mapping(target = "edited", expression = "java(entity.isEdited())")
     @Mapping(target = "roomType", ignore = true)
     @Mapping(target = "id", ignore = true)
     ChatMessage toDto(ChatMessageEntity entity);
