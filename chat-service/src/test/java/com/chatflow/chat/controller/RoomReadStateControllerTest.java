@@ -18,8 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -49,8 +47,6 @@ class RoomReadStateControllerTest {
     @Mock private ChatRoomService chatRoomService;
     @Mock private UnreadCountService unreadCountService;
     @Mock private ReadReceiptService readReceiptService;
-    @Mock private StringRedisTemplate redisTemplate;
-    @Mock private ValueOperations<String, String> valueOperations;
     @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks
@@ -156,6 +152,30 @@ class RoomReadStateControllerTest {
         @Test
         void getLastRead_returns_200_with_empty_when_no_userId_header() throws Exception {
             mockMvc.perform(get("/api/chat/rooms/r1/last-read"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.lastReadMessageId").value(""));
+        }
+
+        @Test
+        void getLastRead_returns_200_with_lastReadMessageId_from_service() throws Exception {
+            when(readReceiptService.getLastReadMessageId("r1", "user-1"))
+                    .thenReturn("msg-42");
+
+            mockMvc.perform(get("/api/chat/rooms/r1/last-read")
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.lastReadMessageId").value("msg-42"));
+        }
+
+        @Test
+        void getLastRead_returns_empty_string_when_service_returns_null() throws Exception {
+            when(readReceiptService.getLastReadMessageId("r1", "user-1"))
+                    .thenReturn(null);
+
+            mockMvc.perform(get("/api/chat/rooms/r1/last-read")
+                            .header("X-User-Id", "user-1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.lastReadMessageId").value(""));

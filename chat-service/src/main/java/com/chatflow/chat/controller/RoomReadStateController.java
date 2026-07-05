@@ -9,7 +9,6 @@ import com.chatflow.chat.service.read.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +31,6 @@ public class RoomReadStateController {
     private final ChatRoomService chatRoomService;
     private final UnreadCountService unreadCountService;
     private final ReadReceiptService readReceiptService;
-    private final StringRedisTemplate redisTemplate;
 
     @GetMapping("/unread-counts")
     public ResponseEntity<ApiResponse<Map<String, Long>>> getUnreadCounts(
@@ -62,8 +60,7 @@ public class RoomReadStateController {
         if (userId == null) {
             return ResponseEntity.ok(ApiResponse.ok(Map.of("lastReadMessageId", "")));
         }
-        String key = "chatflow:read:" + roomId + ":" + userId;
-        String lastReadId = redisTemplate.opsForValue().get(key);
+        String lastReadId = readReceiptService.getLastReadMessageId(roomId, userId);
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("lastReadMessageId", lastReadId != null ? lastReadId : "")));
     }

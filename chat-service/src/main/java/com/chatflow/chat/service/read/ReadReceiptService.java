@@ -1,19 +1,14 @@
 package com.chatflow.chat.service.read;
 
-import com.chatflow.common.dto.ReadReceipt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
-
 import java.time.LocalDateTime;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -21,6 +16,16 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class ReadReceiptService {
 
+    /**
+     * Redis key for per-room read positions hash.
+     * Structure: HASH  chatflow:read:{roomId}  field=userId  value=lastReadMessageId
+     *
+     * <p>Migration note: prior versions stored read positions as individual string keys
+     * {@code chatflow:read:{roomId}:{userId}}. Those keys are NOT migrated — they expire
+     * within 24h. During the brief post-deploy window, some pre-existing positions may
+     * not appear until users send a new read receipt. This is acceptable because read
+     * positions are ephemeral UI state.
+     */
     private static final String READ_KEY_PREFIX = "chatflow:read:";
     private static final long READ_TTL_HOURS = 24;
 
@@ -28,28 +33,31 @@ public class ReadReceiptService {
     private final SimpMessagingTemplate messagingTemplate;
 
     /**
-     * 특정 채팅방에서 각 사용자의 마지막 읽은 메시지 ID를 반환한다.
+     * Returns each user's last-read message ID for the given room.
+     * Single HGETALL — O(room members), no keyspace scan.
      */
     public Map<String, String> getRoomReadPositions(String roomId) {
-        String pattern = READ_KEY_PREFIX + roomId + ":*";
-        Set<String> keys = new HashSet<>();
-        // SCAN 대신 KEYS O(N) 블로킹 방지 — SCAN으로 순회
-        try (Cursor<String> cursor = redisTemplate.scan(
-                ScanOptions.scanOptions().match(pattern).count(100).build())) {
-            cursor.forEachRemaining(keys::add);
-        } catch (Exception e) {
-            log.warn("Redis SCAN failed for pattern {}: {}", pattern, e.getMessage());
-        }
-        Map<String, String> positions = new java.util.LinkedHashMap<>();
-        for (String key : keys) {
-            // key = chatflow:read:{roomId}:{userId}
-            String userId = key.substring(key.lastIndexOf(':') + 1);
-            String lastReadMsgId = redisTemplate.opsForValue().get(key);
-            if (lastReadMsgId != null) {
-                positions.put(userId, lastReadMsgId);
+        String hashKey = READ_KEY_PREFIX + roomId;
+        Map<String, String> positions = new LinkedHashMap<>();
+        try {
+            Map<Object, Object> entries = redisTemplate.opsForHash().entries(hashKey);
+            for (Map.Entry<Object, Object> entry : entries.entrySet()) {
+                positions.put((String) entry.getKey(), (String) entry.getValue());
             }
+        } catch (Exception e) {
+            log.warn("Redis HGETALL failed for key {}: {}", hashKey, e.getMessage());
         }
         return positions;
+    }
+
+    /**
+     * Returns a single user's last-read message ID for the given room.
+     * Single HGET — O(1).
+     */
+    public String getLastReadMessageId(String roomId, String userId) {
+        String hashKey = READ_KEY_PREFIX + roomId;
+        Object value = redisTemplate.opsForHash().get(hashKey, userId);
+        return value != null ? (String) value : null;
     }
 
     /**
@@ -64,16 +72,24 @@ public class ReadReceiptService {
     }
 
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
-        String key = READ_KEY_PREFIX + roomId + ":" + userId;
-        redisTemplate.opsForValue().set(key, lastReadMessageId, READ_TTL_HOURS, TimeUnit.HOURS);
-        // 미읽은 카운트 계산에 사용할 타임스탬프 저장
+        String hashKey = READ_KEY_PREFIX + roomId;
+
+        // HSET chatflow:read:{roomId} {userId} {lastReadMessageId}
+        redisTemplate.opsForHash().put(hashKey, userId, lastReadMessageId);
+        // Refresh hash TTL on each write so the hash lives as long as the room is active.
+        // HSET + EXPIRE are not atomic: a crash between them can leave a no-TTL hash, but
+        // the next markRead in this room re-arms the TTL (self-healing), so it never leaks
+        // for an active room — not worth an EVAL for ephemeral read-position state.
+        redisTemplate.expire(hashKey, READ_TTL_HOURS, TimeUnit.HOURS);
+
+        // 미읽은 카운트 계산에 사용할 타임스탬프 저장 (per-user string key — unchanged)
         String atKey = "chatflow:readat:" + roomId + ":" + userId;
         redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
 
         // 프론트엔드가 메시지별 readCount를 계산할 수 있도록 전체 readPositions를 함께 전송
         Map<String, String> positions = getRoomReadPositions(roomId);
 
-        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("userId", userId);
         payload.put("username", username);
         payload.put("roomId", roomId);
