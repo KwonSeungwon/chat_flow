@@ -70,7 +70,7 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, null);
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.value()).isTrue();
@@ -94,7 +94,7 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u2");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u2");
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.value()).isTrue();
@@ -119,7 +119,7 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\",\"u2\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.value()).isFalse();
@@ -138,7 +138,7 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
             assertThat(result.isSuccess()).isTrue();
             assertThat(result.value()).isFalse();
@@ -161,7 +161,7 @@ class MessageReactionServiceTest {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, null);
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
 
-            messageReactionService.toggleReaction(MESSAGE_ID, "👍", "u1");
+            messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
             ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
             verify(messagingTemplate).convertAndSend(
@@ -188,11 +188,28 @@ class MessageReactionServiceTest {
             when(chatMessageRepository.findById("nonexistent")).thenReturn(Optional.empty());
 
             Result<Boolean, ChatErrorCode> result =
-                    messageReactionService.toggleReaction("nonexistent", "👍", "u1");
+                    messageReactionService.toggleReaction(ROOM_ID, "nonexistent", "👍", "u1");
 
             assertThat(result.isFailure()).isTrue();
             assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
             verify(chatMessageRepository, never()).save(any());
+            verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
+        }
+
+        @Test
+        void returns_NOT_FOUND_when_message_belongs_to_different_room() {
+            // Message exists in room-2 but caller is authorized for room-1
+            ChatMessageEntity message = sampleMessage(MESSAGE_ID, "room-2", null);
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+
+            Result<Boolean, ChatErrorCode> result =
+                    messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
+
+            assertThat(result.isFailure()).isTrue();
+            assertThat(result.error()).isEqualTo(ChatErrorCode.NOT_FOUND);
+            // Must NOT save — no mutation should occur on another room's message
+            verify(chatMessageRepository, never()).save(any());
+            // Must NOT broadcast — especially not to room-2's STOMP topic
             verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
         }
     }

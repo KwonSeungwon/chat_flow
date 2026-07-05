@@ -5,6 +5,9 @@ import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.mapper.MessageEditHistoryMapper;
+import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.chat.service.message.MessageEditService;
 import com.chatflow.chat.service.message.MessagePinService;
@@ -22,6 +25,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -42,6 +46,9 @@ class MessageInteractionControllerThreadTest {
     @Mock private MessagePinService messagePinService;
     @Mock private LinkPreviewService linkPreviewService;
     @Mock private MessageThreadService messageThreadService;
+    @Mock private ChatMessageRepository chatMessageRepository;
+    @Mock private MessageEditHistoryRepository editHistoryRepository;
+    @Mock private MessageEditHistoryMapper messageEditHistoryMapper;
     @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks
@@ -109,5 +116,41 @@ class MessageInteractionControllerThreadTest {
                 .header("X-User-Id", "u-outsider"))
             .andExpect(status().isForbidden());
         verify(messageThreadService, never()).findReplies(anyString(), anyString());
+    }
+
+    // ── Edit-history cross-room ownership guard ───────────────────
+
+    @Test
+    void getEditHistory_returns_404_when_message_belongs_to_different_room() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+
+        // Message exists but belongs to room-2, not room-1
+        ChatMessageEntity foreignMessage = ChatMessageEntity.builder()
+            .messageId("msg-x").chatRoomId("room-2").userId("u2").username("bob")
+            .content("secret").type(ChatMessage.MessageType.CHAT.name())
+            .timestamp(LocalDateTime.now())
+            .build();
+        when(chatMessageRepository.findById("msg-x")).thenReturn(Optional.of(foreignMessage));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/msg-x/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        // Must NOT query edit history for a message in another room
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
+    }
+
+    @Test
+    void getEditHistory_returns_404_when_message_does_not_exist() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        when(chatMessageRepository.findById("no-such-msg")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/no-such-msg/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
     }
 }
