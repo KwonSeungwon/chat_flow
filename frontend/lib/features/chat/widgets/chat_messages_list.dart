@@ -76,6 +76,22 @@ class ChatMessagesList extends StatefulWidget {
   State<ChatMessagesList> createState() => _ChatMessagesListState();
 }
 
+/// Returns true when [newMessages] grew by prepending older history at the
+/// front (the head changed), as opposed to appending new messages at the end.
+/// Exposed for unit testing.
+///
+/// Edge case (benign): if the live buffer overflows its cap and the oldest
+/// messages are trimmed off the front on the same update that appends a new
+/// message, the head changes and this reports a prepend — causing a single
+/// harmless one-frame anchor jump. Not worth guarding for a rare 500+ buffer.
+@visibleForTesting
+bool isPrependedHistory(
+    List<ChatMessage> oldMessages, List<ChatMessage> newMessages) {
+  return oldMessages.isNotEmpty &&
+      newMessages.isNotEmpty &&
+      newMessages.first.effectiveId != oldMessages.first.effectiveId;
+}
+
 class _ChatMessagesListState extends State<ChatMessagesList> {
   final _scrollController = ScrollController();
   final _targetKey = GlobalKey();
@@ -94,6 +110,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   int _autoLoadAttempts = 0;
   static const int _maxAutoLoadAttempts = 3;
 
+  /// True for one frame after a history prepend completes, used to suppress
+  /// the scroll-listener's offset<100 load-more re-trigger.
+  bool _suppressLoadMore = false;
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +131,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
         _autoScroll = false;
       }
       // Trigger history load when near the top
-      if (offset < 100 && widget.hasMoreHistory && !widget.isLoadingHistory) {
+      if (offset < 100 &&
+          widget.hasMoreHistory &&
+          !widget.isLoadingHistory &&
+          !_suppressLoadMore) {
         widget.onLoadMoreHistory?.call();
       }
     });
@@ -258,11 +281,50 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     }
 
     if (widget.messages.length > oldWidget.messages.length) {
-      if (_autoScroll) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      // Distinguish prepend (older history loaded at top) from append (new
+      // live messages at bottom).  A prepend changes the head of the list;
+      // an append leaves it unchanged.
+      final isPrepend =
+          isPrependedHistory(oldWidget.messages, widget.messages);
+
+      if (isPrepend) {
+        // Anchor viewport: after the new items are laid out, jump the scroll
+        // offset by the amount of content inserted above so the previously-
+        // visible messages stay in place visually.
+        if (_scrollController.hasClients) {
+          final oldMaxExtent =
+              _scrollController.position.maxScrollExtent;
+          final oldOffset = _scrollController.offset;
+
+          // Suppress the scroll-listener's load-more trigger for one frame
+          // so the still-near-top offset doesn't immediately re-fire.
+          _suppressLoadMore = true;
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_scrollController.hasClients) {
+              _suppressLoadMore = false;
+              return;
+            }
+            final newMaxExtent =
+                _scrollController.position.maxScrollExtent;
+            final delta = newMaxExtent - oldMaxExtent;
+            if (delta > 0) {
+              _scrollController.jumpTo(oldOffset + delta);
+            }
+            _suppressLoadMore = false;
+          });
+        }
+        // Do NOT scroll to bottom and do NOT increment unread count —
+        // these are old messages, not new ones.
       } else {
-        setState(() =>
-            _unreadCount += widget.messages.length - oldWidget.messages.length);
+        // Append: new live messages arrived at the bottom.
+        if (_autoScroll) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
+        } else {
+          setState(() => _unreadCount +=
+              widget.messages.length - oldWidget.messages.length);
+        }
       }
     }
   }

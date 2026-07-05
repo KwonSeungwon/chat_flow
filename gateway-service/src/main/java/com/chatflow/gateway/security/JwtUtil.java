@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -48,12 +49,15 @@ public class JwtUtil {
                 .getPayload();
     }
 
-    public boolean isValid(String token) {
+    /**
+     * Parse and verify the token, returning the Claims if valid.
+     * Returns empty if the token is malformed, expired, or signature-invalid.
+     */
+    public Optional<Claims> tryParse(String token) {
         try {
-            parseToken(token);
-            return true;
+            return Optional.of(parseToken(token));
         } catch (Exception e) {
-            return false;
+            return Optional.empty();
         }
     }
 

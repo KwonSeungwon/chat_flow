@@ -1,8 +1,11 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.entity.RoomMemberEntity;
+import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.read.ReadReceiptService;
 import com.chatflow.chat.service.room.RoomMembershipChecker;
+import com.chatflow.chat.service.room.RoomMembershipChecker.MembershipResult;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,13 +18,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,47 +65,56 @@ class ChatControllerTest {
     // ── sendMessage membership gate ────────────────────────────────
 
     @Test
-    @DisplayName("sendMessage rejects non-member via isMember gate")
-    void sendMessage_rejects_non_member_via_isMember_gate() {
+    @DisplayName("sendMessage rejects non-member via findMember gate")
+    void sendMessage_rejects_non_member_via_findMember_gate() {
         ChatMessage message = buildChatMessage();
 
-        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(false);
+        when(membershipChecker.findMember(ROOM_ID, USER_ID)).thenReturn(Optional.empty());
 
         chatController.sendMessage(message, headerAccessor);
 
         // chatService.processMessage should never be called
         verify(chatService, never()).processMessage(any(ChatMessage.class));
+        verify(chatService, never()).processMessage(any(ChatMessage.class), any());
         // Non-member error sent to user queue
         verify(messagingTemplate).convertAndSendToUser(
                 eq(USER_ID), eq("/queue/errors"), any(Map.class));
     }
 
     @Test
-    @DisplayName("sendMessage passes through when member")
+    @DisplayName("sendMessage passes through when member — entity forwarded to processMessage")
     void sendMessage_passes_through_when_member() {
         ChatMessage message = buildChatMessage();
 
-        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
-        // Validator returns no violations
+        RoomMemberEntity memberEntity = RoomMemberEntity.builder()
+                .roomId(ROOM_ID).userId(USER_ID).username(USERNAME)
+                .role(RoomRole.MEMBER).joinedAt(LocalDateTime.now()).build();
+        when(membershipChecker.findMember(ROOM_ID, USER_ID))
+                .thenReturn(Optional.of(new MembershipResult(memberEntity, false)));
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
 
         chatController.sendMessage(message, headerAccessor);
 
-        verify(chatService).processMessage(message);
+        // Verify the two-arg overload is called with the pre-fetched entity
+        verify(chatService).processMessage(message, memberEntity);
+        // Verify the single-arg overload is NOT called (no duplicate lookup)
+        verify(chatService, never()).processMessage(message);
     }
 
     @Test
-    @DisplayName("sendMessage passes through via legacy createdBy fallback")
+    @DisplayName("sendMessage passes through via legacy createdBy fallback — null entity forwarded")
     void sendMessage_passes_through_via_legacy_createdBy_fallback() {
         ChatMessage message = buildChatMessage();
 
-        // RoomMembershipChecker handles the legacy createdBy fallback internally
-        when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(true);
+        // Legacy creator: MembershipResult with null entity
+        when(membershipChecker.findMember(ROOM_ID, USER_ID))
+                .thenReturn(Optional.of(MembershipResult.CREATOR_ONLY));
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
 
         chatController.sendMessage(message, headerAccessor);
 
-        verify(chatService).processMessage(message);
+        // Verify the two-arg overload is called with null (creator-only, no member row)
+        verify(chatService).processMessage(message, null);
     }
 
     // ── addUser ────────────────────────────────────────────────────
