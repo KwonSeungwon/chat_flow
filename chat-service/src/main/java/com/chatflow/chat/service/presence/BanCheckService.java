@@ -21,14 +21,16 @@ public class BanCheckService {
 
     /**
      * @return true if the user is banned and join should be aborted.
-     *         As a side effect, broadcasts a ROOM_BANNED error to the room
-     *         topic so the client can render the rejection.
+     *         As a side effect, sends a ROOM_BANNED error to the rejected
+     *         user's own queue ({@code /user/queue/errors}) so only they
+     *         see the rejection -- never the whole room.
      */
     public boolean checkBanGate(String userId, String chatRoomId, String username) {
         if (!userId.isEmpty() && roomBanService.isBanned(chatRoomId, userId)) {
             log.warn("User {} attempted to join banned room {}", username, chatRoomId);
-            messagingTemplate.convertAndSend(
-                    "/topic/chat/" + chatRoomId + "/errors",
+            messagingTemplate.convertAndSendToUser(
+                    userId,
+                    "/queue/errors",
                     Map.of("type", "ROOM_BANNED", "roomId", chatRoomId));
             return true;
         }

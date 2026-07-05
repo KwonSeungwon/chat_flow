@@ -269,6 +269,22 @@ class ChatBubbleState extends State<ChatBubble> {
                                   color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
                                 ),
                               ),
+                            if (widget.msg.deliveryStatus == MessageDeliveryStatus.sending)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
+                              ),
+                            if (widget.msg.deliveryStatus == MessageDeliveryStatus.failed)
+                              GestureDetector(
+                                onTap: widget.onRetry,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(top: 2),
+                                  child: Tooltip(
+                                    message: '재전송',
+                                    child: Icon(Icons.refresh, size: 13, color: Colors.red),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -480,18 +496,6 @@ class ChatBubbleState extends State<ChatBubble> {
                             Text(widget.time,
                                 style: TextStyle(
                                     fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
-                            if (widget.isMine && widget.msg.deliveryStatus == MessageDeliveryStatus.sending)
-                              Padding(padding: const EdgeInsets.only(left: 3), child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120))),
-                            if (widget.isMine && widget.msg.deliveryStatus == MessageDeliveryStatus.failed)
-                              GestureDetector(
-                                onTap: widget.onRetry,
-                                child: const Padding(
-                                    padding: EdgeInsets.only(left: 3),
-                                    child: Tooltip(
-                                      message: '재전송',
-                                      child: Icon(Icons.refresh, size: 13, color: Colors.red),
-                                    )),
-                              ),
                           ],
                         ),
                       ),

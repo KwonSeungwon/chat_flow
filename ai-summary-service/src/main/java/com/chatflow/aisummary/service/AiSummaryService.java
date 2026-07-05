@@ -84,6 +84,16 @@ public class AiSummaryService {
     }
 
     private void addMessageAndCheckTrigger(ChatMessage message) {
+        // Skip re-published mutation events from chat-service (Task 0.10).
+        // MessageEditService publishes MESSAGE_DELETED / MESSAGE_EDITED to
+        // chat-messages so search-service can update the ES doc, but
+        // ai-summary must NOT ingest them: a delete placeholder would
+        // pollute the summary prompt, and an edit would duplicate the
+        // same messageId in the buffer (inflating the 10-msg trigger).
+        if (message.isDeleted() || message.isEdited()) {
+            return;
+        }
+
         // Only real user CHAT messages contribute to the summary buffer.
         // JOIN/LEAVE/SYSTEM/FILE/AI_SUMMARY would inflate the 10-msg trigger
         // and pollute the summary content.

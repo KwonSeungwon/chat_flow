@@ -28,8 +28,10 @@ public class MessageReactionService {
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
-    public Result<Boolean, ChatErrorCode> toggleReaction(String messageId, String emoji, String userId) {
-        return chatMessageRepository.findById(messageId).<Result<Boolean, ChatErrorCode>>map(entity -> {
+    public Result<Boolean, ChatErrorCode> toggleReaction(String roomId, String messageId, String emoji, String userId) {
+        return chatMessageRepository.findById(messageId)
+                .filter(entity -> roomId.equals(entity.getChatRoomId()))
+                .<Result<Boolean, ChatErrorCode>>map(entity -> {
             Map<String, List<String>> map;
             try {
                 map = entity.getReactions() != null

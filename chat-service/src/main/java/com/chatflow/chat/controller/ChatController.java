@@ -1,9 +1,8 @@
 package com.chatflow.chat.controller;
 
-import com.chatflow.chat.repository.ChatRoomRepository;
-import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.read.ReadReceiptService;
+import com.chatflow.chat.service.room.RoomMembershipChecker;
 import com.chatflow.common.dto.ChatMessage;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -28,23 +27,15 @@ public class ChatController {
     private final ReadReceiptService readReceiptService;
     private final Validator validator;
     private final SimpMessagingTemplate messagingTemplate;
-    private final RoomMemberRepository roomMemberRepository;
-    private final ChatRoomRepository chatRoomRepository;
+    private final RoomMembershipChecker membershipChecker;
 
     /**
-     * STOMP-level membership check. Mirrors ChatRoomController.requireMember
-     * semantics: true if user is a row in room_members OR is the room creator
-     * (legacy bridge for pre-seed rooms). The session is authenticated by the
-     * gateway, but session alone says nothing about which rooms the user may
-     * touch — without this check, an authenticated user can send messages,
-     * mark-read, or broadcast typing into ANY room they know the id of.
+     * Delegates to {@link RoomMembershipChecker} — the single source of truth
+     * for the "is this user a member of this room?" predicate, shared with the
+     * STOMP SUBSCRIBE interceptor.
      */
     private boolean isMember(String roomId, String userId) {
-        if (roomId == null || userId == null || userId.isBlank()) return false;
-        if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return true;
-        return chatRoomRepository.findById(roomId)
-                .map(r -> userId.equals(r.getCreatedBy()))
-                .orElse(false);
+        return membershipChecker.isMember(roomId, userId);
     }
 
     private void rejectNonMember(String userId, String roomId, String op) {

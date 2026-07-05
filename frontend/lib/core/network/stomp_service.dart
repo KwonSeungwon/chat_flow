@@ -13,6 +13,7 @@ typedef MemberListCallback = void Function(List<dynamic> members);
 typedef KickedCallback = void Function(String reason, String? byUserId, String? byUsername);
 typedef MutedCallback = void Function(DateTime mutedUntil, String? byUserId, String? byUsername);
 typedef BannedCallback = void Function(String roomId);
+typedef TransientErrorCallback = void Function(String type, String message);
 
 class StompService {
   StompClient? _client;
@@ -37,6 +38,7 @@ class StompService {
   KickedCallback? _onKicked;
   MutedCallback? _onMuted;
   BannedCallback? _onBanned;
+  TransientErrorCallback? _onTransientError;
 
   bool get isConnected => _connected;
 
@@ -56,6 +58,7 @@ class StompService {
     KickedCallback? onKicked,
     MutedCallback? onMuted,
     BannedCallback? onBanned,
+    TransientErrorCallback? onTransientError,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -72,6 +75,7 @@ class StompService {
     _onKicked = onKicked;
     _onMuted = onMuted;
     _onBanned = onBanned;
+    _onTransientError = onTransientError;
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -120,23 +124,17 @@ class StompService {
       },
     );
 
-    // Subscribe to server-side errors
+    // Subscribe to room-wide server-side errors (validation / broadcast-scope only).
+    // Per-user rejections (ROOM_FULL / ROOM_FULL_DM / ROOM_BANNED / MUTED /
+    // NOT_A_MEMBER) now arrive via /user/queue/errors so a single user's
+    // rejection no longer redirects/bans the whole room.
     _client!.subscribe(
       destination: '/topic/chat/$_currentRoomId/errors',
       callback: (frame) {
         if (frame.body == null) return;
         try {
           final data = jsonDecode(frame.body!) as Map<String, dynamic>;
-          final type = data['type']?.toString();
-          if (type == 'ROOM_FULL' || type == 'ROOM_FULL_DM') {
-            // ROOM_FULL_DM: DM 방은 분할 불가, redirectTo가 null이므로 이탈 화면만 표시
-            _onRoomFull?.call(data['redirectTo']?.toString(), data['roomName']?.toString());
-          } else if (type == 'ROOM_BANNED') {
-            final bannedRoomId = data['roomId']?.toString() ?? _currentRoomId ?? '';
-            _onBanned?.call(bannedRoomId);
-          } else {
-            debugPrint('[STOMP] Server error: $data');
-          }
+          debugPrint('[STOMP] Room error: $data');
         } catch (_) {}
       },
     );
@@ -245,6 +243,36 @@ class StompService {
       },
     );
 
+    // Subscribe to user-specific error queue — per-user join rejections.
+    // Spring's user-destination resolver maps this to the Principal set at
+    // CONNECT (same mechanism as /user/queue/kicked & /user/queue/muted),
+    // and it bypasses the SUBSCRIBE room-topic authz guard.
+    _client!.subscribe(
+      destination: '/user/queue/errors',
+      callback: (frame) {
+        if (frame.body == null) return;
+        try {
+          final data = jsonDecode(frame.body!) as Map<String, dynamic>;
+          final type = data['type']?.toString();
+          if (type == 'ROOM_FULL' || type == 'ROOM_FULL_DM') {
+            // ROOM_FULL_DM: DM 방은 분할 불가, redirectTo가 null이므로 이탈 화면만 표시
+            _onRoomFull?.call(
+                data['redirectTo']?.toString(), data['roomName']?.toString());
+          } else if (type == 'ROOM_BANNED') {
+            final bannedRoomId =
+                data['roomId']?.toString() ?? _currentRoomId ?? '';
+            _onBanned?.call(bannedRoomId);
+          } else if (type == 'MUTED') {
+            _onTransientError?.call(type!, '음소거 상태에서는 메시지를 보낼 수 없습니다.');
+          } else if (type == 'NOT_A_MEMBER') {
+            _onTransientError?.call(type!, '이 채팅방의 멤버가 아닙니다.');
+          } else {
+            debugPrint('[STOMP] User error: $data');
+          }
+        } catch (_) {}
+      },
+    );
+
     // Send JOIN via /app/chat.addUser
     _client!.send(
       destination: '/app/chat.addUser',
@@ -341,6 +369,7 @@ class StompService {
     _onKicked = null;
     _onMuted = null;
     _onBanned = null;
+    _onTransientError = null;
   }
 
   void dispose() {

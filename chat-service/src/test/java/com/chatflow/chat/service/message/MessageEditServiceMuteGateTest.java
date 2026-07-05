@@ -3,10 +3,13 @@ package com.chatflow.chat.service.message;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
+import com.chatflow.chat.service.outbox.ChatPersistenceService;
+import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.util.MessageEncryptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,6 +44,8 @@ class MessageEditServiceMuteGateTest {
     @Mock private MessageEncryptor messageEncryptor;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private com.chatflow.chat.repository.MessageEditHistoryRepository editHistoryRepository;
+    @Mock private ChatPersistenceService chatPersistenceService;
+    @Mock private ChatMessageMapper chatMessageMapper;
 
     @InjectMocks private MessageEditService service;
 
@@ -54,6 +60,16 @@ class MessageEditServiceMuteGateTest {
         msg.setUsername("alice");
         msg.setContent("hello");
         msg.setTimestamp(LocalDateTime.now());
+
+        // Stub mapper for tests where edit succeeds and triggers outbox event
+        lenient().when(chatMessageMapper.toDto(msg)).thenReturn(
+                ChatMessage.builder()
+                        .messageId(MESSAGE_ID)
+                        .chatRoomId(ROOM_ID)
+                        .userId(USER_ID)
+                        .username("alice")
+                        .content("hello")
+                        .build());
     }
 
     private RoomMemberEntity member(LocalDateTime mutedUntil) {

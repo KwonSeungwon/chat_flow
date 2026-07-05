@@ -59,6 +59,18 @@ public class SearchService {
             return;
         }
 
+        // Soft-deleted message → remove from ES immediately (not via buffer).
+        // Known window: deletes bypass the buffer while creates/edits flow through it,
+        // so if this delete arrives while the same id's create/edit is still unflushed,
+        // deleteById removes nothing and the buffered doc will resurrect it on the next
+        // flush. Bounded by the 500ms scheduledFlush; deletes target long-persisted
+        // messages in practice, so the interleave is negligible (see plan Task 0.7).
+        if (message.isDeleted()) {
+            log.info("Removing deleted message {} from ES index", message.getMessageId());
+            searchRepository.deleteById(message.getMessageId());
+            return;
+        }
+
         // JOIN/LEAVE/SYSTEM 메시지는 검색 인덱싱 제외
         if (message.getType() != null) {
             var type = message.getType();

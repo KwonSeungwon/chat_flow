@@ -153,6 +153,115 @@ class ChatMessageMapperTest {
     }
 
     @Test
+    void toDto_maps_deleted_flag() {
+        ChatMessageEntity entity = ChatMessageEntity.builder()
+                .messageId("msg-del")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("삭제된 메시지입니다.")
+                .type("CHAT")
+                .timestamp(LocalDateTime.now())
+                .deleted(true)
+                .build();
+
+        ChatMessage dto = mapper.toDto(entity);
+
+        assertThat(dto.isDeleted()).isTrue();
+    }
+
+    @Test
+    void toDto_deleted_defaults_false_when_entity_not_deleted() {
+        ChatMessageEntity entity = ChatMessageEntity.builder()
+                .messageId("msg-live")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("hello")
+                .type("CHAT")
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        ChatMessage dto = mapper.toDto(entity);
+
+        assertThat(dto.isDeleted()).isFalse();
+    }
+
+    @Test
+    void toEntity_ignores_dto_deleted_flag() {
+        ChatMessage dto = ChatMessage.builder()
+                .messageId("msg-ign")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("hello")
+                .type(BaseMessage.MessageType.CHAT)
+                .timestamp(LocalDateTime.now())
+                .isDeleted(true)
+                .build();
+
+        ChatMessageEntity entity = mapper.toEntity(dto);
+
+        // deleted is ignored on toEntity — entity's deleted flag is managed by the service layer
+        assertThat(entity.isDeleted()).isFalse();
+    }
+
+    @Test
+    void toDto_maps_edited_flag() {
+        ChatMessageEntity entity = ChatMessageEntity.builder()
+                .messageId("msg-edit")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("edited content")
+                .type("CHAT")
+                .timestamp(LocalDateTime.now())
+                .edited(true)
+                .editedAt(LocalDateTime.now())
+                .build();
+
+        ChatMessage dto = mapper.toDto(entity);
+
+        assertThat(dto.isEdited()).isTrue();
+    }
+
+    @Test
+    void toDto_edited_defaults_false_when_entity_not_edited() {
+        ChatMessageEntity entity = ChatMessageEntity.builder()
+                .messageId("msg-noedit")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("hello")
+                .type("CHAT")
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        ChatMessage dto = mapper.toDto(entity);
+
+        assertThat(dto.isEdited()).isFalse();
+    }
+
+    @Test
+    void toEntity_ignores_dto_edited_flag() {
+        ChatMessage dto = ChatMessage.builder()
+                .messageId("msg-ign-edit")
+                .chatRoomId("room-1")
+                .userId("user-1")
+                .username("alice")
+                .content("hello")
+                .type(BaseMessage.MessageType.CHAT)
+                .timestamp(LocalDateTime.now())
+                .edited(true)
+                .build();
+
+        ChatMessageEntity entity = mapper.toEntity(dto);
+
+        // edited is ignored on toEntity — entity's edited flag is managed by the service layer
+        assertThat(entity.isEdited()).isFalse();
+    }
+
+    @Test
     void toEntity_returns_null_for_null_input() {
         assertThat(mapper.toEntity(null)).isNull();
     }

@@ -188,11 +188,23 @@ class RoomMembershipServiceTest {
             assertTrue(result.isFailure());
             assertEquals(ChatErrorCode.NOT_FOUND, result.error());
 
-            // No Redis cleanup, no broadcast, no sync
+            // No Redis cleanup, no broadcast, no sync, no DB delete
             verify(redisTemplate, never()).opsForSet();
             verify(messagingTemplate, never()).convertAndSend(anyString(), any(Map.class));
             verify(participantService, never()).syncParticipantCountFromRedis(anyString());
             verify(roomCacheEvictor, never()).evict(anyString());
+            verify(roomMemberRepository, never()).deleteByRoomIdAndUserId(anyString(), anyString());
+        }
+
+        @Test
+        void deletes_membership_row_from_database() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
+            when(redisHealth.isCircuitOpen()).thenReturn(true); // skip Redis to keep test focused
+
+            Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            assertTrue(result.isSuccess());
+            verify(roomMemberRepository).deleteByRoomIdAndUserId(ROOM_ID, USER_ID);
         }
     }
 

@@ -2,11 +2,15 @@ package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
+import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
+import com.chatflow.chat.service.outbox.ChatPersistenceService;
+import com.chatflow.common.dto.ChatMessage;
+import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.common.util.MessageEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,11 +30,15 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MessageEditService {
 
+    private static final String DELETED_PLACEHOLDER = "삭제된 메시지입니다.";
+
     private final ChatMessageRepository chatMessageRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final MessageEncryptor messageEncryptor;
     private final SimpMessagingTemplate messagingTemplate;
     private final MessageEditHistoryRepository editHistoryRepository;
+    private final ChatPersistenceService chatPersistenceService;
+    private final ChatMessageMapper chatMessageMapper;
 
     @Transactional
     public Result<Void, ChatErrorCode> deleteMessage(String messageId, String requestingUserId) {
@@ -39,16 +47,23 @@ public class MessageEditService {
                 return Result.err(ChatErrorCode.FORBIDDEN, "삭제 권한이 없습니다.");
             }
             entity.setDeleted(true);
-            entity.setContent("삭제된 메시지입니다.");
+            entity.setContent(DELETED_PLACEHOLDER);
             chatMessageRepository.save(entity);
             Map<String, Object> broadcast = new LinkedHashMap<>();
             broadcast.put("type", "MESSAGE_DELETED");
             broadcast.put("messageId", messageId);
             broadcast.put("chatRoomId", entity.getChatRoomId());
-            broadcast.put("content", "삭제된 메시지입니다.");
+            broadcast.put("content", DELETED_PLACEHOLDER);
             broadcast.put("username", entity.getUsername());
             broadcast.put("timestamp", entity.getTimestamp().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
+
+            // Publish to Kafka via outbox so search-service removes the ES document
+            ChatMessage outboxDto = chatMessageMapper.toDto(entity);
+            outboxDto.setDeleted(true);
+            outboxDto.setContent(DELETED_PLACEHOLDER);
+            chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_DELETED");
+
             log.info("Message deleted: {} by user {}", messageId, requestingUserId);
             return Result.<ChatErrorCode>ok();
         }).orElse(Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));
@@ -100,6 +115,12 @@ public class MessageEditService {
             broadcast.put("timestamp", entity.getTimestamp().toString());
             broadcast.put("editedAt", entity.getEditedAt().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
+
+            // Publish to Kafka via outbox so search-service upserts the ES document
+            ChatMessage outboxDto = chatMessageMapper.toDto(entity);
+            outboxDto.setContent(newContent);  // plaintext, NOT the encrypted entity content
+            chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_EDITED");
+
             log.info("Message edited: {} by user {}", messageId, requestingUserId);
             return Result.<ChatErrorCode>ok();
         }).orElse(Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));

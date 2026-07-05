@@ -4,6 +4,7 @@ import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.mapper.MessageEditHistoryMapper;
+import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.service.LinkPreviewService;
 import com.chatflow.common.dto.MessageEditHistory;
@@ -34,6 +35,7 @@ public class MessageInteractionController {
     private final MessagePinService messagePinService;
     private final LinkPreviewService linkPreviewService;
     private final MessageThreadService messageThreadService;
+    private final ChatMessageRepository chatMessageRepository;
     private final MessageEditHistoryRepository editHistoryRepository;
     private final MessageEditHistoryMapper messageEditHistoryMapper;
 
@@ -80,7 +82,7 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         String emoji = body.get("emoji");
         if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
-        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(messageId, emoji, userId);
+        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(roomId, messageId, emoji, userId);
         if (result.isFailure()) return ErrorResponses.from(result);
         return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
@@ -95,6 +97,16 @@ public class MessageInteractionController {
             @PathVariable String roomId,
             @PathVariable String messageId,
             @AuthenticatedUser String userId) {
+        // Verify the message exists AND belongs to the authorized room.
+        // Without this, a member of room A could read edit history of room B's
+        // messages by supplying B's messageId in the URL.
+        boolean messageInRoom = chatMessageRepository.findById(messageId)
+                .filter(m -> roomId.equals(m.getChatRoomId()))
+                .isPresent();
+        if (!messageInRoom) {
+            return ErrorResponses.from(
+                    Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));
+        }
         List<MessageEditHistory> history = messageEditHistoryMapper.toDtoList(
                 editHistoryRepository.findByMessageIdOrderByEditedAtDesc(messageId));
         return ResponseEntity.ok(ApiResponse.ok(history));

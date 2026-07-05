@@ -11,6 +11,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -41,11 +43,14 @@ class BanCheckServiceTest {
     }
 
     @Test
-    void banned_user_is_blocked_and_error_broadcast() {
+    void banned_user_is_blocked_and_error_sent_to_user_queue() {
         when(roomBanService.isBanned("room-1", "user-1")).thenReturn(true);
         assertThat(banCheckService.checkBanGate("user-1", "room-1", "alice")).isTrue();
-        verify(messagingTemplate).convertAndSend(
-                eq("/topic/chat/room-1/errors"),
+        // Per-user rejection MUST go to the banned user's queue, never the room topic
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("user-1"),
+                eq("/queue/errors"),
                 eq(Map.of("type", "ROOM_BANNED", "roomId", "room-1")));
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
 }

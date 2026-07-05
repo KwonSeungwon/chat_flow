@@ -139,7 +139,7 @@
         "fields": {
           "ngram": {
             "type": "text",
-            "analyzer": "ngram_analyzer"
+            "analyzer": "korean_ngram_analyzer"
           },
           "keyword": {
             "type": "keyword"

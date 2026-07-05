@@ -88,4 +88,43 @@ class ChatMessageJsonTest {
         ChatMessage parsed = objectMapper.readValue(json, ChatMessage.class);
         assertThat(parsed.isAiGenerated()).isTrue();
     }
+
+    // --- edited flag (Task 0.10) ---
+
+    @Test
+    void serializeWritesEditedKey() throws Exception {
+        ChatMessage m = sampleMessage(false);
+        m.setEdited(true);
+        String json = objectMapper.writeValueAsString(m);
+        assertThat(json).contains("\"edited\":true");
+    }
+
+    @Test
+    void deserializeAcceptsEditedKey() throws Exception {
+        String json = "{\"messageId\":\"m-1\",\"chatRoomId\":\"r\","
+                + "\"userId\":\"u\",\"username\":\"n\","
+                + "\"content\":\"c\",\"timestamp\":\"2026-05-05T12:00:00\","
+                + "\"type\":\"CHAT\",\"edited\":true}";
+        ChatMessage msg = objectMapper.readValue(json, ChatMessage.class);
+        assertThat(msg.isEdited()).isTrue();
+    }
+
+    @Test
+    void deserializeMissingEditedKeyDefaultsToFalse() throws Exception {
+        String json = "{\"messageId\":\"m-1\",\"chatRoomId\":\"r\","
+                + "\"userId\":\"u\",\"username\":\"n\","
+                + "\"content\":\"c\",\"timestamp\":\"2026-05-05T12:00:00\","
+                + "\"type\":\"CHAT\"}";
+        ChatMessage msg = objectMapper.readValue(json, ChatMessage.class);
+        assertThat(msg.isEdited()).isFalse();
+    }
+
+    @Test
+    void roundTripPreservesEditedValue() throws Exception {
+        ChatMessage original = sampleMessage(false);
+        original.setEdited(true);
+        String json = objectMapper.writeValueAsString(original);
+        ChatMessage parsed = objectMapper.readValue(json, ChatMessage.class);
+        assertThat(parsed.isEdited()).isTrue();
+    }
 }
