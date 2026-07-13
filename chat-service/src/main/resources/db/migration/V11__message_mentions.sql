@@ -20,9 +20,8 @@ CREATE TABLE IF NOT EXISTS message_mentions (
 -- 디이제스트 조회(list/unread-count)는 항상 mentioned_user_id + created_at 기준.
 CREATE INDEX IF NOT EXISTS idx_message_mentions_user_created
     ON message_mentions (mentioned_user_id, created_at DESC);
--- 메시지 삭제 전파 시 message_id 로 제거.
-CREATE INDEX IF NOT EXISTS idx_message_mentions_message
-    ON message_mentions (message_id);
+-- message_id 조회(삭제 전파)는 UNIQUE(message_id, mentioned_user_id)의
+-- 백킹 인덱스가 프리픽스로 커버하므로 별도 인덱스를 만들지 않는다.
 
 -- 평문 히스토리 백필 (최근 365일). 암호화가 켜져 있던 기간의 content는
 -- ciphertext라 매칭되지 않음(무해한 no-op). read=true로 넣어 배지 폭주를 막는다
