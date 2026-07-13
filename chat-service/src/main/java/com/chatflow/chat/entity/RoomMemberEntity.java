@@ -39,6 +39,9 @@ public class RoomMemberEntity {
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 
+    @Column(name = "last_read_at")
+    private LocalDateTime lastReadAt;
+
     @PrePersist
     void prePersist() {
         if (joinedAt == null) joinedAt = LocalDateTime.now();
