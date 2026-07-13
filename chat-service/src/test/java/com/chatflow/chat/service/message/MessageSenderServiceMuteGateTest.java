@@ -106,7 +106,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Verify persistence was NOT called
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(), anyString(), anyString(), any());
+                    any(), anyString(), anyString(), any(), anyList());
         }
 
         @Test
@@ -140,7 +140,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Verify persistence WAS called
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any());
+                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
 
             // Verify no error sent to user
             verify(messagingTemplate, never()).convertAndSendToUser(
@@ -163,7 +163,7 @@ class MessageSenderServiceMuteGateTest {
             messageSenderService.send(message);
 
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any());
+                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
         }
 
         @Test
@@ -177,7 +177,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Message should proceed (let existing handlers decide about non-members)
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any());
+                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
             verify(messagingTemplate, never()).convertAndSendToUser(
                     anyString(), eq("/queue/errors"), any());
         }
@@ -198,7 +198,7 @@ class MessageSenderServiceMuteGateTest {
             // RoomMemberRepository should NOT be queried for non-CHAT types
             verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any());
+                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
         }
 
         @Test
@@ -244,6 +244,6 @@ class MessageSenderServiceMuteGateTest {
 
         verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
         verify(chatPersistenceService).persistMessageAndPublish(
-                any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any());
+                any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
     }
 }

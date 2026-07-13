@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
@@ -41,6 +42,7 @@ class MessageEditServiceMuteGateTest {
 
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private RoomMemberRepository roomMemberRepository;
+    @Mock private MessageMentionRepository messageMentionRepository;
     @Mock private MessageEncryptor messageEncryptor;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private com.chatflow.chat.repository.MessageEditHistoryRepository editHistoryRepository;

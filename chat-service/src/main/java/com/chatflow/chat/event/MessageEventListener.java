@@ -1,6 +1,7 @@
 package com.chatflow.chat.event;
 
 import com.chatflow.chat.service.UserPresenceService;
+import com.chatflow.chat.service.message.MentionExtractor;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,19 +12,14 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MessageEventListener {
-
-    private static final Pattern MENTION_PATTERN = Pattern.compile("@([A-Za-z0-9_\\.\\uac00-\\ud7a3]{1,30})");
 
     private final SimpMessagingTemplate messagingTemplate;
     private final UserPresenceService userPresenceService;
@@ -46,7 +42,7 @@ public class MessageEventListener {
         try {
             Set<String> participantUserIds = userPresenceService.getRoomParticipantUserIds(message.getChatRoomId());
             String senderId = message.getUserId();
-            List<String> mentioned = extractMentionedUsernames(message.getContent());
+            List<String> mentioned = MentionExtractor.extract(message.getContent());
 
             // Truncate content to 200 chars for keyword-matching on the client.
             // FILE messages may have empty content — fall back to empty string.
@@ -75,15 +71,4 @@ public class MessageEventListener {
         }
     }
 
-    private static List<String> extractMentionedUsernames(String content) {
-        if (content == null || content.isEmpty() || content.indexOf('@') < 0) {
-            return List.of();
-        }
-        List<String> result = new ArrayList<>();
-        Matcher m = MENTION_PATTERN.matcher(content);
-        while (m.find()) {
-            result.add(m.group(1));
-        }
-        return result;
-    }
 }

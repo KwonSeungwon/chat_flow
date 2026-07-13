@@ -1,6 +1,6 @@
 package com.chatflow.chat.dto;
 
-import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.entity.MessageMentionEntity;
 
 import java.time.LocalDateTime;
 
@@ -12,17 +12,17 @@ public record MentionItemDto(
         LocalDateTime timestamp,
         boolean read
 ) {
-    public static MentionItemDto from(ChatMessageEntity e, boolean read) {
-        String c = e.getContent();
-        String preview = c == null ? ""
-                : (c.length() > 140 ? c.substring(0, 140) + "..." : c);
+    /**
+     * Factory from the structured mention row + an already-decrypted/truncated preview.
+     */
+    public static MentionItemDto of(MessageMentionEntity row, String preview) {
         return new MentionItemDto(
-                e.getMessageId(),
-                e.getChatRoomId(),
-                e.getUsername(),
+                row.getMessageId(),
+                row.getRoomId(),
+                row.getFromUsername(),
                 preview,
-                e.getTimestamp(),
-                read
+                row.getCreatedAt(),
+                row.isRead()
         );
     }
 }

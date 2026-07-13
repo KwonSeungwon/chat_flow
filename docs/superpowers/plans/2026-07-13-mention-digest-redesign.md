@@ -1,5 +1,7 @@
 # Mention Digest Redesign Implementation Plan
 
+> **STATUS: ✅ COMPLETE (2026-07-13).** All 6 tasks implemented on `refactor/mention-redesign` via subagent-driven development. Deviations from this plan, found during implementation/review: chat_messages column is `is_deleted` (not `deleted`); `LEFT(username, 50)` guards added in the V11 backfill; the redundant `idx_message_mentions_message` index dropped (unique-index prefix covers it); the plan's `@under_score.` test fixture was wrong (`.` is in the mention character class); retention purge extended to delete mention rows with the same cutoff (whole-branch review finding). Follow-up filed: mention re-extraction on message edit (design decision). 622 tests green across all modules; frontend untouched as designed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the mention feature's `content LIKE '%@user%'` full-table scan with a structured `message_mentions` table populated at send time — fixing a correctness bug (mentions silently return nothing when at-rest encryption is enabled, because LIKE matches ciphertext), an information leak (no room-membership scoping — anyone can read 140-char previews from rooms they don't belong to), an unbounded Redis read-set, and a hot-path performance problem (leading-wildcard LIKE over all messages on every digest/unread-count call).

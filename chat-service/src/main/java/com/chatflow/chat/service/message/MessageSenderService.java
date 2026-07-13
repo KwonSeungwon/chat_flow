@@ -2,6 +2,7 @@ package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.service.outbox.ChatPersistenceService;
 
+import com.chatflow.chat.entity.MessageMentionEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
@@ -17,14 +18,13 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @Service
 public class MessageSenderService {
-
-    private static final java.util.regex.Pattern MENTION_PATTERN = java.util.regex.Pattern.compile("@(\\S+)");
 
     private final ChatPersistenceService chatPersistenceService;
     private final ChatRoomService chatRoomService;
@@ -126,24 +126,45 @@ public class MessageSenderService {
 
         log.info("Processing chat message: {}", message.getMessageId());
 
+        // Resolve mentions for CHAT messages: one DB lookup, reused for rows + FCM
+        List<RoomMemberEntity> mentionedMembers = List.of();
+        List<MessageMentionEntity> mentionEntities = List.of();
+        if (MessageType.CHAT.equals(message.getType())) {
+            List<String> candidates = MentionExtractor.extract(message.getContent());
+            if (!candidates.isEmpty()) {
+                mentionedMembers = roomMemberRepository
+                        .findByRoomIdAndUsernameIn(message.getChatRoomId(), candidates)
+                        .stream()
+                        .filter(m -> !m.getUsername().equals(message.getUsername()))
+                        .toList();
+                mentionEntities = mentionedMembers.stream()
+                        .map(m -> MessageMentionEntity.builder()
+                                .messageId(message.getMessageId())
+                                .roomId(message.getChatRoomId())
+                                .mentionedUserId(m.getUserId())
+                                .mentionedUsername(m.getUsername())
+                                .fromUsername(message.getUsername())
+                                .createdAt(message.getTimestamp())
+                                .read(false)
+                                .build())
+                        .toList();
+            }
+        }
+
         String aiTopic = shouldRequestAISummary(message) ? KafkaTopics.AI_SUMMARY_REQUESTS : null;
-        chatPersistenceService.persistMessageAndPublish(message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", aiTopic);
+        chatPersistenceService.persistMessageAndPublish(
+                message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", aiTopic, mentionEntities);
         messageCounter.increment();
         chatRoomService.updateLastMessageAt(message.getChatRoomId());
 
         if (MessageType.CHAT.equals(message.getType())) {
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), message.getContent());
-            // Parse @mentions and send targeted notifications
-            var mentionPattern = MENTION_PATTERN;
-            var matcher = mentionPattern.matcher(message.getContent());
-            while (matcher.find()) {
-                String mentionedUser = matcher.group(1);
-                if (!mentionedUser.equals(message.getUsername())) {
-                    fcmNotificationService.sendMessageNotification(
-                        "mention-" + mentionedUser, message.getUsername(),
-                        message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
-                }
+            // Send mention notifications only to resolved room members (not raw candidates)
+            for (RoomMemberEntity mentioned : mentionedMembers) {
+                fcmNotificationService.sendMessageNotification(
+                    "mention-" + mentioned.getUsername(), message.getUsername(),
+                    message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
             }
         } else if (MessageType.FILE.equals(message.getType())) {
             String notifContent = message.getFileName() != null

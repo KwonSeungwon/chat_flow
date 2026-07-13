@@ -1,11 +1,13 @@
 package com.chatflow.chat.service.outbox;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
+import com.chatflow.chat.entity.MessageMentionEntity;
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.event.MessagePersistedEvent;
 import com.chatflow.chat.exception.PersistenceException;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.util.MessageEncryptor;
@@ -17,12 +19,15 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatPersistenceService {
 
     private final ChatMessageRepository chatMessageRepository;
+    private final MessageMentionRepository messageMentionRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
@@ -38,11 +43,27 @@ public class ChatPersistenceService {
     @Transactional
     public void persistMessageAndPublish(ChatMessage message, String chatTopic, String eventType,
                                          String aiSummaryTopic) {
+        persistMessageAndPublish(message, chatTopic, eventType, aiSummaryTopic, List.of());
+    }
+
+    /**
+     * 메시지 + 멘션 행 + Outbox 이벤트를 단일 TX로 영속화.
+     * 멘션 행은 발신 시점 room_members 기준으로 호출자가 미리 구성해 전달한다.
+     *
+     * @param mentions 멘션 엔티티 목록 (empty OK, null-safe)
+     */
+    @Transactional
+    public void persistMessageAndPublish(ChatMessage message, String chatTopic, String eventType,
+                                         String aiSummaryTopic, List<MessageMentionEntity> mentions) {
         ChatMessageEntity entity = chatMessageMapper.toEntity(message);
         if (messageEncryptor.isEnabled()) {
             entity.setContent(messageEncryptor.encrypt(message.getContent()));
         }
         chatMessageRepository.save(entity);
+
+        if (mentions != null && !mentions.isEmpty()) {
+            messageMentionRepository.saveAll(mentions);
+        }
 
         saveOutboxEventInternal(message, chatTopic, eventType);
 
