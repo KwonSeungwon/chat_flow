@@ -16,6 +16,7 @@ import reactor.test.StepVerifier;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -188,5 +189,132 @@ class AuthServiceTest {
         // then
         verify(tokenBlacklistService).blacklist(eq("logout-jti"), eq(Duration.ofMillis(1_800_000L)));
         verify(redisTemplate).delete("chatflow:user:active_jti:user-5");
+    }
+
+    // ── threading: BCrypt must run off the event loop ─────────────
+
+    @Test
+    void register_runsBCryptOnBoundedElastic() {
+        // Capture the thread that executes passwordEncoder.encode
+        AtomicReference<String> encodeThread = new AtomicReference<>();
+
+        when(userRepository.existsByUsername("threadtest")).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenAnswer(inv -> {
+            encodeThread.set(Thread.currentThread().getName());
+            return "encoded-thread";
+        });
+
+        UserEntity saved = UserEntity.builder()
+                .userId("t-uuid").username("threadtest")
+                .encodedPassword("encoded-thread").role("NURSE")
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(saved));
+        when(jwtUtil.generateToken(anyString(), eq("threadtest"), eq("NURSE"))).thenReturn("t-token");
+        when(jwtUtil.getJti("t-token")).thenReturn("t-jti");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.empty());
+
+        var req = new AuthService.AuthRequest("threadtest", "password123", null);
+
+        StepVerifier.create(authService.register(req))
+                .assertNext(resp -> assertEquals("t-token", resp.token()))
+                .verifyComplete();
+
+        assertNotNull(encodeThread.get(), "passwordEncoder.encode should have been called");
+        assertTrue(encodeThread.get().startsWith("boundedElastic"),
+                "BCrypt encode should run on boundedElastic, but ran on: " + encodeThread.get());
+    }
+
+    @Test
+    void login_runsBCryptOnBoundedElastic() {
+        // Capture the thread that executes passwordEncoder.matches
+        AtomicReference<String> matchesThread = new AtomicReference<>();
+
+        UserEntity entity = UserEntity.builder()
+                .userId("user-t").username("threaduser")
+                .encodedPassword("enc").role("NURSE")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("threaduser")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("pass1234", "enc")).thenAnswer(inv -> {
+            matchesThread.set(Thread.currentThread().getName());
+            return true;
+        });
+        when(jwtUtil.generateToken("user-t", "threaduser", "NURSE")).thenReturn("t-token2");
+        when(jwtUtil.getJti("t-token2")).thenReturn("t-jti2");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.empty());
+
+        var req = new AuthService.AuthRequest("threaduser", "pass1234", null);
+
+        StepVerifier.create(authService.login(req))
+                .assertNext(resp -> assertEquals("threaduser", resp.username()))
+                .verifyComplete();
+
+        assertNotNull(matchesThread.get(), "passwordEncoder.matches should have been called");
+        assertTrue(matchesThread.get().startsWith("boundedElastic"),
+                "BCrypt matches should run on boundedElastic, but ran on: " + matchesThread.get());
+    }
+
+    @Test
+    void changePassword_runsBCryptOnBoundedElastic() {
+        // Capture threads for both matches and encode in changePassword
+        AtomicReference<String> matchesThread = new AtomicReference<>();
+        AtomicReference<String> encodeThread = new AtomicReference<>();
+
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp").username("cpuser")
+                .encodedPassword("old-enc").role("NURSE")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("cpuser")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("currentpw", "old-enc")).thenAnswer(inv -> {
+            matchesThread.set(Thread.currentThread().getName());
+            return true;
+        });
+        when(passwordEncoder.encode("newpasswd")).thenAnswer(inv -> {
+            encodeThread.set(Thread.currentThread().getName());
+            return "new-enc";
+        });
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+
+        StepVerifier.create(authService.changePassword("cpuser", "currentpw", "newpasswd"))
+                .verifyComplete();
+
+        assertNotNull(matchesThread.get(), "passwordEncoder.matches should have been called");
+        assertTrue(matchesThread.get().startsWith("boundedElastic"),
+                "BCrypt matches should run on boundedElastic, but ran on: " + matchesThread.get());
+
+        assertNotNull(encodeThread.get(), "passwordEncoder.encode should have been called");
+        assertTrue(encodeThread.get().startsWith("boundedElastic"),
+                "BCrypt encode should run on boundedElastic, but ran on: " + encodeThread.get());
+    }
+
+    @Test
+    void changePassword_wrongCurrentPassword_errorsWithSameMessage() {
+        // The mismatch now throws inside the offloaded Callable (was Mono.error) —
+        // pin that it still surfaces as the same IllegalArgumentException + message
+        // and that encode/save never run.
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp2").username("cpuser2")
+                .encodedPassword("old-enc").role("NURSE")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("cpuser2")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("wrongpw", "old-enc")).thenReturn(false);
+
+        StepVerifier.create(authService.changePassword("cpuser2", "wrongpw", "newpasswd"))
+                .expectErrorSatisfies(err -> {
+                    assertInstanceOf(IllegalArgumentException.class, err);
+                    assertEquals("현재 비밀번호가 올바르지 않습니다.", err.getMessage());
+                })
+                .verify(Duration.ofSeconds(5));
+
+        verify(passwordEncoder, never()).encode(anyString());
+        verify(userRepository, never()).save(any(UserEntity.class));
     }
 }
