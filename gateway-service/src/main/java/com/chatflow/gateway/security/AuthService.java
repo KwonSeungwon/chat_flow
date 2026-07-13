@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -80,23 +81,26 @@ public class AuthService {
                                 new IllegalArgumentException("이미 존재하는 사용자명입니다: " + request.username()));
                     }
                     String userId = UUID.randomUUID().toString();
-                    String encoded = passwordEncoder.encode(request.password());
                     String role = request.role() != null ? request.role() : "NURSE";
 
-                    UserEntity entity = UserEntity.builder()
-                            .userId(userId)
-                            .username(request.username())
-                            .encodedPassword(encoded)
-                            .role(role)
-                            .createdAt(LocalDateTime.now())
-                            .build();
+                    return Mono.fromCallable(() -> passwordEncoder.encode(request.password()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(encoded -> {
+                                UserEntity entity = UserEntity.builder()
+                                        .userId(userId)
+                                        .username(request.username())
+                                        .encodedPassword(encoded)
+                                        .role(role)
+                                        .createdAt(LocalDateTime.now())
+                                        .build();
 
-                    return userRepository.save(entity)
-                            .flatMap(saved -> {
-                                String token = jwtUtil.generateToken(userId, request.username(), role);
-                                String newJti = jwtUtil.getJti(token);
-                                return rotateActiveJti(userId, newJti, cacheTtl)
-                                        .thenReturn(new AuthResponse(token, userId, request.username(), role, null));
+                                return userRepository.save(entity)
+                                        .flatMap(saved -> {
+                                            String token = jwtUtil.generateToken(userId, request.username(), role);
+                                            String newJti = jwtUtil.getJti(token);
+                                            return rotateActiveJti(userId, newJti, cacheTtl)
+                                                    .thenReturn(new AuthResponse(token, userId, request.username(), role, null));
+                                        });
                             });
                 });
     }
@@ -108,16 +112,20 @@ public class AuthService {
         // 비밀번호 검증은 항상 DB에서 수행
         return userRepository.findByUsername(request.username())
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))
-                .flatMap(entity -> {
-                    if (!passwordEncoder.matches(request.password(), entity.getEncodedPassword())) {
-                        return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
-                    }
-                    String role = entity.getRole() != null ? entity.getRole() : "NURSE";
-                    String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
-                    String newJti = jwtUtil.getJti(token);
-                    return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
-                            .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
-                });
+                .flatMap(entity ->
+                    Mono.fromCallable(() -> passwordEncoder.matches(request.password(), entity.getEncodedPassword()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(matches -> {
+                                if (!matches) {
+                                    return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
+                                }
+                                String role = entity.getRole() != null ? entity.getRole() : "NURSE";
+                                String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
+                                String newJti = jwtUtil.getJti(token);
+                                return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
+                                        .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
+                            })
+                );
     }
 
     /**
@@ -140,13 +148,19 @@ public class AuthService {
         // 비밀번호 검증은 항상 DB에서 수행
         return userRepository.findByUsername(username)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
-                .flatMap(entity -> {
-                    if (!passwordEncoder.matches(currentPassword, entity.getEncodedPassword())) {
-                        return Mono.error(new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다."));
-                    }
-                    entity.setEncodedPassword(passwordEncoder.encode(newPassword));
-                    return userRepository.save(entity);
-                })
+                .flatMap(entity ->
+                    Mono.fromCallable(() -> {
+                                if (!passwordEncoder.matches(currentPassword, entity.getEncodedPassword())) {
+                                    throw new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다.");
+                                }
+                                return passwordEncoder.encode(newPassword);
+                            })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(encoded -> {
+                                entity.setEncodedPassword(encoded);
+                                return userRepository.save(entity);
+                            })
+                )
                 .then();
     }
 
