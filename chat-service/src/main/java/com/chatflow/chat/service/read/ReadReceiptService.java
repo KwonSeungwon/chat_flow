@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.read;
 
+import com.chatflow.chat.config.RedisHealthTracker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -31,6 +32,7 @@ public class ReadReceiptService {
 
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RedisHealthTracker redisHealth;
 
     /**
      * Returns each user's last-read message ID for the given room.
@@ -52,12 +54,23 @@ public class ReadReceiptService {
 
     /**
      * Returns a single user's last-read message ID for the given room.
-     * Single HGET — O(1).
+     * Single HGET — O(1). Fail-soft: returns null on Redis outage.
      */
     public String getLastReadMessageId(String roomId, String userId) {
+        if (redisHealth.isCircuitOpen()) {
+            log.debug("Redis circuit open — skipping getLastReadMessageId: room={}, user={}", roomId, userId);
+            return null;
+        }
         String hashKey = READ_KEY_PREFIX + roomId;
-        Object value = redisTemplate.opsForHash().get(hashKey, userId);
-        return value != null ? (String) value : null;
+        try {
+            Object value = redisTemplate.opsForHash().get(hashKey, userId);
+            redisHealth.recordSuccess();
+            return value != null ? (String) value : null;
+        } catch (Exception e) {
+            redisHealth.recordFailure(e);
+            log.debug("Redis HGET failed for key {} field {}: {}", hashKey, userId, e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -66,28 +79,68 @@ public class ReadReceiptService {
      * unread count는 readAt 기준으로 계산되므로 이것만으로 충분히 동작.
      */
     public void updateReadAt(String roomId, String userId) {
+        if (redisHealth.isCircuitOpen()) {
+            log.debug("Redis circuit open — skipping updateReadAt: room={}, user={}", roomId, userId);
+            return;
+        }
         String atKey = "chatflow:readat:" + roomId + ":" + userId;
-        redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
-        log.debug("readAt updated (no lastRead): room={}, user={}", roomId, userId);
+        try {
+            redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
+            redisHealth.recordSuccess();
+            log.debug("readAt updated (no lastRead): room={}, user={}", roomId, userId);
+        } catch (Exception e) {
+            redisHealth.recordFailure(e);
+            log.debug("Redis SET failed for readAt key {}: {}", atKey, e.getMessage());
+        }
     }
 
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
+        if (redisHealth.isCircuitOpen()) {
+            log.debug("Redis circuit open — skipping markRead: room={}, user={}", roomId, userId);
+            return;
+        }
+
         String hashKey = READ_KEY_PREFIX + roomId;
 
-        // HSET chatflow:read:{roomId} {userId} {lastReadMessageId}
-        redisTemplate.opsForHash().put(hashKey, userId, lastReadMessageId);
-        // Refresh hash TTL on each write so the hash lives as long as the room is active.
-        // HSET + EXPIRE are not atomic: a crash between them can leave a no-TTL hash, but
-        // the next markRead in this room re-arms the TTL (self-healing), so it never leaks
-        // for an active room — not worth an EVAL for ephemeral read-position state.
-        redisTemplate.expire(hashKey, READ_TTL_HOURS, TimeUnit.HOURS);
+        // All three Redis writes are in one circuit/try block. If any write fails,
+        // we skip the broadcast and return — broadcasting after a failed write would
+        // push a stale/empty positions map to every client and could visually wipe
+        // read-state. Skipping the broadcast is a cleaner degraded mode: read receipts
+        // simply pause while Redis is down and self-heal on the next successful markRead.
+        // getRoomReadPositions (already fail-soft) would return empty during the outage anyway.
+        try {
+            // HSET chatflow:read:{roomId} {userId} {lastReadMessageId}
+            redisTemplate.opsForHash().put(hashKey, userId, lastReadMessageId);
+            // Refresh hash TTL on each write so the hash lives as long as the room is active.
+            // HSET + EXPIRE are not atomic: a crash between them can leave a no-TTL hash, but
+            // the next markRead in this room re-arms the TTL (self-healing), so it never leaks
+            // for an active room — not worth an EVAL for ephemeral read-position state.
+            redisTemplate.expire(hashKey, READ_TTL_HOURS, TimeUnit.HOURS);
 
-        // 미읽은 카운트 계산에 사용할 타임스탬프 저장 (per-user string key — unchanged)
-        String atKey = "chatflow:readat:" + roomId + ":" + userId;
-        redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
+            // 미읽은 카운트 계산에 사용할 타임스탬프 저장 (per-user string key — unchanged)
+            String atKey = "chatflow:readat:" + roomId + ":" + userId;
+            redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
+
+            redisHealth.recordSuccess();
+        } catch (Exception e) {
+            redisHealth.recordFailure(e);
+            log.debug("Redis write failed in markRead — skipping broadcast: room={}, user={}, error={}",
+                    roomId, userId, e.getMessage());
+            return;
+        }
 
         // 프론트엔드가 메시지별 readCount를 계산할 수 있도록 전체 readPositions를 함께 전송
         Map<String, String> positions = getRoomReadPositions(roomId);
+
+        // The current user's HSET succeeded milliseconds earlier, so a truly empty
+        // HGETALL implies a read-back failure (getRoomReadPositions is fail-soft).
+        // Broadcasting positions={} would make every client REPLACE its readPositions
+        // with an empty map, wiping all read markers — the same stale-broadcast hazard
+        // this method's write-path guard already prevents.
+        if (positions.isEmpty()) {
+            log.debug("Read-back returned empty positions after a successful write — skipping broadcast (room={})", roomId);
+            return;
+        }
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("userId", userId);
