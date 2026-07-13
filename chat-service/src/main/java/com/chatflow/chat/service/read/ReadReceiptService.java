@@ -1,6 +1,7 @@
 package com.chatflow.chat.service.read;
 
 import com.chatflow.chat.config.RedisHealthTracker;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -33,6 +34,7 @@ public class ReadReceiptService {
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final RedisHealthTracker redisHealth;
+    private final RoomMemberRepository roomMemberRepository;
 
     /**
      * Returns each user's last-read message ID for the given room.
@@ -76,33 +78,38 @@ public class ReadReceiptService {
     /**
      * readAt 타임스탬프만 갱신 (lastReadMessageId 없이).
      * 방 입장 시점에 로컬 메시지가 아직 로드되지 않아 lastReadMessageId를 모를 때 사용.
-     * unread count는 readAt 기준으로 계산되므로 이것만으로 충분히 동작.
+     * unread count는 room_members.last_read_at 기준으로 계산되므로 이것만으로 충분히 동작.
      */
     public void updateReadAt(String roomId, String userId) {
-        if (redisHealth.isCircuitOpen()) {
-            log.debug("Redis circuit open — skipping updateReadAt: room={}, user={}", roomId, userId);
-            return;
-        }
-        String atKey = "chatflow:readat:" + roomId + ":" + userId;
         try {
-            redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
-            redisHealth.recordSuccess();
-            log.debug("readAt updated (no lastRead): room={}, user={}", roomId, userId);
+            roomMemberRepository.touchLastReadAt(roomId, userId, LocalDateTime.now());
+            log.debug("readAt cursor updated (DB): room={}, user={}", roomId, userId);
         } catch (Exception e) {
-            redisHealth.recordFailure(e);
-            log.debug("Redis SET failed for readAt key {}: {}", atKey, e.getMessage());
+            log.warn("DB cursor touch failed in updateReadAt — swallowed: room={}, user={}, error={}",
+                    roomId, userId, e.getMessage());
         }
     }
 
     public void markRead(String roomId, String userId, String username, String lastReadMessageId) {
+        // Step 1: DB cursor touch — FIRST, in its own try/catch (fail-soft).
+        // A DB blip must not kill the STOMP frame or prevent the Redis positions write.
+        try {
+            roomMemberRepository.touchLastReadAt(roomId, userId, LocalDateTime.now());
+            log.debug("readAt cursor touched (DB): room={}, user={}", roomId, userId);
+        } catch (Exception e) {
+            log.warn("DB cursor touch failed in markRead — continuing: room={}, user={}, error={}",
+                    roomId, userId, e.getMessage());
+        }
+
+        // Step 2: Redis positions hash — unchanged #18 circuit-breaker/fail-soft structure
         if (redisHealth.isCircuitOpen()) {
-            log.debug("Redis circuit open — skipping markRead: room={}, user={}", roomId, userId);
+            log.debug("Redis circuit open — skipping markRead positions: room={}, user={}", roomId, userId);
             return;
         }
 
         String hashKey = READ_KEY_PREFIX + roomId;
 
-        // All three Redis writes are in one circuit/try block. If any write fails,
+        // All Redis writes are in one circuit/try block. If any write fails,
         // we skip the broadcast and return — broadcasting after a failed write would
         // push a stale/empty positions map to every client and could visually wipe
         // read-state. Skipping the broadcast is a cleaner degraded mode: read receipts
@@ -116,10 +123,6 @@ public class ReadReceiptService {
             // the next markRead in this room re-arms the TTL (self-healing), so it never leaks
             // for an active room — not worth an EVAL for ephemeral read-position state.
             redisTemplate.expire(hashKey, READ_TTL_HOURS, TimeUnit.HOURS);
-
-            // 미읽은 카운트 계산에 사용할 타임스탬프 저장 (per-user string key — unchanged)
-            String atKey = "chatflow:readat:" + roomId + ":" + userId;
-            redisTemplate.opsForValue().set(atKey, LocalDateTime.now().toString(), READ_TTL_HOURS, TimeUnit.HOURS);
 
             redisHealth.recordSuccess();
         } catch (Exception e) {

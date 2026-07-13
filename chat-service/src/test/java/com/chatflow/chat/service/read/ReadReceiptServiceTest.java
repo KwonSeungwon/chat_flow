@@ -1,6 +1,7 @@
 package com.chatflow.chat.service.read;
 
 import com.chatflow.chat.config.RedisHealthTracker;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -11,9 +12,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -23,11 +24,15 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for ReadReceiptService covering Redis hash writes
- * (chatflow:read:{roomId} hash + chatflow:readat: string keys) and STOMP broadcast.
+ * Unit tests for ReadReceiptService covering:
+ * <ul>
+ *   <li>DB cursor touch via {@code roomMemberRepository.touchLastReadAt}</li>
+ *   <li>Redis positions hash ({@code chatflow:read:{roomId}}) writes + STOMP broadcast</li>
+ *   <li>#18 circuit-breaker / fail-soft behaviors preserved</li>
+ * </ul>
  *
- * <p>Read positions are stored as a per-room Redis HASH (field=userId, value=lastReadMessageId).
- * readAt timestamps remain per-user string keys (consumed by UnreadCountService).
+ * <p>After U2, {@code chatflow:readat:*} string keys are no longer written.
+ * The durable cursor lives in {@code room_members.last_read_at} (DB).
  */
 @ExtendWith(MockitoExtension.class)
 class ReadReceiptServiceTest {
@@ -35,7 +40,7 @@ class ReadReceiptServiceTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private RedisHealthTracker redisHealth;
-    @Mock private ValueOperations<String, String> valueOperations;
+    @Mock private RoomMemberRepository roomMemberRepository;
     @SuppressWarnings("rawtypes")
     @Mock private HashOperations hashOperations;
 
@@ -48,7 +53,8 @@ class ReadReceiptServiceTest {
 
     @BeforeEach
     void setUp() {
-        readReceiptService = new ReadReceiptService(redisTemplate, messagingTemplate, redisHealth);
+        readReceiptService = new ReadReceiptService(
+                redisTemplate, messagingTemplate, redisHealth, roomMemberRepository);
     }
 
     // ── MarkRead ───────────────────────────────────────────────────
@@ -58,10 +64,9 @@ class ReadReceiptServiceTest {
 
         @SuppressWarnings("unchecked")
         @Test
-        void markRead_writes_hash_field_and_readAt_key() {
+        void markRead_writes_hash_field_and_touches_cursor() {
             when(redisHealth.isCircuitOpen()).thenReturn(false);
             when(redisTemplate.opsForHash()).thenReturn(hashOperations);
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             // HGETALL for positions broadcast (returns the just-written entry)
             Map<Object, Object> entries = new LinkedHashMap<>();
             entries.put(USER_ID, MSG_ID);
@@ -69,18 +74,18 @@ class ReadReceiptServiceTest {
 
             readReceiptService.markRead(ROOM_ID, USER_ID, USERNAME, MSG_ID);
 
+            // DB cursor touch (roomMemberRepository.touchLastReadAt)
+            verify(roomMemberRepository).touchLastReadAt(
+                    eq(ROOM_ID), eq(USER_ID), any(LocalDateTime.class));
+
             // chatflow:read:{roomId} hash — HSET userId -> lastReadMessageId
             verify(hashOperations).put("chatflow:read:" + ROOM_ID, USER_ID, MSG_ID);
 
             // Hash TTL refreshed on each write
             verify(redisTemplate).expire(eq("chatflow:read:" + ROOM_ID), eq(24L), eq(TimeUnit.HOURS));
 
-            // chatflow:readat:{roomId}:{userId} — readAt timestamp (unchanged)
-            verify(valueOperations).set(
-                    eq("chatflow:readat:" + ROOM_ID + ":" + USER_ID),
-                    argThat(ts -> ts != null && !ts.isEmpty()),
-                    eq(24L),
-                    eq(TimeUnit.HOURS));
+            // NO chatflow:readat: key written (readat keys retired)
+            verify(redisTemplate, never()).opsForValue();
 
             // Circuit breaker recorded success
             verify(redisHealth).recordSuccess();
@@ -94,7 +99,6 @@ class ReadReceiptServiceTest {
         void markRead_broadcasts_read_receipt_on_topic() {
             when(redisHealth.isCircuitOpen()).thenReturn(false);
             when(redisTemplate.opsForHash()).thenReturn(hashOperations);
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             // HGETALL returns current user's position
             Map<Object, Object> entries = new LinkedHashMap<>();
             entries.put(USER_ID, MSG_ID);
@@ -110,6 +114,7 @@ class ReadReceiptServiceTest {
             assertEquals("/topic/chat/" + ROOM_ID + "/read-receipts", destCaptor.getValue());
 
             // Payload is a Map with expected keys
+            @SuppressWarnings("unchecked")
             Map<String, Object> payload = (Map<String, Object>) payloadCaptor.getValue();
             assertEquals(USER_ID, payload.get("userId"));
             assertEquals(USERNAME, payload.get("username"));
@@ -127,6 +132,10 @@ class ReadReceiptServiceTest {
 
             assertDoesNotThrow(() ->
                     readReceiptService.markRead(ROOM_ID, USER_ID, USERNAME, MSG_ID));
+
+            // DB cursor touch still happens (circuit is for Redis, not DB)
+            verify(roomMemberRepository).touchLastReadAt(
+                    eq(ROOM_ID), eq(USER_ID), any(LocalDateTime.class));
 
             // No Redis ops attempted
             verify(redisTemplate, never()).opsForHash();
@@ -147,6 +156,10 @@ class ReadReceiptServiceTest {
             assertDoesNotThrow(() ->
                     readReceiptService.markRead(ROOM_ID, USER_ID, USERNAME, MSG_ID));
 
+            // DB cursor touch still happened (before the Redis block)
+            verify(roomMemberRepository).touchLastReadAt(
+                    eq(ROOM_ID), eq(USER_ID), any(LocalDateTime.class));
+
             // Failure recorded on the circuit breaker
             verify(redisHealth).recordFailure(any(Exception.class));
             // No broadcast after a failed write
@@ -155,11 +168,32 @@ class ReadReceiptServiceTest {
 
         @SuppressWarnings("unchecked")
         @Test
+        void markRead_dbCursorThrows_swallowed_redisStillAttempted() {
+            // DB cursor touch fails → swallowed (warn log), Redis block still runs
+            doThrow(new RuntimeException("DB connection lost"))
+                    .when(roomMemberRepository).touchLastReadAt(anyString(), anyString(), any());
+
+            when(redisHealth.isCircuitOpen()).thenReturn(false);
+            when(redisTemplate.opsForHash()).thenReturn(hashOperations);
+            Map<Object, Object> entries = new LinkedHashMap<>();
+            entries.put(USER_ID, MSG_ID);
+            when(hashOperations.entries("chatflow:read:" + ROOM_ID)).thenReturn(entries);
+
+            assertDoesNotThrow(() ->
+                    readReceiptService.markRead(ROOM_ID, USER_ID, USERNAME, MSG_ID));
+
+            // Redis positions hash still written
+            verify(hashOperations).put("chatflow:read:" + ROOM_ID, USER_ID, MSG_ID);
+            // Broadcast still happens
+            verify(messagingTemplate).convertAndSend(anyString(), any(Object.class));
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
         void markRead_writesSucceed_readBackEmpty_noBroadcast() {
             // Writes succeed, but HGETALL returns empty (Redis died between write and read-back)
             when(redisHealth.isCircuitOpen()).thenReturn(false);
             when(redisTemplate.opsForHash()).thenReturn(hashOperations);
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             // Read-back returns empty — simulates Redis failure in getRoomReadPositions (fail-soft → empty map)
             when(hashOperations.entries("chatflow:read:" + ROOM_ID)).thenReturn(new LinkedHashMap<>());
 
@@ -179,46 +213,25 @@ class ReadReceiptServiceTest {
     class UpdateReadAt {
 
         @Test
-        void updateReadAt_writes_only_readAt_key() {
-            when(redisHealth.isCircuitOpen()).thenReturn(false);
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
+        void updateReadAt_touches_db_cursor() {
             readReceiptService.updateReadAt(ROOM_ID, USER_ID);
 
-            // chatflow:readat: key IS written
-            verify(valueOperations).set(
-                    eq("chatflow:readat:" + ROOM_ID + ":" + USER_ID),
-                    argThat(ts -> ts != null && !ts.isEmpty()),
-                    eq(24L),
-                    eq(TimeUnit.HOURS));
+            // DB cursor touch
+            verify(roomMemberRepository).touchLastReadAt(
+                    eq(ROOM_ID), eq(USER_ID), any(LocalDateTime.class));
 
-            // chatflow:read: hash is NOT touched
-            verify(redisTemplate, never()).opsForHash();
-            // only 1 opsForValue().set() call total
-            verify(valueOperations, times(1)).set(anyString(), anyString(), anyLong(), any(TimeUnit.class));
-            // Circuit breaker recorded success
-            verify(redisHealth).recordSuccess();
-        }
-
-        @Test
-        void updateReadAt_circuitOpen_skipsRedis() {
-            when(redisHealth.isCircuitOpen()).thenReturn(true);
-
-            assertDoesNotThrow(() -> readReceiptService.updateReadAt(ROOM_ID, USER_ID));
-
+            // NO chatflow:readat: key written (readat keys retired)
             verify(redisTemplate, never()).opsForValue();
+            // NO Redis hash touched
+            verify(redisTemplate, never()).opsForHash();
         }
 
         @Test
-        void updateReadAt_redisThrows_swallowsException() {
-            when(redisHealth.isCircuitOpen()).thenReturn(false);
-            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            doThrow(new RedisConnectionFailureException("connection refused"))
-                    .when(valueOperations).set(anyString(), anyString(), anyLong(), any());
+        void updateReadAt_dbThrows_swallowsException() {
+            doThrow(new RuntimeException("DB connection lost"))
+                    .when(roomMemberRepository).touchLastReadAt(anyString(), anyString(), any());
 
             assertDoesNotThrow(() -> readReceiptService.updateReadAt(ROOM_ID, USER_ID));
-
-            verify(redisHealth).recordFailure(any(Exception.class));
         }
     }
 
