@@ -24,8 +24,6 @@ import java.util.UUID;
 @Service
 public class MessageSenderService {
 
-    private static final java.util.regex.Pattern MENTION_PATTERN = java.util.regex.Pattern.compile("@(\\S+)");
-
     private final ChatPersistenceService chatPersistenceService;
     private final ChatRoomService chatRoomService;
     private final FcmNotificationService fcmNotificationService;
@@ -135,10 +133,7 @@ public class MessageSenderService {
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), message.getContent());
             // Parse @mentions and send targeted notifications
-            var mentionPattern = MENTION_PATTERN;
-            var matcher = mentionPattern.matcher(message.getContent());
-            while (matcher.find()) {
-                String mentionedUser = matcher.group(1);
+            for (String mentionedUser : MentionExtractor.extract(message.getContent())) {
                 if (!mentionedUser.equals(message.getUsername())) {
                     fcmNotificationService.sendMessageNotification(
                         "mention-" + mentionedUser, message.getUsername(),
