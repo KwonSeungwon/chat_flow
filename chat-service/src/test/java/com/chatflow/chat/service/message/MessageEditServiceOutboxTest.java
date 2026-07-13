@@ -6,6 +6,7 @@ import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
@@ -48,6 +49,7 @@ class MessageEditServiceOutboxTest {
 
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private RoomMemberRepository roomMemberRepository;
+    @Mock private MessageMentionRepository messageMentionRepository;
     @Mock private MessageEncryptor messageEncryptor;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private MessageEditHistoryRepository editHistoryRepository;
@@ -130,6 +132,31 @@ class MessageEditServiceOutboxTest {
             assertThat(result.isFailure()).isTrue();
             assertThat(result.error()).isEqualTo(ChatErrorCode.FORBIDDEN);
             verifyNoInteractions(chatPersistenceService);
+        }
+
+        @Test
+        @DisplayName("deletes mention rows for the message")
+        void deleteMessage_removesMentionRows() {
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));
+            when(chatMessageMapper.toDto(entity)).thenReturn(ChatMessage.builder()
+                    .messageId(MESSAGE_ID).chatRoomId(ROOM_ID)
+                    .userId(USER_ID).username(USERNAME).content("c").build());
+
+            Result<Void, ChatErrorCode> result = service.deleteMessage(MESSAGE_ID, USER_ID);
+
+            assertThat(result.isSuccess()).isTrue();
+            verify(messageMentionRepository).deleteByMessageId(MESSAGE_ID);
+        }
+
+        @Test
+        @DisplayName("does NOT delete mention rows when delete is forbidden")
+        void deleteMessage_forbidden_mentionsUntouched() {
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));
+
+            Result<Void, ChatErrorCode> result = service.deleteMessage(MESSAGE_ID, "other-user");
+
+            assertThat(result.isFailure()).isTrue();
+            verifyNoInteractions(messageMentionRepository);
         }
     }
 

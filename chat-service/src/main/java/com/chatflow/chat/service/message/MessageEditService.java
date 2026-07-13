@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
@@ -34,6 +35,7 @@ public class MessageEditService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final MessageMentionRepository messageMentionRepository;
     private final MessageEncryptor messageEncryptor;
     private final SimpMessagingTemplate messagingTemplate;
     private final MessageEditHistoryRepository editHistoryRepository;
@@ -49,6 +51,7 @@ public class MessageEditService {
             entity.setDeleted(true);
             entity.setContent(DELETED_PLACEHOLDER);
             chatMessageRepository.save(entity);
+            messageMentionRepository.deleteByMessageId(messageId);
             Map<String, Object> broadcast = new LinkedHashMap<>();
             broadcast.put("type", "MESSAGE_DELETED");
             broadcast.put("messageId", messageId);
