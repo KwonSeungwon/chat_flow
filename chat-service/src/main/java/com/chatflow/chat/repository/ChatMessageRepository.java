@@ -69,4 +69,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("DELETE FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId")
     int deleteAllByChatRoomId(@Param("roomId") String roomId);
 
+    @Query("SELECT m.chatRoomId, COUNT(m) FROM ChatMessageEntity m, RoomMemberEntity rm " +
+           "WHERE rm.userId = :userId AND rm.roomId = m.chatRoomId " +
+           "AND m.chatRoomId IN :roomIds " +
+           "AND m.timestamp > COALESCE(rm.lastReadAt, rm.joinedAt) " +
+           "AND m.type = 'CHAT' AND m.deleted = false " +
+           "GROUP BY m.chatRoomId")
+    List<Object[]> countUnreadByCursor(@Param("userId") String userId,
+                                       @Param("roomIds") List<String> roomIds);
+
 }
