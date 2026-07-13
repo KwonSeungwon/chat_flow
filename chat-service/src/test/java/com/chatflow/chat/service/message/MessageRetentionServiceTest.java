@@ -1,6 +1,7 @@
 package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,12 +25,13 @@ import static org.mockito.Mockito.*;
 class MessageRetentionServiceTest {
 
     @Mock private ChatMessageRepository chatMessageRepository;
+    @Mock private MessageMentionRepository messageMentionRepository;
 
     private MessageRetentionService retentionService;
 
     @BeforeEach
     void setUp() throws Exception {
-        retentionService = new MessageRetentionService(chatMessageRepository);
+        retentionService = new MessageRetentionService(chatMessageRepository, messageMentionRepository);
         // @Value is not processed in unit tests; set the default manually
         Field retentionDaysField = MessageRetentionService.class
                 .getDeclaredField("retentionDays");
@@ -82,6 +84,25 @@ class MessageRetentionServiceTest {
         long diffSeconds = Math.abs(ChronoUnit.SECONDS.between(expectedCutoff, actualCutoff));
         assertTrue(diffSeconds <= 5,
                 "cutoff should be within 5s of now-7d but diff was " + diffSeconds + "s");
+    }
+
+    @Test
+    void purges_mention_rows_with_the_same_cutoff() {
+        // Mention rows share the purged messages' timestamps — the batch must
+        // delete them with the identical cutoff, or unreadCount counts orphans.
+        when(chatMessageRepository.deleteBatchOlderThan(any(LocalDateTime.class), eq(5000)))
+                .thenReturn(0);
+        when(messageMentionRepository.deleteByCreatedAtBefore(any(LocalDateTime.class)))
+                .thenReturn(3);
+
+        retentionService.purgeOldMessages();
+
+        ArgumentCaptor<LocalDateTime> msgCutoff = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> mentionCutoff = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(chatMessageRepository).deleteBatchOlderThan(msgCutoff.capture(), eq(5000));
+        verify(messageMentionRepository).deleteByCreatedAtBefore(mentionCutoff.capture());
+        assertEquals(msgCutoff.getValue(), mentionCutoff.getValue(),
+                "mention purge must use the exact same cutoff as the message purge");
     }
 
     // -- Helpers ------------------------------------------------------------

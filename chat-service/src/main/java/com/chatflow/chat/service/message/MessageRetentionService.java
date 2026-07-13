@@ -1,6 +1,7 @@
 package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 public class MessageRetentionService {
 
     private final ChatMessageRepository chatMessageRepository;
+    private final MessageMentionRepository messageMentionRepository;
 
     @Value("${chatflow.message-retention-days:7}")
     private int retentionDays;
@@ -39,6 +41,14 @@ public class MessageRetentionService {
                 log.info("Message retention: batch deleted {} messages (total: {})", deleted, totalDeleted);
             }
         } while (deleted == BATCH_SIZE);
+
+        // 멘션 행은 메시지 timestamp를 created_at으로 공유하므로 같은 cutoff로
+        // 삭제하면 정확히 purge된 메시지의 멘션만 제거된다 — 남겨두면 list()는
+        // 드롭하는데 unreadCount는 계속 세는 고아 행이 된다.
+        int mentionsDeleted = messageMentionRepository.deleteByCreatedAtBefore(cutoff);
+        if (mentionsDeleted > 0) {
+            log.info("Message retention: deleted {} orphaned mention rows", mentionsDeleted);
+        }
 
         log.info("Message retention: completed, total deleted {} messages", totalDeleted);
     }
