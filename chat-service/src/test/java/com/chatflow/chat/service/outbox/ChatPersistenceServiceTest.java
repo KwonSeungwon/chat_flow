@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.event.MessagePersistedEvent;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
+import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.BaseMessage;
 import com.chatflow.common.dto.ChatMessage;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.*;
 class ChatPersistenceServiceTest {
 
     @Mock private ChatMessageRepository chatMessageRepository;
+    @Mock private MessageMentionRepository messageMentionRepository;
     @Mock private OutboxEventRepository outboxEventRepository;
     @Mock private ObjectMapper objectMapper;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -50,7 +52,7 @@ class ChatPersistenceServiceTest {
     @BeforeEach
     void setUp() {
         chatPersistenceService = new ChatPersistenceService(
-                chatMessageRepository, outboxEventRepository,
+                chatMessageRepository, messageMentionRepository, outboxEventRepository,
                 objectMapper, eventPublisher, messageEncryptor,
                 chatMessageMapper);
     }
