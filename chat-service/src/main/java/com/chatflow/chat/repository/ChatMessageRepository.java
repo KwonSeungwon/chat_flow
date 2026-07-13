@@ -69,14 +69,4 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
     @Query("DELETE FROM ChatMessageEntity m WHERE m.chatRoomId = :roomId")
     int deleteAllByChatRoomId(@Param("roomId") String roomId);
 
-    @Query("SELECT m FROM ChatMessageEntity m " +
-           "WHERE m.content LIKE CONCAT('%@', :username, '%') " +
-           "  AND m.timestamp >= :since " +
-           "  AND m.username <> :username " +
-           "  AND m.isAiGenerated = false " +
-           "  AND m.deleted = false " +
-           "ORDER BY m.timestamp DESC")
-    List<ChatMessageEntity> findMentionsOf(
-            @Param("username") String username,
-            @Param("since") LocalDateTime since);
 }
