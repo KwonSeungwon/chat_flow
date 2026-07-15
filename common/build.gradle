@@ -9,6 +9,13 @@ dependencies {
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     api 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
     
+    // Needed to compile BaseExceptionHandler's ServletRequestBindingException /
+    // HttpRequestMethodNotSupportedException handlers — both transitively extend
+    // jakarta.servlet.ServletException. compileOnly: each MVC service already
+    // provides servlet-api at runtime via spring-boot-starter-web (Tomcat), and
+    // keeping it off common's runtime graph avoids leaking it into the WebFlux
+    // gateway. Do NOT remove — the framework-4xx handlers won't compile without it.
+    compileOnly 'jakarta.servlet:jakarta.servlet-api'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 }

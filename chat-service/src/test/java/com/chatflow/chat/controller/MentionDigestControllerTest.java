@@ -50,11 +50,12 @@ class MentionDigestControllerTest {
     class ListMentions {
 
         @Test
-        @DisplayName("500 when X-User-Id header missing (MissingRequestHeaderException)")
+        @DisplayName("400 when X-User-Id header missing (MissingRequestHeaderException)")
         void error_when_X_User_Id_missing_on_get() throws Exception {
             mockMvc.perform(get("/api/chat/mentions")
                             .header("X-Username", "alice"))
-                    .andExpect(status().isInternalServerError());
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"));
         }
 
         @Test
