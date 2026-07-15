@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.ReportReason;
 import com.chatflow.chat.entity.ReportStatus;
@@ -32,6 +34,9 @@ class MessageReportControllerTest {
     @Mock
     private MessageReportService messageReportService;
 
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private MessageReportController controller;
 
@@ -42,8 +47,21 @@ class MessageReportControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    // ── Auth ────────────────────────────────────────────────────
+
+    @Test
+    void returns_401_when_X_User_Id_missing() throws Exception {
+        mockMvc.perform(post("/api/chat/messages/{messageId}/reports", MESSAGE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"SPAM\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     // ── POST /messages/{messageId}/reports ───────────────────────

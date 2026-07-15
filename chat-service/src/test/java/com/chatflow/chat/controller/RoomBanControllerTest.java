@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -37,6 +39,9 @@ class RoomBanControllerTest {
     @Mock
     private RoomMemberRepository roomMemberRepository;
 
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private RoomBanController controller;
 
@@ -47,8 +52,19 @@ class RoomBanControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    // ── Auth ────────────────────────────────────────────────────
+
+    @Test
+    void returns_401_when_X_User_Id_missing() throws Exception {
+        mockMvc.perform(get("/api/chat/rooms/{roomId}/bans", ROOM_ID))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     // ── GET /bans ───────────────────────────────────────────────

@@ -25,6 +25,10 @@ import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.ChatMessageResponse;
 import com.chatflow.common.dto.ChatRoomResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,7 +37,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.RequestHeader;
 
@@ -95,10 +98,22 @@ public class ChatRoomController {
     @RequireAuth
     @PostMapping
     public ResponseEntity<ApiResponse<ChatRoomResponse>> createRoom(
-            @Valid @RequestBody ChatRoom request,
+            @Valid @RequestBody CreateRoomRequest request,
             @AuthenticatedUser String creatorId,
             @RequestHeader(value = "X-Username", required = false) String creatorUsername) {
-        ChatRoom saved = chatRoomService.createRoom(request, creatorId, creatorUsername);
+        ChatRoom roomSpec = ChatRoom.builder()
+                .name(request.name())
+                .description(request.description())
+                .color(request.color())
+                .roomType(request.roomType() != null
+                        ? RoomType.valueOf(request.roomType()) : null)
+                .isPrivate(request.isPrivate() != null && request.isPrivate())
+                .password(request.password())
+                .allowedRoles(request.allowedRoles())
+                .allowInvites(request.allowInvites() != null
+                        ? request.allowInvites() : true)
+                .build();
+        ChatRoom saved = chatRoomService.createRoom(roomSpec, creatorId, creatorUsername);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(chatRoomMapper.toResponse(saved), "채팅방이 생성되었습니다."));
     }
 
@@ -154,11 +169,10 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/verify")
     public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> request,
+            @RequestBody VerifyPasswordRequest request,
             @AuthenticatedUser(required = false) String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        String password = request.get("password");
-        boolean valid = chatRoomService.verifyRoomPassword(roomId, password);
+        boolean valid = chatRoomService.verifyRoomPassword(roomId, request.password());
         if (valid) {
             // Seed membership so subsequent member-gated endpoints work.
             if (userId != null && !userId.isBlank()) {
@@ -260,19 +274,14 @@ public class ChatRoomController {
     @RequireAuth
     @PostMapping("/dm")
     public ResponseEntity<ApiResponse<ChatRoomResponse>> createDm(
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody CreateDmRequest body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        String targetUserId = body.get("targetUserId");
-        String targetUsername = body.get("targetUsername");
-        if (targetUserId == null || targetUsername == null) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("targetUserId, targetUsername이 필요합니다."));
-        }
-        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, targetUserId, targetUsername);
+        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), body.targetUsername());
         // Seed both DM participants — they may both want to call member-gated
         // endpoints without sending a STOMP message first.
         roomMembershipService.addMemberIfAbsent(dm.getId(), userId, username);
-        roomMembershipService.addMemberIfAbsent(dm.getId(), targetUserId, targetUsername);
+        roomMembershipService.addMemberIfAbsent(dm.getId(), body.targetUserId(), body.targetUsername());
         return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
     }
 
@@ -280,7 +289,7 @@ public class ChatRoomController {
     @PutMapping("/{roomId}/settings")
     public ResponseEntity<?> updateRoomSettings(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body,
+            @RequestBody UpdateSettingsRequest body,
             @AuthenticatedUser String userId) {
         if (chatRoomService.getRoom(roomId).isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -291,7 +300,7 @@ public class ChatRoomController {
         // 걸리지 않음 — room_members 행이 없는 pre-seed 레거시 방은 데이터 backfill 필요.)
         roomPermissionService.requireRole(roomId, userId, RoomRole.OWNER);
         return ResponseEntity.ok(ApiResponse.ok(
-                chatRoomService.updateRoomSettings(roomId, body.get("name"), body.get("description"))));
+                chatRoomService.updateRoomSettings(roomId, body.name(), body.description())));
     }
 
     /**
@@ -302,39 +311,79 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/messages")
     public ResponseEntity<?> sendMessage(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody SendMessageRequest body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        String content = body.get("content");
-        if (content == null || content.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("content가 필요합니다."));
-        }
         ChatMessage msg = new ChatMessage();
         msg.setChatRoomId(roomId);
         msg.setUserId(userId);
         msg.setUsername(username != null ? username : userId);
-        msg.setContent(content);
+        msg.setContent(body.content());
         msg.setType(ChatMessage.MessageType.CHAT);
-        String priority = body.get("priority");
-        msg.setPriority(priority != null && !priority.isBlank() ? priority : "ROUTINE");
-        String parentMessageId = body.get("parentMessageId");
-        if (parentMessageId != null && !parentMessageId.isBlank()) {
-            msg.setParentMessageId(parentMessageId);
+        msg.setPriority(body.priority() != null && !body.priority().isBlank()
+                ? body.priority() : "ROUTINE");
+        if (body.parentMessageId() != null && !body.parentMessageId().isBlank()) {
+            msg.setParentMessageId(body.parentMessageId());
         }
-        String forwardedFrom = body.get("forwardedFrom");
-        if (forwardedFrom != null && !forwardedFrom.isBlank()) {
-            msg.setForwardedFrom(forwardedFrom);
+        if (body.forwardedFrom() != null && !body.forwardedFrom().isBlank()) {
+            msg.setForwardedFrom(body.forwardedFrom());
         }
-        String fileUrl = body.get("fileUrl");
-        if (fileUrl != null && !fileUrl.isBlank()) {
-            msg.setFileUrl(fileUrl);
-            msg.setFileName(body.get("fileName"));
-            msg.setFileContentType(body.get("fileContentType"));
+        if (body.fileUrl() != null && !body.fileUrl().isBlank()) {
+            msg.setFileUrl(body.fileUrl());
+            msg.setFileName(body.fileName());
+            msg.setFileContentType(body.fileContentType());
         }
         messageSenderService.send(msg);
         return ResponseEntity.ok(ApiResponse.ok(null, "메시지를 전송했습니다."));
     }
 
     public record GetOrCreateRequest(String externalId, String name, String description) {}
+
+    // ── Request records ─────────────────────────────────────────
+
+    public record CreateRoomRequest(
+            @NotBlank(message = "채팅방 이름은 필수입니다")
+            @Size(max = 100, message = "채팅방 이름은 100자를 초과할 수 없습니다")
+            String name,
+
+            @Size(max = 500, message = "설명은 500자를 초과할 수 없습니다")
+            String description,
+
+            String color,
+
+            String roomType,
+
+            @JsonProperty("isPrivate")
+            Boolean isPrivate,
+
+            String password,
+
+            String allowedRoles,
+
+            Boolean allowInvites
+    ) {}
+
+    public record VerifyPasswordRequest(String password) {}
+
+    public record CreateDmRequest(
+            @NotBlank(message = "targetUserId는 필수입니다")
+            String targetUserId,
+
+            @NotBlank(message = "targetUsername은 필수입니다")
+            String targetUsername
+    ) {}
+
+    public record UpdateSettingsRequest(String name, String description) {}
+
+    public record SendMessageRequest(
+            @NotBlank(message = "content는 필수입니다")
+            String content,
+
+            String priority,
+            String parentMessageId,
+            String forwardedFrom,
+            String fileUrl,
+            String fileName,
+            String fileContentType
+    ) {}
 }

@@ -16,6 +16,9 @@ import com.chatflow.chat.service.message.MessagePinService;
 import com.chatflow.chat.service.message.MessageReactionService;
 import com.chatflow.chat.service.message.MessageThreadService;
 import com.chatflow.common.dto.ApiResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -57,16 +60,9 @@ public class MessageInteractionController {
     public ResponseEntity<ApiResponse<?>> editMessage(
             @PathVariable String roomId,
             @PathVariable String messageId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody EditMessageRequest request,
             @AuthenticatedUser String userId) {
-        String newContent = body.get("content");
-        if (newContent == null || newContent.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("수정할 내용이 필요합니다."));
-        }
-        if (newContent.length() > 10_000) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("메시지는 10,000자를 초과할 수 없습니다."));
-        }
-        Result<Void, ChatErrorCode> result = messageEditService.editMessage(messageId, userId, newContent.trim());
+        Result<Void, ChatErrorCode> result = messageEditService.editMessage(messageId, userId, request.content().trim());
         if (result.isFailure()) {
             return ErrorResponses.from(result);
         }
@@ -78,11 +74,9 @@ public class MessageInteractionController {
     public ResponseEntity<?> toggleReaction(
             @PathVariable String roomId,
             @PathVariable String messageId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody ReactionRequest request,
             @AuthenticatedUser String userId) {
-        String emoji = body.get("emoji");
-        if (emoji == null) return ResponseEntity.badRequest().body(ApiResponse.error("emoji가 필요합니다."));
-        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(roomId, messageId, emoji, userId);
+        Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(roomId, messageId, request.emoji(), userId);
         if (result.isFailure()) return ErrorResponses.from(result);
         return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
@@ -126,11 +120,9 @@ public class MessageInteractionController {
     @PutMapping("/{roomId}/pin")
     public ResponseEntity<?> pinMessage(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody PinRequest request,
             @AuthenticatedUser String userId) {
-        String messageId = body.get("messageId");
-        if (messageId == null) return ResponseEntity.badRequest().body(ApiResponse.error("messageId가 필요합니다."));
-        Result<Void, ChatErrorCode> result = messagePinService.pinMessage(roomId, messageId);
+        Result<Void, ChatErrorCode> result = messagePinService.pinMessage(roomId, request.messageId());
         if (result.isFailure()) return ErrorResponses.from(result);
         return ResponseEntity.ok(ApiResponse.ok(true));
     }
@@ -151,4 +143,22 @@ public class MessageInteractionController {
         if (result.isFailure()) return ErrorResponses.from(result);
         return ResponseEntity.ok(ApiResponse.ok(result.value()));
     }
+
+    // ── Request records ─────────────────────────────────────────
+
+    public record EditMessageRequest(
+            @NotBlank(message = "수정할 내용이 필요합니다")
+            @Size(max = 10_000, message = "메시지는 10,000자를 초과할 수 없습니다")
+            String content
+    ) {}
+
+    public record ReactionRequest(
+            @NotBlank(message = "emoji가 필요합니다")
+            String emoji
+    ) {}
+
+    public record PinRequest(
+            @NotBlank(message = "messageId가 필요합니다")
+            String messageId
+    ) {}
 }

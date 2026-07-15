@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.dto.BanDto;
 import com.chatflow.chat.dto.BanRequest;
 import com.chatflow.chat.entity.RoomBanEntity;
@@ -27,10 +29,11 @@ public class RoomBanController {
      * GET /api/chat/rooms/{roomId}/bans
      * Lists all bans for the room. OWNER or MOD only (enforced in service).
      */
+    @RequireAuth
     @GetMapping
     public ResponseEntity<ApiResponse<List<BanDto>>> listBans(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         List<RoomBanEntity> bans = roomBanService.listBans(roomId, callerUserId);
 
         List<BanDto> banDtos = bans.stream()
@@ -50,11 +53,12 @@ public class RoomBanController {
      * POST /api/chat/rooms/{roomId}/bans
      * Bans a user (kick + ban). OWNER or MOD only.
      */
+    @RequireAuth
     @PostMapping
     public ResponseEntity<ApiResponse<BanDto>> banUser(
             @PathVariable String roomId,
             @RequestBody BanRequest request,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         if (request.userId() == null || request.userId().isBlank()) {
             throw new IllegalArgumentException("userId는 필수입니다.");
         }
@@ -84,11 +88,12 @@ public class RoomBanController {
      * DELETE /api/chat/rooms/{roomId}/bans/{userId}
      * Unbans a user. OWNER or MOD only.
      */
+    @RequireAuth
     @DeleteMapping("/{userId}")
     public ResponseEntity<Void> unbanUser(
             @PathVariable String roomId,
             @PathVariable String userId,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         roomBanService.unbanUser(roomId, callerUserId, userId);
         log.info("User unbanned: roomId={}, target={}, by={}", roomId, userId, callerUserId);
         return ResponseEntity.noContent().build();

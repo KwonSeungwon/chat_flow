@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.dto.MemberDto;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -45,6 +47,9 @@ class RoomMemberManagementControllerTest {
     @Mock
     private MemberMapper memberMapper;
 
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private RoomMemberManagementController controller;
 
@@ -55,6 +60,8 @@ class RoomMemberManagementControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -67,6 +74,15 @@ class RoomMemberManagementControllerTest {
                 .role(role)
                 .joinedAt(LocalDateTime.now())
                 .build();
+    }
+
+    // ── Auth ─────────────────────────────────────────────────────
+
+    @Test
+    void returns_401_when_X_User_Id_missing() throws Exception {
+        mockMvc.perform(get("/api/chat/rooms/{roomId}/members", ROOM_ID))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     // ── GET /members ────────────────────────────────────────────

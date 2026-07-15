@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.dto.MentionItemDto;
 import com.chatflow.chat.service.notification.MentionDigestService;
 import com.chatflow.common.dto.ApiResponse;
@@ -19,45 +21,40 @@ public class MentionDigestController {
 
     private final MentionDigestService service;
 
+    @RequireAuth
     @GetMapping
     public ResponseEntity<ApiResponse<List<MentionItemDto>>> list(
-            @RequestHeader(value = "X-User-Id") String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username,
             @RequestParam(defaultValue = "30") int days) {
-        if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("X-Username header is required");
-        }
         return ResponseEntity.ok(ApiResponse.ok(service.list(userId, username, days)));
     }
 
+    @RequireAuth
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Map<String, Long>>> unreadCount(
-            @RequestHeader(value = "X-User-Id") String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username,
             @RequestParam(defaultValue = "30") int days) {
-        if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("X-Username header is required");
-        }
         long count = service.unreadCount(userId, username, days);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("count", count)));
     }
 
+    @RequireAuth
     @PostMapping("/{messageId}/read")
     public ResponseEntity<ApiResponse<Void>> markRead(
             @PathVariable String messageId,
-            @RequestHeader(value = "X-User-Id") String userId) {
+            @AuthenticatedUser String userId) {
         service.markRead(userId, messageId);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @RequireAuth
     @PostMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllRead(
-            @RequestHeader(value = "X-User-Id") String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username,
             @RequestParam(defaultValue = "30") int days) {
-        if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("X-Username header is required");
-        }
         service.markAllRead(userId, username, days);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
