@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.dto.MentionItemDto;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.notification.MentionDigestService;
@@ -33,12 +35,16 @@ class MentionDigestControllerTest {
 
     @Mock private MentionDigestService service;
 
+    @Mock private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private MentionDigestController controller;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -50,12 +56,12 @@ class MentionDigestControllerTest {
     class ListMentions {
 
         @Test
-        @DisplayName("400 when X-User-Id header missing (MissingRequestHeaderException)")
-        void error_when_X_User_Id_missing_on_get() throws Exception {
+        @DisplayName("401 when X-User-Id header missing")
+        void returns_401_when_X_User_Id_missing() throws Exception {
             mockMvc.perform(get("/api/chat/mentions")
                             .header("X-Username", "alice"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"));
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
         }
 
         @Test

@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.dto.ScheduledMessageDto;
 import com.chatflow.chat.mapper.ScheduledMessageMapper;
 import com.chatflow.chat.service.notification.ScheduledMessageService;
@@ -24,14 +26,12 @@ public class ScheduledMessageController {
     private final ScheduledMessageService service;
     private final ScheduledMessageMapper scheduledMessageMapper;
 
+    @RequireAuth
     @PostMapping
     public ResponseEntity<ApiResponse<ScheduledMessageDto>> schedule(
             @Valid @RequestBody ScheduleRequest request,
-            @RequestHeader(value = "X-User-Id") String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("X-Username header is required");
-        }
         var saved = service.schedule(request.chatRoomId(), userId, username, request.content(),
                 LocalDateTime.parse(request.scheduledAt()));
         log.info("Scheduled message id={} for user={} room={} at={}",
@@ -39,19 +39,21 @@ public class ScheduledMessageController {
         return ResponseEntity.ok(ApiResponse.ok(scheduledMessageMapper.toDto(saved)));
     }
 
+    @RequireAuth
     @GetMapping
     public ResponseEntity<ApiResponse<List<ScheduledMessageDto>>> list(
-            @RequestHeader(value = "X-User-Id") String userId) {
+            @AuthenticatedUser String userId) {
         var items = service.listMine(userId).stream()
                 .map(scheduledMessageMapper::toDto)
                 .toList();
         return ResponseEntity.ok(ApiResponse.ok(items));
     }
 
+    @RequireAuth
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<ScheduledMessageDto>> cancel(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id") String userId) {
+            @AuthenticatedUser String userId) {
         try {
             var canceled = service.cancel(id, userId);
             log.info("Scheduled message id={} canceled by user={}", id, userId);

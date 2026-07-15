@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.dto.ReportStatusUpdateRequest;
 import com.chatflow.chat.dto.ReportSubmitRequest;
@@ -27,11 +29,12 @@ public class MessageReportController {
      * POST /api/chat/messages/{messageId}/reports
      * Submits a report for a message. Any room member can call (self-report blocked in service).
      */
+    @RequireAuth
     @PostMapping("/api/chat/messages/{messageId}/reports")
     public ResponseEntity<ApiResponse<Map<String, Long>>> submitReport(
             @PathVariable String messageId,
             @RequestBody ReportSubmitRequest request,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         if (request.reason() == null || request.reason().isBlank()) {
             throw new IllegalArgumentException("reason은 필수입니다.");
         }
@@ -50,11 +53,12 @@ public class MessageReportController {
      * GET /api/chat/rooms/{roomId}/reports?status=PENDING
      * Lists reports for a room. OWNER or MOD only (enforced in service).
      */
+    @RequireAuth
     @GetMapping("/api/chat/rooms/{roomId}/reports")
     public ResponseEntity<ApiResponse<List<ReportDto>>> listReports(
             @PathVariable String roomId,
             @RequestParam(defaultValue = "PENDING") String status,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         // Currently only PENDING listing is supported via the service method
         List<ReportDto> reports = messageReportService.listPendingReports(roomId, callerUserId);
         return ResponseEntity.ok(ApiResponse.ok(reports));
@@ -64,11 +68,12 @@ public class MessageReportController {
      * PATCH /api/chat/reports/{reportId}
      * Updates a report's status. OWNER or MOD only (enforced in service).
      */
+    @RequireAuth
     @PatchMapping("/api/chat/reports/{reportId}")
     public ResponseEntity<ApiResponse<Void>> updateReportStatus(
             @PathVariable Long reportId,
             @RequestBody ReportStatusUpdateRequest request,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         if (request.status() == null || request.status().isBlank()) {
             throw new IllegalArgumentException("status는 필수입니다.");
         }

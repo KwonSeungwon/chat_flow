@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUser;
+import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.dto.MemberDto;
 import com.chatflow.chat.dto.MuteRequest;
 import com.chatflow.chat.dto.MuteResponse;
@@ -33,10 +35,11 @@ public class RoomMemberManagementController {
      * GET /api/chat/rooms/{roomId}/members
      * Returns the member list. Any room member can call this.
      */
+    @RequireAuth
     @GetMapping("/members")
     public ResponseEntity<ApiResponse<List<MemberDto>>> getMembers(
             @PathVariable String roomId,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         // Verify caller is a member (any role)
         roomPermissionService.requireRole(roomId, callerUserId,
                 RoomRole.OWNER, RoomRole.MODERATOR, RoomRole.MEMBER);
@@ -52,12 +55,13 @@ public class RoomMemberManagementController {
      * Changes a member's role. OWNER only.
      * If role == "OWNER", delegates to transferOwnership.
      */
+    @RequireAuth
     @PatchMapping("/members/{userId}/role")
     public ResponseEntity<ApiResponse<Void>> changeRole(
             @PathVariable String roomId,
             @PathVariable String userId,
             @RequestBody RoleChangeRequest request,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         if (request.role() == null || request.role().isBlank()) {
             throw new IllegalArgumentException("role은 필수입니다.");
         }
@@ -80,11 +84,12 @@ public class RoomMemberManagementController {
      * DELETE /api/chat/rooms/{roomId}/members/{userId}
      * Kicks a member. OWNER or MOD only.
      */
+    @RequireAuth
     @DeleteMapping("/members/{userId}")
     public ResponseEntity<Void> kickMember(
             @PathVariable String roomId,
             @PathVariable String userId,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         memberManagementService.kickMember(roomId, callerUserId, userId);
         log.info("Member kicked: roomId={}, target={}, by={}", roomId, userId, callerUserId);
         return ResponseEntity.noContent().build();
@@ -94,12 +99,13 @@ public class RoomMemberManagementController {
      * POST /api/chat/rooms/{roomId}/members/{userId}/mute
      * Mutes a member. OWNER or MOD only.
      */
+    @RequireAuth
     @PostMapping("/members/{userId}/mute")
     public ResponseEntity<ApiResponse<MuteResponse>> muteMember(
             @PathVariable String roomId,
             @PathVariable String userId,
             @RequestBody MuteRequest request,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         MuteResult result = memberManagementService.muteMember(
                 roomId, callerUserId, userId, request.minutes());
         log.info("Member muted: roomId={}, target={}, minutes={}, by={}",
@@ -111,11 +117,12 @@ public class RoomMemberManagementController {
      * DELETE /api/chat/rooms/{roomId}/members/{userId}/mute
      * Unmutes a member. OWNER or MOD only.
      */
+    @RequireAuth
     @DeleteMapping("/members/{userId}/mute")
     public ResponseEntity<Void> unmuteMember(
             @PathVariable String roomId,
             @PathVariable String userId,
-            @RequestHeader(value = "X-User-Id", required = true) String callerUserId) {
+            @AuthenticatedUser String callerUserId) {
         memberManagementService.unmuteMember(roomId, callerUserId, userId);
         log.info("Member unmuted: roomId={}, target={}, by={}", roomId, userId, callerUserId);
         return ResponseEntity.noContent().build();

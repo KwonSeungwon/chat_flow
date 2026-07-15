@@ -1,5 +1,7 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthInterceptor;
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.dto.ScheduledMessageDto;
 import com.chatflow.chat.entity.ScheduledMessageEntity;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
@@ -42,6 +44,9 @@ class ScheduledMessageControllerTest {
     @Mock
     private ScheduledMessageMapper scheduledMessageMapper;
 
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private ScheduledMessageController controller;
 
@@ -50,8 +55,27 @@ class ScheduledMessageControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    // ── Auth ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("returns 401 when X-User-Id header missing")
+    void returns_401_when_X_User_Id_missing() throws Exception {
+        String body = objectMapper.writeValueAsString(java.util.Map.of(
+                "chatRoomId", "room-1",
+                "content", "hello",
+                "scheduledAt", "2026-08-01T14:30:00"));
+
+        mockMvc.perform(post("/api/chat/scheduled-messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     // ── schedule (POST) ─────────────────────────────────────────
