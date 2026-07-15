@@ -7,6 +7,7 @@ import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.read.ReadReceiptService;
 import com.chatflow.chat.service.read.UnreadCountService;
 import com.chatflow.common.dto.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -69,16 +70,20 @@ public class RoomReadStateController {
     @PutMapping("/{roomId}/last-read")
     public ResponseEntity<?> updateLastRead(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody UpdateLastReadRequest request,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        String lastReadMessageId = body.get("lastReadMessageId");
-        if (lastReadMessageId == null || lastReadMessageId.isBlank()) {
+        if (request.lastReadMessageId() == null || request.lastReadMessageId().isBlank()) {
             // 메시지가 아직 로드되지 않은 방 입장 시점에도 unread count를 초기화하도록 readAt만 갱신
             readReceiptService.updateReadAt(roomId, userId);
             return ResponseEntity.ok(ApiResponse.ok(null));
         }
-        readReceiptService.markRead(roomId, userId, username != null ? username : "", lastReadMessageId);
+        readReceiptService.markRead(roomId, userId, username != null ? username : "", request.lastReadMessageId());
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
+
+    // ── Request records ─────────────────────────────────────────
+
+    /** lastReadMessageId may be null or blank — semantically means "just update readAt". */
+    public record UpdateLastReadRequest(String lastReadMessageId) {}
 }

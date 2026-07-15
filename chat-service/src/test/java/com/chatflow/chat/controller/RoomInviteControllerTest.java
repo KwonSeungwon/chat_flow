@@ -177,6 +177,41 @@ class RoomInviteControllerTest {
         }
 
         @Test
+        @DisplayName("blank targetUsername -> 400 VALIDATION_ERROR")
+        void _400_when_targetUsername_blank() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("targetUsername", "   "));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.targetUsername").exists());
+
+            verify(roomMembershipService, never())
+                    .sendInviteMessage(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("missing targetUsername -> 400 VALIDATION_ERROR")
+        void _400_when_targetUsername_missing() throws Exception {
+            mockMvc.perform(post("/api/chat/rooms/r1/invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}")
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.targetUsername").exists());
+
+            verify(roomMembershipService, never())
+                    .sendInviteMessage(anyString(), anyString(), anyString());
+        }
+
+        @Test
         void _200_and_sendInviteMessage_called_on_success() throws Exception {
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
             when(participantService.isRoomFull("r1")).thenReturn(false);
@@ -267,6 +302,35 @@ class RoomInviteControllerTest {
                             .content(body))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @DisplayName("missing token -> 400 VALIDATION_ERROR")
+        void _400_when_token_missing() throws Exception {
+            mockMvc.perform(post("/api/chat/rooms/join-by-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}")
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.token").exists());
+        }
+
+        @Test
+        @DisplayName("blank token -> 400 VALIDATION_ERROR")
+        void _400_when_token_blank() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("token", "   "));
+
+            mockMvc.perform(post("/api/chat/rooms/join-by-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.token").exists());
         }
 
         @Test

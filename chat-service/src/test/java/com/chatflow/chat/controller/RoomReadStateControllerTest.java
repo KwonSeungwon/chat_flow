@@ -232,6 +232,24 @@ class RoomReadStateControllerTest {
         }
 
         @Test
+        @DisplayName("null lastReadMessageId -> calls updateReadAt only (semantic, not a validation error)")
+        void putLastRead_calls_updateReadAt_when_lastReadMessageId_null() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            mockMvc.perform(put("/api/chat/rooms/r1/last-read")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}")
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(readReceiptService).updateReadAt("r1", "user-1");
+            verify(readReceiptService, never()).markRead(
+                    anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
         void putLastRead_calls_updateReadAt_only_when_lastReadMessageId_blank() throws Exception {
             doNothing().when(membershipGuard).requireMember("r1", "user-1");
 

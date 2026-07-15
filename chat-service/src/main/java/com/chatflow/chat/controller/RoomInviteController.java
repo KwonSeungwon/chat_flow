@@ -12,6 +12,8 @@ import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -44,7 +46,7 @@ public class RoomInviteController {
     @PostMapping("/{roomId}/invite")
     public ResponseEntity<ApiResponse<Void>> inviteUser(
             @PathVariable String roomId,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody InviteRequest request,
             @AuthenticatedUser String inviterId,
             @RequestHeader(value = "X-Username", required = false) String inviterName) {
         // 채팅방 존재 여부 확인
@@ -62,23 +64,19 @@ public class RoomInviteController {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
         }
-        String targetUsername = body.get("targetUsername");
-        if (targetUsername == null || targetUsername.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("targetUsername이 필요합니다."));
-        }
         // 이미 참여 중인 멤버 중복 초대 방지
         String participantKey = "chatflow:room:participants:" + roomId;
         Set<String> members = redisTemplate.opsForSet().members(participantKey);
         if (members != null) {
-            final String target = targetUsername.toLowerCase();
+            final String target = request.targetUsername().toLowerCase();
             boolean alreadyPresent = members.stream()
                     .anyMatch(e -> e.toLowerCase().endsWith(":" + target));
             if (alreadyPresent) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error(targetUsername + "님은 이미 채팅방에 참여 중입니다."));
+                        .body(ApiResponse.error(request.targetUsername() + "님은 이미 채팅방에 참여 중입니다."));
             }
         }
-        roomMembershipService.sendInviteMessage(roomId, inviterName, targetUsername);
+        roomMembershipService.sendInviteMessage(roomId, inviterName, request.targetUsername());
         return ResponseEntity.ok(ApiResponse.ok(null, "초대 메시지를 보냈습니다."));
     }
 
@@ -116,15 +114,10 @@ public class RoomInviteController {
     @RequireAuth
     @PostMapping("/join-by-invite")
     public ResponseEntity<?> joinByInvite(
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody JoinByInviteRequest request,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        String token = body.get("token");
-        if (token == null || token.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("token이 필요합니다."));
-        }
-        Result<String, ChatErrorCode> resolved = inviteLinkService.resolveToken(token);
+        Result<String, ChatErrorCode> resolved = inviteLinkService.resolveToken(request.token());
         if (resolved.isFailure()) {
             return ErrorResponses.from(resolved);
         }
@@ -145,4 +138,16 @@ public class RoomInviteController {
         data.put("roomName", room.getName());
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
+
+    // ── Request records ─────────────────────────────────────────
+
+    public record InviteRequest(
+            @NotBlank(message = "targetUsername이 필요합니다")
+            String targetUsername
+    ) {}
+
+    public record JoinByInviteRequest(
+            @NotBlank(message = "token이 필요합니다")
+            String token
+    ) {}
 }
