@@ -40,6 +40,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -243,6 +244,68 @@ class ChatRoomControllerTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.id").value("r-new"));
         }
+
+        @Test
+        @DisplayName("missing name -> 400 VALIDATION_ERROR (was 500 with entity binding)")
+        void returns_400_when_name_missing() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("description", "no name"));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.name").exists());
+
+            verify(chatRoomService, never()).createRoom(any(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("blank name -> 400 VALIDATION_ERROR")
+        void returns_400_when_name_blank() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("name", "   "));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.name").exists());
+        }
+
+        @Test
+        @DisplayName("createRoom whitelists only client-settable fields")
+        void creates_room_with_whitelisted_fields_only() throws Exception {
+            ChatRoom saved = room("r-new", "Test", RoomType.GENERAL, "user-1");
+            when(chatRoomService.createRoom(any(ChatRoom.class), eq("user-1"), eq("alice")))
+                    .thenReturn(saved);
+            when(chatRoomMapper.toResponse(saved))
+                    .thenReturn(roomResponse("r-new", "Test", "GENERAL", "user-1"));
+
+            // Attempt to mass-assign id, participantCount, createdAt — record ignores them
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Test",
+                    "id", "injected-id",
+                    "participantCount", 999));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isCreated());
+
+            // The service receives a ChatRoom with id==null (not injected),
+            // because the record has no id field — mass-assignment blocked.
+            verify(chatRoomService).createRoom(argThat(room ->
+                    room.getId() == null && "Test".equals(room.getName())
+            ), eq("user-1"), eq("alice"));
+        }
     }
 
     // ── DeleteRoom ──────────────────────────────────────────────
@@ -410,6 +473,128 @@ class ChatRoomControllerTest {
                             .content(body)
                             .header("X-User-Id", "any-user"))
                     .andExpect(status().isNotFound());
+        }
+    }
+
+    // ── CreateDm ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/rooms/dm")
+    class CreateDm {
+
+        @Test
+        void returns_400_when_targetUserId_missing() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("targetUsername", "bob"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.targetUserId").exists());
+
+            verify(dmRoomService, never()).createOrFindDmRoom(anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void returns_400_when_targetUsername_missing() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("targetUserId", "u2"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.targetUsername").exists());
+        }
+
+        @Test
+        void returns_200_when_valid() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(chatRoomMapper.toResponse(dm))
+                    .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("targetUserId", "u2", "targetUsername", "bob"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.id").value("r-dm"));
+
+            verify(roomMembershipService).addMemberIfAbsent("r-dm", "user-1", "alice");
+            verify(roomMembershipService).addMemberIfAbsent("r-dm", "u2", "bob");
+        }
+    }
+
+    // ── SendMessage (REST fallback) ─────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/rooms/{roomId}/messages")
+    class SendMessage {
+
+        @Test
+        void returns_400_when_content_missing() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("forwardedFrom", "someone: hello"));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.content").exists());
+
+            verify(messageSenderService, never()).send(any());
+        }
+
+        @Test
+        void returns_400_when_content_blank() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("content", "   "));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+
+        @Test
+        void returns_200_and_delegates_to_sender_when_valid() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("content", "hello", "forwardedFrom", "alice: world"));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+
+            verify(messageSenderService).send(argThat(msg ->
+                    "hello".equals(msg.getContent())
+                    && "r1".equals(msg.getChatRoomId())
+                    && "alice: world".equals(msg.getForwardedFrom())
+            ));
         }
     }
 
