@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.notification;
 
+import com.chatflow.chat.exception.QuotaExceededException;
 import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.RoomPermissionService;
 
@@ -58,7 +59,7 @@ public class ScheduledMessageService {
         long pending = repository.countByUserIdAndStatus(
                 userId, ScheduledMessageStatus.PENDING);
         if (pending >= MAX_PENDING_PER_USER) {
-            throw new IllegalStateException(
+            throw new QuotaExceededException(
                     "scheduled message limit reached (max " + MAX_PENDING_PER_USER + ")");
         }
         ScheduledMessageEntity entity = ScheduledMessageEntity.builder()

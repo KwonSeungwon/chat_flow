@@ -103,16 +103,19 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
     }
 
     /**
-     * IllegalStateException for resource-cap / quota violations
+     * QuotaExceededException for resource-cap / quota violations
      * (e.g. ScheduledMessageService.MAX_PENDING_PER_USER). 429 is the right
-     * code for "you've hit the limit, slow down". Note: controllers that
-     * use IllegalStateException for not-found masking (see
-     * ScheduledMessageController.cancel) MUST catch it locally before it
-     * reaches this handler.
+     * code for "you've hit the limit, slow down".
+     *
+     * Previously this handler caught ALL IllegalStateException → 429, which
+     * incorrectly mapped programming errors (e.g. Result.value() on Failure)
+     * to 429 instead of 500. Now only the dedicated QuotaExceededException
+     * triggers 429; stray IllegalStateExceptions fall through to the
+     * catch-all → 500 (correct — they are bugs, not client rate limits).
      */
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException e) {
-        log.warn("Illegal state (cap/quota): {}", e.getMessage());
+    @ExceptionHandler(QuotaExceededException.class)
+    public ResponseEntity<ErrorResponse> handleQuotaExceeded(QuotaExceededException e) {
+        log.warn("Quota exceeded: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(ErrorResponse.of(429, "QUOTA_EXCEEDED", e.getMessage()));
     }

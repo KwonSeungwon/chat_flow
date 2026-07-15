@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.notification;
 
+import com.chatflow.chat.exception.QuotaExceededException;
 import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.RoomPermissionService;
 
@@ -78,6 +79,19 @@ class ScheduledMessageServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must be in the future");
         verifyNoInteractions(repository);
+    }
+
+    @Test
+    void schedule_throwsQuotaExceeded_whenPendingCapReached() {
+        when(repository.countByUserIdAndStatus("user-1", ScheduledMessageStatus.PENDING))
+                .thenReturn(100L);
+
+        assertThatThrownBy(() -> service.schedule(
+                "room-1", "user-1", "alice", "one more",
+                LocalDateTime.now().plusMinutes(30)))
+                .isInstanceOf(QuotaExceededException.class)
+                .hasMessageContaining("scheduled message limit reached");
+        verify(repository, never()).save(any());
     }
 
     @Test

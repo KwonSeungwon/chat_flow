@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -43,6 +46,34 @@ public abstract class BaseExceptionHandler {
         log.warn("Bad request: {}", e.getMessage());
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(400, "BAD_REQUEST", "잘못된 요청입니다."));
+    }
+
+    // ── Framework 4xx handlers ────────────────────────────────
+    // These intercept Spring MVC exceptions that the catch-all would
+    // otherwise turn into 500 INTERNAL_ERROR with error-level stack traces.
+
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<ErrorResponse> handleServletRequestBinding(ServletRequestBindingException e) {
+        log.warn("Missing request parameter or header: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "MISSING_REQUEST_PARAMETER",
+                        "필수 요청 파라미터 또는 헤더가 누락되었습니다."));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("Type mismatch: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of(400, "TYPE_MISMATCH",
+                        "요청 파라미터 타입이 올바르지 않습니다."));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("Method not supported: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of(405, "METHOD_NOT_ALLOWED",
+                        "지원하지 않는 HTTP 메서드입니다."));
     }
 
     @ExceptionHandler(Exception.class)
