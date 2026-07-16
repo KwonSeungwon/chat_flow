@@ -18,28 +18,11 @@ public class JwtUtil {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public boolean isValid(String token) {
-        try {
-            parseToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     public Claims parseToken(String token) {
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-    }
-
-    public String getUserId(String token) {
-        return parseToken(token).getSubject();
-    }
-
-    public String getUsername(String token) {
-        return parseToken(token).get("username", String.class);
     }
 }

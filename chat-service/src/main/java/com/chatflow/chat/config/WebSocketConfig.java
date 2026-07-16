@@ -1,5 +1,6 @@
 package com.chatflow.chat.config;
 
+import com.chatflow.chat.auth.AuthHeaders;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -65,11 +66,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                     WebSocketHandler wsHandler, Map<String, Object> attributes) {
                 if (request instanceof ServletServerHttpRequest servletRequest) {
-                    String userId = servletRequest.getServletRequest().getHeader("X-User-Id");
-                    String username = servletRequest.getServletRequest().getHeader("X-Username");
-                    if (username != null) {
-                        try { username = java.net.URLDecoder.decode(username, java.nio.charset.StandardCharsets.UTF_8); } catch (Exception ignored) {}
-                    }
+                    String userId = servletRequest.getServletRequest().getHeader(AuthHeaders.X_USER_ID);
+                    String username = AuthHeaders.decodeUsername(
+                            servletRequest.getServletRequest().getHeader(AuthHeaders.X_USERNAME));
                     if (userId != null) {
                         attributes.put("userId", userId);
                         attributes.put("username", username);
