@@ -2,6 +2,7 @@ package com.chatflow.chat.config;
 
 import com.chatflow.common.dto.KafkaTopics;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -15,14 +16,15 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     private static final int PARTITIONS = 3;
-    // 3-broker StatefulSet 전환으로 replication 1→3
-    private static final short REPLICATION = 3;
+
+    @Value("${chatflow.kafka.replication-factor:1}")
+    private short replicationFactor;
 
     @Bean
     public NewTopic chatMessagesTopic() {
         return TopicBuilder.name(KafkaTopics.CHAT_MESSAGES)
                 .partitions(PARTITIONS)
-                .replicas(REPLICATION)
+                .replicas(replicationFactor)
                 .build();
     }
 
@@ -30,7 +32,7 @@ public class KafkaTopicConfig {
     public NewTopic aiSummaryRequestsTopic() {
         return TopicBuilder.name(KafkaTopics.AI_SUMMARY_REQUESTS)
                 .partitions(PARTITIONS)
-                .replicas(REPLICATION)
+                .replicas(replicationFactor)
                 .build();
     }
 
@@ -38,7 +40,7 @@ public class KafkaTopicConfig {
     public NewTopic aiSummariesTopic() {
         return TopicBuilder.name(KafkaTopics.AI_SUMMARIES)
                 .partitions(PARTITIONS)
-                .replicas(REPLICATION)
+                .replicas(replicationFactor)
                 .build();
     }
 }

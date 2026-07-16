@@ -3,7 +3,8 @@ server:
   port: 8081
   shutdown: graceful
   tomcat:
-    max-threads: 20
+    threads:
+      max: 20
     accept-count: 10
 
 spring:
@@ -72,9 +73,9 @@ management:
   endpoint:
     health:
       show-details: never
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
   tracing:
     enabled: false
@@ -91,5 +92,7 @@ logging:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: /var/log/chatflow/ai-summary-service.log
-    max-size: 100MB
-    max-history: 30
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
