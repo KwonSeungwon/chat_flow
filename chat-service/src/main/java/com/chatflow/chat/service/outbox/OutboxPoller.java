@@ -3,6 +3,7 @@ package com.chatflow.chat.service.outbox;
 import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.repository.OutboxEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -29,6 +31,7 @@ public class OutboxPoller {
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
     private final Timer pollTimer;
+    private final Counter reapedCounter;
 
     public OutboxPoller(OutboxEventRepository outboxEventRepository,
                         KafkaTemplate<String, Object> kafkaTemplate,
@@ -42,6 +45,11 @@ public class OutboxPoller {
         this.pollTimer = Timer.builder("chatflow.outbox.poll.duration")
                 .description("Outbox poll cycle duration")
                 .register(registry);
+        // A steadily-climbing reaped count signals sends chronically exceeding the
+        // 2m cutoff — each reaped row risks an at-least-once duplicate re-send.
+        this.reapedCounter = Counter.builder("chatflow.outbox.reaped")
+                .description("Stale PROCESSING outbox events reset to PENDING by the reaper")
+                .register(registry);
         registry.gauge("chatflow.outbox.pending", outboxEventRepository,
                 repo -> repo.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING).size());
     }
@@ -51,15 +59,31 @@ public class OutboxPoller {
         pollTimer.record(() -> doPoll());
     }
 
-    private void doPoll() {
-        List<OutboxEvent> pendingEvents =
+    void doPoll() {
+        // Step 1: Find PENDING candidates
+        List<OutboxEvent> candidates =
                 outboxEventRepository.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING);
 
-        if (pendingEvents.isEmpty()) return;
+        if (candidates.isEmpty()) return;
 
-        // Phase 1: 모든 이벤트를 병렬로 Kafka 전송, future 수집
+        // Step 2: Claim the batch atomically (PENDING -> PROCESSING + claim_token)
+        String token = UUID.randomUUID().toString();
+        List<Long> candidateIds = candidates.stream().map(OutboxEvent::getId).toList();
+
+        Integer claimed = transactionTemplate.execute(status ->
+                outboxEventRepository.claimBatch(candidateIds, token, LocalDateTime.now()));
+
+        if (claimed == null || claimed == 0) return;
+
+        // Step 3: Retrieve exactly this poller's claimed rows
+        List<OutboxEvent> claimedEvents =
+                outboxEventRepository.findByClaimTokenAndStatus(token, OutboxEvent.OutboxStatus.PROCESSING);
+
+        if (claimedEvents.isEmpty()) return;
+
+        // Step 4: Send claimed events to Kafka in parallel
         List<CompletableFuture<OutboxEvent>> futures = new ArrayList<>();
-        for (OutboxEvent event : pendingEvents) {
+        for (OutboxEvent event : claimedEvents) {
             try {
                 Object payloadObj = objectMapper.readValue(event.getPayload(), Object.class);
                 CompletableFuture<OutboxEvent> future = kafkaTemplate
@@ -72,7 +96,7 @@ public class OutboxPoller {
             }
         }
 
-        // Phase 2: 모든 전송 완료 대기 (30초 타임아웃)
+        // Step 5: Await all sends (30s timeout)
         List<OutboxEvent> succeeded = new ArrayList<>();
         for (CompletableFuture<OutboxEvent> future : futures) {
             try {
@@ -83,23 +107,23 @@ public class OutboxPoller {
             }
         }
 
-        // Phase 3: 성공한 이벤트를 단일 JPQL로 일괄 PROCESSED 처리
-        if (!succeeded.isEmpty()) {
+        // Step 6: Finalize — succeeded -> PROCESSED; failed -> resetToPending or FAILED at cap
+        Set<Long> succeededIds = succeeded.stream().map(OutboxEvent::getId).collect(Collectors.toSet());
+
+        if (!succeededIds.isEmpty()) {
             try {
-                List<Long> ids = succeeded.stream().map(OutboxEvent::getId).toList();
                 transactionTemplate.executeWithoutResult(status -> {
-                    int updated = outboxEventRepository.markProcessed(ids, LocalDateTime.now());
-                    log.info("Outbox batch processed: {}/{} events", updated, pendingEvents.size());
+                    int updated = outboxEventRepository.markProcessed(
+                            new ArrayList<>(succeededIds), LocalDateTime.now());
+                    log.info("Outbox batch processed: {}/{} events", updated, claimedEvents.size());
                 });
             } catch (Exception e) {
                 log.error("Failed to update outbox status for batch", e);
             }
         }
 
-        // Phase 4: 실패한 이벤트 — retry 카운트 증가 또는 FAILED 마킹
-        Set<Long> succeededIds = succeeded.stream().map(OutboxEvent::getId).collect(Collectors.toSet());
-        List<OutboxEvent> failedEvents = pendingEvents.stream()
-                .filter(e -> !succeededIds.contains(e.getId()))
+        List<OutboxEvent> failedEvents = claimedEvents.stream()
+                .filter(ev -> !succeededIds.contains(ev.getId()))
                 .toList();
 
         if (!failedEvents.isEmpty()) {
@@ -121,14 +145,35 @@ public class OutboxPoller {
                         log.warn("Outbox events marked FAILED (poison-pill cap reached): ids={}", toFail);
                     }
                     if (!toRetry.isEmpty()) {
-                        outboxEventRepository.incrementRetry(toRetry);
-                        log.debug("Outbox events retry incremented: ids={}", toRetry);
+                        outboxEventRepository.resetToPending(toRetry);
+                        log.debug("Outbox events reset to PENDING for retry: ids={}", toRetry);
                     }
                 });
             } catch (Exception e) {
                 log.error("Failed to update retry/failed status for outbox events", e);
             }
         }
+    }
+
+    /**
+     * Reaper: recover rows stuck in PROCESSING from a crashed poller instance.
+     * Cutoff = 2 minutes (well beyond the 30s Kafka send timeout, so in-flight
+     * sends will not be reaped).
+     *
+     * Note: reset-to-PENDING may re-send an event that was actually delivered
+     * right before a crash -- at-least-once; consumers (search-service upsert-by-id,
+     * ai-summary) are already idempotent.
+     */
+    @Scheduled(fixedDelay = 60000)
+    public void reapStaleClaims() {
+        transactionTemplate.executeWithoutResult(status -> {
+            int reset = outboxEventRepository.resetStaleProcessing(
+                    LocalDateTime.now().minusMinutes(2));
+            if (reset > 0) {
+                reapedCounter.increment(reset);
+                log.warn("Reaped {} stale PROCESSING outbox events back to PENDING", reset);
+            }
+        });
     }
 
     @Scheduled(fixedRate = 3600000)

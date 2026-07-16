@@ -55,10 +55,16 @@ public class OutboxEvent {
     @Column
     private LocalDateTime processedAt;
 
+    @Column(name = "claim_token", length = 36)
+    private String claimToken;
+
+    @Column(name = "claimed_at")
+    private LocalDateTime claimedAt;
+
     @Version
     private Long version;
 
     public enum OutboxStatus {
-        PENDING, PROCESSED, FAILED
+        PENDING, PROCESSING, PROCESSED, FAILED
     }
 }
