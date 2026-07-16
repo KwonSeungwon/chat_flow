@@ -1,13 +1,15 @@
 package com.chatflow.search.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.SortOrder;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.MultiMatchQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
-import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.json.JsonData;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.exception.SearchException;
 import com.chatflow.search.util.SearchConstants;
@@ -18,13 +20,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
-import co.elastic.clients.json.JsonData;
-
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,145 +32,27 @@ public class KoreanSearchService {
     private final ElasticsearchClient elasticsearchClient;
 
     public Page<ChatMessageDocument> searchKoreanContent(String query, String chatRoomId, Pageable pageable) {
-        try {
-            // Multi-match query with Korean analyzer
-            Query multiMatchQuery = MultiMatchQuery.of(m -> m
-                    .query(query)
-                    .fields("content^3", "content.ngram^0.3", "fileName^2", "fileName.ngram^0.5")
-                    .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
-                    .minimumShouldMatch("75%")
-            )._toQuery();
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(standardMultiMatch(query)));
 
-            // Build bool query: must match content + filter by type + optional room
-            BoolQuery.Builder boolQueryBuilder = excludeSystemMessages(
-                    new BoolQuery.Builder().must(multiMatchQuery));
-
-            if (chatRoomId != null && !chatRoomId.isEmpty()) {
-                // Use match rather than term — the live chat_messages index in
-                // some environments was created before the keyword annotation
-                // was set on chatRoomId, leaving the field as the auto-mapped
-                // text type. term() does not analyze the query, so it cannot
-                // match the analyzed tokens. match() works regardless: against
-                // a keyword field it matches the single token, against text it
-                // re-tokenizes and matches the produced tokens.
-                boolQueryBuilder.filter(f -> f
-                        .match(t -> t
-                                .field("chatRoomId")
-                                .query(chatRoomId)
-                        )
-                );
-            }
-
-            Query finalQuery = boolQueryBuilder.build()._toQuery();
-
-            SearchRequest searchRequest = SearchRequest.of(s -> s
-                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                    .query(finalQuery)
-                    .from((int) pageable.getOffset())
-                    .size(pageable.getPageSize())
-                    .sort(sort -> sort
-                            .field(f -> f
-                                    .field("timestamp")
-                                    .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
-                            )
-                    )
-                    .highlight(h -> h
-                            .fields("content", hf -> hf
-                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
-                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
-                            )
-                    )
-            );
-
-            SearchResponse<ChatMessageDocument> response = elasticsearchClient.search(searchRequest, ChatMessageDocument.class);
-
-            List<ChatMessageDocument> documents = new ArrayList<>();
-            for (Hit<ChatMessageDocument> hit : response.hits().hits()) {
-                ChatMessageDocument doc = hit.source();
-                if (doc != null) {
-                    // Add highlight information if needed
-                    if (hit.highlight() != null && hit.highlight().containsKey("content")) {
-                        log.debug("Highlight found for message: {}", doc.getMessageId());
-                    }
-                    documents.add(doc);
-                }
-            }
-
-            long totalHits = response.hits().total() != null ? response.hits().total().value() : 0;
-            return new PageImpl<>(documents, pageable, totalHits);
-
-        } catch (Exception e) {
-            log.error("Error performing Korean search for query: {}", query, e);
-            throw new SearchException("검색 중 오류가 발생했습니다.", e);
+        if (chatRoomId != null && !chatRoomId.isEmpty()) {
+            applyRoomFilter(boolBuilder, chatRoomId);
         }
+
+        return executeAndMap(boolBuilder.build(), pageable, "content", null,
+                "Error performing Korean search for query: " + query);
     }
 
     public Page<ChatMessageDocument> searchWithNgram(String query, String chatRoomId, Pageable pageable) {
-        try {
-            // N-gram based search for partial matching
-            Query ngramQuery = MultiMatchQuery.of(m -> m
-                    .query(query)
-                    .fields("content.ngram^2", "fileName.ngram^1.5")
-                    .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
-            )._toQuery();
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(ngramMultiMatch(query)));
 
-            BoolQuery.Builder boolQueryBuilder = excludeSystemMessages(
-                    new BoolQuery.Builder().must(ngramQuery));
-
-            if (chatRoomId != null && !chatRoomId.isEmpty()) {
-                // Use match rather than term — the live chat_messages index in
-                // some environments was created before the keyword annotation
-                // was set on chatRoomId, leaving the field as the auto-mapped
-                // text type. term() does not analyze the query, so it cannot
-                // match the analyzed tokens. match() works regardless: against
-                // a keyword field it matches the single token, against text it
-                // re-tokenizes and matches the produced tokens.
-                boolQueryBuilder.filter(f -> f
-                        .match(t -> t
-                                .field("chatRoomId")
-                                .query(chatRoomId)
-                        )
-                );
-            }
-
-            Query finalQuery = boolQueryBuilder.build()._toQuery();
-
-            SearchRequest searchRequest = SearchRequest.of(s -> s
-                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                    .query(finalQuery)
-                    .minScore(0.5)
-                    .from((int) pageable.getOffset())
-                    .size(pageable.getPageSize())
-                    .sort(sort -> sort
-                            .field(f -> f
-                                    .field("timestamp")
-                                    .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
-                            )
-                    )
-                    .highlight(h -> h
-                            .fields("content.ngram", hf -> hf
-                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
-                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
-                            )
-                    )
-            );
-
-            SearchResponse<ChatMessageDocument> response = elasticsearchClient.search(searchRequest, ChatMessageDocument.class);
-
-            List<ChatMessageDocument> documents = new ArrayList<>();
-            for (Hit<ChatMessageDocument> hit : response.hits().hits()) {
-                if (hit.source() != null) {
-                    documents.add(hit.source());
-                }
-            }
-
-            long totalHits = response.hits().total() != null ? response.hits().total().value() : 0;
-            return new PageImpl<>(documents, pageable, totalHits);
-
-        } catch (Exception e) {
-            log.error("Error performing N-gram search for query: {}", query, e);
-            throw new SearchException("검색 중 오류가 발생했습니다.", e);
+        if (chatRoomId != null && !chatRoomId.isEmpty()) {
+            applyRoomFilter(boolBuilder, chatRoomId);
         }
+
+        return executeAndMap(boolBuilder.build(), pageable, "content.ngram", 0.5,
+                "Error performing N-gram search for query: " + query);
     }
 
     public Page<ChatMessageDocument> searchWithFilters(
@@ -183,73 +63,161 @@ public class KoreanSearchService {
             LocalDateTime endDate,
             String messageType,
             Pageable pageable) {
+
+        BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
+
+        if (query != null && !query.isBlank()) {
+            boolBuilder.must(standardMultiMatch(query));
+        } else {
+            boolBuilder.must(q -> q.matchAll(m -> m));
+        }
+
+        applyRoomFilter(boolBuilder, roomId);
+
+        if (username != null && !username.isBlank()) {
+            final String u = username.trim();
+            boolBuilder.filter(f -> f.term(t -> t.field("username").value(u)));
+        }
+
+        if (startDate != null && endDate != null) {
+            final LocalDateTime sd = startDate;
+            final LocalDateTime ed = endDate;
+            boolBuilder.filter(f -> f.range(r -> r
+                    .field("timestamp")
+                    .gte(JsonData.of(sd.toString()))
+                    .lte(JsonData.of(ed.toString()))));
+        }
+
+        if (messageType != null && !messageType.isBlank()) {
+            final String mt = messageType.trim();
+            boolBuilder.filter(f -> f.term(t -> t.field("messageType").value(mt)));
+        } else {
+            boolBuilder = excludeSystemMessages(boolBuilder);
+        }
+
+        return executeAndMap(boolBuilder.build(), pageable, null, null,
+                "Error in searchWithFilters for roomId: " + roomId);
+    }
+
+    // ── shared query builders ────────────────────────────────────────────
+
+    /**
+     * Standard multi-match: Korean-analyzed content + n-gram fallback + fileName.
+     * Used by searchKoreanContent and searchWithFilters.
+     */
+    static Query standardMultiMatch(String query) {
+        return MultiMatchQuery.of(m -> m
+                .query(query)
+                .fields("content^3", "content.ngram^0.3", "fileName^2", "fileName.ngram^0.5")
+                .type(TextQueryType.BestFields)
+                .minimumShouldMatch("75%")
+        )._toQuery();
+    }
+
+    /**
+     * N-gram multi-match for partial/substring matching.
+     * Used by searchWithNgram.
+     */
+    static Query ngramMultiMatch(String query) {
+        return MultiMatchQuery.of(m -> m
+                .query(query)
+                .fields("content.ngram^2", "fileName.ngram^1.5")
+                .type(TextQueryType.BestFields)
+        )._toQuery();
+    }
+
+    /**
+     * Applies a chatRoomId match filter to the bool query.
+     *
+     * <p>Uses match() rather than term() — the live chat_messages index in
+     * some environments was created before the keyword annotation was set on
+     * chatRoomId, leaving the field as the auto-mapped text type. term() does
+     * not analyze the query, so it cannot match the analyzed tokens. match()
+     * works regardless: against a keyword field it matches the single token,
+     * against text it re-tokenizes and matches the produced tokens.</p>
+     */
+    static void applyRoomFilter(BoolQuery.Builder builder, String chatRoomId) {
+        builder.filter(f -> f
+                .match(t -> t
+                        .field("chatRoomId")
+                        .query(chatRoomId)
+                )
+        );
+    }
+
+    // ── shared execution ─────────────────────────────────────────────────
+
+    /**
+     * Builds a SearchRequest from the given bool query, executes it, and maps
+     * hits to a {@link Page}.
+     *
+     * <p>Error boundary: the try/catch here wraps only the request assembly,
+     * the Elasticsearch call, and hit mapping — i.e. the operations that can
+     * realistically fail. Query construction (the multi-match/filter builders
+     * in the caller) is pure, non-throwing builder code for the inputs this
+     * service receives (the controller guarantees non-null query/roomId), so
+     * it deliberately sits outside this boundary. A realistic failure still
+     * becomes {@link SearchException} → HTTP 500, unchanged.</p>
+     *
+     * @param boolQuery       the fully-built bool query
+     * @param pageable        pagination (offset + size)
+     * @param highlightField  field to highlight, or {@code null} for no highlight
+     * @param minScore        minimum score threshold, or {@code null} for none
+     * @param errorLogContext message logged (at ERROR) if the search fails
+     */
+    private Page<ChatMessageDocument> executeAndMap(
+            BoolQuery boolQuery, Pageable pageable,
+            String highlightField, Double minScore,
+            String errorLogContext) {
         try {
-            BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
+            Query finalQuery = boolQuery._toQuery();
 
-            if (query != null && !query.isBlank()) {
-                boolBuilder.must(MultiMatchQuery.of(m -> m
-                        .query(query)
-                        .fields("content^3", "content.ngram^0.3", "fileName^2", "fileName.ngram^0.5")
-                        .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
-                        .minimumShouldMatch("75%")
-                )._toQuery());
-            } else {
-                boolBuilder.must(q -> q.matchAll(m -> m));
-            }
+            SearchRequest searchRequest = SearchRequest.of(s -> {
+                s.index(SearchConstants.CHAT_MESSAGES_INDEX)
+                        .query(finalQuery)
+                        .from((int) pageable.getOffset())
+                        .size(pageable.getPageSize())
+                        .sort(sort -> sort
+                                .field(f -> f
+                                        .field("timestamp")
+                                        .order(SortOrder.Desc)
+                                )
+                        );
 
-            // See searchKoreanContent for why this is match() not term()
-            boolBuilder.filter(f -> f.match(t -> t.field("chatRoomId").query(roomId)));
+                if (minScore != null) {
+                    s.minScore(minScore);
+                }
 
-            if (username != null && !username.isBlank()) {
-                final String u = username.trim();
-                boolBuilder.filter(f -> f.term(t -> t.field("username").value(u)));
-            }
+                if (highlightField != null) {
+                    s.highlight(h -> h
+                            .fields(highlightField, hf -> hf
+                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
+                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
+                            )
+                    );
+                }
 
-            if (startDate != null && endDate != null) {
-                final LocalDateTime sd = startDate;
-                final LocalDateTime ed = endDate;
-                boolBuilder.filter(f -> f.range(r -> r
-                        .field("timestamp")
-                        .gte(JsonData.of(sd.toString()))
-                        .lte(JsonData.of(ed.toString()))));
-            }
-
-            if (messageType != null && !messageType.isBlank()) {
-                final String mt = messageType.trim();
-                boolBuilder.filter(f -> f.term(t -> t.field("messageType").value(mt)));
-            } else {
-                boolBuilder = excludeSystemMessages(boolBuilder);
-            }
-
-            final Query builtQuery = boolBuilder.build()._toQuery();
-
-            SearchRequest request = SearchRequest.of(s -> s
-                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                    .query(builtQuery)
-                    .from((int) pageable.getOffset())
-                    .size(pageable.getPageSize())
-                    .sort(sort -> sort.field(f -> f
-                            .field("timestamp")
-                            .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc))));
+                return s;
+            });
 
             SearchResponse<ChatMessageDocument> response =
-                    elasticsearchClient.search(request, ChatMessageDocument.class);
+                    elasticsearchClient.search(searchRequest, ChatMessageDocument.class);
 
             List<ChatMessageDocument> docs = response.hits().hits().stream()
                     .map(co.elastic.clients.elasticsearch.core.search.Hit::source)
                     .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                    .toList();
 
-            long total = response.hits().total() != null ? response.hits().total().value() : 0;
-            return new PageImpl<>(docs, pageable, total);
+            long totalHits = response.hits().total() != null ? response.hits().total().value() : 0;
+            return new PageImpl<>(docs, pageable, totalHits);
 
         } catch (Exception e) {
-            log.error("Error in searchWithFilters for roomId: {}", roomId, e);
+            log.error(errorLogContext, e);
             throw new SearchException("검색 중 오류가 발생했습니다.", e);
         }
     }
 
-    private static BoolQuery.Builder excludeSystemMessages(BoolQuery.Builder builder) {
+    static BoolQuery.Builder excludeSystemMessages(BoolQuery.Builder builder) {
         return builder.mustNot(mn -> mn.terms(t -> t
                 .field("messageType")
                 .terms(tv -> tv.value(
