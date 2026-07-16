@@ -28,6 +28,8 @@ public interface MessageMentionRepository extends JpaRepository<MessageMentionEn
            "WHERE m.mentionedUserId = :userId AND m.read = false AND m.createdAt >= :since")
     int markAllRead(@Param("userId") String userId, @Param("since") LocalDateTime since);
 
+    List<MessageMentionEntity> findByMessageId(String messageId);
+
     void deleteByMessageId(String messageId);
 
     /**
