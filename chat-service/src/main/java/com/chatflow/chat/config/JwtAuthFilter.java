@@ -14,6 +14,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.chatflow.chat.auth.AuthHeaders;
+
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.Collections;
@@ -36,12 +38,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         // Gateway가 주입한 X-User-Id 헤더로 인증 — X-Gateway-Secret으로 게이트웨이 경유 검증
-        String xUserId = request.getHeader("X-User-Id");
-        String xUsername = request.getHeader("X-Username");
-        // URL-decode username (gateway URL-encodes Korean chars for HTTP header safety)
-        if (xUsername != null) {
-            try { xUsername = java.net.URLDecoder.decode(xUsername, java.nio.charset.StandardCharsets.UTF_8); } catch (Exception ignored) {}
-        }
+        String xUserId = request.getHeader(AuthHeaders.X_USER_ID);
+        String xUsername = AuthHeaders.decodeUsername(request.getHeader(AuthHeaders.X_USERNAME));
         if (xUserId != null && xUsername != null) {
             if (isGatewaySecretValid(request)) {
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
@@ -56,12 +54,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             filterChain.doFilter(new jakarta.servlet.http.HttpServletRequestWrapper(request) {
                 @Override
                 public String getHeader(String name) {
-                    if ("X-Username".equalsIgnoreCase(name)) return decodedUsername;
+                    if (AuthHeaders.X_USERNAME.equalsIgnoreCase(name)) return decodedUsername;
                     return super.getHeader(name);
                 }
                 @Override
                 public java.util.Enumeration<String> getHeaders(String name) {
-                    if ("X-Username".equalsIgnoreCase(name)) {
+                    if (AuthHeaders.X_USERNAME.equalsIgnoreCase(name)) {
                         return java.util.Collections.enumeration(java.util.List.of(decodedUsername));
                     }
                     return super.getHeaders(name);
