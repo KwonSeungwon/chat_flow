@@ -35,12 +35,8 @@ public class AiSummaryController {
         if (roomId == null || roomId.isBlank() || question == null || question.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("chatRoomId와 question은 필수입니다."));
         }
-        try {
-            ChatMessage response = aiSummaryService.answerQuestion(roomId, question);
-            return ResponseEntity.ok(ApiResponse.ok(response, "AI 답변이 생성되었습니다."));
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(429).body(ApiResponse.error(e.getMessage()));
-        }
+        ChatMessage response = aiSummaryService.answerQuestion(roomId, question);
+        return ResponseEntity.ok(ApiResponse.ok(response, "AI 답변이 생성되었습니다."));
     }
 
     @PostMapping("/shift-report")
@@ -49,12 +45,8 @@ public class AiSummaryController {
         if (roomId == null || roomId.isBlank()) {
             return ResponseEntity.badRequest().body(ApiResponse.error("chatRoomId는 필수입니다."));
         }
-        try {
-            ChatMessage report = aiSummaryService.generateShiftReport(roomId);
-            return ResponseEntity.ok(ApiResponse.ok(report, "교대 보고서가 생성되었습니다."));
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(429).body(ApiResponse.error(e.getMessage()));
-        }
+        ChatMessage report = aiSummaryService.generateShiftReport(roomId);
+        return ResponseEntity.ok(ApiResponse.ok(report, "교대 보고서가 생성되었습니다."));
     }
 
     @PostMapping("/quick-replies")

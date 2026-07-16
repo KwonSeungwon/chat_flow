@@ -1,6 +1,7 @@
 package com.chatflow.aisummary.service;
 
 import com.chatflow.aisummary.client.ChatModelClient;
+import com.chatflow.aisummary.exception.AiRateLimitException;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -327,7 +328,7 @@ public class AiSummaryService {
      */
     public ChatMessage answerQuestion(String roomId, String question) {
         if (!rateLimiter.tryConsume(1)) {
-            throw new IllegalStateException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
+            throw new AiRateLimitException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
         }
 
         String bufferKey = REDIS_BUFFER_PREFIX + roomId;
@@ -439,7 +440,7 @@ public class AiSummaryService {
 
     public ChatMessage generateShiftReport(String roomId) {
         if (!rateLimiter.tryConsume(1)) {
-            throw new IllegalStateException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
+            throw new AiRateLimitException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
         }
 
         String bufferKey = REDIS_BUFFER_PREFIX + roomId;

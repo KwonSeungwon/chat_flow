@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.message;
 
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.mapper.ChatMessageMapper;
@@ -19,9 +20,14 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.chatflow.chat.entity.MessageMentionEntity;
+
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 메시지 삭제(soft delete) / 편집 서비스.
@@ -124,8 +130,73 @@ public class MessageEditService {
             outboxDto.setContent(newContent);  // plaintext, NOT the encrypted entity content
             chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_EDITED");
 
+            // Re-sync mention rows for CHAT messages (digest consistency, no re-notify)
+            if ("CHAT".equals(entity.getType())) {
+                resyncMentions(entity, newContent);
+            }
+
             log.info("Message edited: {} by user {}", messageId, requestingUserId);
             return Result.<ChatErrorCode>ok();
         }).orElse(Result.err(ChatErrorCode.NOT_FOUND, "메시지를 찾을 수 없습니다."));
+    }
+
+    /**
+     * Diff-based mention re-sync: add new, delete gone, keep surviving (preserves read state).
+     * No FCM/notification — editing is not sending.
+     */
+    private void resyncMentions(ChatMessageEntity entity, String newContent) {
+        // 1. Extract new mention candidates from the edited content
+        List<String> candidates = MentionExtractor.extract(newContent);
+
+        // 2. Resolve candidates to actual room members, excluding the author
+        Set<String> resolvedUserIds;
+        Map<String, RoomMemberEntity> resolvedByUserId;
+        if (candidates.isEmpty()) {
+            resolvedUserIds = Set.of();
+            resolvedByUserId = Map.of();
+        } else {
+            List<RoomMemberEntity> members = roomMemberRepository
+                    .findByRoomIdAndUsernameIn(entity.getChatRoomId(), candidates)
+                    .stream()
+                    .filter(m -> !m.getUsername().equals(entity.getUsername()))
+                    .toList();
+            resolvedByUserId = members.stream()
+                    .collect(Collectors.toMap(RoomMemberEntity::getUserId, m -> m));
+            resolvedUserIds = resolvedByUserId.keySet();
+        }
+
+        // 3. Load existing mention rows for this message
+        List<MessageMentionEntity> existing = messageMentionRepository.findByMessageId(entity.getMessageId());
+        Set<String> existingUserIds = existing.stream()
+                .map(MessageMentionEntity::getMentionedUserId)
+                .collect(Collectors.toSet());
+
+        // 4. Diff — remove stale, add new, keep surviving (preserves read state)
+        List<MessageMentionEntity> toRemove = existing.stream()
+                .filter(row -> !resolvedUserIds.contains(row.getMentionedUserId()))
+                .toList();
+        if (!toRemove.isEmpty()) {
+            messageMentionRepository.deleteAll(toRemove);
+            log.debug("Removed {} stale mention rows for edited message {}",
+                    toRemove.size(), entity.getMessageId());
+        }
+
+        List<MessageMentionEntity> toAdd = resolvedByUserId.entrySet().stream()
+                .filter(e -> !existingUserIds.contains(e.getKey()))
+                .map(e -> MessageMentionEntity.builder()
+                        .messageId(entity.getMessageId())
+                        .roomId(entity.getChatRoomId())
+                        .mentionedUserId(e.getKey())
+                        .mentionedUsername(e.getValue().getUsername())
+                        .fromUsername(entity.getUsername())
+                        .createdAt(entity.getTimestamp())
+                        .read(false)
+                        .build())
+                .toList();
+        if (!toAdd.isEmpty()) {
+            messageMentionRepository.saveAll(toAdd);
+            log.debug("Added {} new mention rows for edited message {}",
+                    toAdd.size(), entity.getMessageId());
+        }
     }
 }
