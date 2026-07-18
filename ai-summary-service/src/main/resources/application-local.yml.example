@@ -1,0 +1,78 @@
+# AI Summary Service - Local Development Environment (TEMPLATE)
+#
+# This file is tracked. The actual `application-local.yml` is gitignored
+# (root .gitignore line 34). On a fresh checkout, copy this template:
+#
+#   cp ai-summary-service/src/main/resources/application-local.yml.example \
+#      ai-summary-service/src/main/resources/application-local.yml
+#
+# Requires GEMINI_API_KEY in the environment (see root CLAUDE.md).
+#
+# IMPORTANT — Kafka value-deserializer:
+#   The consumer value-deserializer MUST be StringDeserializer (not
+#   JsonDeserializer). The listener container factory in common
+#   (KafkaCommonConfig) deserializes the JSON payload itself; a
+#   JsonDeserializer here double-deserializes and fails at runtime.
+server:
+  port: 8081
+
+spring:
+  profiles:
+    active: local,spring-ai  # AI 프로바이더 전환: spring-ai 또는 langchain4j
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: ai-summary-service-local-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+  # Valkey Configuration (using Spring Data Redis for compatibility)
+  data:
+    redis:  # Redis-compatible API for Valkey
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      database: 0
+
+  # Spring AI - Google Gemini 설정 (spring-ai 프로필 활성 시)
+  ai:
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY}
+        chat:
+          options:
+            model: gemini-2.5-flash-lite
+            temperature: 0.3
+
+# LangChain4J - Google Gemini 설정 (langchain4j 프로필 활성 시)
+langchain4j:
+  google-ai-gemini:
+    chat-model:
+      api-key: ${GEMINI_API_KEY}
+      model-name: gemini-2.5-flash-lite
+      temperature: 0.3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+logging:
+  level:
+    com.chatflow: DEBUG
+    org.springframework.ai: DEBUG
+    dev.langchain4j: DEBUG
