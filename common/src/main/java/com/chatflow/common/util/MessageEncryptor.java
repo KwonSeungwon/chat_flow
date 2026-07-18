@@ -1,7 +1,10 @@
 package com.chatflow.common.util;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -21,8 +24,12 @@ public class MessageEncryptor {
 
     private final SecretKey secretKey;
     private final boolean enabled;
+    @Nullable private final Counter encryptFailures;
+    @Nullable private final Counter decryptFailures;
 
-    public MessageEncryptor(@Value("${chatflow.encryption.key:}") String encryptionKey) {
+    public MessageEncryptor(
+            @Value("${chatflow.encryption.key:}") String encryptionKey,
+            @Nullable MeterRegistry meterRegistry) {
         if (encryptionKey != null && !encryptionKey.isBlank()) {
             byte[] keyBytes = Base64.getDecoder().decode(encryptionKey);
             this.secretKey = new SecretKeySpec(keyBytes, "AES");
@@ -32,6 +39,14 @@ public class MessageEncryptor {
             this.secretKey = null;
             this.enabled = false;
             log.info("MessageEncryptor: CHATFLOW_ENCRYPTION_KEY 미설정 — 암호화 비활성화");
+        }
+
+        if (meterRegistry != null) {
+            this.encryptFailures = meterRegistry.counter("chatflow.encryption.failures", "operation", "encrypt");
+            this.decryptFailures = meterRegistry.counter("chatflow.encryption.failures", "operation", "decrypt");
+        } else {
+            this.encryptFailures = null;
+            this.decryptFailures = null;
         }
     }
 
@@ -55,7 +70,8 @@ public class MessageEncryptor {
             System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
             return Base64.getEncoder().encodeToString(combined);
         } catch (Exception e) {
-            log.error("메시지 암호화 실패", e);
+            log.error("메시지 암호화 실패 — 평문으로 폴백(암호화 미적용 저장)", e);
+            if (encryptFailures != null) encryptFailures.increment();
             return plaintext;
         }
     }
@@ -75,6 +91,7 @@ public class MessageEncryptor {
             return new String(plaintext, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
             log.error("메시지 복호화 실패 — 원문 반환", e);
+            if (decryptFailures != null) decryptFailures.increment();
             return ciphertext;
         }
     }

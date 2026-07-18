@@ -16,6 +16,13 @@ dependencies {
     // keeping it off common's runtime graph avoids leaking it into the WebFlux
     // gateway. Do NOT remove — the framework-4xx handlers won't compile without it.
     compileOnly 'jakarta.servlet:jakarta.servlet-api'
+
+    // MessageEncryptor emits a Micrometer failure counter. Every consuming
+    // service provides micrometer-core at runtime via spring-boot-starter-actuator,
+    // so keep it off common's runtime graph (base-library leanness) — same
+    // rationale as the servlet-api entry above.
+    compileOnly 'io.micrometer:micrometer-core'
+    testImplementation 'io.micrometer:micrometer-core'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 }
