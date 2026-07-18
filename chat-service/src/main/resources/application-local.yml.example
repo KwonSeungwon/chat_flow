@@ -1,0 +1,109 @@
+# Chat Service - Local Development Environment (TEMPLATE)
+#
+# This file is tracked. The actual `application-local.yml` is gitignored
+# (root .gitignore line 34). On a fresh checkout, copy this template:
+#
+#   cp chat-service/src/main/resources/application-local.yml.example \
+#      chat-service/src/main/resources/application-local.yml
+#
+# Then edit the local copy for any developer-specific overrides
+# (the Firebase path below, port conflicts, etc.).
+#
+# IMPORTANT — Kafka value-deserializer:
+#   The consumer value-deserializer MUST be StringDeserializer (not
+#   JsonSerializer/JsonDeserializer). The listener container factory in
+#   common (KafkaCommonConfig) deserializes the JSON payload itself; a
+#   JsonDeserializer here double-deserializes and fails at runtime.
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: local
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
+  # H2 Database for quick local development
+  datasource:
+    url: jdbc:h2:mem:chatflow_local
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+
+  flyway:
+    enabled: false  # local은 ddl-auto=create-drop 사용, Flyway 비활성화
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # Valkey Configuration (using Spring Data Redis for compatibility)
+  data:
+    redis:  # Redis-compatible API for Valkey
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      database: 0
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: chat-service-local-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+logging:
+  level:
+    com.chatflow: DEBUG
+    org.springframework.web.socket: DEBUG
+    org.hibernate: DEBUG
+
+chatflow:
+  allowed-origins: http://localhost:3000,http://localhost:8000
+  frontend:
+    base-url: http://localhost:8000
+
+jwt:
+  secret: local-dev-secret-do-not-use-in-production-1234567890
+
+# Firebase FCM (optional — omit to disable push notifications)
+# Set FIREBASE_SERVICE_ACCOUNT_PATH to file:/absolute/path/to/firebase-service-account.json
+firebase:
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:file:/path/to/firebase-service-account.json}

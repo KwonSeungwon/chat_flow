@@ -97,7 +97,14 @@ docker compose -f docker-compose.local.yml down
 > cp gateway-service/src/main/resources/application-local.yml.example \
 >    gateway-service/src/main/resources/application-local.yml
 > ```
-> 다른 서비스(chat-service / ai-summary-service / search-service)도 `application-local.yml`이 동일하게 gitignored이지만 누락 시 가시적인 오류를 내므로 별도 템플릿은 제공하지 않는다.
+> 다른 서비스(chat-service / ai-summary-service / search-service)도 `application-local.yml`이 동일하게 gitignored 상태다. 각 서비스에 `application-local.yml.example` 템플릿이 함께 제공되므로, 신규 체크아웃 시 동일하게 복사해서 시작한다:
+> ```bash
+> for svc in chat-service ai-summary-service search-service; do
+>   cp "$svc/src/main/resources/application-local.yml.example" \
+>      "$svc/src/main/resources/application-local.yml"
+> done
+> ```
+> 각 템플릿은 Kafka consumer `value-deserializer`를 반드시 `StringDeserializer`로 지정한다(리스너 컨테이너 팩토리가 payload를 직접 역직렬화하므로 `JsonDeserializer`를 쓰면 이중 역직렬화로 런타임 오류). chat-service 템플릿의 `firebase.service-account-path`는 개발자별 절대경로로 교체한다.
 
 ### Frontend (Flutter)
 
