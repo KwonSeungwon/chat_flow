@@ -2,7 +2,12 @@ dependencies {
     implementation project(':common')
     
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+    // Low-level Elasticsearch Java client (formerly pulled transitively by
+    // spring-boot-starter-data-elasticsearch, removed with the Spring-Data stack).
+    // Versions managed by Spring Boot 3.2 BOM (resolves to 8.10.4).
+    // ElasticsearchClient/RestClient beans live in ElasticsearchConfig.
+    implementation 'co.elastic.clients:elasticsearch-java'
+    implementation 'org.elasticsearch.client:elasticsearch-rest-client'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.kafka:spring-kafka'
 
