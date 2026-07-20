@@ -57,7 +57,7 @@ public class RoomMessageController {
     }
 
     /**
-     * 커서 기반 페이징 -- 무한 스크롤에 최적화.
+     * 커서 기반 페이징 — 무한 스크롤에 최적화.
      * before 파라미터 없으면 최신 메시지부터 반환.
      */
     @RequireMember
