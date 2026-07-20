@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/chat_strings.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/utils/url_helper.dart';
@@ -32,10 +33,7 @@ Future<void> _copyInviteLink(BuildContext context, WidgetRef ref, String roomId)
     final dio = ref.read(dioClientProvider).dio;
     final resp = await dio.post('/api/chat/rooms/$roomId/invite-link');
     final data = resp.data;
-    String? url;
-    if (data is Map && data['data'] is Map) {
-      url = (data['data'] as Map)['url']?.toString();
-    }
+    final url = apiResponseMap(data)?['url']?.toString();
     if (url == null || url.isEmpty) throw Exception('url empty');
     await Clipboard.setData(ClipboardData(text: url));
     if (context.mounted) {

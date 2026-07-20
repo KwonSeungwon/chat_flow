@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/storage_keys.dart';
+import 'api_response.dart';
 
 final dioClientProvider = Provider<DioClient>((ref) => DioClient());
 
@@ -82,8 +83,7 @@ class DioClient {
         onSendProgress: onProgress,
       );
       final data = resp.data;
-      if (data is Map && data['data'] is Map) return data['data'] as Map<String, dynamic>;
-      return data as Map<String, dynamic>;
+      return apiResponseMap(data) ?? (data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
         throw Exception('지원하지 않는 파일 형식입니다.');

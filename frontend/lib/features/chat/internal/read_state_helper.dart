@@ -1,3 +1,4 @@
+import '../../../core/network/api_response.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/chat_message.dart';
 import '../state/chat_messages_state.dart';
@@ -81,10 +82,8 @@ class ReadStateHelper {
     try {
       final resp =
           await dioClient.dio.get('/api/chat/rooms/$roomId/last-read');
-      final data = resp.data;
-      final lastReadId = data is Map
-          ? ((data['data'] as Map?)?['lastReadMessageId']?.toString() ?? '')
-          : '';
+      final lastReadId =
+          apiResponseMap(resp.data)?['lastReadMessageId']?.toString() ?? '';
       if (!mounted()) return;
 
       // Find how many CHAT messages are after the lastRead position
@@ -115,9 +114,8 @@ class ReadStateHelper {
     try {
       final resp =
           await dioClient.dio.get('/api/chat/rooms/$roomId/readers');
-      final data = resp.data;
-      if (data is Map && data['data'] is Map) {
-        final raw = data['data'] as Map;
+      final raw = apiResponseMap(resp.data);
+      if (raw != null) {
         final positions = <String, String>{};
         raw.forEach((k, v) {
           final uid = k.toString();

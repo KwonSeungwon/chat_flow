@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/network/api_response.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/chat_message.dart';
 
 void showReadersSheet(BuildContext context, WidgetRef ref, String roomId, String messageId, List<ChatMessage> messages) async {
   try {
     final resp = await ref.read(dioClientProvider).dio.get('/api/chat/rooms/$roomId/readers');
-    final data = resp.data;
     // positions: {userId: lastReadMessageId}
-    Map<String, String> positions = {};
-    if (data is Map && data['data'] is Map) {
-      positions = Map<String, String>.from(data['data'] as Map);
-    }
+    final unwrapped = apiResponseMap(resp.data);
+    final positions = unwrapped != null
+        ? Map<String, String>.from(unwrapped)
+        : <String, String>{};
 
     // Find the index of target message to compare read positions
     final targetIdx = messages.indexWhere((m) => m.effectiveId == messageId);
