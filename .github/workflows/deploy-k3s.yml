@@ -4,18 +4,22 @@ name: Deploy to K3s (manual)
 # matching Deployment. Manually triggered to keep deploy intent explicit
 # — develop-build.yml only produces the image; this workflow ships it.
 #
-# The K3s node logs into GHCR itself (sudo k3s ctr login), pulls into
-# containerd, then we kubectl set image to force a fresh rollout against
-# the pinned sha-* tag. The mutable develop-latest tag is *not* used at
-# deploy time so two consecutive deploys with the same image still
-# trigger pod recreation via the sha-* digest.
+# The K3s node sits BEHIND Cloudflare Access (SSH has no public port; it is
+# reached only via `cloudflared access ssh`). So the runner installs
+# cloudflared and connects through it using a Cloudflare Access SERVICE TOKEN.
+# The node then pulls the image from GHCR into containerd (anonymous pull —
+# the packages are public; a read:packages token is used only if provided),
+# and we `kubectl set image` to force a rollout against the pinned sha-* tag.
 #
 # Required secrets (Settings → Secrets and variables → Actions):
-#   K3S_HOST            — e.g. node.chatflow.ai.kr
-#   K3S_USER            — e.g. ksw
-#   K3S_SSH_KEY         — private key (PEM), no passphrase
-#   K3S_GHCR_USERNAME   — GitHub user with read:packages on this repo's GHCR
-#   K3S_GHCR_TOKEN      — PAT (classic) with read:packages OR a fine-grained token
+#   K3S_HOST              — e.g. node.chatflow.ai.kr
+#   K3S_USER              — e.g. ksw
+#   K3S_SSH_KEY           — private key (PEM/OpenSSH), no passphrase
+#   CF_ACCESS_CLIENT_ID   — Cloudflare Access service token client id
+#   CF_ACCESS_CLIENT_SECRET — Cloudflare Access service token client secret
+# Optional:
+#   K3S_GHCR_USERNAME / K3S_GHCR_TOKEN — only if the GHCR packages are made
+#     private (read:packages). Left unset → anonymous pull.
 
 on:
   workflow_dispatch:
@@ -47,20 +51,36 @@ jobs:
     runs-on: ubuntu-latest
     environment: k3s-prod
     steps:
-      - name: Configure SSH
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            -o /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
+          cloudflared --version
+
+      - name: Configure SSH (via Cloudflare Access)
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.K3S_SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.K3S_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.K3S_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host ${{ secrets.K3S_HOST }}
+            User ${{ secrets.K3S_USER }}
+            IdentityFile ~/.ssh/id_ed25519
+            StrictHostKeyChecking no
+            ProxyCommand cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_ACCESS_CLIENT_ID }} --service-token-secret ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: Pull image into K3s containerd
         run: |
           IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
-          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
-            "echo '${{ secrets.K3S_GHCR_TOKEN }}' | sudo k3s ctr image pull \
-              --user '${{ secrets.K3S_GHCR_USERNAME }}:${{ secrets.K3S_GHCR_TOKEN }}' \
-              '${IMAGE}'"
+          if [ -n "${{ secrets.K3S_GHCR_TOKEN }}" ]; then
+            ssh "${{ secrets.K3S_HOST }}" \
+              "sudo k3s ctr image pull --user '${{ secrets.K3S_GHCR_USERNAME }}:${{ secrets.K3S_GHCR_TOKEN }}' '${IMAGE}'"
+          else
+            ssh "${{ secrets.K3S_HOST }}" "sudo k3s ctr image pull '${IMAGE}'"
+          fi
           echo "Pulled ${IMAGE} into k3s containerd"
 
       - name: Rollout Deployment
@@ -69,18 +89,17 @@ jobs:
           IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
           # container name inside the pod matches the service name (Helm convention)
           CONTAINER="${{ github.event.inputs.service }}"
-          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+          ssh "${{ secrets.K3S_HOST }}" \
             "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
               -n ${{ env.NAMESPACE }} set image deployment/${DEPLOY} \
-              ${CONTAINER}=${IMAGE} --record"
-          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+              ${CONTAINER}=${IMAGE}"
+          ssh "${{ secrets.K3S_HOST }}" \
             "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
-              -n ${{ env.NAMESPACE }} rollout status deployment/${DEPLOY} --timeout=5m"
+              -n ${{ env.NAMESPACE }} rollout status deployment/${DEPLOY} --timeout=6m"
 
       - name: Verify pod
         run: |
-          DEPLOY="chatflow-${{ github.event.inputs.service }}"
-          ssh "${{ secrets.K3S_USER }}@${{ secrets.K3S_HOST }}" \
+          ssh "${{ secrets.K3S_HOST }}" \
             "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
               -n ${{ env.NAMESPACE }} get pods -l app.kubernetes.io/name=${{ github.event.inputs.service }} \
               -o wide"
