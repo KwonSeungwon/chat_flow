@@ -1,9 +1,7 @@
 package com.chatflow.search.controller;
 
 import com.chatflow.search.document.ChatMessageDocument;
-import com.chatflow.search.repository.ChatMessageSearchRepository;
 import com.chatflow.search.service.KoreanSearchService;
-import com.chatflow.search.service.SearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -15,7 +13,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,15 +45,6 @@ class FilterEndpointTest {
 
     @MockBean
     private KoreanSearchService koreanSearchService;
-
-    @MockBean
-    private SearchService searchService;
-
-    @MockBean
-    private ChatMessageSearchRepository chatMessageSearchRepository;
-
-    @MockBean(name = "elasticsearchTemplate")
-    private ElasticsearchOperations elasticsearchOperations;
 
     @MockBean
     @SuppressWarnings("rawtypes")

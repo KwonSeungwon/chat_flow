@@ -1,7 +1,6 @@
 package com.chatflow.search.controller;
 
 import com.chatflow.search.document.ChatMessageDocument;
-import com.chatflow.search.repository.ChatMessageSearchRepository;
 import com.chatflow.search.service.KoreanSearchService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -16,7 +15,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,8 +41,6 @@ class SearchControllerLegacyDelegationTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private KoreanSearchService koreanSearchService;
-    @MockBean private ChatMessageSearchRepository chatMessageSearchRepository;
-    @MockBean(name = "elasticsearchTemplate") private ElasticsearchOperations elasticsearchOperations;
     @MockBean @SuppressWarnings("rawtypes") private KafkaTemplate kafkaTemplate;
 
     @TestConfiguration
