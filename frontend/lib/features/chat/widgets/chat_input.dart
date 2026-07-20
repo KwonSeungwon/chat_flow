@@ -388,6 +388,540 @@ class _ChatInputState extends State<ChatInput> {
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // Build helpers — extracted from build() for readability.
+  // Each returns the exact same widget tree that was previously inline.
+  // ---------------------------------------------------------------------------
+
+  /// Mention autocomplete dropdown (visible only while typing @query).
+  Widget _buildMentionSuggestions(ColorScheme cs) {
+    if (!_showMentions || _mentionSuggestions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 150),
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.outline.withAlpha(80)),
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _mentionSuggestions.length,
+        itemBuilder: (_, i) {
+          final user = _mentionSuggestions[i];
+          return ListTile(
+            dense: true,
+            leading: CircleAvatar(radius: 14, child: Text((user['username'] ?? '?')[0].toUpperCase(), style: const TextStyle(fontSize: 12))),
+            title: Text(user['username'] ?? '', style: const TextStyle(fontSize: 13)),
+            onTap: () => _insertMention(user['username'] ?? ''),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Reply-to banner shown above the input when replying to a message.
+  Widget _buildReplyBanner(ColorScheme cs) {
+    if (widget.replyTarget == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withAlpha(60),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(color: AppColors.primary, width: 3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply_rounded, size: 16, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.replyTarget!.username,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                ),
+                Text(
+                  widget.replyTarget!.content,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: widget.onCancelReply,
+            child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Character counter — only visible when near the max-length limit.
+  Widget _buildCharacterCounter() {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _controller,
+      builder: (_, value, __) {
+        final len = value.text.length;
+        if (len < UIConstants.chatWarnThreshold) {
+          return const SizedBox.shrink();
+        }
+        final isOver = len >= UIConstants.maxChatLength;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '$len/${UIConstants.maxChatLength}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isOver ? FontWeight.w600 : FontWeight.w500,
+                color: isOver ? AppColors.error : const Color(0xFFF57C00),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Chip showing the pending file attachment with a dismiss button.
+  Widget _buildPendingFilePreview(ColorScheme cs) {
+    if (_pendingFileName == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.secondaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _pendingFileMimeType?.startsWith('image/') == true
+                ? Icons.image_outlined : Icons.attach_file_rounded,
+            size: 16, color: cs.onSecondaryContainer,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              _pendingFileName!,
+              style: TextStyle(fontSize: 12, color: cs.onSecondaryContainer),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => setState(() {
+              _pendingFileName = null;
+              _pendingFileBytes = null;
+              _pendingFileMimeType = null;
+            }),
+            child: Icon(Icons.close, size: 16, color: cs.onSecondaryContainer),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// AI-mode toggle button.
+  Widget _buildAiModeToggle({
+    required ColorScheme cs,
+    required double btnSize,
+    required bool isNarrow,
+  }) {
+    return Container(
+      width: btnSize,
+      height: btnSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _aiMode
+            ? AppColors.secondary.withAlpha(30)
+            : cs.surfaceContainer,
+        border: Border.all(
+          color: _aiMode ? AppColors.secondary : cs.outline,
+          width: _aiMode ? 1.5 : 1,
+        ),
+      ),
+      child: widget.isAiLoading
+          ? Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.secondary,
+                ),
+              ),
+            )
+          : Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.isConnected
+                    ? () => setState(() {
+                          _aiMode = !_aiMode;
+                          _controller.clear();
+                        })
+                    : null,
+                borderRadius: BorderRadius.circular(20),
+                child: Center(
+                  child: Text(
+                    'AI',
+                    style: TextStyle(
+                      fontSize: isNarrow ? 10 : 11,
+                      fontWeight: FontWeight.w700,
+                      color: _aiMode
+                          ? AppColors.secondary
+                          : widget.isConnected
+                              ? cs.onSurfaceVariant
+                              : cs.onSurfaceVariant.withAlpha(80),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  /// Priority toggle pill (ROUTINE / URGENT / STAT) for handoff rooms.
+  Widget _buildPriorityToggle({
+    required ColorScheme cs,
+    required double btnSize,
+    required bool isNarrow,
+  }) {
+    return GestureDetector(
+      onTap: widget.isConnected ? () {
+        setState(() {
+          _priority = _priority == 'ROUTINE' ? 'URGENT'
+              : _priority == 'URGENT' ? 'STAT' : 'ROUTINE';
+        });
+      } : null,
+      child: Container(
+        height: btnSize,
+        padding: EdgeInsets.symmetric(horizontal: isNarrow ? 5 : 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: _priority == 'STAT' ? const Color(0xFFD32F2F).withAlpha(25)
+              : _priority == 'URGENT' ? const Color(0xFFF57C00).withAlpha(25)
+              : cs.surfaceContainer,
+          border: Border.all(
+            color: _priority == 'STAT' ? const Color(0xFFD32F2F)
+                : _priority == 'URGENT' ? const Color(0xFFF57C00)
+                : cs.outline,
+            width: _priority != 'ROUTINE' ? 1.5 : 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            _priority,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: _priority == 'STAT' ? const Color(0xFFD32F2F)
+                  : _priority == 'URGENT' ? const Color(0xFFF57C00)
+                  : cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// SBAR / Patient-card popup menu for handoff rooms.
+  Widget _buildHandoffToolsMenu({
+    required ColorScheme cs,
+    required double btnSize,
+  }) {
+    return PopupMenuButton<String>(
+      enabled: widget.isConnected,
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints(minWidth: btnSize, minHeight: btnSize),
+      icon: Icon(
+        Icons.add_circle_outline,
+        size: 22,
+        color: widget.isConnected
+            ? cs.onSurfaceVariant
+            : cs.onSurfaceVariant.withAlpha(80),
+      ),
+      onSelected: (value) async {
+        if (value == 'sbar') {
+          showDialog(
+            context: context,
+            builder: (_) => SbarInputDialog(
+              onSend: (content) {
+                widget.onSend(content, priority: _priority);
+              },
+            ),
+          );
+        } else if (value == 'patient_card') {
+          final card = await showDialog<PatientCard>(
+            context: context,
+            builder: (_) => const PatientCardInputDialog(),
+          );
+          if (card != null && widget.onSendPatientCard != null) {
+            widget.onSendPatientCard!(card);
+          }
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: 'sbar',
+          child: Row(
+            children: [
+              Icon(Icons.assignment_outlined, size: 20),
+              SizedBox(width: 8),
+              Text('SBAR 인수인계'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'patient_card',
+          child: Row(
+            children: [
+              Icon(Icons.person_add_outlined, size: 20),
+              SizedBox(width: 8),
+              Text('환자 카드 전송'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// File-attach button (or upload spinner when uploading).
+  Widget _buildFileAttachButton({
+    required ColorScheme cs,
+    required double btnSize,
+  }) {
+    if (_isUploading) {
+      return Container(
+        width: btnSize,
+        height: btnSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: cs.surfaceContainer,
+          border: Border.all(color: cs.outline),
+        ),
+        child: Center(
+          child: SizedBox(
+            width: 18, height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+      );
+    }
+    return _CircleIconBtn(
+      icon: Icons.attach_file_rounded,
+      enabled: widget.isConnected && !_isUploading,
+      onTap: _pickFile,
+      size: btnSize,
+    );
+  }
+
+  /// Pill-shaped text input field with keyboard listener.
+  Widget _buildTextField(ColorScheme cs) {
+    return Expanded(
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 120),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainer,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: cs.outline.withAlpha(80)),
+        ),
+        child: KeyboardListener(
+          focusNode: _keyboardFocusNode,
+          onKeyEvent: (event) {
+            if (kIsWeb &&
+                event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                 event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+                !HardwareKeyboard.instance.isShiftPressed &&
+                !_controller.value.composing.isValid) {
+              _send();
+            }
+          },
+          child: Builder(builder: (context) {
+            final isMuted = widget.mutedUntil != null &&
+                widget.mutedUntil!.isAfter(DateTime.now());
+            String? mutedHint;
+            if (isMuted) {
+              final hh = widget.mutedUntil!.hour.toString().padLeft(2, '0');
+              final mm = widget.mutedUntil!.minute.toString().padLeft(2, '0');
+              mutedHint = '음소거됨 — $hh:$mm까지';
+            }
+            return TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              enabled: widget.isConnected && !isMuted,
+              onChanged: (text) {
+                widget.onTyping?.call();
+                _checkMention(text);
+              },
+              maxLines: 5,
+              minLines: 1,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(UIConstants.maxChatLength),
+              ],
+              textInputAction: kIsWeb
+                  ? TextInputAction.none
+                  : TextInputAction.newline,
+              style: TextStyle(
+                color: cs.onSurface,
+                fontSize: 14,
+                height: 1.4,
+              ),
+              decoration: InputDecoration(
+                hintText: !widget.isConnected
+                    ? '연결 중...'
+                    : isMuted
+                        ? mutedHint
+                        : _aiMode
+                            ? 'AI에게 질문하세요...'
+                            : '메시지를 입력하세요...',
+                hintMaxLines: 1,
+                hintStyle: TextStyle(
+                    color: isMuted ? Colors.orange : cs.onSurfaceVariant.withAlpha(130),
+                    fontSize: 14,
+                    fontWeight: isMuted ? FontWeight.w600 : null,
+                    overflow: TextOverflow.ellipsis),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                isDense: true,
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  /// Animated send button with long-press for schedule-send.
+  Widget _buildSendButton({
+    required ColorScheme cs,
+    required double btnSize,
+  }) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _controller,
+      builder: (_, value, __) {
+        final canSend = widget.isConnected &&
+            (value.text.trim().isNotEmpty || _pendingFileName != null) &&
+            !(_aiMode && widget.isAiLoading) &&
+            !_isUploading;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: btnSize,
+          height: btnSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: canSend
+                ? AppColors.primary
+                : cs.surfaceContainer,
+            border: Border.all(
+              color: canSend
+                  ? AppColors.primary
+                  : cs.outline,
+            ),
+            boxShadow: canSend
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withAlpha(70),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canSend ? _send : null,
+              onLongPress: canSend && widget.onScheduleSend != null
+                  ? _handleScheduleSend
+                  : null,
+              borderRadius: BorderRadius.circular(20),
+              child: Icon(
+                Icons.send_rounded,
+                size: 18,
+                color: canSend
+                    ? Colors.white
+                    : cs.onSurfaceVariant.withAlpha(130),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// The bottom input row: action buttons + text field + send button.
+  Widget _buildInputRow({
+    required ColorScheme cs,
+    required double btnSize,
+    required double btnGap,
+    required bool isNarrow,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // AI mode toggle
+        if (widget.onAskAi != null) ...[
+          _buildAiModeToggle(cs: cs, btnSize: btnSize, isNarrow: isNarrow),
+          SizedBox(width: btnGap),
+        ],
+        // Priority toggle (handoff rooms only)
+        if (widget.isHandoff && !_aiMode) ...[
+          _buildPriorityToggle(cs: cs, btnSize: btnSize, isNarrow: isNarrow),
+          SizedBox(width: btnGap),
+        ],
+        // Handoff tools (SBAR + Patient card) — combined menu
+        if (widget.isHandoff && !_aiMode) ...[
+          _buildHandoffToolsMenu(cs: cs, btnSize: btnSize),
+          SizedBox(width: btnGap),
+        ],
+        // File attach button (hidden in AI mode)
+        if (!_aiMode && widget.onFilePick != null) ...[
+          _buildFileAttachButton(cs: cs, btnSize: btnSize),
+          SizedBox(width: btnGap),
+        ],
+        // Emoji button (hidden in AI mode)
+        if (!_aiMode) ...[
+          _CircleIconBtn(
+            icon: Icons.emoji_emotions_outlined,
+            enabled: widget.isConnected,
+            onTap: _showEmojiSheet,
+            size: btnSize,
+          ),
+          SizedBox(width: isNarrow ? 6 : 8),
+        ],
+
+        // Text field (pill style)
+        _buildTextField(cs),
+        SizedBox(width: isNarrow ? 6 : 8),
+
+        // Send button (animated fill on active)
+        _buildSendButton(cs: cs, btnSize: btnSize),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -418,8 +952,7 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Smart Reply suggestions — shown when backend has fresh suggestions for
-            // the latest non-self message. Returns SizedBox.shrink when empty.
+            // Smart Reply suggestions
             if (widget.roomId != null)
               QuickReplyChips(
                 roomId: widget.roomId!,
@@ -430,466 +963,15 @@ class _ChatInputState extends State<ChatInput> {
                   _focusNode.requestFocus();
                 },
               ),
-            // Mention suggestions
-            if (_showMentions && _mentionSuggestions.isNotEmpty)
-              Container(
-                constraints: const BoxConstraints(maxHeight: 150),
-                margin: const EdgeInsets.only(bottom: 4),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainer,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: cs.outline.withAlpha(80)),
-                ),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _mentionSuggestions.length,
-                  itemBuilder: (_, i) {
-                    final user = _mentionSuggestions[i];
-                    return ListTile(
-                      dense: true,
-                      leading: CircleAvatar(radius: 14, child: Text((user['username'] ?? '?')[0].toUpperCase(), style: const TextStyle(fontSize: 12))),
-                      title: Text(user['username'] ?? '', style: const TextStyle(fontSize: 13)),
-                      onTap: () => _insertMention(user['username'] ?? ''),
-                    );
-                  },
-                ),
-              ),
-            // Reply target banner
-            if (widget.replyTarget != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withAlpha(60),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border(
-                    left: BorderSide(color: AppColors.primary, width: 3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.reply_rounded, size: 16, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.replyTarget!.username,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
-                          ),
-                          Text(
-                            widget.replyTarget!.content,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: widget.onCancelReply,
-                      child: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Character counter — hidden during normal typing.
-            // Only surfaces when within 200 chars of the limit (warn threshold)
-            // so it stops competing for vertical space on every keystroke.
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _controller,
-              builder: (_, value, __) {
-                final len = value.text.length;
-                if (len < UIConstants.chatWarnThreshold) {
-                  return const SizedBox.shrink();
-                }
-                final isOver = len >= UIConstants.maxChatLength;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      '$len/${UIConstants.maxChatLength}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: isOver ? FontWeight.w600 : FontWeight.w500,
-                        color: isOver ? AppColors.error : const Color(0xFFF57C00),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // Pending file attachment preview
-            if (_pendingFileName != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: cs.secondaryContainer,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _pendingFileMimeType?.startsWith('image/') == true
-                          ? Icons.image_outlined : Icons.attach_file_rounded,
-                      size: 16, color: cs.onSecondaryContainer,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        _pendingFileName!,
-                        style: TextStyle(fontSize: 12, color: cs.onSecondaryContainer),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () => setState(() {
-                        _pendingFileName = null;
-                        _pendingFileBytes = null;
-                        _pendingFileMimeType = null;
-                      }),
-                      child: Icon(Icons.close, size: 16, color: cs.onSecondaryContainer),
-                    ),
-                  ],
-                ),
-              ),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // AI mode toggle
-                if (widget.onAskAi != null) ...[
-                  Container(
-                    width: btnSize,
-                    height: btnSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _aiMode
-                          ? AppColors.secondary.withAlpha(30)
-                          : cs.surfaceContainer,
-                      border: Border.all(
-                        color: _aiMode ? AppColors.secondary : cs.outline,
-                        width: _aiMode ? 1.5 : 1,
-                      ),
-                    ),
-                    child: widget.isAiLoading
-                        ? Center(
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.secondary,
-                              ),
-                            ),
-                          )
-                        : Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: widget.isConnected
-                                  ? () => setState(() {
-                                        _aiMode = !_aiMode;
-                                        _controller.clear();
-                                      })
-                                  : null,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Center(
-                                child: Text(
-                                  'AI',
-                                  style: TextStyle(
-                                    fontSize: isNarrow ? 10 : 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: _aiMode
-                                        ? AppColors.secondary
-                                        : widget.isConnected
-                                            ? cs.onSurfaceVariant
-                                            : cs.onSurfaceVariant.withAlpha(80),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                  ),
-                  SizedBox(width: btnGap),
-                ],
-                // Priority toggle (handoff rooms only)
-                if (widget.isHandoff && !_aiMode) ...[
-                  GestureDetector(
-                    onTap: widget.isConnected ? () {
-                      setState(() {
-                        _priority = _priority == 'ROUTINE' ? 'URGENT'
-                            : _priority == 'URGENT' ? 'STAT' : 'ROUTINE';
-                      });
-                    } : null,
-                    child: Container(
-                      height: btnSize,
-                      padding: EdgeInsets.symmetric(horizontal: isNarrow ? 5 : 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: _priority == 'STAT' ? const Color(0xFFD32F2F).withAlpha(25)
-                            : _priority == 'URGENT' ? const Color(0xFFF57C00).withAlpha(25)
-                            : Theme.of(context).colorScheme.surfaceContainer,
-                        border: Border.all(
-                          color: _priority == 'STAT' ? const Color(0xFFD32F2F)
-                              : _priority == 'URGENT' ? const Color(0xFFF57C00)
-                              : Theme.of(context).colorScheme.outline,
-                          width: _priority != 'ROUTINE' ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          _priority,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _priority == 'STAT' ? const Color(0xFFD32F2F)
-                                : _priority == 'URGENT' ? const Color(0xFFF57C00)
-                                : Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: btnGap),
-                ],
-                // Handoff tools (SBAR + Patient card) — combined menu
-                if (widget.isHandoff && !_aiMode) ...[
-                  PopupMenuButton<String>(
-                    enabled: widget.isConnected,
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(minWidth: btnSize, minHeight: btnSize),
-                    icon: Icon(
-                      Icons.add_circle_outline,
-                      size: 22,
-                      color: widget.isConnected
-                          ? Theme.of(context).colorScheme.onSurfaceVariant
-                          : Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(80),
-                    ),
-                    onSelected: (value) async {
-                      if (value == 'sbar') {
-                        showDialog(
-                          context: context,
-                          builder: (_) => SbarInputDialog(
-                            onSend: (content) {
-                              widget.onSend(content, priority: _priority);
-                            },
-                          ),
-                        );
-                      } else if (value == 'patient_card') {
-                        final card = await showDialog<PatientCard>(
-                          context: context,
-                          builder: (_) => const PatientCardInputDialog(),
-                        );
-                        if (card != null && widget.onSendPatientCard != null) {
-                          widget.onSendPatientCard!(card);
-                        }
-                      }
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'sbar',
-                        child: Row(
-                          children: [
-                            Icon(Icons.assignment_outlined, size: 20),
-                            SizedBox(width: 8),
-                            Text('SBAR 인수인계'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'patient_card',
-                        child: Row(
-                          children: [
-                            Icon(Icons.person_add_outlined, size: 20),
-                            SizedBox(width: 8),
-                            Text('환자 카드 전송'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(width: btnGap),
-                ],
-                // File attach button (hidden in AI mode)
-                if (!_aiMode && widget.onFilePick != null) ...[
-                  _isUploading
-                      ? Container(
-                          width: btnSize,
-                          height: btnSize,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Theme.of(context).colorScheme.surfaceContainer,
-                            border: Border.all(color: Theme.of(context).colorScheme.outline),
-                          ),
-                          child: Center(
-                            child: SizedBox(
-                              width: 18, height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        )
-                      : _CircleIconBtn(
-                          icon: Icons.attach_file_rounded,
-                          enabled: widget.isConnected && !_isUploading,
-                          onTap: _pickFile,
-                          size: btnSize,
-                        ),
-                  SizedBox(width: btnGap),
-                ],
-                // Emoji button (hidden in AI mode)
-                if (!_aiMode) ...[
-                  _CircleIconBtn(
-                    icon: Icons.emoji_emotions_outlined,
-                    enabled: widget.isConnected,
-                    onTap: _showEmojiSheet,
-                    size: btnSize,
-                  ),
-                  SizedBox(width: isNarrow ? 6 : 8),
-                ],
-
-                // Text field (pill style)
-                Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 120),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: cs.outline.withAlpha(80)),
-                    ),
-                    child: KeyboardListener(
-                      focusNode: _keyboardFocusNode,
-                      onKeyEvent: (event) {
-                        if (kIsWeb &&
-                            event is KeyDownEvent &&
-                            (event.logicalKey == LogicalKeyboardKey.enter ||
-                             event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
-                            !HardwareKeyboard.instance.isShiftPressed &&
-                            !_controller.value.composing.isValid) {
-                          _send();
-                        }
-                      },
-                      child: Builder(builder: (context) {
-                        final isMuted = widget.mutedUntil != null &&
-                            widget.mutedUntil!.isAfter(DateTime.now());
-                        String? mutedHint;
-                        if (isMuted) {
-                          final hh = widget.mutedUntil!.hour.toString().padLeft(2, '0');
-                          final mm = widget.mutedUntil!.minute.toString().padLeft(2, '0');
-                          mutedHint = '음소거됨 — $hh:$mm까지';
-                        }
-                        return TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          enabled: widget.isConnected && !isMuted,
-                          onChanged: (text) {
-                            widget.onTyping?.call();
-                            _checkMention(text);
-                          },
-                          maxLines: 5,
-                          minLines: 1,
-                          inputFormatters: [
-                            LengthLimitingTextInputFormatter(UIConstants.maxChatLength),
-                          ],
-                          textInputAction: kIsWeb
-                              ? TextInputAction.none
-                              : TextInputAction.newline,
-                          style: TextStyle(
-                            color: cs.onSurface,
-                            fontSize: 14,
-                            height: 1.4,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: !widget.isConnected
-                                ? '연결 중...'
-                                : isMuted
-                                    ? mutedHint
-                                    : _aiMode
-                                        ? 'AI에게 질문하세요...'
-                                        : '메시지를 입력하세요...',
-                            hintMaxLines: 1,
-                            hintStyle: TextStyle(
-                                color: isMuted ? Colors.orange : cs.onSurfaceVariant.withAlpha(130),
-                                fontSize: 14,
-                                fontWeight: isMuted ? FontWeight.w600 : null,
-                                overflow: TextOverflow.ellipsis),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
-                            isDense: true,
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-                SizedBox(width: isNarrow ? 6 : 8),
-
-                // Send button (animated fill on active)
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _controller,
-                  builder: (_, value, __) {
-                    final canSend = widget.isConnected &&
-                        (value.text.trim().isNotEmpty || _pendingFileName != null) &&
-                        !(_aiMode && widget.isAiLoading) &&
-                        !_isUploading;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: btnSize,
-                      height: btnSize,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: canSend
-                            ? AppColors.primary
-                            : cs.surfaceContainer,
-                        border: Border.all(
-                          color: canSend
-                              ? AppColors.primary
-                              : cs.outline,
-                        ),
-                        boxShadow: canSend
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primary.withAlpha(70),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: canSend ? _send : null,
-                          onLongPress: canSend && widget.onScheduleSend != null
-                              ? _handleScheduleSend
-                              : null,
-                          borderRadius: BorderRadius.circular(20),
-                          child: Icon(
-                            Icons.send_rounded,
-                            size: 18,
-                            color: canSend
-                                ? Colors.white
-                                : cs.onSurfaceVariant.withAlpha(130),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+            _buildMentionSuggestions(cs),
+            _buildReplyBanner(cs),
+            _buildCharacterCounter(),
+            _buildPendingFilePreview(cs),
+            _buildInputRow(
+              cs: cs,
+              btnSize: btnSize,
+              btnGap: btnGap,
+              isNarrow: isNarrow,
             ),
           ],
         ),
