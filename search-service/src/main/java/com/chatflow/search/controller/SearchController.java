@@ -1,7 +1,6 @@
 package com.chatflow.search.controller;
 
 import com.chatflow.search.document.ChatMessageDocument;
-import com.chatflow.search.service.SearchService;
 import com.chatflow.search.service.KoreanSearchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -18,7 +17,6 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class SearchController {
 
-    private final SearchService searchService;
     private final KoreanSearchService koreanSearchService;
 
     private static final int MAX_PAGE_SIZE = 100;
@@ -30,7 +28,8 @@ public class SearchController {
             @RequestParam(defaultValue = "20") int size) {
 
         validateSearchParams(query, page, size);
-        Page<ChatMessageDocument> results = searchService.searchByContent(query, page, Math.min(size, MAX_PAGE_SIZE));
+        Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        Page<ChatMessageDocument> results = koreanSearchService.searchKoreanContent(query, null, pageable);
         return ResponseEntity.ok(results);
     }
 
@@ -42,7 +41,8 @@ public class SearchController {
             @RequestParam(defaultValue = "20") int size) {
 
         validateSearchParams(query, page, size);
-        Page<ChatMessageDocument> results = searchService.searchInChatRoom(roomId, query, page, Math.min(size, MAX_PAGE_SIZE));
+        Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        Page<ChatMessageDocument> results = koreanSearchService.searchKoreanContent(query, roomId, pageable);
         return ResponseEntity.ok(results);
     }
 
@@ -57,10 +57,9 @@ public class SearchController {
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("username은 필수입니다.");
         }
-        int clampedSize = Math.min(size, MAX_PAGE_SIZE);
-        Page<ChatMessageDocument> results = (query != null && !query.isBlank())
-                ? searchService.searchByUsernameAndContent(roomId, username, query, page, clampedSize)
-                : searchService.searchByUsername(roomId, username, page, clampedSize);
+        Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        String q = (query != null && !query.isBlank()) ? query : null;
+        Page<ChatMessageDocument> results = koreanSearchService.searchWithFilters(roomId, q, username, null, null, null, pageable);
         return ResponseEntity.ok(results);
     }
 
@@ -77,8 +76,10 @@ public class SearchController {
         if (start.isAfter(end)) {
             throw new IllegalArgumentException("시작 시간은 종료 시간보다 이전이어야 합니다.");
         }
-        Page<ChatMessageDocument> results = searchService.searchByTimeRangeCombined(
-                roomId, start, end, username, query, page, Math.min(size, MAX_PAGE_SIZE));
+        Pageable pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+        String q = (query != null && !query.isBlank()) ? query : null;
+        String u = (username != null && !username.isBlank()) ? username : null;
+        Page<ChatMessageDocument> results = koreanSearchService.searchWithFilters(roomId, q, u, start, end, null, pageable);
         return ResponseEntity.ok(results);
     }
 

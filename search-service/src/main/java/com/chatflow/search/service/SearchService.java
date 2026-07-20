@@ -10,15 +10,10 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
@@ -160,51 +155,4 @@ public class SearchService {
         }
     }
 
-    public Page<ChatMessageDocument> searchByContent(String content, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByContentContaining(content, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchInChatRoom(String chatRoomId, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndContentContaining(chatRoomId, query, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByUsername(String chatRoomId, String username, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndUsernameContaining(chatRoomId, username, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByTimeRange(String chatRoomId, LocalDateTime start, LocalDateTime end, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
-    }
-
-    // ---- 결합 필터 (QA F6 IMPORTANT 반영) ----
-
-    public Page<ChatMessageDocument> searchByUsernameAndContent(String chatRoomId, String username, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndUsernameContainingAndContentContaining(chatRoomId, username, query, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByTimeRangeCombined(
-            String chatRoomId, LocalDateTime start, LocalDateTime end,
-            String username, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        boolean hasUser = username != null && !username.isBlank();
-        boolean hasQuery = query != null && !query.isBlank();
-        if (hasUser && hasQuery) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContainingAndContentContaining(
-                    chatRoomId, start, end, username, query, pageable);
-        }
-        if (hasUser) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContaining(
-                    chatRoomId, start, end, username, pageable);
-        }
-        if (hasQuery) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndContentContaining(
-                    chatRoomId, start, end, query, pageable);
-        }
-        return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
-    }
 }
