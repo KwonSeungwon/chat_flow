@@ -75,6 +75,12 @@ jobs:
         channel: stable
         cache: true
 
+    - name: Create .env placeholder
+      # pubspec.yaml declares `.env` as a Flutter asset, but it is gitignored
+      # (runtime config). Without it `flutter test` fails building the asset
+      # bundle: "No file or variants found for asset: .env".
+      run: touch .env
+
     - name: Install dependencies
       run: flutter pub get
 
