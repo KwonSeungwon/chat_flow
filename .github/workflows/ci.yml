@@ -71,7 +71,8 @@ jobs:
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.24.0'
+        # Latest stable: the codebase uses newer Material 3 theme APIs
+        # (e.g. CardThemeData) that predate-pinned versions lack.
         channel: stable
         cache: true
 
