@@ -52,4 +52,4 @@ rss:
 logging:
   level:
     com.chatflow: DEBUG
-    org.springframework.data.elasticsearch: DEBUG
+    co.elastic.clients: DEBUG

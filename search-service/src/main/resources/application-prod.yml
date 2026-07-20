@@ -72,7 +72,7 @@ management:
 logging:
   level:
     com.chatflow: INFO
-    org.springframework.data.elasticsearch: WARN
+    co.elastic.clients: WARN
     org.apache.kafka: WARN
   pattern:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
