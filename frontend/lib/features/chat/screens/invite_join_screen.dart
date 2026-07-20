@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/network/api_response.dart';
 import '../../../core/network/dio_client.dart';
 
 class InviteJoinScreen extends ConsumerStatefulWidget {
@@ -31,14 +32,9 @@ class _InviteJoinScreenState extends ConsumerState<InviteJoinScreen> {
         '/api/chat/rooms/join-by-invite',
         data: {'token': widget.token},
       );
-      final data = resp.data;
-      String? roomId;
-      String? roomName;
-      if (data is Map && data['data'] is Map) {
-        final d = data['data'] as Map;
-        roomId = d['roomId']?.toString();
-        roomName = d['roomName']?.toString();
-      }
+      final d = apiResponseMap(resp.data);
+      final roomId = d?['roomId']?.toString();
+      final roomName = d?['roomName']?.toString();
       if (mounted) {
         if (roomId == null || roomId.isEmpty) {
           setState(() {

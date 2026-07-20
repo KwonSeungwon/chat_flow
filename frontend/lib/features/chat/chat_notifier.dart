@@ -139,18 +139,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         queryParameters: {'size': 50},
       );
       final data = resp.data;
-      List<dynamic> items;
-      if (data is Map &&
-          data['data'] is Map &&
-          data['data']['content'] is List) {
-        items = data['data']['content'] as List;
-      } else if (data is Map && data['content'] is List) {
-        items = data['content'] as List;
-      } else if (data is List) {
-        items = data;
-      } else {
-        items = [];
-      }
+      final items = apiResponseList(data);
       final history = <ChatMessage>[];
       for (final e in items) {
         try {
@@ -303,17 +292,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       );
       final data = resp.data;
       // Response: { data: { messages: [...], nextCursor: ..., hasMore: bool } }
-      List<dynamic> items;
-      bool? serverHasMore;
-      if (data is Map && data['data'] is Map) {
-        final inner = data['data'] as Map;
-        items = (inner['messages'] as List?) ?? [];
+      final inner = apiResponseMap(data);
+      final List<dynamic> items;
+      final bool? serverHasMore;
+      if (inner != null && inner['messages'] is List) {
+        items = inner['messages'] as List;
         serverHasMore = inner['hasMore'] as bool?;
-      } else if (data is Map && data['messages'] is List) {
-        items = data['messages'] as List;
-        serverHasMore = data['hasMore'] as bool?;
       } else {
         items = [];
+        serverHasMore = null;
       }
       final newMessages = <ChatMessage>[];
       for (final e in items) {
@@ -521,13 +508,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       });
       if (!mounted) return;
       // Parse AI response directly from REST — no WebSocket dependency
-      final data = resp.data;
-      Map<String, dynamic>? msgJson;
-      if (data is Map && data['data'] is Map) {
-        msgJson = data['data'] as Map<String, dynamic>;
-      } else if (data is Map && data['messageId'] != null) {
-        msgJson = data as Map<String, dynamic>;
-      }
+      final msgJson = apiResponseMap(resp.data);
       if (msgJson != null) {
         final aiMsg = ChatMessage.fromJson(msgJson);
         if (!state.messages.any((m) => m.effectiveId == aiMsg.effectiveId)) {
@@ -622,13 +603,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     try {
       final resp =
           await _dioClient.dio.get('/api/chat/rooms/$roomId/participants');
-      final data = resp.data;
-      List<dynamic> participants = [];
-      if (data is Map && data['data'] is List) {
-        participants = data['data'] as List;
-      } else if (data is List) {
-        participants = data;
-      }
+      final participants = apiResponseList(resp.data);
       final q = query.toLowerCase();
       return participants
           .where((p) =>
