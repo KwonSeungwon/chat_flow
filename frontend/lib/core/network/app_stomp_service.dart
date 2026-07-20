@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:stomp_dart_client/stomp_dart_client.dart';
+
+import 'stomp_support.dart';
 
 typedef RoomUpdateCallback = void Function(
   String roomId,
@@ -47,9 +48,7 @@ class AppStompService {
   void _doConnect(String token) {
     _client?.deactivate();
 
-    final url = kIsWeb
-        ? _webWsUrl()
-        : (dotenv.env['WS_URL'] ?? 'wss://app.chatflow.ai.kr/ws-native');
+    final url = resolveStompWsUrl();
 
     _client = StompClient(
       config: StompConfig(
@@ -128,12 +127,4 @@ class AppStompService {
     _onRoomUpdate = null;
   }
 
-  static String _webWsUrl() {
-    final uri = Uri.base;
-    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    final port = (uri.hasPort && uri.port != 80 && uri.port != 443)
-        ? ':${uri.port}'
-        : '';
-    return '$scheme://${uri.host}$port/ws-native';
-  }
 }
