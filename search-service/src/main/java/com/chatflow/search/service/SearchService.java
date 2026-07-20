@@ -1,31 +1,30 @@
 package com.chatflow.search.service;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.search.document.ChatMessageDocument;
-import com.chatflow.search.repository.ChatMessageSearchRepository;
+import com.chatflow.search.util.SearchConstants;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Kafka 메시지를 수신하여 ES에 벌크 인덱싱.
+ * Kafka 메시지를 수신하여 ES에 벌크 인덱싱 (indexing-only).
  * 버퍼에 축적 후 50건 또는 500ms 간격으로 flush.
+ * 읽기(검색)는 {@link KoreanSearchService}에서 담당한다.
  */
 @Slf4j
 @Service
@@ -35,14 +34,14 @@ public class SearchService {
     private static final int MAX_BUFFER_SIZE = 5000;
     private static final int MAX_RETRY_COUNT = 3;
 
-    private final ChatMessageSearchRepository searchRepository;
+    private final ElasticsearchClient elasticsearchClient;
     private final ObjectMapper objectMapper;
     private final List<ChatMessageDocument> buffer = new ArrayList<>();
     private final ReentrantLock bufferLock = new ReentrantLock();
     private int consecutiveFailures = 0;
 
-    public SearchService(ChatMessageSearchRepository searchRepository, ObjectMapper objectMapper, MeterRegistry registry) {
-        this.searchRepository = searchRepository;
+    public SearchService(ElasticsearchClient elasticsearchClient, ObjectMapper objectMapper, MeterRegistry registry) {
+        this.elasticsearchClient = elasticsearchClient;
         this.objectMapper = objectMapper;
         Gauge.builder("chatflow.search.buffer.size", buffer, List::size)
                 .description("Search indexing buffer size")
@@ -60,14 +59,16 @@ public class SearchService {
         }
 
         // Soft-deleted message → remove from ES immediately (not via buffer).
-        // Known window: deletes bypass the buffer while creates/edits flow through it,
-        // so if this delete arrives while the same id's create/edit is still unflushed,
-        // deleteById removes nothing and the buffered doc will resurrect it on the next
-        // flush. Bounded by the 500ms scheduledFlush; deletes target long-persisted
-        // messages in practice, so the interleave is negligible (see plan Task 0.7).
         if (message.isDeleted()) {
             log.info("Removing deleted message {} from ES index", message.getMessageId());
-            searchRepository.deleteById(message.getMessageId());
+            try {
+                elasticsearchClient.delete(new co.elastic.clients.elasticsearch.core.DeleteRequest.Builder()
+                        .index(SearchConstants.CHAT_MESSAGES_INDEX)
+                        .id(message.getMessageId())
+                        .build());
+            } catch (Exception e) {
+                log.error("Failed to delete message {} from ES index", message.getMessageId(), e);
+            }
             return;
         }
 
@@ -130,7 +131,23 @@ public class SearchService {
         buffer.clear();
 
         try {
-            searchRepository.saveAll(batch);
+            BulkRequest.Builder br = new BulkRequest.Builder();
+            for (ChatMessageDocument doc : batch) {
+                br.operations(op -> op.index(idx -> idx
+                        .index(SearchConstants.CHAT_MESSAGES_INDEX)
+                        .id(doc.getId())
+                        .document(doc)));
+            }
+            BulkResponse response = elasticsearchClient.bulk(br.build());
+            if (response.errors()) {
+                // Item-level failures: log the first few and treat the batch as failed.
+                response.items().stream()
+                        .filter(i -> i.error() != null)
+                        .limit(5)
+                        .forEach(i -> log.error("Bulk item failed id={} : {}",
+                                i.id(), i.error() != null ? i.error().reason() : "unknown"));
+                throw new IllegalStateException("Bulk response contained item errors");
+            }
             log.info("Bulk indexed {} messages", batch.size());
             consecutiveFailures = 0;
         } catch (Exception e) {
@@ -160,51 +177,4 @@ public class SearchService {
         }
     }
 
-    public Page<ChatMessageDocument> searchByContent(String content, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByContentContaining(content, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchInChatRoom(String chatRoomId, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndContentContaining(chatRoomId, query, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByUsername(String chatRoomId, String username, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndUsernameContaining(chatRoomId, username, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByTimeRange(String chatRoomId, LocalDateTime start, LocalDateTime end, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
-    }
-
-    // ---- 결합 필터 (QA F6 IMPORTANT 반영) ----
-
-    public Page<ChatMessageDocument> searchByUsernameAndContent(String chatRoomId, String username, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        return searchRepository.findByChatRoomIdAndUsernameContainingAndContentContaining(chatRoomId, username, query, pageable);
-    }
-
-    public Page<ChatMessageDocument> searchByTimeRangeCombined(
-            String chatRoomId, LocalDateTime start, LocalDateTime end,
-            String username, String query, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("timestamp").descending());
-        boolean hasUser = username != null && !username.isBlank();
-        boolean hasQuery = query != null && !query.isBlank();
-        if (hasUser && hasQuery) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContainingAndContentContaining(
-                    chatRoomId, start, end, username, query, pageable);
-        }
-        if (hasUser) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndUsernameContaining(
-                    chatRoomId, start, end, username, pageable);
-        }
-        if (hasQuery) {
-            return searchRepository.findByChatRoomIdAndTimestampBetweenAndContentContaining(
-                    chatRoomId, start, end, query, pageable);
-        }
-        return searchRepository.findByChatRoomIdAndTimestampBetween(chatRoomId, start, end, pageable);
-    }
 }

@@ -1,7 +1,9 @@
 package com.chatflow.search.service;
 
-import com.chatflow.search.document.ChatMessageDocument;
-import com.chatflow.search.repository.ChatMessageSearchRepository;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.DeleteRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -15,18 +17,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/**
- * SearchService — deleted-flag handling (Task 0.7).
- * Verifies that a Kafka payload with isDeleted=true triggers deleteById
- * instead of buffering/indexing the document.
- */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("SearchService — delete/edit event handling")
+@DisplayName("SearchService — low-level client indexing (bulk) + delete")
 class SearchServiceDeleteTest {
 
-    @Mock
-    private ChatMessageSearchRepository searchRepository;
-
+    @Mock private ElasticsearchClient elasticsearchClient;
     private SearchService searchService;
     private ObjectMapper objectMapper;
 
@@ -34,119 +29,60 @@ class SearchServiceDeleteTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
-        searchService = new SearchService(searchRepository, objectMapper, new SimpleMeterRegistry());
+        searchService = new SearchService(elasticsearchClient, objectMapper, new SimpleMeterRegistry());
+    }
+
+    private static String msg(String id, boolean deleted, String type) {
+        return """
+            {"messageId":"%s","chatRoomId":"room-1","userId":"u1","username":"alice",
+             "content":"c","type":"%s","timestamp":"2026-07-04T12:00:00",
+             "isDeleted":%s,"isAiGenerated":false}""".formatted(id, type, deleted);
     }
 
     @Test
-    @DisplayName("deleted payload triggers deleteById and skips indexing")
-    void deletedMessage_triggersDeleteById() {
-        String json = """
-                {
-                  "messageId": "msg-del-1",
-                  "chatRoomId": "room-1",
-                  "userId": "user-1",
-                  "username": "alice",
-                  "content": "삭제된 메시지입니다.",
-                  "type": "CHAT",
-                  "timestamp": "2026-07-04T12:00:00",
-                  "isDeleted": true,
-                  "isAiGenerated": false
-                }
-                """;
-
-        searchService.indexChatMessage(json);
-
-        verify(searchRepository).deleteById("msg-del-1");
-        verify(searchRepository, never()).saveAll(any());
+    @DisplayName("deleted payload calls client.delete and never buffers/bulk-indexes")
+    void deleted_callsDelete() throws Exception {
+        searchService.indexChatMessage(msg("del-1", true, "CHAT"));
+        verify(elasticsearchClient).delete(any(DeleteRequest.class));
+        searchService.scheduledFlush();
+        verify(elasticsearchClient, never()).bulk(any(BulkRequest.class));
     }
 
     @Test
-    @DisplayName("normal (non-deleted) payload is buffered for indexing, not deleted")
-    void normalMessage_isBuffered() {
-        String json = """
-                {
-                  "messageId": "msg-norm-1",
-                  "chatRoomId": "room-1",
-                  "userId": "user-1",
-                  "username": "alice",
-                  "content": "hello world",
-                  "type": "CHAT",
-                  "timestamp": "2026-07-04T12:00:00",
-                  "isDeleted": false,
-                  "isAiGenerated": false
-                }
-                """;
+    @DisplayName("normal payload is buffered then bulk-indexed on flush")
+    void normal_bulkIndexedOnFlush() throws Exception {
+        BulkResponse ok = mock(BulkResponse.class);
+        when(ok.errors()).thenReturn(false);
+        when(elasticsearchClient.bulk(any(BulkRequest.class))).thenReturn(ok);
 
-        searchService.indexChatMessage(json);
-
-        verify(searchRepository, never()).deleteById(any());
-        // The message is buffered; it won't be flushed until BULK_SIZE (50) is reached
-        // or scheduledFlush runs. We verify no deleteById was called.
+        searchService.indexChatMessage(msg("norm-1", false, "CHAT"));
+        verify(elasticsearchClient, never()).delete(any(DeleteRequest.class));
+        searchService.scheduledFlush();
+        verify(elasticsearchClient).bulk(any(BulkRequest.class));
     }
 
     @Test
-    @DisplayName("edited payload (non-deleted, new content) is buffered for upsert")
-    void editedMessage_isBuffered() {
-        String json = """
-                {
-                  "messageId": "msg-edit-1",
-                  "chatRoomId": "room-1",
-                  "userId": "user-1",
-                  "username": "alice",
-                  "content": "updated content",
-                  "type": "CHAT",
-                  "timestamp": "2026-07-04T12:00:00",
-                  "isDeleted": false,
-                  "isAiGenerated": false
-                }
-                """;
-
-        searchService.indexChatMessage(json);
-
-        verify(searchRepository, never()).deleteById(any());
+    @DisplayName("JOIN/LEAVE/SYSTEM messages are skipped (not buffered)")
+    void systemMessage_skipped() throws Exception {
+        searchService.indexChatMessage(msg("join-1", false, "JOIN"));
+        searchService.scheduledFlush();
+        verify(elasticsearchClient, never()).bulk(any(BulkRequest.class));
     }
 
     @Test
-    @DisplayName("deleted payload with JOIN type still triggers deleteById")
-    void deletedJoinMessage_stillDeletes() {
-        String json = """
-                {
-                  "messageId": "msg-join-del-1",
-                  "chatRoomId": "room-1",
-                  "userId": "user-1",
-                  "username": "alice",
-                  "content": "joined",
-                  "type": "JOIN",
-                  "timestamp": "2026-07-04T12:00:00",
-                  "isDeleted": true,
-                  "isAiGenerated": false
-                }
-                """;
-
-        searchService.indexChatMessage(json);
-
-        verify(searchRepository).deleteById("msg-join-del-1");
-        verify(searchRepository, never()).saveAll(any());
+    @DisplayName("deleted JOIN message still deletes")
+    void deletedJoin_stillDeletes() throws Exception {
+        searchService.indexChatMessage(msg("join-del-1", true, "JOIN"));
+        verify(elasticsearchClient).delete(any(DeleteRequest.class));
     }
 
     @Test
-    @DisplayName("payload without isDeleted field defaults to false (backward compat)")
-    void missingDeletedField_defaultsFalse() {
+    @DisplayName("missing isDeleted defaults to false — buffered, not deleted")
+    void missingDeleted_defaultsFalse() throws Exception {
         String json = """
-                {
-                  "messageId": "msg-legacy-1",
-                  "chatRoomId": "room-1",
-                  "userId": "user-1",
-                  "username": "alice",
-                  "content": "old message",
-                  "type": "CHAT",
-                  "timestamp": "2026-07-04T12:00:00",
-                  "isAiGenerated": false
-                }
-                """;
-
+            {"messageId":"legacy-1","chatRoomId":"room-1","userId":"u1","username":"alice",
+             "content":"c","type":"CHAT","timestamp":"2026-07-04T12:00:00","isAiGenerated":false}""";
         searchService.indexChatMessage(json);
-
-        verify(searchRepository, never()).deleteById(any());
+        verify(elasticsearchClient, never()).delete(any(DeleteRequest.class));
     }
 }

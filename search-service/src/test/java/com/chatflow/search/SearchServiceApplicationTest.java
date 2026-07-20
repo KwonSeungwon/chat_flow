@@ -1,10 +1,8 @@
 package com.chatflow.search;
 
-import com.chatflow.search.repository.ChatMessageSearchRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -12,16 +10,11 @@ import org.springframework.test.context.ActiveProfiles;
     "spring.autoconfigure.exclude=" +
         "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
         "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration," +
-        "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration"
+        "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",
+    "spring.main.allow-bean-definition-overriding=true"
 })
 @ActiveProfiles("test")
 class SearchServiceApplicationTest {
-
-    @MockBean
-    private ChatMessageSearchRepository chatMessageSearchRepository;
-
-    @MockBean(name = "elasticsearchTemplate")
-    private ElasticsearchOperations elasticsearchOperations;
 
     @MockBean
     @SuppressWarnings("rawtypes")
