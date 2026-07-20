@@ -1,11 +1,14 @@
-# K3s 단일노드 배포: 최소 리소스, 로컬 이미지
+# K3s 단일노드 배포: 최소 리소스, GHCR 이미지
+# 이미지는 develop-build.yml이 GHCR로 push (ghcr.io/kwonseungwon/chatflow/<svc>:sha-<full>).
+# K3s 노드 containerd가 익명 pull 가능(패키지 public). 배포마다 tag를 최신 sha로 올린다.
+# (직전엔 docker.io/chatflow:latest pullPolicy:Never 레거시 로컬 import 방식이었음.)
 global:
   namespace: chatflow
   image:
-    registry: docker.io
-    repository: chatflow
-    pullPolicy: Never
-    tag: "latest"
+    registry: ghcr.io
+    repository: kwonseungwon/chatflow
+    pullPolicy: IfNotPresent
+    tag: "sha-8a079278dd8d796ca3f762108973c3981d7afa65"
   imagePullSecrets: []
 
   externalSecrets:
