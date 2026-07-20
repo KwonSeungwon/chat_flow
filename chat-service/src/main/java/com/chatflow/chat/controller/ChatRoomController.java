@@ -3,18 +3,14 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.auth.RequireMember;
-import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
-import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.mapper.ChatRoomMapper;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
-import com.chatflow.chat.service.read.MessageReadService;
-import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
 import com.chatflow.chat.result.ChatErrorCode;
@@ -22,8 +18,6 @@ import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.AuditEvent;
-import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.ChatMessageResponse;
 import com.chatflow.common.dto.ChatRoomResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
@@ -31,17 +25,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,13 +48,10 @@ public class ChatRoomController {
     private final ChatRoomService chatRoomService;
     private final RoomMembershipService roomMembershipService;
     private final RoomPermissionService roomPermissionService;
-    private final MessageReadService messageReadService;
     private final DmRoomService dmRoomService;
     private final AuditService auditService;
     private final StringRedisTemplate redisTemplate;
     private final RoomVisibilityService roomVisibilityService;
-    private final MessageSenderService messageSenderService;
-    private final ChatMessageResponseMapper chatMessageResponseMapper;
     private final ChatRoomMapper chatRoomMapper;
 
     @GetMapping
@@ -124,46 +111,6 @@ public class ChatRoomController {
         }
         ChatRoom room = chatRoomService.getOrCreateByExternalId(request.externalId, request.name, request.description);
         return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(room)));
-    }
-
-    @RequireMember
-    @GetMapping("/{roomId}/messages")
-    public ResponseEntity<?> getMessages(
-            @PathVariable String roomId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
-            @AuthenticatedUser String userId,
-            @RequestHeader(value = "X-Username", required = false) String username) {
-        size = Math.min(size, 100);
-        Page<ChatMessageResponse> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size))
-                .map(chatMessageResponseMapper::toResponse);
-        auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
-        return ResponseEntity.ok(ApiResponse.ok(messages));
-    }
-
-    /**
-     * 커서 기반 페이징 — 무한 스크롤에 최적화.
-     * before 파라미터 없으면 최신 메시지부터 반환.
-     */
-    @RequireMember
-    @GetMapping("/{roomId}/messages/cursor")
-    public ResponseEntity<?> getMessagesByCursor(
-            @PathVariable String roomId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime before,
-            @RequestParam(defaultValue = "50") int size,
-            @AuthenticatedUser String userId) {
-        size = Math.min(size, 100);
-        List<ChatMessageEntity> entities = messageReadService.getMessagesByCursor(roomId, before, size);
-
-        LocalDateTime nextCursor = entities.isEmpty() ? null
-                : entities.get(entities.size() - 1).getTimestamp();
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("messages", chatMessageResponseMapper.toResponseList(entities));
-        result.put("nextCursor", nextCursor);
-        result.put("hasMore", entities.size() == size);
-
-        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping("/{roomId}/verify")
@@ -303,40 +250,6 @@ public class ChatRoomController {
                 chatRoomService.updateRoomSettings(roomId, body.name(), body.description())));
     }
 
-    /**
-     * REST fallback for sending a message when STOMP is disconnected.
-     * Also used for forwarded messages with forwardedFrom metadata.
-     */
-    @RequireMember
-    @PostMapping("/{roomId}/messages")
-    public ResponseEntity<?> sendMessage(
-            @PathVariable String roomId,
-            @Valid @RequestBody SendMessageRequest body,
-            @AuthenticatedUser String userId,
-            @RequestHeader(value = "X-Username", required = false) String username) {
-        ChatMessage msg = new ChatMessage();
-        msg.setChatRoomId(roomId);
-        msg.setUserId(userId);
-        msg.setUsername(username != null ? username : userId);
-        msg.setContent(body.content());
-        msg.setType(ChatMessage.MessageType.CHAT);
-        msg.setPriority(body.priority() != null && !body.priority().isBlank()
-                ? body.priority() : "ROUTINE");
-        if (body.parentMessageId() != null && !body.parentMessageId().isBlank()) {
-            msg.setParentMessageId(body.parentMessageId());
-        }
-        if (body.forwardedFrom() != null && !body.forwardedFrom().isBlank()) {
-            msg.setForwardedFrom(body.forwardedFrom());
-        }
-        if (body.fileUrl() != null && !body.fileUrl().isBlank()) {
-            msg.setFileUrl(body.fileUrl());
-            msg.setFileName(body.fileName());
-            msg.setFileContentType(body.fileContentType());
-        }
-        messageSenderService.send(msg);
-        return ResponseEntity.ok(ApiResponse.ok(null, "메시지를 전송했습니다."));
-    }
-
     public record GetOrCreateRequest(String externalId, String name, String description) {}
 
     // ── Request records ─────────────────────────────────────────
@@ -374,16 +287,4 @@ public class ChatRoomController {
     ) {}
 
     public record UpdateSettingsRequest(String name, String description) {}
-
-    public record SendMessageRequest(
-            @NotBlank(message = "content는 필수입니다")
-            String content,
-
-            String priority,
-            String parentMessageId,
-            String forwardedFrom,
-            String fileUrl,
-            String fileName,
-            String fileContentType
-    ) {}
 }

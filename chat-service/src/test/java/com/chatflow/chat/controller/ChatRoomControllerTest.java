@@ -13,8 +13,6 @@ import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
-import com.chatflow.chat.service.read.MessageReadService;
-import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
 import com.chatflow.common.dto.ChatRoomResponse;
@@ -62,12 +60,10 @@ class ChatRoomControllerTest {
 
     @Mock private ChatRoomService chatRoomService;
     @Mock private RoomMembershipService roomMembershipService;
-    @Mock private MessageReadService messageReadService;
     @Mock private DmRoomService dmRoomService;
     @Mock private AuditService auditService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private RoomVisibilityService roomVisibilityService;
-    @Mock private MessageSenderService messageSenderService;
     @Mock private ChatRoomMapper chatRoomMapper;
     @Mock private RoomMembershipGuard membershipGuard;
     @Mock private RoomPermissionService roomPermissionService;
@@ -533,68 +529,6 @@ class ChatRoomControllerTest {
 
             verify(roomMembershipService).addMemberIfAbsent("r-dm", "user-1", "alice");
             verify(roomMembershipService).addMemberIfAbsent("r-dm", "u2", "bob");
-        }
-    }
-
-    // ── SendMessage (REST fallback) ─────────────────────────────
-
-    @Nested
-    @DisplayName("POST /api/chat/rooms/{roomId}/messages")
-    class SendMessage {
-
-        @Test
-        void returns_400_when_content_missing() throws Exception {
-            doNothing().when(membershipGuard).requireMember("r1", "user-1");
-
-            String body = objectMapper.writeValueAsString(
-                    Map.of("forwardedFrom", "someone: hello"));
-
-            mockMvc.perform(post("/api/chat/rooms/r1/messages")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(body)
-                            .header("X-User-Id", "user-1"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                    .andExpect(jsonPath("$.fieldErrors.content").exists());
-
-            verify(messageSenderService, never()).send(any());
-        }
-
-        @Test
-        void returns_400_when_content_blank() throws Exception {
-            doNothing().when(membershipGuard).requireMember("r1", "user-1");
-
-            String body = objectMapper.writeValueAsString(
-                    Map.of("content", "   "));
-
-            mockMvc.perform(post("/api/chat/rooms/r1/messages")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(body)
-                            .header("X-User-Id", "user-1"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-        }
-
-        @Test
-        void returns_200_and_delegates_to_sender_when_valid() throws Exception {
-            doNothing().when(membershipGuard).requireMember("r1", "user-1");
-
-            String body = objectMapper.writeValueAsString(
-                    Map.of("content", "hello", "forwardedFrom", "alice: world"));
-
-            mockMvc.perform(post("/api/chat/rooms/r1/messages")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(body)
-                            .header("X-User-Id", "user-1")
-                            .header("X-Username", "alice"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.success").value(true));
-
-            verify(messageSenderService).send(argThat(msg ->
-                    "hello".equals(msg.getContent())
-                    && "r1".equals(msg.getChatRoomId())
-                    && "alice: world".equals(msg.getForwardedFrom())
-            ));
         }
     }
 
