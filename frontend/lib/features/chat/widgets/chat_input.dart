@@ -73,7 +73,6 @@ class _ChatInputState extends State<ChatInput> {
   // Mention autocomplete
   List<Map<String, dynamic>> _mentionSuggestions = [];
   bool _showMentions = false;
-  String _mentionQuery = '';
   // Drag-drop overlay state
   bool _isDragHovering = false;
 
@@ -100,7 +99,6 @@ class _ChatInputState extends State<ChatInput> {
       setState(() => _showMentions = false);
       return;
     }
-    _mentionQuery = query;
     if (query.length >= 1 && widget.onMentionSearch != null) {
       widget.onMentionSearch!(query).then((results) {
         if (mounted) setState(() { _mentionSuggestions = results; _showMentions = results.isNotEmpty; });
@@ -995,25 +993,6 @@ class _ChatInputState extends State<ChatInput> {
       ),
     );
   }
-}
-
-String buildSbarTemplate() {
-  return '[SBAR 인수인계]\n'
-      '\n'
-      '[S] 환자: / 병실: \n'
-      '    주호소: \n'
-      '\n'
-      '[B] 진단: \n'
-      '    이력: \n'
-      '    알러지: \n'
-      '\n'
-      '[A] V/S: BP /  HR  RR  BT \n'
-      '    현재상태: \n'
-      '    주의사항: \n'
-      '\n'
-      '[R] 다음조치: \n'
-      '    투약: \n'
-      '    모니터링: ';
 }
 
 class _CircleIconBtn extends StatelessWidget {
