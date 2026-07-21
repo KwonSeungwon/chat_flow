@@ -23,6 +23,7 @@ dependencies {
     // rationale as the servlet-api entry above.
     compileOnly 'io.micrometer:micrometer-core'
     testImplementation 'io.micrometer:micrometer-core'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 }
