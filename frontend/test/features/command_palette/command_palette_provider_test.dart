@@ -1,5 +1,10 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chatflow/core/network/dio_client.dart';
+import 'package:chatflow/features/chat/chat_rooms_provider.dart';
 import 'package:chatflow/features/command_palette/command_action.dart';
+import 'package:chatflow/features/command_palette/command_palette_provider.dart';
 
 /// Tests for the command palette filtering/scoring logic.
 ///
@@ -99,4 +104,59 @@ void main() {
       }
     });
   });
+
+  group('CommandPaletteNotifier state transitions', () {
+    late ProviderContainer container;
+
+    setUpAll(() => dotenv.testLoad(fileInput: ''));
+
+    setUp(() {
+      container = ProviderContainer(
+        overrides: [
+          dioClientProvider.overrideWithValue(DioClient()),
+          chatRoomsProvider.overrideWith(
+            (ref) => _FakeChatRoomsNotifier(),
+          ),
+        ],
+      );
+      // Keep auto-dispose provider alive for the duration of the test
+      container.listen(commandPaletteProvider, (_, __) {});
+    });
+
+    tearDown(() => container.dispose());
+
+    test('query dropping below 2 chars resets isSearchingUsers to false', () {
+      final notifier = container.read(commandPaletteProvider.notifier);
+
+      // Simulate typing 2+ chars — triggers isSearchingUsers = true
+      notifier.updateQuery('ab');
+      expect(container.read(commandPaletteProvider).isSearchingUsers, true);
+
+      // Drop below 2 chars — spinner must clear
+      notifier.updateQuery('a');
+      expect(container.read(commandPaletteProvider).isSearchingUsers, false);
+    });
+
+    test('empty query resets isSearchingUsers to false', () {
+      final notifier = container.read(commandPaletteProvider.notifier);
+
+      notifier.updateQuery('abc');
+      expect(container.read(commandPaletteProvider).isSearchingUsers, true);
+
+      notifier.updateQuery('');
+      expect(container.read(commandPaletteProvider).isSearchingUsers, false);
+    });
+  });
+}
+
+/// Stub notifier that provides an empty room list without network calls.
+class _FakeChatRoomsNotifier extends ChatRoomsNotifier {
+  _FakeChatRoomsNotifier() : super(DioClient()) {
+    state = const AsyncValue.data([]);
+  }
+
+  @override
+  Future<void> fetchRooms() async {
+    // no-op — avoid real network calls in tests
+  }
 }

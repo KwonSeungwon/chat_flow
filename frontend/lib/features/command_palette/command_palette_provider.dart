@@ -85,6 +85,8 @@ class CommandPaletteNotifier extends StateNotifier<CommandPaletteState> {
     if (trimmed.length >= 2) {
       state = state.copyWith(isSearchingUsers: true);
       _debounceTimer = Timer(_debounceDuration, () => _searchUsers(trimmed));
+    } else {
+      state = state.copyWith(isSearchingUsers: false);
     }
   }
 

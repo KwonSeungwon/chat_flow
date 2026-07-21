@@ -16,7 +16,7 @@ class ScheduledMessage {
   });
 
   factory ScheduledMessage.fromJson(Map<String, dynamic> json) => ScheduledMessage(
-        id: (json['id'] as num).toInt(),
+        id: _parseId(json['id']),
         chatRoomId: json['chatRoomId']?.toString() ?? '',
         content: json['content']?.toString() ?? '',
         scheduledAt: json['scheduledAt']?.toString() ?? '',
@@ -28,4 +28,11 @@ class ScheduledMessage {
       DateTime.tryParse(scheduledAt) ?? DateTime.now();
 
   bool get isPending => status == 'PENDING';
+
+  /// Parse id tolerantly: accept num, String, or null; default to 0.
+  static int _parseId(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
 }

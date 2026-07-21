@@ -53,6 +53,23 @@ void main() {
       expect(m.createdAt, '');
     });
 
+    test('tolerates missing, null, or wrong-type id without throwing', () {
+      final missing = ScheduledMessage.fromJson({'content': 'no id key'});
+      expect(missing.id, 0);
+
+      final nullId = ScheduledMessage.fromJson({'id': null, 'content': 'null id'});
+      expect(nullId.id, 0);
+
+      final stringId = ScheduledMessage.fromJson({'id': '99', 'content': 'string id'});
+      expect(stringId.id, 99);
+
+      final badString = ScheduledMessage.fromJson({'id': 'abc', 'content': 'non-numeric string'});
+      expect(badString.id, 0);
+
+      final boolId = ScheduledMessage.fromJson({'id': true, 'content': 'bool id'});
+      expect(boolId.id, 0);
+    });
+
     test('isPending reflects status', () {
       final pending = ScheduledMessage.fromJson({'id': 1, 'status': 'PENDING'});
       final sent = ScheduledMessage.fromJson({'id': 2, 'status': 'SENT'});
