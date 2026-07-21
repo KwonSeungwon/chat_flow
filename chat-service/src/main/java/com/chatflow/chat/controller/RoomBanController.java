@@ -66,10 +66,8 @@ public class RoomBanController {
         roomBanService.banUser(roomId, callerUserId, request.userId(), request.reason());
         log.info("User banned: roomId={}, target={}, by={}", roomId, request.userId(), callerUserId);
 
-        // Retrieve the ban entity to return in response
-        RoomBanEntity banEntity = roomBanService.listBans(roomId, callerUserId).stream()
-                .filter(b -> b.getUserId().equals(request.userId()))
-                .findFirst()
+        // Retrieve the ban entity to return in response (single-row fetch, not full list)
+        RoomBanEntity banEntity = roomBanService.findBan(roomId, request.userId())
                 .orElse(null);
 
         String bannedByUsername = roomMemberRepository

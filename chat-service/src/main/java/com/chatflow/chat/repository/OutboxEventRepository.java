@@ -15,6 +15,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
 
     List<OutboxEvent> findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus status);
 
+    long countByStatus(OutboxEvent.OutboxStatus status);
+
     /**
      * Atomically claim a batch of PENDING rows by flipping them to PROCESSING
      * with a unique claim token. Returns the count of rows actually claimed

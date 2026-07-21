@@ -51,7 +51,7 @@ public class OutboxPoller {
                 .description("Stale PROCESSING outbox events reset to PENDING by the reaper")
                 .register(registry);
         registry.gauge("chatflow.outbox.pending", outboxEventRepository,
-                repo -> repo.findTop50ByStatusOrderByCreatedAtAsc(OutboxEvent.OutboxStatus.PENDING).size());
+                repo -> repo.countByStatus(OutboxEvent.OutboxStatus.PENDING));
     }
 
     @Scheduled(fixedDelay = 200)
