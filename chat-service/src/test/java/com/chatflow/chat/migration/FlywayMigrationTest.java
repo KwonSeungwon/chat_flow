@@ -22,7 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V13) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V14) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -94,7 +94,7 @@ class FlywayMigrationTest {
     // ── Test 1: full chain applies without error ──────────────────────────
 
     /**
-     * Every migration V1..V13 must apply cleanly. If any migration contains
+     * Every migration V1..V14 must apply cleanly. If any migration contains
      * invalid Postgres SQL, Flyway will fail and this test catches it.
      */
     @Test
@@ -104,8 +104,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 13 versioned migrations (V1..V13) should have been executed")
-                .isEqualTo(13);
+                .as("All 14 versioned migrations (V1..V14) should have been executed")
+                .isEqualTo(14);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -191,6 +191,20 @@ class FlywayMigrationTest {
                 .isTrue();
     }
 
+    // ── Test 6: V14 — message_reports rate-limit index ──────────────────
+
+    /**
+     * V14 must create a composite index {@code idx_message_reports_reporter_created}
+     * on {@code message_reports (reported_by, created_at)} to support the per-user
+     * report rate-limit query.
+     */
+    @Test
+    void v14_messageReportsRateLimitIndexExists() throws SQLException {
+        assertThat(indexExists("message_reports", "idx_message_reports_reporter_created"))
+                .as("Index idx_message_reports_reporter_created should exist on message_reports (added by V14)")
+                .isTrue();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     /**
@@ -246,6 +260,24 @@ class FlywayMigrationTest {
                     return rs.getString("data_type");
                 }
                 return "";
+            }
+        }
+    }
+
+    /**
+     * Checks whether an index with the given name exists on the specified table.
+     * Uses {@code pg_indexes} for Postgres introspection.
+     */
+    private static boolean indexExists(String table, String indexName) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM pg_indexes "
+                             + "WHERE schemaname = 'public' AND tablename = ? AND indexname = ?")) {
+            ps.setString(1, table);
+            ps.setString(2, indexName);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
             }
         }
     }
