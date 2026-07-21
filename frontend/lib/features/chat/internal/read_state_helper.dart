@@ -16,8 +16,8 @@ class ReadStateHelper {
     required this.mounted,
     required this.dioClient,
     required this.userId,
-    required this.readUnreadCounts,
-    required this.writeUnreadCounts,
+    required this.resetUnreadCount,
+    required this.setUnreadCount,
   });
 
   /// Returns the live [ChatMessagesState] snapshot.
@@ -36,11 +36,11 @@ class ReadStateHelper {
   /// user's own messages don't count towards their own read receipts.
   final String userId;
 
-  /// Reads the current global `roomUnreadCountsProvider` state.
-  final Map<String, int> Function() readUnreadCounts;
+  /// Resets the unread count for a room to zero via the notifier.
+  final void Function(String roomId) resetUnreadCount;
 
-  /// Writes a new value to the global `roomUnreadCountsProvider`.
-  final void Function(Map<String, int>) writeUnreadCounts;
+  /// Sets the unread count for a specific room via the notifier.
+  final void Function(String roomId, int count) setUnreadCount;
 
   // -------------------------------------------------------------------
   // Public API
@@ -49,9 +49,7 @@ class ReadStateHelper {
   /// Called when user enters a room.  Clears local unread count and
   /// persists last-read position to the server.
   void markRoomRead(String roomId) {
-    final current = Map<String, int>.from(readUnreadCounts());
-    current[roomId] = 0;
-    writeUnreadCounts(current);
+    resetUnreadCount(roomId);
 
     // 항상 서버에 readAt을 갱신 — 메시지가 아직 로드되지 않았어도 빈 lastReadMessageId로 호출
     final chatMsgs =
@@ -100,9 +98,7 @@ class ReadStateHelper {
       }
 
       // Update global unread counts map
-      final current = Map<String, int>.from(readUnreadCounts());
-      current[roomId] = unreadCount;
-      writeUnreadCounts(current);
+      setUnreadCount(roomId, unreadCount);
     } catch (_) {
       // Non-critical — best effort
     }

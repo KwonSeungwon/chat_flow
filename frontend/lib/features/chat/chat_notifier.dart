@@ -77,10 +77,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       mounted: () => mounted,
       dioClient: _dioClient,
       userId: _userId,
-      readUnreadCounts: () =>
-          Map<String, int>.from(_ref.read(roomUnreadCountsProvider)),
-      writeUnreadCounts: (counts) =>
-          _ref.read(roomUnreadCountsProvider.notifier).state = counts,
+      resetUnreadCount: (roomId) =>
+          _ref.read(roomUnreadCountsProvider.notifier).reset(roomId),
+      setUnreadCount: (roomId, count) =>
+          _ref.read(roomUnreadCountsProvider.notifier).setCount(roomId, count),
     );
     _dispatcher = StompMessageDispatcher(
       getCurrentState: () => state,

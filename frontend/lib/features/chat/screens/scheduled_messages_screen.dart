@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../chat_rooms_provider.dart' show chatRoomsProvider;
 import '../scheduled_messages_provider.dart';
 
 class ScheduledMessagesScreen extends ConsumerWidget {
@@ -9,6 +10,12 @@ class ScheduledMessagesScreen extends ConsumerWidget {
   String _format(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  String _resolveRoomName(WidgetRef ref, String roomId) {
+    final rooms = ref.watch(chatRoomsProvider).valueOrNull ?? [];
+    final room = rooms.where((r) => r.id == roomId).firstOrNull;
+    return room?.name ?? roomId;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +62,7 @@ class ScheduledMessagesScreen extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    '${item.chatRoomId}  ·  ${_format(item.scheduledAtDateTime)}',
+                    '${_resolveRoomName(ref, item.chatRoomId)}  ·  ${_format(item.scheduledAtDateTime)}',
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.cancel_outlined),
