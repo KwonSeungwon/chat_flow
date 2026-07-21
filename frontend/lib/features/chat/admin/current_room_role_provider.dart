@@ -6,7 +6,7 @@ import 'room_members_provider.dart';
 /// Returns the current user's [RoomRole] in the given room,
 /// or null if the member list is not yet loaded or the user is not a member.
 final currentRoomRoleProvider =
-    Provider.family<RoomRole?, String>((ref, roomId) {
+    Provider.autoDispose.family<RoomRole?, String>((ref, roomId) {
   final membersAsync = ref.watch(roomMembersProvider(roomId));
   final userId = ref.watch(authProvider).userId;
   if (userId == null) return null;

@@ -4,7 +4,7 @@ import '../../../shared/models/room_ban.dart';
 import 'room_admin_api.dart';
 import 'room_admin_api_provider.dart';
 
-final roomBansProvider = StateNotifierProvider.family<RoomBansNotifier,
+final roomBansProvider = StateNotifierProvider.autoDispose.family<RoomBansNotifier,
     AsyncValue<List<RoomBan>>, String>(
   (ref, roomId) {
     final api = ref.watch(roomAdminApiProvider);

@@ -442,7 +442,7 @@ class _ReplyTile extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(ctrl.dispose);
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {

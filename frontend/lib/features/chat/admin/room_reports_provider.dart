@@ -7,7 +7,7 @@ import 'room_admin_api_provider.dart';
 /// Key for the reports provider: (roomId, status).
 typedef ReportsKey = ({String roomId, ReportStatus status});
 
-final roomReportsProvider = StateNotifierProvider.family<
+final roomReportsProvider = StateNotifierProvider.autoDispose.family<
     RoomReportsNotifier, AsyncValue<List<MessageReport>>, ReportsKey>(
   (ref, key) {
     final api = ref.watch(roomAdminApiProvider);

@@ -76,6 +76,11 @@ void showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, 
     );
   }
 
+  void dispose() {
+    nameCtrl.dispose();
+    descCtrl.dispose();
+  }
+
   if (isMobile) {
     showModalBottomSheet(
       context: context,
@@ -105,7 +110,7 @@ void showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, 
           ],
         ),
       ),
-    );
+    ).whenComplete(dispose);
   } else {
     showDialog(
       context: context,
@@ -129,6 +134,6 @@ void showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, 
           ),
         ),
       ),
-    );
+    ).whenComplete(dispose);
   }
 }
