@@ -29,6 +29,14 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class KoreanSearchService {
 
+    /**
+     * Elasticsearch default for {@code index.max_result_window}.
+     * Requests with {@code from + size} exceeding this value are rejected by ES
+     * with a hard error.  We guard against this to degrade gracefully instead of
+     * returning HTTP 500.
+     */
+    static final int MAX_RESULT_WINDOW = 10_000;
+
     private final ElasticsearchClient elasticsearchClient;
 
     public Page<ChatMessageDocument> searchKoreanContent(String query, String chatRoomId, Pageable pageable) {
@@ -169,14 +177,34 @@ public class KoreanSearchService {
             BoolQuery boolQuery, Pageable pageable,
             String highlightField, Double minScore,
             String errorLogContext) {
+
+        int from = (int) pageable.getOffset();
+        int size = pageable.getPageSize();
+
+        // Guard: ES rejects from + size > max_result_window (default 10 000).
+        // If 'from' alone exceeds the window there are simply no reachable results
+        // → return an empty page without hitting ES.
+        // If only 'from + size' crosses the boundary, clamp size so the last
+        // valid page still returns whatever results ES can serve.
+        if (from >= MAX_RESULT_WINDOW) {
+            log.debug("Deep pagination blocked: from={} exceeds max_result_window={}", from, MAX_RESULT_WINDOW);
+            return new PageImpl<>(List.of(), pageable, 0);
+        }
+        if (from + size > MAX_RESULT_WINDOW) {
+            size = MAX_RESULT_WINDOW - from;
+            log.debug("Clamping page size to {} (from={}, max_result_window={})", size, from, MAX_RESULT_WINDOW);
+        }
+
+        final int clampedSize = size;
+
         try {
             Query finalQuery = boolQuery._toQuery();
 
             SearchRequest searchRequest = SearchRequest.of(s -> {
                 s.index(SearchConstants.CHAT_MESSAGES_INDEX)
                         .query(finalQuery)
-                        .from((int) pageable.getOffset())
-                        .size(pageable.getPageSize())
+                        .from(from)
+                        .size(clampedSize)
                         .sort(sort -> sort
                                 .field(f -> f
                                         .field("timestamp")
