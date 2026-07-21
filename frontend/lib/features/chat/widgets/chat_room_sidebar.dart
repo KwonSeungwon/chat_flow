@@ -101,9 +101,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
             );
           }
 
-          final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
-          current[roomId] = (current[roomId] ?? 0) + 1;
-          ref.read(roomUnreadCountsProvider.notifier).state = current;
+          ref.read(roomUnreadCountsProvider.notifier).increment(roomId);
         },
       );
     });
@@ -116,9 +114,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
       ref.read(chatRoomsProvider.notifier).fetchRooms();
       final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
       if (!_disposed && counts.isNotEmpty) {
-        final current = Map<String, int>.from(ref.read(roomUnreadCountsProvider));
-        current.addAll(counts);
-        ref.read(roomUnreadCountsProvider.notifier).state = current;
+        ref.read(roomUnreadCountsProvider.notifier).mergeAll(counts);
       }
     });
   }
@@ -137,7 +133,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
   Future<void> _loadInitialUnreadCounts() async {
     final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
     if (!_disposed && counts.isNotEmpty) {
-      ref.read(roomUnreadCountsProvider.notifier).state = Map<String, int>.from(counts);
+      ref.read(roomUnreadCountsProvider.notifier).replaceAll(counts);
     }
   }
 

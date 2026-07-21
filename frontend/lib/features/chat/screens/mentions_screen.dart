@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../chat_rooms_provider.dart' show chatRoomsProvider;
 import '../mentions_provider.dart';
 
 class MentionsScreen extends ConsumerWidget {
@@ -14,6 +15,12 @@ class MentionsScreen extends ConsumerWidget {
     if (diff.inDays < 1) return '${diff.inHours}시간 전';
     if (diff.inDays < 7) return '${diff.inDays}일 전';
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  String _resolveRoomName(WidgetRef ref, String roomId) {
+    final rooms = ref.watch(chatRoomsProvider).valueOrNull ?? [];
+    final room = rooms.where((r) => r.id == roomId).firstOrNull;
+    return room?.name ?? roomId;
   }
 
   @override
@@ -73,7 +80,7 @@ class MentionsScreen extends ConsumerWidget {
                     ),
                   ),
                   title: Text(
-                    '${m.fromUsername} → ${m.chatRoomId}',
+                    '${m.fromUsername} → ${_resolveRoomName(ref, m.chatRoomId)}',
                     style: TextStyle(
                         fontWeight:
                             m.read ? FontWeight.normal : FontWeight.bold),

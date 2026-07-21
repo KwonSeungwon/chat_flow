@@ -36,7 +36,12 @@ class _RouterNotifier extends ChangeNotifier {
     }
     if (auth.isAuthenticated && isLoginPage) {
       final redirect = state.uri.queryParameters['redirect'];
-      if (redirect != null && redirect.isNotEmpty) return redirect;
+      if (redirect != null &&
+          redirect.isNotEmpty &&
+          redirect.startsWith('/') &&
+          !redirect.startsWith('//')) {
+        return redirect;
+      }
       return '/chat';
     }
     return null;

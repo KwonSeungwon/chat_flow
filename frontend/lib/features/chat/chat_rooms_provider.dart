@@ -143,7 +143,38 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 // Global unread counts (per room) — updated by ChatNotifier, read by sidebar
 // ---------------------------------------------------------------------------
 
-final roomUnreadCountsProvider = StateProvider<Map<String, int>>((ref) => {});
+class RoomUnreadCountsNotifier extends StateNotifier<Map<String, int>> {
+  RoomUnreadCountsNotifier() : super({});
+
+  /// Increment the unread count for a single room by 1.
+  void increment(String roomId) {
+    state = {...state, roomId: (state[roomId] ?? 0) + 1};
+  }
+
+  /// Reset the unread count for a room to zero.
+  void reset(String roomId) {
+    state = {...state, roomId: 0};
+  }
+
+  /// Set the unread count for a specific room.
+  void setCount(String roomId, int count) {
+    state = {...state, roomId: count};
+  }
+
+  /// Bulk-replace the entire counts map (e.g. initial load from server).
+  void replaceAll(Map<String, int> counts) {
+    state = Map<String, int>.from(counts);
+  }
+
+  /// Merge server-fetched counts into the current state (addAll semantics).
+  void mergeAll(Map<String, int> counts) {
+    state = {...state, ...counts};
+  }
+}
+
+final roomUnreadCountsProvider =
+    StateNotifierProvider<RoomUnreadCountsNotifier, Map<String, int>>(
+        (ref) => RoomUnreadCountsNotifier());
 
 // ---------------------------------------------------------------------------
 // App-level STOMP service (single connection, survives room changes)

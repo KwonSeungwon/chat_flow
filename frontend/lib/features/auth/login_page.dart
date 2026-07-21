@@ -111,7 +111,13 @@ class _LoginPageState extends ConsumerState<LoginPage>
     ref.listen<AuthState>(authProvider, (_, next) {
       if (next.isAuthenticated) {
         final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
-        context.go(redirect != null && redirect.isNotEmpty ? redirect : '/chat');
+        final safeRedirect = redirect != null &&
+                redirect.isNotEmpty &&
+                redirect.startsWith('/') &&
+                !redirect.startsWith('//')
+            ? redirect
+            : '/chat';
+        context.go(safeRedirect);
       }
     });
 
