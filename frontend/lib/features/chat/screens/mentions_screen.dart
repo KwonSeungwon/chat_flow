@@ -2,19 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/utils/time_format.dart';
 import '../mentions_provider.dart';
 
 class MentionsScreen extends ConsumerWidget {
   const MentionsScreen({super.key});
-
-  String _format(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return '방금';
-    if (diff.inHours < 1) return '${diff.inMinutes}분 전';
-    if (diff.inDays < 1) return '${diff.inHours}시간 전';
-    if (diff.inDays < 7) return '${diff.inDays}일 전';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -80,7 +72,7 @@ class MentionsScreen extends ConsumerWidget {
                   ),
                   subtitle: Text(m.contentPreview,
                       maxLines: 2, overflow: TextOverflow.ellipsis),
-                  trailing: Text(_format(m.when),
+                  trailing: Text(relativeTime(m.when),
                       style: const TextStyle(fontSize: 12)),
                   onTap: () async {
                     await ref

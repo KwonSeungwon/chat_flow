@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/utils/time_format.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
 import 'bubbles/ai_summary_bubble.dart';
@@ -342,7 +342,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
 
   String _formatTime(String timestamp) {
     try {
-      return DateFormat('HH:mm').format(DateTime.parse(timestamp).toLocal());
+      return hhmm(DateTime.parse(timestamp).toLocal());
     } catch (_) {
       return '';
     }
