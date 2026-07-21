@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../shared/models/chat_message.dart';
+import '../../shared/widgets/highlighted_text.dart';
 import 'search_provider.dart';
 
 class _CloseSearchIntent extends Intent {
@@ -41,46 +42,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     } catch (_) {
       return '';
     }
-  }
-
-  /// Highlight [query] within [text] using RichText / TextSpan.
-  Widget _highlightedText(String text, String query) {
-    if (query.isEmpty) return Text(text, maxLines: 3, overflow: TextOverflow.ellipsis);
-
-    final lowerText = text.toLowerCase();
-    final lowerQuery = query.toLowerCase();
-    final spans = <TextSpan>[];
-    int start = 0;
-
-    while (true) {
-      final idx = lowerText.indexOf(lowerQuery, start);
-      if (idx == -1) {
-        spans.add(TextSpan(text: text.substring(start)));
-        break;
-      }
-      if (idx > start) {
-        spans.add(TextSpan(text: text.substring(start, idx)));
-      }
-      spans.add(
-        TextSpan(
-          text: text.substring(idx, idx + query.length),
-          style: TextStyle(
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-      start = idx + query.length;
-    }
-
-    return Text.rich(
-      TextSpan(
-        style: DefaultTextStyle.of(context).style.copyWith(fontSize: 14),
-        children: spans,
-      ),
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
-    );
   }
 
   @override
@@ -274,7 +235,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 msg: msg,
                 query: _queryCtrl.text.trim(),
                 formattedTime: _formatTimestamp(msg.timestamp),
-                highlightedContent: _highlightedText(msg.content, _queryCtrl.text.trim()),
+                highlightedContent: HighlightedText(
+                  text: msg.content,
+                  query: _queryCtrl.text.trim(),
+                ),
                 onTap: () {
                   if (msg.chatRoomId.isNotEmpty) {
                     final msgId = msg.messageId ?? '';

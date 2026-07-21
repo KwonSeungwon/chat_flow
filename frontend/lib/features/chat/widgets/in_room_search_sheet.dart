@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../shared/widgets/highlighted_text.dart';
 import '../in_room_search_provider.dart';
 
 class InRoomSearchSheet extends ConsumerStatefulWidget {
@@ -60,40 +61,6 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
         _end = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
       }
     });
-  }
-
-  Widget _highlightedText(String text, String query) {
-    if (query.isEmpty) {
-      return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis);
-    }
-    final lower = text.toLowerCase();
-    final lowerQ = query.toLowerCase();
-    final spans = <TextSpan>[];
-    int start = 0;
-    while (true) {
-      final idx = lower.indexOf(lowerQ, start);
-      if (idx == -1) {
-        spans.add(TextSpan(text: text.substring(start)));
-        break;
-      }
-      if (idx > start) spans.add(TextSpan(text: text.substring(start, idx)));
-      spans.add(TextSpan(
-        text: text.substring(idx, idx + lowerQ.length),
-        style: TextStyle(
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          fontWeight: FontWeight.bold,
-        ),
-      ));
-      start = idx + lowerQ.length;
-    }
-    return Text.rich(
-      TextSpan(
-        style: DefaultTextStyle.of(context).style.copyWith(fontSize: 13),
-        children: spans,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
   }
 
   @override
@@ -311,8 +278,12 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
                       ]),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 2),
-                        child: _highlightedText(
-                            msg.content, _queryCtrl.text.trim()),
+                        child: HighlightedText(
+                          text: msg.content,
+                          query: _queryCtrl.text.trim(),
+                          fontSize: 13,
+                          maxLines: 2,
+                        ),
                       ),
                       onTap: () {
                         Navigator.of(context).pop();
