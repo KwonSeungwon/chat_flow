@@ -86,13 +86,13 @@ class _InRoomSearchSheetState extends ConsumerState<InRoomSearchSheet> {
       ));
       start = idx + lowerQ.length;
     }
-    return RichText(
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         style: DefaultTextStyle.of(context).style.copyWith(fontSize: 13),
         children: spans,
       ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
     );
   }
 

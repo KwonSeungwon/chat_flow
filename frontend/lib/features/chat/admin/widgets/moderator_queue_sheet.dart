@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/models/message_report.dart';
+import '../../../../shared/utils/time_format.dart';
 import '../room_admin_api_provider.dart';
 import '../room_reports_provider.dart';
 
@@ -127,7 +128,7 @@ class _ReportCard extends ConsumerWidget {
                 Text('작성자: ${report.messageAuthor}',
                     style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 const Spacer(),
-                Text(_formatTime(report.createdAt),
+                Text(relativeTimeCompact(report.createdAt),
                     style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
@@ -238,14 +239,6 @@ class _ReportCard extends ConsumerWidget {
     }
   }
 
-  String _formatTime(DateTime t) {
-    final now = DateTime.now();
-    final diff = now.difference(t);
-    if (diff.inMinutes < 1) return '방금';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
-    if (diff.inHours < 24) return '${diff.inHours}시간 전';
-    return '${t.month}/${t.day}';
-  }
 }
 
 class _ReasonChip extends StatelessWidget {

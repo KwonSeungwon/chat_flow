@@ -73,13 +73,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       start = idx + query.length;
     }
 
-    return RichText(
-      maxLines: 3,
-      overflow: TextOverflow.ellipsis,
-      text: TextSpan(
+    return Text.rich(
+      TextSpan(
         style: DefaultTextStyle.of(context).style.copyWith(fontSize: 14),
         children: spans,
       ),
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
     );
   }
 

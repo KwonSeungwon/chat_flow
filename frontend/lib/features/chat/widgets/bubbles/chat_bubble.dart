@@ -104,7 +104,7 @@ class ChatBubbleState extends State<ChatBubble> {
     if (cursor < content.length) {
       spans.add(TextSpan(text: content.substring(cursor), style: baseStyle));
     }
-    return RichText(text: TextSpan(children: spans));
+    return Text.rich(TextSpan(children: spans));
   }
 
   void _showDeleteSheet(BuildContext context) =>
