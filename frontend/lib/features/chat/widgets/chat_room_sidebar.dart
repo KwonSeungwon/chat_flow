@@ -375,7 +375,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
           ),
         ),
       ),
-    );
+    ).whenComplete(searchCtrl.dispose);
   }
 
   void _showCreateDialog(BuildContext context) {
@@ -425,7 +425,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   void _showPasswordDialog(BuildContext context, ChatRoom room) {
@@ -467,7 +467,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
           ),
         ],
       ),
-    );
+    ).whenComplete(pwCtrl.dispose);
   }
 
   void _showHideRoomDialog(BuildContext context, ChatRoom room) {

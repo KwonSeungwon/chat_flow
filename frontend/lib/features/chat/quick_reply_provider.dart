@@ -37,8 +37,8 @@ class QuickReplyNotifier extends StateNotifier<QuickReplySuggestions> {
   }
 }
 
-final quickReplyProvider = StateNotifierProvider.family<QuickReplyNotifier,
-    QuickReplySuggestions, String>((ref, roomId) {
+final quickReplyProvider = StateNotifierProvider.autoDispose
+    .family<QuickReplyNotifier, QuickReplySuggestions, String>((ref, roomId) {
   final dio = ref.read(dioClientProvider).dio;
   return QuickReplyNotifier(dio, roomId);
 });

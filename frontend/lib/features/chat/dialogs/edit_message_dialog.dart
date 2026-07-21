@@ -47,5 +47,5 @@ void showEditMessageDialog(
         ),
       ],
     ),
-  );
+  ).whenComplete(ctrl.dispose);
 }

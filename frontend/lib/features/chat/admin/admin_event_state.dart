@@ -25,4 +25,4 @@ final kickedEventProvider = StateProvider<KickedEvent?>((ref) => null);
 
 /// Fire-and-clear muted event per room. Set when /user/queue/muted is received.
 final mutedEventProvider =
-    StateProvider.family<MutedEvent?, String>((ref, roomId) => null);
+    StateProvider.autoDispose.family<MutedEvent?, String>((ref, roomId) => null);
