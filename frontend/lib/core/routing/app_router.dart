@@ -34,7 +34,11 @@ class _RouterNotifier extends ChangeNotifier {
       if (isInvitePage) return '/login?redirect=${Uri.encodeComponent(loc)}';
       return '/login';
     }
-    if (auth.isAuthenticated && isLoginPage) return '/chat';
+    if (auth.isAuthenticated && isLoginPage) {
+      final redirect = state.uri.queryParameters['redirect'];
+      if (redirect != null && redirect.isNotEmpty) return redirect;
+      return '/chat';
+    }
     return null;
   }
 }
