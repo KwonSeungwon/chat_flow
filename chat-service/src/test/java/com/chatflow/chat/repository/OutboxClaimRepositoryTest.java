@@ -229,6 +229,38 @@ class OutboxClaimRepositoryTest {
         assertThat(refreshed.getStatus()).isEqualTo(OutboxStatus.FAILED);
     }
 
+    // ---- countByStatus ----
+
+    @Test
+    @Transactional
+    void countByStatus_returnsTrueCountNotCappedAt50() {
+        // Insert 55 PENDING events — proves the count is not capped at 50
+        for (int i = 0; i < 55; i++) {
+            outboxEventRepository.save(pendingEvent("topic-a", "key-" + i));
+        }
+        // Insert 3 PROCESSED events — should not be counted
+        for (int i = 0; i < 3; i++) {
+            outboxEventRepository.save(
+                    eventWithStatus("topic-a", "processed-" + i, OutboxStatus.PROCESSED));
+        }
+
+        long pendingCount = outboxEventRepository.countByStatus(OutboxStatus.PENDING);
+        assertThat(pendingCount).isEqualTo(55);
+
+        long processedCount = outboxEventRepository.countByStatus(OutboxStatus.PROCESSED);
+        assertThat(processedCount).isEqualTo(3);
+
+        long failedCount = outboxEventRepository.countByStatus(OutboxStatus.FAILED);
+        assertThat(failedCount).isZero();
+    }
+
+    @Test
+    @Transactional
+    void countByStatus_returnsZeroWhenNoneExist() {
+        long count = outboxEventRepository.countByStatus(OutboxStatus.PENDING);
+        assertThat(count).isZero();
+    }
+
     // ---- helpers ----
 
     private OutboxEvent pendingEvent(String topic, String partitionKey) {

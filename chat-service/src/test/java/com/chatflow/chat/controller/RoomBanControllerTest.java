@@ -126,7 +126,7 @@ class RoomBanControllerTest {
                     .reason("harassment")
                     .bannedAt(LocalDateTime.of(2026, 4, 27, 12, 0))
                     .build();
-            when(roomBanService.listBans(ROOM_ID, CALLER_ID)).thenReturn(List.of(ban));
+            when(roomBanService.findBan(ROOM_ID, TARGET_ID)).thenReturn(Optional.of(ban));
 
             RoomMemberEntity callerMember = RoomMemberEntity.builder()
                     .roomId(ROOM_ID).userId(CALLER_ID).username("alice")
@@ -140,9 +140,14 @@ class RoomBanControllerTest {
                             .content("{\"userId\":\"" + TARGET_ID + "\",\"reason\":\"harassment\"}"))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.userId").value(TARGET_ID));
+                    .andExpect(jsonPath("$.data.userId").value(TARGET_ID))
+                    .andExpect(jsonPath("$.data.bannedBy").value("alice"))
+                    .andExpect(jsonPath("$.data.reason").value("harassment"));
 
             verify(roomBanService).banUser(ROOM_ID, CALLER_ID, TARGET_ID, "harassment");
+            // Verify single-row fetch is used, NOT the full-list path
+            verify(roomBanService).findBan(ROOM_ID, TARGET_ID);
+            verify(roomBanService, never()).listBans(anyString(), anyString());
         }
 
         @Test

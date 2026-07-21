@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -95,6 +96,11 @@ public class RoomBanService {
 
     public boolean isBanned(String roomId, String userId) {
         return roomBanRepository.existsByRoomIdAndUserId(roomId, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<RoomBanEntity> findBan(String roomId, String userId) {
+        return roomBanRepository.findByRoomIdAndUserId(roomId, userId);
     }
 
     @Transactional(readOnly = true)
