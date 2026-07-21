@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -563,6 +564,98 @@ class KoreanSearchServiceTest {
                     .isInstanceOf(SearchException.class)
                     .hasMessage("검색 중 오류가 발생했습니다.")
                     .hasCauseInstanceOf(IOException.class);
+        }
+    }
+
+    // ── deep pagination guard ───────────────────────────────────────────
+
+    @Nested
+    @DisplayName("deep pagination guard (max_result_window = 10 000)")
+    class DeepPaginationGuardTests {
+
+        @Test
+        @DisplayName("from beyond max_result_window returns empty page and does NOT call ES")
+        void beyondWindowReturnsEmptyWithoutEsCall() throws IOException {
+            // page=1000, size=20 → offset=20000 → far beyond 10 000
+            Pageable pageable = PageRequest.of(1000, 20);
+
+            Page<ChatMessageDocument> result = service.searchKoreanContent("테스트", "room-1", pageable);
+
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isZero();
+            verify(elasticsearchClient, never()).search(any(SearchRequest.class), eq(ChatMessageDocument.class));
+        }
+
+        @Test
+        @DisplayName("from exactly at max_result_window returns empty page and does NOT call ES")
+        void exactlyAtWindowReturnsEmpty() throws IOException {
+            // page=500, size=20 → offset=10000 → exactly at boundary
+            Pageable pageable = PageRequest.of(500, 20);
+
+            Page<ChatMessageDocument> result = service.searchWithNgram("검색", "room-1", pageable);
+
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isZero();
+            verify(elasticsearchClient, never()).search(any(SearchRequest.class), eq(ChatMessageDocument.class));
+        }
+
+        @Test
+        @DisplayName("boundary request (from + size crosses window) clamps size and still calls ES")
+        void boundaryRequestClampsSizeAndCallsEs() throws IOException {
+            stubEmptyResponse();
+            // page=499, size=20 → offset=9980, from+size=10000 → exactly at limit, should NOT clamp
+            Pageable pageable = PageRequest.of(499, 20);
+
+            service.searchKoreanContent("테스트", "room-1", pageable);
+
+            verify(elasticsearchClient).search(requestCaptor.capture(), eq(ChatMessageDocument.class));
+            SearchRequest req = requestCaptor.getValue();
+            assertThat(req.from()).isEqualTo(9980);
+            assertThat(req.size()).isEqualTo(20); // not clamped: 9980+20 = 10000 = MAX exactly
+        }
+
+        @Test
+        @DisplayName("request crossing window boundary gets size clamped")
+        void crossingBoundaryClamps() throws IOException {
+            stubEmptyResponse();
+            // page=333, size=30 → offset=9990, from+size=10020 > 10000 → clamp size to 10
+            Pageable crossingPageable = PageRequest.of(333, 30);
+
+            service.searchKoreanContent("테스트", "room-1", crossingPageable);
+
+            verify(elasticsearchClient).search(requestCaptor.capture(), eq(ChatMessageDocument.class));
+            SearchRequest req = requestCaptor.getValue();
+            assertThat(req.from()).isEqualTo(9990);
+            assertThat(req.size()).isEqualTo(10); // clamped: 10000 - 9990 = 10
+        }
+
+        @Test
+        @DisplayName("normal in-window request calls ES and returns results (regression guard)")
+        void normalRequestStillWorks() throws IOException {
+            ChatMessageDocument doc = ChatMessageDocument.builder()
+                    .messageId("msg-1").chatRoomId("room-1").content("hello").build();
+            stubResponseWithHits(List.of(doc), 42);
+
+            Pageable pageable = PageRequest.of(0, 20);
+            Page<ChatMessageDocument> result = service.searchKoreanContent("hello", "room-1", pageable);
+
+            verify(elasticsearchClient).search(any(SearchRequest.class), eq(ChatMessageDocument.class));
+            assertThat(result.getContent()).hasSize(1);
+            assertThat(result.getContent().get(0).getMessageId()).isEqualTo("msg-1");
+            assertThat(result.getTotalElements()).isEqualTo(42);
+        }
+
+        @Test
+        @DisplayName("deep pagination guard applies to searchWithFilters too")
+        void appliesToSearchWithFilters() throws IOException {
+            Pageable pageable = PageRequest.of(1000, 20); // offset=20000
+
+            Page<ChatMessageDocument> result = service.searchWithFilters(
+                    "room-1", "test", null, null, null, null, pageable);
+
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isZero();
+            verify(elasticsearchClient, never()).search(any(SearchRequest.class), eq(ChatMessageDocument.class));
         }
     }
 
