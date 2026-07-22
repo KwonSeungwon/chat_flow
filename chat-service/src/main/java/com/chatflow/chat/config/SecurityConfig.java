@@ -45,6 +45,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/chat/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat/auth/**").permitAll()
                         .requestMatchers("/api/fhir/**").authenticated()
+                        // Token-only (see gateway SecurityConfig) — must work after JWT expiry so
+                        // logout/expiry cleanup can unsubscribe the device from all room topics.
+                        .requestMatchers(HttpMethod.POST, "/api/fcm/unsubscribe-all").permitAll()
                         .requestMatchers("/api/fcm/**").authenticated()
                         .anyRequest().authenticated()
                 )
