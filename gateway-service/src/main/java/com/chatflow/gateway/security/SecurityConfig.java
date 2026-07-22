@@ -42,6 +42,11 @@ public class SecurityConfig {
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
                         .pathMatchers("/actuator/health").permitAll()
                         .pathMatchers("/api/fallback/**").permitAll()
+                        // FCM unsubscribe-all is token-only (the FCM device token identifies the
+                        // device; Firebase verifies ownership) and destructive only against the
+                        // caller's own pushes. It must be callable AFTER the session JWT has expired
+                        // so logout/expiry cleanup can stop pushes — hence permitAll, not authenticated.
+                        .pathMatchers(HttpMethod.POST, "/api/fcm/unsubscribe-all").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/files/**").authenticated()
                         .pathMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyExchange().authenticated()

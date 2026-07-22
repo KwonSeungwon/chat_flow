@@ -60,10 +60,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final DioClient _dioClient;
   static const _storage = FlutterSecureStorage();
 
+  bool _fcmStopInFlight = false;
+
   AuthNotifier(this._dioClient) : super(const AuthState()) {
     _dioClient.onUnauthorized = () {
       state = const AuthState(isHydrated: true);
       setAuthTokenForFiles(null);
+      // Session expired/invalidated server-side (401) — stop FCM pushes for this
+      // device, otherwise notifications keep arriving after the token dies.
+      WebUnloadHandler.unregister();
+      _stopFcmPushes();
     };
     _hydrate();
   }
@@ -97,6 +103,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _storage.delete(key: StorageKeys.token);
           await _storage.delete(key: StorageKeys.userId);
           await _storage.delete(key: StorageKeys.username);
+          // The session's JWT expired while we were away — this device is still
+          // subscribed to room topics, so pushes keep coming. Unsubscribe now.
+          await _stopFcmPushes();
         }
         state = const AuthState(isHydrated: true);
       }
@@ -166,6 +175,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  /// Stop FCM pushes for this device when the session ends (logout / token
+  /// expiry / 401). Unsubscribes the device's FCM token from every room topic
+  /// server-side — the reliable way to stop pushes; deleting the token alone
+  /// leaves the topic subscription in place until Firebase lazily evicts it.
+  /// Then invalidates the local token. Best-effort: never throws.
+  ///
+  /// POST /api/fcm/unsubscribe-all is permitAll server-side, so it also works on
+  /// the expiry paths where the JWT is already invalid. The in-flight guard
+  /// prevents re-entrancy if the call itself were ever to surface a 401.
+  Future<void> _stopFcmPushes() async {
+    if (_fcmStopInFlight) return;
+    _fcmStopInFlight = true;
+    try {
+      String? fcmToken;
+      try {
+        fcmToken = await FcmService.getToken();
+      } catch (e) {
+        debugPrint('[AuthNotifier] fcm getToken failed: $e');
+      }
+      // Server validates @Size(min=100); skip obviously-invalid tokens.
+      if (fcmToken != null && fcmToken.length >= 100) {
+        try {
+          await _dioClient.dio
+              .post('/api/fcm/unsubscribe-all', data: {'token': fcmToken});
+        } catch (e) {
+          debugPrint('[AuthNotifier] fcm unsubscribe-all failed: $e');
+        }
+      }
+      await FcmService.deleteToken();
+    } finally {
+      _fcmStopInFlight = false;
+    }
+  }
+
   Future<void> register(String username, String password, {String role = 'NURSE'}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
@@ -198,11 +241,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       debugPrint('[AuthNotifier] logout error: $e');
     }
-    // Invalidate the FCM token so pushes stop arriving for the previously
-    // logged-in user. Firebase auto-evicts the dead token from any topic
-    // subscriptions on the next push attempt — no need to enumerate
-    // per-room subscriptions here.
-    await FcmService.deleteToken();
+    // Unsubscribe this device from all room topics server-side, then invalidate
+    // the local FCM token. Unsubscribe-all (not just deleteToken) is what
+    // reliably stops pushes — a deleted token lingers in the topic until Firebase
+    // lazily evicts it. The JWT is still valid here, so the call is authenticated.
+    await _stopFcmPushes();
     // Detach the beforeunload handler so a future tab close after logout
     // doesn't fire POST /api/fcm/unsubscribe-all with a stale/empty JWT.
     WebUnloadHandler.unregister();
