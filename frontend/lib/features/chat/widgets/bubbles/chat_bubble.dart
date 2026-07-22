@@ -555,8 +555,10 @@ class ChatBubbleState extends State<ChatBubble> {
       );
     }
 
-    // Desktop/web hover reaction bar
-    final showHoverBar = kIsWeb && widget.onReaction != null && !widget.msg.deleted;
+    // Desktop/web hover action toolbar: quick reactions + reply + more (⋯).
+    // Surfaces the actions otherwise hidden behind long-press/right-click.
+    final showHoverBar =
+        kIsWeb && !widget.msg.deleted && (widget.onReaction != null || hasActions);
     if (!showHoverBar) return result;
 
     return MouseRegion(
@@ -573,7 +575,11 @@ class ChatBubbleState extends State<ChatBubble> {
               left: widget.isMine ? null : 0,
               child: HoverReactionBar(
                 reactions: _quickReactions,
-                onReaction: widget.onReaction!,
+                onReaction: widget.onReaction,
+                onReply: widget.onReply,
+                onMore: hasActions
+                    ? (pos) => _showContextMenu(context, pos)
+                    : null,
               ),
             ),
         ],
