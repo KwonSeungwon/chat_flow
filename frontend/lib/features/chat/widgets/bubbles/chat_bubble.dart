@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -65,8 +67,31 @@ class ChatBubble extends StatefulWidget {
 
 class ChatBubbleState extends State<ChatBubble> {
   bool _hovered = false;
+  Timer? _hideTimer;
 
   static const _quickReactions = ['👍', '❤️', '😂', '😮', '😢', '✅'];
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Debounced hover state for the floating action toolbar. The toolbar sits
+  /// above the bubble (outside the parent MouseRegion's bounds), so moving the
+  /// pointer onto it briefly leaves the bubble region. Delaying the hide lets
+  /// the pointer cross the gap and reach the toolbar's own MouseRegion, which
+  /// re-asserts hover — so the bar no longer vanishes before it can be used.
+  void _setHovered(bool hovered) {
+    _hideTimer?.cancel();
+    if (hovered) {
+      if (!_hovered) setState(() => _hovered = true);
+    } else {
+      _hideTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted && _hovered) setState(() => _hovered = false);
+      });
+    }
+  }
 
   /// 메시지 content의 @username 패턴을 하이라이트해 RichText로 반환.
   /// invertColors=true면 어두운 배경 위(본인 버블)에 맞게 대비를 조정.
@@ -562,24 +587,35 @@ class ChatBubbleState extends State<ChatBubble> {
     if (!showHoverBar) return result;
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           result,
           if (_hovered)
             Positioned(
-              top: -32,
+              top: -34,
               right: widget.isMine ? 0 : null,
               left: widget.isMine ? null : 0,
-              child: HoverReactionBar(
-                reactions: _quickReactions,
-                onReaction: widget.onReaction,
-                onReply: widget.onReply,
-                onMore: hasActions
-                    ? (pos) => _showContextMenu(context, pos)
-                    : null,
+              // The bar sits outside the parent MouseRegion's bounds, so give it
+              // its own region to keep hover alive while the pointer is on it.
+              // The bottom padding is a transparent "bridge" whose hit area
+              // reaches down to the bubble, so crossing the gap never drops hover.
+              child: MouseRegion(
+                onEnter: (_) => _setHovered(true),
+                onExit: (_) => _setHovered(false),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: HoverReactionBar(
+                    reactions: _quickReactions,
+                    onReaction: widget.onReaction,
+                    onReply: widget.onReply,
+                    onMore: hasActions
+                        ? (pos) => _showContextMenu(context, pos)
+                        : null,
+                  ),
+                ),
               ),
             ),
         ],
