@@ -117,6 +117,15 @@ class _ChatInputState extends State<ChatInput> {
           _draftStore.clear(oldRoomId);
         }
       }
+      // 컨트롤러를 직접 리셋 — _clearController()는 widget.roomId(이미 새 방)의
+      // draft를 지우므로 사용 금지.
+      _controller.value = const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+        composing: TextRange.empty,
+      );
+      // 리셋으로 _onDraftChanged가 동기 발화하므로 디바운스 타이머 재취소
+      _draftDebounce?.cancel();
       // 새 방 draft 로드
       _loadDraft(widget.roomId);
     }
@@ -452,6 +461,16 @@ class _ChatInputState extends State<ChatInput> {
   void dispose() {
     _draftDebounce?.cancel();
     _controller.removeListener(_onDraftChanged);
+    // dispose 직전에 현재 입력분을 fire-and-forget으로 저장 (디바운스 유실 방지)
+    final roomId = widget.roomId;
+    if (roomId != null) {
+      final text = _controller.text;
+      if (text.isNotEmpty) {
+        _draftStore.save(roomId, text);
+      } else {
+        _draftStore.clear(roomId);
+      }
+    }
     _keyboardFocusNode.dispose();
     _controller.dispose();
     _focusNode.dispose();
