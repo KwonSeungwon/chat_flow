@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/keyboard/app_shortcuts.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
@@ -32,6 +33,18 @@ Future<void> main() async {
   runZonedGuarded<Future<void>>(() async {
     WidgetsFlutterBinding.ensureInitialized();
     try { await dotenv.load(fileName: '.env'); } catch (_) {}
+
+    // 한글 IME tofu(□) 번쩍임 방지 — 테마 폰트(Noto Sans KR)를 첫 프레임 전에
+    // 등록해 CanvasKit의 런타임 글리프 폴백 경로를 아예 타지 않게 한다.
+    // 실패해도 앱은 떠야 하므로 best-effort (실패 시 기존 폴백 동작으로 degrade).
+    try {
+      await GoogleFonts.pendingFonts([
+        GoogleFonts.notoSansKr(),
+        GoogleFonts.notoSansKr(fontWeight: FontWeight.w600),
+      ]);
+    } catch (e) {
+      debugPrint('[fonts] Noto Sans KR preload failed: $e');
+    }
 
     final defaultErrorHandler = FlutterError.onError;
     FlutterError.onError = (details) {

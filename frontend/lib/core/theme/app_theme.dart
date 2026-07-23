@@ -129,7 +129,10 @@ class AppTheme {
   static ThemeData _build(ColorScheme cs) {
     final isDark = cs.brightness == Brightness.dark;
     final baseTheme = ThemeData(brightness: isDark ? Brightness.dark : Brightness.light, useMaterial3: true);
-    final textTheme = GoogleFonts.notoSansTextTheme(baseTheme.textTheme);
+    // Noto Sans KR — 한글 글리프를 테마 폰트가 직접 포함해야 한다. 라틴 전용
+    // notoSans를 쓰면 웹(CanvasKit)에서 한글 IME 조합 글자가 런타임 폴백 해석
+    // 전까지 □(tofu)로 번쩍이며 그려진다. KR 패밀리는 라틴도 포함한다.
+    final textTheme = GoogleFonts.notoSansKrTextTheme(baseTheme.textTheme);
 
     return baseTheme.copyWith(
       colorScheme: cs,
@@ -141,7 +144,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         foregroundColor: cs.onSurface,
-        titleTextStyle: GoogleFonts.notoSans(
+        titleTextStyle: GoogleFonts.notoSansKr(
           color: cs.onSurface,
           fontSize: 16,
           fontWeight: FontWeight.w600,
@@ -195,7 +198,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(50),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          textStyle: GoogleFonts.notoSans(fontWeight: FontWeight.w600, fontSize: 15),
+          textStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w600, fontSize: 15),
           elevation: 0,
         ),
       ),
