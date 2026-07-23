@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../shared/models/chat_message.dart';
+import '../../auth/auth_provider.dart';
 import '../bookmark_provider.dart';
 import '../chat_provider.dart';
 import '../scheduled_messages_provider.dart';
@@ -441,6 +442,21 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           isAiLoading: chatState.isAiLoading,
           roomId: widget.roomId,
           mutedUntil: ref.watch(mutedEventProvider(widget.roomId))?.mutedUntil,
+          onEditLastMessage: () {
+            final myUserId = ref.read(authProvider).userId;
+            if (myUserId == null) return;
+            final lastOwn = chatState.messages
+                .where((m) =>
+                    !m.deleted &&
+                    m.type == 'CHAT' &&
+                    m.userId == myUserId)
+                .lastOrNull;
+            if (lastOwn == null) return;
+            showEditMessageDialog(
+              context, ref, widget.roomId,
+              lastOwn.effectiveId, lastOwn.content,
+            );
+          },
           isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
             data: (rooms) =>
                 rooms.any((r) => r.id == widget.roomId && r.isHandoff),
