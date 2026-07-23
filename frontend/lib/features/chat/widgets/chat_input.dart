@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -6,6 +8,7 @@ import '../../../core/constants/ui_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
+import '../helpers/draft_store.dart';
 import '../helpers/pasted_image.dart';
 import '../helpers/web_drop_target.dart';
 import 'drop_zone_overlay.dart';
@@ -79,6 +82,9 @@ class _ChatInputState extends State<ChatInput> {
   bool _showMentions = false;
   // Drag-drop overlay state
   bool _isDragHovering = false;
+  // Draft 보존
+  final _draftStore = DraftStore();
+  Timer? _draftDebounce;
 
   static const _emojiList = [
     '😀', '😂', '😍', '🥰', '😎', '🤔',
@@ -88,6 +94,71 @@ class _ChatInputState extends State<ChatInput> {
     '👀', '💬', '📌', '🚀', '💡', '🎯',
     '☕', '🍕', '🎵', '📝', '⏰', '🌟',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDraft(widget.roomId);
+    _controller.addListener(_onDraftChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.roomId != widget.roomId) {
+      // 이전 방 draft를 즉시 저장 (디바운스 무시)
+      _draftDebounce?.cancel();
+      final oldRoomId = oldWidget.roomId;
+      if (oldRoomId != null) {
+        final text = _controller.text;
+        if (text.isNotEmpty) {
+          _draftStore.save(oldRoomId, text);
+        } else {
+          _draftStore.clear(oldRoomId);
+        }
+      }
+      // 컨트롤러를 직접 리셋 — _clearController()는 widget.roomId(이미 새 방)의
+      // draft를 지우므로 사용 금지.
+      _controller.value = const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+        composing: TextRange.empty,
+      );
+      // 리셋으로 _onDraftChanged가 동기 발화하므로 디바운스 타이머 재취소
+      _draftDebounce?.cancel();
+      // 새 방 draft 로드
+      _loadDraft(widget.roomId);
+    }
+  }
+
+  /// 해당 방의 draft를 불러와서 컨트롤러가 비어 있을 때만 복원한다.
+  void _loadDraft(String? roomId) {
+    if (roomId == null) return;
+    _draftStore.load(roomId).then((draft) {
+      if (!mounted) return;
+      if (draft != null && draft.isNotEmpty && _controller.text.isEmpty) {
+        _controller.value = TextEditingValue(
+          text: draft,
+          selection: TextSelection.collapsed(offset: draft.length),
+        );
+      }
+    });
+  }
+
+  /// 컨트롤러 변경 시 400ms 디바운스로 draft 저장.
+  void _onDraftChanged() {
+    final roomId = widget.roomId;
+    if (roomId == null) return;
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 400), () {
+      final text = _controller.text;
+      if (text.isNotEmpty) {
+        _draftStore.save(roomId, text);
+      } else {
+        _draftStore.clear(roomId);
+      }
+    });
+  }
 
   void _checkMention(String text) {
     final cursor = _controller.selection.baseOffset;
@@ -179,6 +250,10 @@ class _ChatInputState extends State<ChatInput> {
       selection: TextSelection.collapsed(offset: 0),
       composing: TextRange.empty,
     );
+    // 전송 성공 시 draft 삭제
+    _draftDebounce?.cancel();
+    final roomId = widget.roomId;
+    if (roomId != null) _draftStore.clear(roomId);
   }
 
   Future<void> _handleScheduleSend() async {
@@ -192,7 +267,7 @@ class _ChatInputState extends State<ChatInput> {
     try {
       await widget.onScheduleSend!(text, picked);
       if (!mounted) return;
-      _controller.clear();
+      _clearController();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('메시지가 예약되었습니다.')),
       );
@@ -384,6 +459,18 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   void dispose() {
+    _draftDebounce?.cancel();
+    _controller.removeListener(_onDraftChanged);
+    // dispose 직전에 현재 입력분을 fire-and-forget으로 저장 (디바운스 유실 방지)
+    final roomId = widget.roomId;
+    if (roomId != null) {
+      final text = _controller.text;
+      if (text.isNotEmpty) {
+        _draftStore.save(roomId, text);
+      } else {
+        _draftStore.clear(roomId);
+      }
+    }
     _keyboardFocusNode.dispose();
     _controller.dispose();
     _focusNode.dispose();
