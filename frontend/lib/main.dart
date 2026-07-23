@@ -102,10 +102,23 @@ class ChatFlowApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
     final fontScale = ref.watch(fontScaleProvider);
 
-    // Update browser tab title with unread badge — no-op on native platforms.
-    ref.listen<Map<String, int>>(roomUnreadCountsProvider, (_, counts) {
-      final total = counts.values.fold<int>(0, (sum, c) => sum + c);
-      setTabTitle(formatTabTitle(total));
+    // Compute the unread-badge tab title. On web, this feeds directly into
+    // MaterialApp.title so Flutter's internal Title widget keeps document.title
+    // in sync — avoids the race where a side-effect setTabTitle call gets
+    // clobbered by the async platform channel. On native, the title is a fixed
+    // string for the app-switcher label.
+    final unreadCounts = ref.watch(roomUnreadCountsProvider);
+    final tabTitle = kIsWeb
+        ? formatTabTitle(
+            unreadCounts.values.fold<int>(0, (sum, c) => sum + c))
+        : 'ChatFlow';
+
+    // On logout, clear unread counts so the tab badge doesn't linger on the
+    // login screen. Listens for auth transitions from authenticated → not.
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (prev != null && prev.isAuthenticated && !next.isAuthenticated) {
+        ref.read(roomUnreadCountsProvider.notifier).replaceAll({});
+      }
     });
 
     // Override default ReadingOrderTraversalPolicy with WidgetOrderTraversalPolicy.
@@ -115,7 +128,7 @@ class ChatFlowApp extends ConsumerWidget {
     return FocusTraversalGroup(
       policy: WidgetOrderTraversalPolicy(),
       child: MaterialApp.router(
-        title: 'ChatFlow',
+        title: tabTitle,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
