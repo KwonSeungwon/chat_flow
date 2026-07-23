@@ -10,10 +10,12 @@ import 'core/keyboard/app_shortcuts.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/web_unload_handler.dart';
+import 'core/utils/tab_title.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/chat/chat_rooms_provider.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -99,6 +101,26 @@ class ChatFlowApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
     final fontScale = ref.watch(fontScaleProvider);
+
+    // Compute the unread-badge tab title. On web, this feeds directly into
+    // MaterialApp.title so Flutter's internal Title widget keeps document.title
+    // in sync — avoids the race where a side-effect setTabTitle call gets
+    // clobbered by the async platform channel. On native, the title is a fixed
+    // string for the app-switcher label.
+    final unreadCounts = ref.watch(roomUnreadCountsProvider);
+    final tabTitle = kIsWeb
+        ? formatTabTitle(
+            unreadCounts.values.fold<int>(0, (sum, c) => sum + c))
+        : 'ChatFlow';
+
+    // On logout, clear unread counts so the tab badge doesn't linger on the
+    // login screen. Listens for auth transitions from authenticated → not.
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (prev != null && prev.isAuthenticated && !next.isAuthenticated) {
+        ref.read(roomUnreadCountsProvider.notifier).replaceAll({});
+      }
+    });
+
     // Override default ReadingOrderTraversalPolicy with WidgetOrderTraversalPolicy.
     // ReadingOrderTraversalPolicy has a known bug (`nearestCommonDirectionality!`
     // throws on null when focus nodes lack a common Directionality ancestor),
@@ -106,7 +128,7 @@ class ChatFlowApp extends ConsumerWidget {
     return FocusTraversalGroup(
       policy: WidgetOrderTraversalPolicy(),
       child: MaterialApp.router(
-        title: 'ChatFlow',
+        title: tabTitle,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
