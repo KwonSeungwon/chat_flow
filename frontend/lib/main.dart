@@ -103,14 +103,16 @@ class ChatFlowApp extends ConsumerWidget {
     final fontScale = ref.watch(fontScaleProvider);
 
     // Compute the unread-badge tab title. On web, this feeds directly into
-    // MaterialApp.title so Flutter's internal Title widget keeps document.title
-    // in sync — avoids the race where a side-effect setTabTitle call gets
-    // clobbered by the async platform channel. On native, the title is a fixed
-    // string for the app-switcher label.
-    final unreadCounts = ref.watch(roomUnreadCountsProvider);
+    // MaterialApp.title so Flutter's internal Title widget — the single owner
+    // of document.title — rewrites the badge on every rebuild instead of
+    // racing a side-effect updater. On native, the title is a fixed string for
+    // the app-switcher label; the watch sits inside the kIsWeb branch so
+    // native never subscribes to (or rebuilds on) unread-count changes.
     final tabTitle = kIsWeb
-        ? formatTabTitle(
-            unreadCounts.values.fold<int>(0, (sum, c) => sum + c))
+        ? formatTabTitle(ref
+            .watch(roomUnreadCountsProvider)
+            .values
+            .fold<int>(0, (sum, c) => sum + c))
         : 'ChatFlow';
 
     // On logout, clear unread counts so the tab badge doesn't linger on the
