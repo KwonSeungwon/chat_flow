@@ -444,7 +444,9 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           mutedUntil: ref.watch(mutedEventProvider(widget.roomId))?.mutedUntil,
           onEditLastMessage: () {
             final myUserId = ref.read(authProvider).userId;
-            if (myUserId == null) return;
+            // 빈 문자열 가드 — fromJson은 userId 결손 시 '' 폴백이라, 가드 없으면
+            // 타인 메시지(userId='')가 내 것으로 매칭될 수 있다 (리뷰 지적).
+            if (myUserId == null || myUserId.isEmpty) return;
             final lastOwn = chatState.messages
                 .where((m) =>
                     !m.deleted &&
