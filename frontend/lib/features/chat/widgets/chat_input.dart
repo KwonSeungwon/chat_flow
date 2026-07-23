@@ -35,6 +35,9 @@ class ChatInput extends StatefulWidget {
   /// When non-null, renders QuickReplyChips above the input.
   /// Required for the per-room provider lookup.
   final String? roomId;
+  /// Called when the user presses ArrowUp while the input is empty
+  /// (Slack/Discord-style "edit last message" shortcut).
+  final VoidCallback? onEditLastMessage;
 
   const ChatInput({
     super.key,
@@ -52,6 +55,7 @@ class ChatInput extends StatefulWidget {
     this.mutedUntil,
     this.onScheduleSend,
     this.roomId,
+    this.onEditLastMessage,
   });
 
   @override
@@ -749,6 +753,17 @@ class _ChatInputState extends State<ChatInput> {
                 !HardwareKeyboard.instance.isShiftPressed &&
                 !_controller.value.composing.isValid) {
               _send();
+            }
+            // ArrowUp on empty input → edit last message (Slack/Discord UX)
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                _controller.text.isEmpty &&
+                !HardwareKeyboard.instance.isShiftPressed &&
+                !HardwareKeyboard.instance.isControlPressed &&
+                !HardwareKeyboard.instance.isAltPressed &&
+                !HardwareKeyboard.instance.isMetaPressed &&
+                widget.onEditLastMessage != null) {
+              widget.onEditLastMessage!();
             }
           },
           child: Builder(builder: (context) {
