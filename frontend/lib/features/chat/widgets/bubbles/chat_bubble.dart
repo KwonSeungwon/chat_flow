@@ -87,7 +87,9 @@ class ChatBubbleState extends State<ChatBubble> {
     if (hovered) {
       if (!_hovered) setState(() => _hovered = true);
     } else {
-      _hideTimer = Timer(const Duration(milliseconds: 250), () {
+      // 800ms — 대각선 이동/살짝 벗어남에도 툴바가 살아있도록 넉넉하게.
+      // (250ms는 버블→툴바로 마우스를 옮기는 실제 동선에서 부족했음)
+      _hideTimer = Timer(const Duration(milliseconds: 800), () {
         if (mounted && _hovered) setState(() => _hovered = false);
       });
     }
@@ -606,7 +608,7 @@ class ChatBubbleState extends State<ChatBubble> {
                 onEnter: (_) => _setHovered(true),
                 onExit: (_) => _setHovered(false),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.only(bottom: 14),
                   child: HoverReactionBar(
                     reactions: _quickReactions,
                     onReaction: widget.onReaction,
