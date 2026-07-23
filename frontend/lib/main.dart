@@ -10,10 +10,12 @@ import 'core/keyboard/app_shortcuts.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/web_unload_handler.dart';
+import 'core/utils/tab_title.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/auth_provider.dart';
+import 'features/chat/chat_rooms_provider.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -99,6 +101,13 @@ class ChatFlowApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
     final fontScale = ref.watch(fontScaleProvider);
+
+    // Update browser tab title with unread badge — no-op on native platforms.
+    ref.listen<Map<String, int>>(roomUnreadCountsProvider, (_, counts) {
+      final total = counts.values.fold<int>(0, (sum, c) => sum + c);
+      setTabTitle(formatTabTitle(total));
+    });
+
     // Override default ReadingOrderTraversalPolicy with WidgetOrderTraversalPolicy.
     // ReadingOrderTraversalPolicy has a known bug (`nearestCommonDirectionality!`
     // throws on null when focus nodes lack a common Directionality ancestor),
