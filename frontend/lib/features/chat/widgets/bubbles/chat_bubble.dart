@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/chat_message.dart';
+import '../../helpers/mention_spans.dart';
 import 'avatar.dart';
 import 'bubble_footer.dart';
 import 'bubble_header_decorations.dart';
@@ -16,6 +17,12 @@ import 'hover_reaction_bar.dart';
 class ChatBubble extends StatefulWidget {
   final ChatMessage msg;
   final bool isMine;
+
+  /// 로그인한 사용자명. @멘션이 나를 가리키는지 판정하는 데만 쓴다.
+  /// 리스트가 이미 [isMine] 계산에 쓰는 값을 그대로 내려받는다 — 버블이 직접
+  /// authProvider를 watch하면 화면에 뜬 모든 버블이 AuthState 전체를 구독한다.
+  final String? me;
+
   final String time;
   final bool isAiQuestion;
   final int readCount;
@@ -41,6 +48,7 @@ class ChatBubble extends StatefulWidget {
     required this.msg,
     required this.isMine,
     required this.time,
+    this.me,
     this.isAiQuestion = false,
     this.readCount = 0,
     this.onReply,
@@ -97,29 +105,32 @@ class ChatBubbleState extends State<ChatBubble> {
 
   /// 메시지 content의 @username 패턴을 하이라이트해 RichText로 반환.
   /// invertColors=true면 어두운 배경 위(본인 버블)에 맞게 대비를 조정.
+  ///
+  /// 본인이 호명됐는지는 [findMentionSpans]가 내 사용자명과 직접 대조해 판정한다.
+  /// 예전에는 `@([A-Za-z0-9_.가-힣]{1,30})`로 이름 모양을 추측했는데, 가입 시
+  /// 사용자명 검증이 없어서 공백·하이픈·악센트·30자 초과 이름이 잘려 나갔다.
   Widget _buildContentRichText(BuildContext context, String content, TextStyle baseStyle,
-      {required bool invertColors, String? highlightMe}) {
-    final pattern = RegExp(r'@([A-Za-z0-9_\.가-힣]{1,30})');
-    final matches = pattern.allMatches(content).toList();
-    if (matches.isEmpty) {
+      {required bool invertColors}) {
+    final me = widget.me;
+    final mentions =
+        findMentionSpans(content, me: (me == null || me.isEmpty) ? null : me);
+    if (mentions.isEmpty) {
       return Text(content, style: baseStyle);
     }
     final spans = <TextSpan>[];
     int cursor = 0;
-    for (final m in matches) {
+    for (final m in mentions) {
       if (m.start > cursor) {
         spans.add(TextSpan(text: content.substring(cursor, m.start), style: baseStyle));
       }
-      final mentioned = m.group(1) ?? '';
-      final isMeMentioned = highlightMe != null && mentioned == highlightMe;
       final fg = invertColors
-          ? (isMeMentioned ? const Color(0xFFFFE082) : Colors.white)
-          : (isMeMentioned ? const Color(0xFFB71C1C) : AppColors.primary);
-      final bg = isMeMentioned
+          ? (m.isMe ? const Color(0xFFFFE082) : Colors.white)
+          : (m.isMe ? const Color(0xFFB71C1C) : AppColors.primary);
+      final bg = m.isMe
           ? (invertColors ? Colors.white.withAlpha(40) : const Color(0xFFFFF59D))
           : (invertColors ? Colors.white.withAlpha(30) : AppColors.primary.withAlpha(25));
       spans.add(TextSpan(
-        text: m.group(0),
+        text: content.substring(m.start, m.end),
         style: baseStyle.copyWith(
           color: fg,
           fontWeight: FontWeight.w700,

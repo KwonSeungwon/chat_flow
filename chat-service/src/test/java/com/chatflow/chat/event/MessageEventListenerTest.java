@@ -1,7 +1,6 @@
 package com.chatflow.chat.event;
 
 import com.chatflow.chat.service.UserPresenceService;
-import com.chatflow.chat.service.message.MentionExtractor;
 import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -90,28 +89,26 @@ class MessageEventListenerTest {
         assertThat(payload).containsEntry("senderId", "u-sender");
     }
 
-    // ── 2. Mentions extracted ──────────────────────────────────────────
+    // ── 2. Mentions ride on the event ──────────────────────────────────
 
     @Test
-    @DisplayName("CHAT message with @mention: payload contains extracted mentioned usernames")
-    void chatMessage_withMentions_extractsMentionedUsernames() {
+    @DisplayName("CHAT message with @mention: payload carries the usernames resolved at publish time")
+    void chatMessage_withMentions_carriesResolvedUsernames() {
         // given
-        String content = "@u2 hello @admin check this";
         ChatMessage message = ChatMessage.builder()
                 .chatRoomId("r1")
                 .userId("u-sender")
                 .username("sender-name")
-                .content(content)
+                .content("@u2 hello @Phill Park check this")
                 .type(ChatMessage.MessageType.CHAT)
                 .messageId("msg-2")
                 .timestamp(LocalDateTime.now())
                 .build();
-        MessagePersistedEvent event = new MessagePersistedEvent(message);
+        MessagePersistedEvent event =
+                new MessagePersistedEvent(message, List.of("u2", "Phill Park"));
 
         when(userPresenceService.getRoomParticipantUserIds("r1"))
                 .thenReturn(Set.of("u-sender", "u2"));
-
-        List<String> expectedMentions = MentionExtractor.extract(content);
 
         // when
         listener.onMessagePersisted(event);
@@ -120,9 +117,67 @@ class MessageEventListenerTest {
         verify(messagingTemplate).convertAndSendToUser(
                 eq("u2"), eq("/queue/room-updates"), payloadCaptor.capture());
 
-        Map<String, Object> payload = payloadCaptor.getValue();
-        assertThat(payload).containsEntry("mentionedUsernames", expectedMentions);
-        assertThat(expectedMentions).containsExactly("u2", "admin");
+        // "Phill Park" contains a space — no charset regex would survive it. The
+        // listener does not parse, so whatever the sender resolved gets through.
+        assertThat(payloadCaptor.getValue())
+                .containsEntry("mentionedUsernames", List.of("u2", "Phill Park"));
+    }
+
+    @Test
+    @DisplayName("The listener reports the carried list, never a re-parse of the content")
+    void chatMessage_payloadFollowsTheCarriedList_notTheContent() {
+        // given — the content names "@nobody" (no such member) and an email, while
+        // the resolved list names "u2", which appears nowhere in the text.
+        ChatMessage message = ChatMessage.builder()
+                .chatRoomId("r1")
+                .userId("u-sender")
+                .username("sender-name")
+                .content("mail me at bob@example.com or ping @nobody")
+                .type(ChatMessage.MessageType.CHAT)
+                .messageId("msg-2b")
+                .timestamp(LocalDateTime.now())
+                .build();
+        MessagePersistedEvent event = new MessagePersistedEvent(message, List.of("u2"));
+
+        when(userPresenceService.getRoomParticipantUserIds("r1"))
+                .thenReturn(Set.of("u-sender", "u2"));
+
+        // when
+        listener.onMessagePersisted(event);
+
+        // then — any content parsing would have yielded [] or ["nobody"]
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("u2"), eq("/queue/room-updates"), payloadCaptor.capture());
+
+        assertThat(payloadCaptor.getValue()).containsEntry("mentionedUsernames", List.of("u2"));
+    }
+
+    @Test
+    @DisplayName("No resolved mentions: payload carries an empty list, not null")
+    void chatMessage_withoutMentions_carriesEmptyList() {
+        // given
+        ChatMessage message = ChatMessage.builder()
+                .chatRoomId("r1")
+                .userId("u-sender")
+                .username("sender-name")
+                .content("점심 뭐 먹지")
+                .type(ChatMessage.MessageType.CHAT)
+                .messageId("msg-2c")
+                .timestamp(LocalDateTime.now())
+                .build();
+        MessagePersistedEvent event = new MessagePersistedEvent(message);
+
+        when(userPresenceService.getRoomParticipantUserIds("r1"))
+                .thenReturn(Set.of("u-sender", "u2"));
+
+        // when
+        listener.onMessagePersisted(event);
+
+        // then
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("u2"), eq("/queue/room-updates"), payloadCaptor.capture());
+
+        assertThat(payloadCaptor.getValue()).containsEntry("mentionedUsernames", List.of());
     }
 
     // ── 3. JOIN/LEAVE/SYSTEM → broadcast only, no unread ──────────────

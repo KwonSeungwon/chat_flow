@@ -28,7 +28,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -279,9 +278,8 @@ class MessageEditServiceOutboxTest {
         @DisplayName("edit that ADDS a mention creates a new mention row (read=false)")
         void editMessage_addsMention_createsRow() {
             String newContent = "hello @bob check this";
-            RoomMemberEntity bob = roomMember("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME), roomMember("bob-id", "bob")));
             when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of());
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
@@ -328,9 +326,8 @@ class MessageEditServiceOutboxTest {
         void editMessage_keepsMention_preservesReadState() {
             String newContent = "updated @bob still here";
             MessageMentionEntity bobMention = existingMention("bob-id", "bob", true);
-            RoomMemberEntity bob = roomMember("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME), roomMember("bob-id", "bob")));
             when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of(bobMention));
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
@@ -346,8 +343,8 @@ class MessageEditServiceOutboxTest {
         @DisplayName("edit mentioning a NON-member does not create a mention row")
         void editMessage_nonMember_noRowAdded() {
             String newContent = "hello @ghost are you there?";
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of()); // ghost is not a member
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME))); // ghost is not a member
             when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of());
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
@@ -361,11 +358,9 @@ class MessageEditServiceOutboxTest {
         @DisplayName("self-mention by the author is excluded")
         void editMessage_selfMention_excluded() {
             String newContent = "I mentioned myself @" + USERNAME;
-            // Author's own member entity returned from query
-            RoomMemberEntity selfMember = roomMember(USER_ID, USERNAME);
-            // But since this is the message author, it is filtered out
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(selfMember));
+            // The author is a member of their own room, but is filtered out
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME)));
             when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of());
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
@@ -381,9 +376,8 @@ class MessageEditServiceOutboxTest {
             // so no notification can fire. This test documents that guarantee.
             // The send-path in MessageSenderService is the only notification trigger.
             String newContent = "hello @bob mention added";
-            RoomMemberEntity bob = roomMember("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME), roomMember("bob-id", "bob")));
             when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of());
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
@@ -395,16 +389,76 @@ class MessageEditServiceOutboxTest {
         }
 
         @Test
-        @DisplayName("non-CHAT message type skips mention re-sync entirely")
-        void editMessage_nonChatType_noResync() {
-            entity.setType("JOIN"); // not a CHAT message
+        @DisplayName("server-authored message type skips mention re-sync entirely")
+        void editMessage_serverAuthoredType_noResync() {
+            entity.setType("JOIN"); // nobody typed this text
             String newContent = "some @bob content";
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
 
             assertThat(result.isSuccess()).isTrue();
             verify(messageMentionRepository, never()).findByMessageId(anyString());
-            verify(roomMemberRepository, never()).findByRoomIdAndUsernameIn(anyString(), anyCollection());
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+        }
+
+        @Test
+        @DisplayName("FILE caption re-syncs too — editing @bob out must drop bob's row")
+        void editMessage_fileCaption_resyncsMentions() {
+            // A file ships with a caption the user typed, and that caption is what
+            // the send path mined for mentions. If the edit path disagreed about the
+            // type, bob would keep a mention row for text that no longer names him.
+            entity.setType("FILE");
+            MessageMentionEntity bobMention = existingMention("bob-id", "bob", true);
+            when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of(bobMention));
+
+            Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "차트입니다");
+
+            assertThat(result.isSuccess()).isTrue();
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(messageMentionRepository).deleteAll(captor.capture());
+            assertThat(captor.getValue()).hasSize(1);
+            assertThat(captor.getValue().get(0).getMentionedUserId()).isEqualTo("bob-id");
+        }
+
+        @Test
+        @DisplayName("FILE caption that ADDS @bob resolves against the roster and creates the row")
+        void editMessage_fileCaption_addsMention() {
+            entity.setType("FILE");
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(roomMember(USER_ID, USERNAME), roomMember("bob-id", "bob")));
+            when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of());
+
+            Result<Void, ChatErrorCode> result =
+                    service.editMessage(MESSAGE_ID, USER_ID, "@bob 차트 확인");
+
+            assertThat(result.isSuccess()).isTrue();
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(messageMentionRepository).saveAll(captor.capture());
+            assertThat(captor.getValue()).hasSize(1);
+            assertThat(captor.getValue().get(0).getMentionedUserId()).isEqualTo("bob-id");
+        }
+
+        @Test
+        @DisplayName("editing back to the auto '[파일]' caption drops the row, same as the send path")
+        void editMessage_backToAutoFileCaption_dropsTheRow() {
+            entity.setType("FILE");
+            entity.setFileName("@bob-review.pdf");
+            MessageMentionEntity bobMention = existingMention("bob-id", "bob", true);
+            when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of(bobMention));
+
+            Result<Void, ChatErrorCode> result =
+                    service.editMessage(MESSAGE_ID, USER_ID, "[파일] @bob-review.pdf");
+
+            assertThat(result.isSuccess()).isTrue();
+
+            // The filename is not a mention, so no roster lookup and bob's row goes.
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(messageMentionRepository).deleteAll(anyList());
+            verify(messageMentionRepository, never()).saveAll(anyList());
         }
 
         @Test
@@ -417,11 +471,10 @@ class MessageEditServiceOutboxTest {
             when(messageMentionRepository.findByMessageId(MESSAGE_ID))
                     .thenReturn(List.of(bobMention, daveMention));
 
-            // Resolved from new content: carol + dave (bob gone)
-            RoomMemberEntity carol = roomMember("carol-id", "carol");
-            RoomMemberEntity dave = roomMember("dave-id", "dave");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(carol, dave));
+            // Room holds bob, carol and dave; the new content names carol + dave
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(List.of(
+                    roomMember(USER_ID, USERNAME), roomMember("bob-id", "bob"),
+                    roomMember("carol-id", "carol"), roomMember("dave-id", "dave")));
 
             Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, newContent);
 

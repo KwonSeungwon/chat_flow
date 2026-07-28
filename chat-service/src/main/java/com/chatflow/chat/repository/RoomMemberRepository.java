@@ -9,7 +9,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,7 +18,6 @@ public interface RoomMemberRepository extends JpaRepository<RoomMemberEntity, Ro
     long deleteByRoomIdAndUserId(String roomId, String userId);
     List<RoomMemberEntity> findByRoomId(String roomId);
     Optional<RoomMemberEntity> findByRoomIdAndUserId(String roomId, String userId);
-    List<RoomMemberEntity> findByRoomIdAndUsernameIn(String roomId, Collection<String> usernames);
 
     @Modifying
     @Transactional

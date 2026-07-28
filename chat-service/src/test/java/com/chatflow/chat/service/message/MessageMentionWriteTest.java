@@ -67,14 +67,18 @@ class MessageMentionWriteTest {
         return msg;
     }
 
-    private ChatMessage fileMessage() {
+    private ChatMessage fileMessage(String caption) {
+        return fileMessage(caption, "file.pdf");
+    }
+
+    private ChatMessage fileMessage(String caption, String fileName) {
         ChatMessage msg = new ChatMessage();
         msg.setChatRoomId(ROOM_ID);
         msg.setUserId(SENDER_USER_ID);
         msg.setUsername(SENDER_USERNAME);
         msg.setType(MessageType.FILE);
-        msg.setContent("file.pdf");
-        msg.setFileName("file.pdf");
+        msg.setContent(caption);
+        msg.setFileName(fileName);
         return msg;
     }
 
@@ -97,9 +101,8 @@ class MessageMentionWriteTest {
         @SuppressWarnings("unchecked")
         void records_mention_row_for_member_bob() {
             // given: bob IS a room member
-            RoomMemberEntity bob = member("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
+                    List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             // when
@@ -125,6 +128,74 @@ class MessageMentionWriteTest {
         }
     }
 
+    // ── Names the old charset regex could not express ──────────
+
+    /**
+     * Registration never validated usernames (gateway {@code AuthService.register}
+     * only checks the password), so hyphenated, spaced and over-long names exist.
+     * The old {@code @([A-Za-z0-9_.가-힣]{1,30})} regex truncated them, the
+     * truncated token matched no member, and the mention silently reached nobody.
+     */
+    @Nested
+    class UnusualUsernames {
+
+        @SuppressWarnings("unchecked")
+        private List<MessageMentionEntity> mentionsFor(String content, String mentionedName) {
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
+                    List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("target-id", mentionedName)));
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(chatMessage(content), member(SENDER_USER_ID, SENDER_USERNAME));
+
+            ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+            return captor.getValue();
+        }
+
+        @Test
+        void uuid_fallback_username_is_mentionable() {
+            // A blank username falls back to the userId, so 36-char hyphenated
+            // names are in prod right now.
+            String uuid = "bd515969-a57e-4cc1-b72d-6b2508b483d0";
+            assertThat(mentionsFor("@" + uuid + " 확인 부탁", uuid))
+                    .extracting(MessageMentionEntity::getMentionedUsername)
+                    .containsExactly(uuid);
+        }
+
+        @Test
+        void username_with_a_space_is_mentionable() {
+            assertThat(mentionsFor("hey @Phill Park, ping", "Phill Park"))
+                    .extracting(MessageMentionEntity::getMentionedUsername)
+                    .containsExactly("Phill Park");
+        }
+
+        @Test
+        void username_longer_than_thirty_characters_is_mentionable() {
+            String long_ = "a".repeat(45);
+            assertThat(mentionsFor("@" + long_ + " hi", long_))
+                    .extracting(MessageMentionEntity::getMentionedUsername)
+                    .containsExactly(long_);
+        }
+    }
+
+    // ── No '@' → no member lookup at all ───────────────────────
+
+    @Nested
+    class NoMentionSyntax {
+
+        @Test
+        void plain_message_never_loads_the_member_list() {
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(chatMessage("점심 뭐 먹지"), member(SENDER_USER_ID, SENDER_USERNAME));
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+        }
+    }
+
     // ── Non-member mention ─────────────────────────────────────
 
     @Nested
@@ -133,9 +204,9 @@ class MessageMentionWriteTest {
         @Test
         @SuppressWarnings("unchecked")
         void stranger_produces_empty_mention_list() {
-            // given: finder returns empty (stranger not a member)
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of());
+            // given: nobody in the room is called "stranger"
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(member(SENDER_USER_ID, SENDER_USERNAME)));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             // when
@@ -159,10 +230,9 @@ class MessageMentionWriteTest {
         @Test
         @SuppressWarnings("unchecked")
         void sender_self_mention_filtered_out() {
-            // given: finder returns the sender's own member row
-            RoomMemberEntity senderMember = member(SENDER_USER_ID, SENDER_USERNAME);
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(senderMember));
+            // given: the sender is the only member, and mentions themselves
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(member(SENDER_USER_ID, SENDER_USERNAME)));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             // when
@@ -178,23 +248,125 @@ class MessageMentionWriteTest {
         }
     }
 
-    // ── FILE type → no mention processing ──────────────────────
+    // ── FILE captions mention people too ───────────────────────
 
+    /**
+     * A FILE message carries a user-typed caption (frontend
+     * {@code message_send_helper.dart} sends it as the content). Skipping mention
+     * resolution for FILE meant "@bob 차트 확인" attached to a file produced no
+     * mention row — and a room set to {@code NotificationPolicy.mentionsOnly}
+     * suppresses the unread badge entirely unless the mention is there.
+     */
     @Nested
     class FileType {
 
         @Test
-        void file_message_skips_mention_lookup() {
+        void caption_without_an_at_sign_skips_the_member_lookup() {
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
-            service.send(fileMessage(), null);
+            service.send(fileMessage("file.pdf"), null);
 
-            // finder never called
-            verify(roomMemberRepository, never()).findByRoomIdAndUsernameIn(anyString(), anyCollection());
-            // persist called with empty mentions
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
                     any(ChatMessage.class), eq(KafkaTopics.CHAT_MESSAGES),
                     eq("MESSAGE_SENT"), any(), eq(List.of()));
+        }
+
+        @Test
+        void null_caption_is_safe() {
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(fileMessage(null), null);
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void caption_mention_records_a_row_and_pushes_fcm() {
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
+                    List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(fileMessage("@bob 차트 확인 부탁"), null);
+
+            ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+            assertThat(captor.getValue())
+                    .extracting(MessageMentionEntity::getMentionedUserId)
+                    .containsExactly("bob-id");
+
+            // 파일 알림 + bob 멘션 알림, 정확히 둘
+            verify(fcmNotificationService).sendMessageNotification(
+                    eq("mention-bob"), eq(SENDER_USERNAME), anyString());
+            verify(fcmNotificationService, times(2)).sendMessageNotification(
+                    anyString(), anyString(), anyString());
+        }
+
+        /**
+         * 캡션을 비우고 올리면 프론트가 본문을 "[파일] &lt;파일명&gt;"으로 채운다.
+         * 파일명 안의 @는 사용자가 이 방에서 부른 이름이 아니다 — 파일 이름일 뿐이라
+         * 그걸로 푸시를 쏘면 아무도 부르지 않은 사람이 호출당한다.
+         */
+        @Test
+        void the_auto_generated_caption_never_mentions_anyone() {
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(fileMessage("[파일] @bob-review.pdf", "@bob-review.pdf"), null);
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+            verify(fcmNotificationService, never()).sendMessageNotification(
+                    startsWith("mention-"), anyString(), anyString());
+        }
+
+        /**
+         * 같은 파일이라도 사용자가 캡션에 한 글자라도 보탰으면 그건 사용자가 친 문장이다.
+         * 접두사만 보고 잘라내면 이 경우를 조용히 삼킨다.
+         */
+        @Test
+        @SuppressWarnings("unchecked")
+        void a_caption_the_user_extended_still_mentions() {
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
+                    List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(fileMessage("[파일] @bob 이거 봐줘", "chart.pdf"), null);
+
+            ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+            assertThat(captor.getValue())
+                    .extracting(MessageMentionEntity::getMentionedUserId)
+                    .containsExactly("bob-id");
+        }
+    }
+
+    // ── Server-generated text never mentions ───────────────────
+
+    @Nested
+    class SystemText {
+
+        @Test
+        void system_message_does_not_resolve_mentions() {
+            ChatMessage msg = new ChatMessage();
+            msg.setChatRoomId(ROOM_ID);
+            msg.setUserId(SENDER_USER_ID);
+            msg.setUsername(SENDER_USERNAME);
+            msg.setType(MessageType.SYSTEM);
+            msg.setContent("@bob 님이 입장했습니다");
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(msg, null);
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+            verifyNoInteractions(fcmNotificationService);
         }
     }
 
@@ -206,9 +378,8 @@ class MessageMentionWriteTest {
         @Test
         void fcm_fired_for_resolved_member_not_for_stranger() {
             // given: @bob is a member, @stranger is not
-            RoomMemberEntity bob = member("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
+                    List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             // when
@@ -232,9 +403,8 @@ class MessageMentionWriteTest {
 
         @Test
         void fcm_mention_not_fired_for_self_mention() {
-            RoomMemberEntity senderMember = member(SENDER_USER_ID, SENDER_USERNAME);
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(senderMember));
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(member(SENDER_USER_ID, SENDER_USERNAME)));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             service.send(chatMessage("@" + SENDER_USERNAME),
@@ -261,9 +431,8 @@ class MessageMentionWriteTest {
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, SENDER_USER_ID))
                     .thenReturn(Optional.of(senderMember));
 
-            RoomMemberEntity bob = member("bob-id", "bob");
-            when(roomMemberRepository.findByRoomIdAndUsernameIn(eq(ROOM_ID), anyCollection()))
-                    .thenReturn(List.of(bob));
+            when(roomMemberRepository.findByRoomId(ROOM_ID))
+                    .thenReturn(List.of(senderMember, member("bob-id", "bob")));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             // when: single-arg send

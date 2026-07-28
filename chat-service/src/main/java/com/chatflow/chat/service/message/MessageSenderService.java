@@ -58,7 +58,7 @@ public class MessageSenderService {
      */
     public void send(ChatMessage message) {
         RoomMemberEntity member = null;
-        if (MessageType.CHAT.equals(message.getType()) && message.getUserId() != null) {
+        if (MentionTargets.carriesUserText(message.getType()) && message.getUserId() != null) {
             member = roomMemberRepository.findByRoomIdAndUserId(
                     message.getChatRoomId(), message.getUserId()).orElse(null);
         }
@@ -75,11 +75,14 @@ public class MessageSenderService {
      *                       gate. {@code null} means "no mute info available" — the
      *                       mute gate is skipped (correct for legacy creator-only
      *                       membership where no room_members row exists, and for
-     *                       non-CHAT message types).
+     *                       server-authored message types).
      */
     public void send(ChatMessage message, RoomMemberEntity resolvedMember) {
-        // Mute gate — muted users cannot send CHAT messages
-        if (MessageType.CHAT.equals(message.getType()) && message.getUserId() != null) {
+        // Mute gate — muted users cannot post anything they typed themselves.
+        // FILE is in scope: its caption reaches the room *and* fires mention pushes
+        // at the members it names, so leaving files ungated would let a muted user
+        // keep tapping people on the shoulder.
+        if (MentionTargets.carriesUserText(message.getType()) && message.getUserId() != null) {
             // mutedUntil == now ⇒ 만료 (mute가 끝나는 그 순간부터는 발송 허용)
             if (resolvedMember != null && resolvedMember.getMutedUntil() != null
                     && resolvedMember.getMutedUntil().isAfter(LocalDateTime.now())) {
@@ -126,29 +129,26 @@ public class MessageSenderService {
 
         log.info("Processing chat message: {}", message.getMessageId());
 
-        // Resolve mentions for CHAT messages: one DB lookup, reused for rows + FCM
+        // Resolve mentions once — the rows, the FCM pings and the persisted event all
+        // reuse this single room_members lookup.
         List<RoomMemberEntity> mentionedMembers = List.of();
         List<MessageMentionEntity> mentionEntities = List.of();
-        if (MessageType.CHAT.equals(message.getType())) {
-            List<String> candidates = MentionExtractor.extract(message.getContent());
-            if (!candidates.isEmpty()) {
-                mentionedMembers = roomMemberRepository
-                        .findByRoomIdAndUsernameIn(message.getChatRoomId(), candidates)
-                        .stream()
-                        .filter(m -> !m.getUsername().equals(message.getUsername()))
-                        .toList();
-                mentionEntities = mentionedMembers.stream()
-                        .map(m -> MessageMentionEntity.builder()
-                                .messageId(message.getMessageId())
-                                .roomId(message.getChatRoomId())
-                                .mentionedUserId(m.getUserId())
-                                .mentionedUsername(m.getUsername())
-                                .fromUsername(message.getUsername())
-                                .createdAt(message.getTimestamp())
-                                .read(false)
-                                .build())
-                        .toList();
-            }
+        if (MentionTargets.shouldResolveMentions(
+                message.getType(), message.getContent(), message.getFileName())) {
+            mentionedMembers = MentionTargets.resolve(
+                    roomMemberRepository.findByRoomId(message.getChatRoomId()),
+                    message.getContent(), message.getUsername());
+            mentionEntities = mentionedMembers.stream()
+                    .map(m -> MessageMentionEntity.builder()
+                            .messageId(message.getMessageId())
+                            .roomId(message.getChatRoomId())
+                            .mentionedUserId(m.getUserId())
+                            .mentionedUsername(m.getUsername())
+                            .fromUsername(message.getUsername())
+                            .createdAt(message.getTimestamp())
+                            .read(false)
+                            .build())
+                    .toList();
         }
 
         String aiTopic = shouldRequestAISummary(message) ? KafkaTopics.AI_SUMMARY_REQUESTS : null;
@@ -160,18 +160,20 @@ public class MessageSenderService {
         if (MessageType.CHAT.equals(message.getType())) {
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), message.getContent());
-            // Send mention notifications only to resolved room members (not raw candidates)
-            for (RoomMemberEntity mentioned : mentionedMembers) {
-                fcmNotificationService.sendMessageNotification(
-                    "mention-" + mentioned.getUsername(), message.getUsername(),
-                    message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
-            }
         } else if (MessageType.FILE.equals(message.getType())) {
             String notifContent = message.getFileName() != null
                     ? "파일을 보냈습니다: " + message.getFileName()
                     : "파일을 보냈습니다";
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), notifContent);
+        }
+
+        // Mention pings ride on the caption too, so this sits outside the type branch.
+        // mentionedMembers is empty for every type that cannot carry user text.
+        for (RoomMemberEntity mentioned : mentionedMembers) {
+            fcmNotificationService.sendMessageNotification(
+                "mention-" + mentioned.getUsername(), message.getUsername(),
+                message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
         }
     }
 

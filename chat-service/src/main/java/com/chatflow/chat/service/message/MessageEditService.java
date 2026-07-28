@@ -130,8 +130,10 @@ public class MessageEditService {
             outboxDto.setContent(newContent);  // plaintext, NOT the encrypted entity content
             chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_EDITED");
 
-            // Re-sync mention rows for CHAT messages (digest consistency, no re-notify)
-            if ("CHAT".equals(entity.getType())) {
+            // Re-sync mention rows (digest consistency, no re-notify). Same type rule as
+            // the send path — otherwise editing "@bob" out of a FILE caption leaves the
+            // row behind and bob keeps seeing a mention that no longer exists.
+            if (MentionTargets.carriesUserText(entity.getType())) {
                 resyncMentions(entity, newContent);
             }
 
@@ -145,25 +147,19 @@ public class MessageEditService {
      * No FCM/notification — editing is not sending.
      */
     private void resyncMentions(ChatMessageEntity entity, String newContent) {
-        // 1. Extract new mention candidates from the edited content
-        List<String> candidates = MentionExtractor.extract(newContent);
+        // 1. Resolve the edited content against the room's real member list
+        List<RoomMemberEntity> mentioned =
+                MentionTargets.shouldResolveMentions(
+                                entity.getType(), newContent, entity.getFileName())
+                        ? MentionTargets.resolve(
+                                roomMemberRepository.findByRoomId(entity.getChatRoomId()),
+                                newContent, entity.getUsername())
+                        : List.of();
 
-        // 2. Resolve candidates to actual room members, excluding the author
-        Set<String> resolvedUserIds;
-        Map<String, RoomMemberEntity> resolvedByUserId;
-        if (candidates.isEmpty()) {
-            resolvedUserIds = Set.of();
-            resolvedByUserId = Map.of();
-        } else {
-            List<RoomMemberEntity> members = roomMemberRepository
-                    .findByRoomIdAndUsernameIn(entity.getChatRoomId(), candidates)
-                    .stream()
-                    .filter(m -> !m.getUsername().equals(entity.getUsername()))
-                    .toList();
-            resolvedByUserId = members.stream()
-                    .collect(Collectors.toMap(RoomMemberEntity::getUserId, m -> m));
-            resolvedUserIds = resolvedByUserId.keySet();
-        }
+        // 2. Index by userId — that is what the existing rows are keyed on
+        Map<String, RoomMemberEntity> resolvedByUserId = mentioned.stream()
+                .collect(Collectors.toMap(RoomMemberEntity::getUserId, m -> m, (a, b) -> a));
+        Set<String> resolvedUserIds = resolvedByUserId.keySet();
 
         // 3. Load existing mention rows for this message
         List<MessageMentionEntity> existing = messageMentionRepository.findByMessageId(entity.getMessageId());

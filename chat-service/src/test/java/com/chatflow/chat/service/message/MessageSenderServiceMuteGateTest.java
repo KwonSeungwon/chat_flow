@@ -32,7 +32,10 @@ import static org.mockito.Mockito.*;
 
 /**
  * Focused tests for the mute gate added to MessageSenderService.send().
- * Verifies muted users cannot send CHAT messages, and other message types are unaffected.
+ *
+ * <p>The gate covers the types that carry text the user typed — CHAT and FILE
+ * (a file ships with a caption). Server-authored JOIN/LEAVE/SYSTEM text is never
+ * gated, and must not even hit room_members.
  */
 @ExtendWith(MockitoExtension.class)
 class MessageSenderServiceMuteGateTest {
@@ -183,10 +186,10 @@ class MessageSenderServiceMuteGateTest {
         }
     }
 
-    // ── Non-CHAT message types skip mute check ─────────────────
+    // ── Server-authored types skip the mute check ──────────────
 
     @Nested
-    class NonChatMessageTypes {
+    class ServerAuthoredMessageTypes {
 
         @Test
         void joinMessage_muteCheckSkipped() {
@@ -195,7 +198,8 @@ class MessageSenderServiceMuteGateTest {
             ChatMessage message = createMessage(ChatMessage.MessageType.JOIN);
             messageSenderService.send(message);
 
-            // RoomMemberRepository should NOT be queried for non-CHAT types
+            // Nobody typed this text, so there is nothing to gate — and no reason
+            // to spend a room_members query finding that out.
             verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
                     any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
@@ -221,14 +225,72 @@ class MessageSenderServiceMuteGateTest {
             verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
         }
 
+    }
+
+    // ── FILE is user-authored, so the mute gate covers it ──────
+
+    /**
+     * A file arrives with a caption the user typed, and that caption both lands in
+     * the room and fires FCM mention pushes at the members it names. Letting a muted
+     * user through on FILE would leave them a working way to keep tapping people on
+     * the shoulder.
+     */
+    @Nested
+    class FileMessages {
+
         @Test
-        void fileMessage_muteCheckSkipped() {
+        void mutedUser_fileMessageBlocked() {
+            LocalDateTime mutedUntil = LocalDateTime.now().plusMinutes(30);
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
+                    .thenReturn(Optional.of(member(mutedUntil)));
+
+            ChatMessage message = createMessage(ChatMessage.MessageType.FILE);
+            messageSenderService.send(message);
+
+            verify(messagingTemplate).convertAndSendToUser(
+                    eq(USER_ID), eq("/queue/errors"), any());
+            verify(chatPersistenceService, never()).persistMessageAndPublish(
+                    any(), anyString(), anyString(), any(), anyList());
+            verifyNoInteractions(fcmNotificationService);
+            assertNull(message.getMessageId());
+        }
+
+        @Test
+        void nonMutedUser_fileMessageSentNormally() {
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
+                    .thenReturn(Optional.of(member(null)));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             ChatMessage message = createMessage(ChatMessage.MessageType.FILE);
             messageSenderService.send(message);
 
-            verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
+            // The single-arg overload has to go looking for the mute state itself.
+            verify(roomMemberRepository).findByRoomIdAndUserId(ROOM_ID, USER_ID);
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+            verify(messagingTemplate, never()).convertAndSendToUser(
+                    anyString(), eq("/queue/errors"), any());
+        }
+
+        /**
+         * Real file traffic arrives over STOMP, which hands the member entity in
+         * rather than letting send() re-fetch it. That is the overload the gate
+         * actually runs on in production, so pin it directly.
+         */
+        @Test
+        void mutedUser_fileMessageBlocked_onThePreResolvedOverload() {
+            LocalDateTime mutedUntil = LocalDateTime.now().plusMinutes(30);
+
+            ChatMessage message = createMessage(ChatMessage.MessageType.FILE);
+            messageSenderService.send(message, member(mutedUntil));
+
+            verify(messagingTemplate).convertAndSendToUser(
+                    eq(USER_ID), eq("/queue/errors"), any());
+            verify(chatPersistenceService, never()).persistMessageAndPublish(
+                    any(), anyString(), anyString(), any(), anyList());
+            // Already resolved by the caller — no second trip to the DB.
+            verifyNoInteractions(roomMemberRepository);
+            assertNull(message.getMessageId());
         }
     }
 

@@ -1,7 +1,7 @@
 package com.chatflow.chat.event;
 
 import com.chatflow.chat.service.UserPresenceService;
-import com.chatflow.chat.service.message.MentionExtractor;
+import com.chatflow.chat.service.message.MentionTargets;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,18 +31,23 @@ public class MessageEventListener {
         messagingTemplate.convertAndSend("/topic/chat/" + message.getChatRoomId(), message);
         log.debug("Broadcast {} to room {} after commit", message.getMessageId(), message.getChatRoomId());
 
-        // W1: Send per-user unread increment notification (exclude sender, skip JOIN/LEAVE)
-        if (message.getType() == ChatMessage.MessageType.CHAT
-                || message.getType() == ChatMessage.MessageType.FILE) {
-            sendUnreadNotifications(message);
+        // W1: Send per-user unread increment notification (exclude sender). Server-authored
+        // JOIN/LEAVE/SYSTEM text is not something anyone needs to catch up on, and the badge
+        // rule has to agree with the mention rows — hence the shared predicate.
+        if (MentionTargets.carriesUserText(message.getType())) {
+            sendUnreadNotifications(message, event.getMentionedUsernames());
         }
     }
 
-    private void sendUnreadNotifications(ChatMessage message) {
+    /**
+     * @param mentioned 발행 시점에 확정된 멘션 대상. 본문을 다시 파싱하지 않는다 —
+     *                  사용자명 문자셋이 자유로워서 텍스트만으로는 대상을 알 수 없고,
+     *                  멘션 행/FCM과 같은 목록을 써야 클라이언트 배지가 어긋나지 않는다.
+     */
+    private void sendUnreadNotifications(ChatMessage message, List<String> mentioned) {
         try {
             Set<String> participantUserIds = userPresenceService.getRoomParticipantUserIds(message.getChatRoomId());
             String senderId = message.getUserId();
-            List<String> mentioned = MentionExtractor.extract(message.getContent());
 
             // Truncate content to 200 chars for keyword-matching on the client.
             // FILE messages may have empty content — fall back to empty string.

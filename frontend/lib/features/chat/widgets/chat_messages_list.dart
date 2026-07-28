@@ -531,6 +531,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 bubble = ChatBubble(
                   msg: msg,
                   isMine: isMine,
+                  me: widget.currentUsername,
                   time: _formatTime(msg.timestamp),
                   readCount: readCount,
                   onReply: (!msg.deleted && widget.onReplySelected != null)
@@ -604,6 +605,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               bubble = ChatBubble(
                 msg: msg,
                 isMine: isMine,
+                me: widget.currentUsername,
                 time: _formatTime(msg.timestamp),
                 isAiQuestion: isAiQuestion,
                 readCount: readCount,

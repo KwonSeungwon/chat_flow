@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -71,7 +72,17 @@ public class ChatPersistenceService {
             saveOutboxEventInternal(message, aiSummaryTopic, "AI_SUMMARY_REQUEST");
         }
 
-        eventPublisher.publishEvent(new MessagePersistedEvent(message));
+        // 리스너가 본문을 다시 파싱하지 않도록, 방금 확정한 멘션 대상을 그대로 실어 보낸다.
+        eventPublisher.publishEvent(new MessagePersistedEvent(message, mentionedUsernames(mentions)));
+    }
+
+    private static List<String> mentionedUsernames(List<MessageMentionEntity> mentions) {
+        if (mentions == null || mentions.isEmpty()) return List.of();
+        return mentions.stream()
+                .map(MessageMentionEntity::getMentionedUsername)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     /**
