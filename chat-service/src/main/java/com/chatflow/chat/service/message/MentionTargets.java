@@ -1,7 +1,9 @@
 package com.chatflow.chat.service.message;
 
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.common.dto.BaseMessage.MessageType;
+import com.chatflow.common.dto.ChatMessage;
 
 import java.util.HashSet;
 import java.util.List;
@@ -68,28 +70,34 @@ public final class MentionTargets {
      * 서버가 만든 문구(JOIN/LEAVE/SYSTEM), {@code @}가 아예 없는 본문,
      * 그리고 캡션 없이 올린 파일의 자동 본문.
      *
-     * <p>마지막 항목이 핵심이다 — 파일명은 사용자가 이 방에서 친 문장이 아니다.
-     * {@code @bob-review.pdf} 를 올렸다고 bob에게 푸시가 가면 안 된다.
-     *
-     * <p><b>알려진 구멍</b>: 전달(forward)은 프론트가 본문을
-     * {@code "[전달] <보낸이>: <원문>"} 으로 다시 조립하므로 이 판정을 빠져나간다.
-     * 캡션 없는 파일을 전달하면 파일명 속 {@code @}가 여전히 멘션이 된다.
-     * 막으려면 {@code forwardedFrom != null} 까지 봐야 하는데, 그러면 CHAT 전달의
-     * 오래된 동작(원문 멘션이 그대로 전달됨)까지 바뀌므로 별건으로 둔다.
+     * <p>뒤의 둘이 핵심이다. 파일명은 사용자가 이 방에서 친 문장이 아니라서
+     * {@code @bob-review.pdf} 를 올렸다고 bob에게 푸시가 가면 안 되고, 전달된 글은
+     * 남이 쓴 문장이라 전달자가 bob을 부른 게 아니다 — 멘션 행의 {@code fromUsername}은
+     * 전달자로 찍히므로, 부르지도 않은 사람이 부른 것처럼 기록된다.
      */
-    static boolean shouldResolveMentions(MessageType type, String content, String fileName) {
-        return carriesUserText(type)
-                && namesSomeone(content, MessageType.FILE.equals(type), fileName);
+    static boolean shouldResolveMentions(ChatMessage message) {
+        return carriesUserText(message.getType())
+                && namesSomeone(message.getContent(), MessageType.FILE.equals(message.getType()),
+                        message.getFileName(), message.getForwardedFrom());
     }
 
-    /** {@link #shouldResolveMentions(MessageType, String, String)} 의 엔티티(문자열 타입)용. */
-    static boolean shouldResolveMentions(String typeName, String content, String fileName) {
-        return carriesUserText(typeName)
-                && namesSomeone(content, MessageType.FILE.name().equals(typeName), fileName);
+    /** 수정 경로용 — 본문만 새 것이고 타입/파일명/전달여부는 저장된 행에서 온다. */
+    static boolean shouldResolveMentions(ChatMessageEntity entity, String newContent) {
+        return carriesUserText(entity.getType())
+                && namesSomeone(newContent, MessageType.FILE.name().equals(entity.getType()),
+                        entity.getFileName(), entity.getForwardedFrom());
     }
 
-    private static boolean namesSomeone(String content, boolean isFile, String fileName) {
+    private static boolean namesSomeone(String content, boolean isFile, String fileName,
+                                        String forwardedFrom) {
         if (content == null || content.indexOf('@') < 0) return false;
+
+        // 전달은 프론트가 "[전달] <보낸이>: <원문>" 으로 다시 조립한 남의 글이다
+        // (message_send_helper.dart forwardMessage). 전달자가 친 글자는 하나도 없다.
+        // 이 규칙이 없으면 캡션 없는 파일을 전달할 때 재조립된 본문이 자동 캡션 판정을
+        // 빠져나가, 파일명 속 @가 다시 멘션이 된다.
+        if (forwardedFrom != null && !forwardedFrom.isBlank()) return false;
+
         // 완전일치라, 사용자가 캡션을 한 글자라도 보태면 그건 사용자가 친 문장이다.
         return !(isFile && content.equals(AUTO_FILE_CAPTION + fileName));
     }

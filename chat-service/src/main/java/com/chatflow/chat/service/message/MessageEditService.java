@@ -149,8 +149,7 @@ public class MessageEditService {
     private void resyncMentions(ChatMessageEntity entity, String newContent) {
         // 1. Resolve the edited content against the room's real member list
         List<RoomMemberEntity> mentioned =
-                MentionTargets.shouldResolveMentions(
-                                entity.getType(), newContent, entity.getFileName())
+                MentionTargets.shouldResolveMentions(entity, newContent)
                         ? MentionTargets.resolve(
                                 roomMemberRepository.findByRoomId(entity.getChatRoomId()),
                                 newContent, entity.getUsername())

@@ -133,8 +133,7 @@ public class MessageSenderService {
         // reuse this single room_members lookup.
         List<RoomMemberEntity> mentionedMembers = List.of();
         List<MessageMentionEntity> mentionEntities = List.of();
-        if (MentionTargets.shouldResolveMentions(
-                message.getType(), message.getContent(), message.getFileName())) {
+        if (MentionTargets.shouldResolveMentions(message)) {
             mentionedMembers = MentionTargets.resolve(
                     roomMemberRepository.findByRoomId(message.getChatRoomId()),
                     message.getContent(), message.getUsername());

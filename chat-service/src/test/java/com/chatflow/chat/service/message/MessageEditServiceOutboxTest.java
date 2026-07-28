@@ -461,6 +461,28 @@ class MessageEditServiceOutboxTest {
             verify(messageMentionRepository, never()).saveAll(anyList());
         }
 
+        /**
+         * 전달된 글은 프론트가 "[전달] &lt;보낸이&gt;: &lt;원문&gt;"으로 재조립한 남의 문장이라
+         * 전달자가 누굴 부른 게 아니다. 그걸 손본다고 남의 문장이 전달자의 문장이 되지는
+         * 않는다 — 여전히 멘션 행을 만들지 않고, 남아 있던 행은 지운다.
+         */
+        @Test
+        @DisplayName("전달 메시지를 수정해도 멘션 행이 생기지 않는다")
+        void editMessage_forwardedMessage_neverResolvesMentions() {
+            entity.setForwardedFrom("carol: @bob 이거 봐줘");
+            MessageMentionEntity bobMention = existingMention("bob-id", "bob", true);
+            when(messageMentionRepository.findByMessageId(MESSAGE_ID)).thenReturn(List.of(bobMention));
+
+            Result<Void, ChatErrorCode> result =
+                    service.editMessage(MESSAGE_ID, USER_ID, "[전달] carol: @bob 이거 봐줘 (오타수정)");
+
+            assertThat(result.isSuccess()).isTrue();
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(messageMentionRepository, never()).saveAll(anyList());
+            verify(messageMentionRepository).deleteAll(anyList());
+        }
+
         @Test
         @DisplayName("mixed diff: add carol, remove bob, keep dave")
         void editMessage_mixedDiff_addRemoveKeep() {

@@ -370,6 +370,50 @@ class MessageMentionWriteTest {
         }
     }
 
+    // ── Forwarded text is somebody else's sentence ─────────────
+
+    @Nested
+    class Forwarded {
+
+        /**
+         * 프론트가 "[전달] &lt;보낸이&gt;: &lt;원문&gt;"으로 다시 조립한다
+         * ({@code message_send_helper.dart} {@code forwardMessage}). 전달자는 한 글자도
+         * 치지 않았는데 멘션 행의 {@code fromUsername}은 전달자로 찍히므로, 부르지도
+         * 않은 사람이 부른 것처럼 기록된다.
+         */
+        @Test
+        void forwarded_chat_does_not_mention_anyone() {
+            ChatMessage msg = chatMessage("[전달] alice: @bob 이거 봐줘");
+            msg.setForwardedFrom("alice: @bob 이거 봐줘");
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(msg, null);
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(chatPersistenceService).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+            verify(fcmNotificationService, never()).sendMessageNotification(
+                    startsWith("mention-"), anyString(), anyString());
+        }
+
+        /**
+         * 캡션 없는 파일을 전달하면 재조립된 본문이 "[파일] &lt;파일명&gt;" 완전일치를
+         * 빠져나간다 — 전달 규칙이 없으면 여기서 자동 캡션 방어가 그대로 뚫린다.
+         */
+        @Test
+        void forwarding_an_uncaptioned_file_does_not_revive_the_filename() {
+            ChatMessage msg = fileMessage("[전달] alice: [파일] @bob-review.pdf", "@bob-review.pdf");
+            msg.setForwardedFrom("alice: [파일] @bob-review.pdf");
+            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+
+            service.send(msg, null);
+
+            verify(roomMemberRepository, never()).findByRoomId(anyString());
+            verify(fcmNotificationService, never()).sendMessageNotification(
+                    startsWith("mention-"), anyString(), anyString());
+        }
+    }
+
     // ── FCM mention pushes use resolved members only ───────────
 
     @Nested

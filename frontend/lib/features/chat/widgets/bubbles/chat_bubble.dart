@@ -111,6 +111,15 @@ class ChatBubbleState extends State<ChatBubble> {
   /// 사용자명 검증이 없어서 공백·하이픈·악센트·30자 초과 이름이 잘려 나갔다.
   Widget _buildContentRichText(BuildContext context, String content, TextStyle baseStyle,
       {required bool invertColors}) {
+    // 전달된 글은 남이 쓴 문장을 "[전달] <보낸이>: <원문>" 으로 다시 조립한 것이라
+    // 서버가 멘션 행을 만들지 않는다(MentionTargets.shouldResolveMentions).
+    // 여기서 하이라이트하면 오지 않을 알림을 약속하는 셈이다.
+    //
+    // 공백만 있는 값은 "전달 아님"으로 본다 — 서버(MentionTargets)와 전달 배지
+    // (bubble_header_decorations)가 쓰는 판정과 같아야 셋이 따로 놀지 않는다.
+    if (widget.msg.forwardedFrom?.trim().isNotEmpty ?? false) {
+      return Text(content, style: baseStyle);
+    }
     final me = widget.me;
     final mentions =
         findMentionSpans(content, me: (me == null || me.isEmpty) ? null : me);
