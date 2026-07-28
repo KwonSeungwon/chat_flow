@@ -1,5 +1,6 @@
 package com.chatflow.chat.migration;
 
+import com.chatflow.chat.entity.OutboxEvent;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.MigrationState;
@@ -22,7 +23,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V14) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V15) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -104,8 +105,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 14 versioned migrations (V1..V14) should have been executed")
-                .isEqualTo(14);
+                .as("All 15 versioned migrations (V1..V15) should have been executed")
+                .isEqualTo(15);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -205,7 +206,131 @@ class FlywayMigrationTest {
                 .isTrue();
     }
 
+    // ── Test 7: V15 — outbox status CHECK accepts every OutboxStatus value ─
+
+    /**
+     * The migrated schema must accept <strong>every</strong> value of
+     * {@link OutboxEvent.OutboxStatus}. Driven off the enum itself, so adding a new
+     * status in Java without a matching migration fails here instead of in prod.
+     *
+     * <p>History: V13 introduced the PENDING → PROCESSING claim step, but prod carried a
+     * pre-Flyway Hibernate-generated CHECK constraint listing only the three older values.
+     * Every poll failed with SQLState 23514 and the outbox stalled for a week. V15 rebuilds
+     * the constraint with all four values.
+     */
+    @Test
+    void v15_outboxStatusCheckAcceptsEveryEnumValue() throws SQLException {
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            for (OutboxEvent.OutboxStatus status : OutboxEvent.OutboxStatus.values()) {
+                stmt.executeUpdate(insertOutboxRowSql(status));
+            }
+        }
+    }
+
+    // ── Test 8: V15 — heals a drifted (legacy 3-value constraint) database ─
+
+    /**
+     * Reproduces the exact production drift: {@code outbox_events} pre-exists with the
+     * legacy three-value CHECK constraint (Hibernate ddl-auto, pre-Flyway), so V1's
+     * {@code CREATE TABLE IF NOT EXISTS} is a no-op and the stale constraint survives the
+     * whole chain. After V15 the claim update (PENDING → PROCESSING) must succeed.
+     *
+     * <p>Runs against a separate database inside the same container — no second container.
+     */
+    @Test
+    void v15_healsLegacyThreeValueConstraintOnDriftedDatabase() throws SQLException {
+        final String driftedDb = "chatflow_drifted";
+
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE DATABASE " + driftedDb);
+        }
+
+        try (Connection conn = connect(driftedDb);
+             Statement stmt = conn.createStatement()) {
+            // gateway-owned table that V5/V10 join against
+            stmt.execute("""
+                    CREATE TABLE users (
+                        user_id  VARCHAR(50)  PRIMARY KEY,
+                        username VARCHAR(100) NOT NULL
+                    )
+                    """);
+            // The pre-Flyway shape: V1's columns plus the stale 3-value constraint.
+            stmt.execute("""
+                    CREATE TABLE outbox_events (
+                        id              BIGSERIAL PRIMARY KEY,
+                        aggregate_type  VARCHAR(50)  NOT NULL,
+                        aggregate_id    VARCHAR(100) NOT NULL,
+                        event_type      VARCHAR(50)  NOT NULL,
+                        topic           VARCHAR(100) NOT NULL,
+                        partition_key   VARCHAR(100) NOT NULL,
+                        payload         TEXT         NOT NULL,
+                        status          VARCHAR(20)  NOT NULL,
+                        created_at      TIMESTAMP    NOT NULL,
+                        processed_at    TIMESTAMP,
+                        version         BIGINT,
+                        CONSTRAINT outbox_events_status_check
+                            CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED'))
+                    )
+                    """);
+        }
+
+        MigrateResult driftedResult = Flyway.configure()
+                .dataSource(jdbcUrl(driftedDb), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .load()
+                .migrate();
+
+        assertThat(driftedResult.success)
+                .as("Flyway should migrate a drifted (pre-Flyway schema) database cleanly")
+                .isTrue();
+
+        try (Connection conn = connect(driftedDb);
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(insertOutboxRowSql(OutboxEvent.OutboxStatus.PENDING));
+
+            // This is the statement OutboxPoller.claimBatch() issues — it threw 23514 in prod.
+            int claimed = stmt.executeUpdate(
+                    "UPDATE outbox_events SET status = 'PROCESSING' WHERE status = 'PENDING'");
+
+            assertThat(claimed)
+                    .as("claim update (PENDING -> PROCESSING) should succeed after V15")
+                    .isEqualTo(1);
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    /**
+     * Builds a JDBC URL for an arbitrary database inside the test container.
+     * {@link PostgreSQLContainer#getJdbcUrl()} is hardcoded to the container's default
+     * database, so tests needing a second database construct their own URL.
+     */
+    private static String jdbcUrl(String database) {
+        return "jdbc:postgresql://" + POSTGRES.getHost()
+                + ":" + POSTGRES.getMappedPort(PostgreSQLContainer.POSTGRESQL_PORT)
+                + "/" + database;
+    }
+
+    private static Connection connect(String database) throws SQLException {
+        return DriverManager.getConnection(
+                jdbcUrl(database), POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    /**
+     * A minimal valid {@code outbox_events} INSERT for the given status.
+     * Status is interpolated from an enum constant, so there is no injection surface.
+     */
+    private static String insertOutboxRowSql(OutboxEvent.OutboxStatus status) {
+        return "INSERT INTO outbox_events "
+                + "(aggregate_type, aggregate_id, event_type, topic, partition_key, payload, status, created_at) "
+                + "VALUES ('ChatMessage', 'room_test', 'MESSAGE_SENT', 'chat-messages', 'room_test', '{}', "
+                + "'" + status.name() + "', now())";
+    }
+
 
     /**
      * Returns all column names for the given table via {@code information_schema.columns}.
