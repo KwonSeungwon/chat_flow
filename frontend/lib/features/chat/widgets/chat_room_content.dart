@@ -469,7 +469,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           onTyping: () => chatNotifier.notifyTyping(widget.roomId),
           onMentionSearch: (query) => ref
               .read(chatNotifierProvider(widget.roomId).notifier)
-              .searchParticipants(widget.roomId, query),
+              .searchMentionCandidates(widget.roomId, query),
           onSend: (content, {String priority = 'ROUTINE'}) {
             chatNotifier.sendMessage(
                 roomId: widget.roomId, content: content, priority: priority);

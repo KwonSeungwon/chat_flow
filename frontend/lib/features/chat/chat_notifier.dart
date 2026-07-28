@@ -14,6 +14,7 @@ export 'state/chat_messages_state.dart';
 import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 import 'chat_rooms_provider.dart';
+import 'helpers/mention_candidates.dart';
 import 'helpers/offline_message_queue.dart';
 import 'internal/fcm_room_subscription.dart';
 import 'internal/message_send_helper.dart';
@@ -52,6 +53,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   /// localId → sending 타임아웃 타이머
   final Map<String, Timer> _sendingTimers = {};
+
+  /// @mention 후보 조회 + 캐시. 키 입력마다 멤버 목록을 다시 받지 않는다.
+  late final MentionCandidateSource _mentions =
+      MentionCandidateSource(_dioClient.dio);
   final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
   String? _currentRoomId;
   Timer? _quickReplyDebounce;
@@ -231,6 +236,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       },
       onMembersUpdate: (members) {
         if (!mounted || _currentRoomId == null) return;
+        // Membership changed, and this payload *is* the new list.
+        _mentions.seed(_currentRoomId!, members);
         try {
           _ref
               .read(roomMembersProvider(_currentRoomId!).notifier)
@@ -598,22 +605,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) =>
       _send.forwardMessage(targetRoomId, msg);
 
-  Future<List<Map<String, dynamic>>> searchParticipants(
-      String roomId, String query) async {
-    try {
-      final resp =
-          await _dioClient.dio.get('/api/chat/rooms/$roomId/participants');
-      final participants = apiResponseList(resp.data);
-      final q = query.toLowerCase();
-      return participants
-          .where((p) =>
-              (p['username']?.toString() ?? '').toLowerCase().contains(q))
-          .map((p) => Map<String, dynamic>.from(p as Map))
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  /// @mention autocomplete candidates for [roomId], matching [query].
+  /// See [MentionCandidateSource] for why this reads members, not presence.
+  Future<List<Map<String, dynamic>>> searchMentionCandidates(
+          String roomId, String query) =>
+      _mentions.search(roomId, query);
 
   void notifyTyping(String roomId) {
     _typing.scheduleSend(() => _stompService.sendTyping(roomId));
