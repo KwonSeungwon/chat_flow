@@ -80,8 +80,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final notifier = ref.read(authProvider.notifier);
     if (_isRegister) {
       await notifier.register(username, password, role: _selectedRole);
-      // Upload profile image after successful registration
-      if (_profileImageBytes != null && _profileImageName != null) {
+      // Upload profile image after successful registration.
+      // 가입이 실패했으면 토큰이 없다 → 업로드가 401을 받고, 그 401이 authProvider를
+      // 리셋해 방금 띄운 실패 사유까지 지워버린다. 반드시 성공을 먼저 확인한다.
+      if (ref.read(authProvider).isAuthenticated &&
+          _profileImageBytes != null &&
+          _profileImageName != null) {
         try {
           final dioClient = ref.read(dioClientProvider);
           final formData = FormData.fromMap({

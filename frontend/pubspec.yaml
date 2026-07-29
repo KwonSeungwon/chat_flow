@@ -51,6 +51,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # FilePicker.platform 을 테스트에서 갈아끼우려면 MockPlatformInterfaceMixin 이 필요하다.
+  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true

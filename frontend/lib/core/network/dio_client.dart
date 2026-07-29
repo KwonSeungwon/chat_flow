@@ -52,7 +52,9 @@ class DioClient {
                 await _storage.delete(key: StorageKeys.username);
               }
             } catch (_) {/* best-effort */}
-            // storage 동작과 무관하게 항상 onUnauthorized 호출 → state 리셋 + router redirect
+            // storage 동작과 무관하게 항상 onUnauthorized 호출 → state 리셋 + router redirect.
+            // 세션이 실제로 있었는지 판단할 근거는 storage가 아니라 in-memory state다
+            // (다른 탭이 로그아웃하면 storage만 비고 이 탭 state는 살아 있다). 판단은 구독자 몫.
             onUnauthorized?.call();
           }
         }

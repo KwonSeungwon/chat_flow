@@ -64,6 +64,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._dioClient) : super(const AuthState()) {
     _dioClient.onUnauthorized = () {
+      // 애초에 세션이 없으면 리셋할 것도, 끊을 푸시도 없다. 여기서 리셋해버리면
+      // 회원가입 실패 직후 튀어나간 요청의 401이 방금 띄운 실패 사유까지 지운다.
+      if (state.token == null) return;
       state = const AuthState(isHydrated: true);
       setAuthTokenForFiles(null);
       // Session expired/invalidated server-side (401) — stop FCM pushes for this
