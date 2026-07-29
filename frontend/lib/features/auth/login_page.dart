@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/apk_downloader.dart';
@@ -95,7 +96,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
             ),
           });
           final resp = await dioClient.dio.post('/api/files/upload', data: formData);
-          final fileUrl = resp.data['url']?.toString() ?? resp.data['fileUrl']?.toString();
+          // 응답은 ApiResponse envelope다: {success, data:{fileUrl,...}}.
+          // 최상위에서 찾으면 항상 null이라 아바타가 계정에 안 붙는다(파일만 고아로 남음).
+          final fileUrl = apiResponseField<String>(resp.data, 'fileUrl');
           if (fileUrl != null) {
             await notifier.updateProfileImage(fileUrl);
           }

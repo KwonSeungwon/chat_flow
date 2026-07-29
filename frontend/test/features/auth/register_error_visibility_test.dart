@@ -38,16 +38,26 @@ class _RegisterFailsAdapter implements HttpClientAdapter {
 }
 
 /// 가입이 성공하는 세상. 새 가드가 정상 경로까지 막아버리지 않는지 확인하는 용도.
+///
+/// /api/files/upload 응답은 prod에서 실제로 관측한 그대로다 —
+/// FileController가 ApiResponse.ok(...)로 감싸므로 fileUrl은 data 아래에 있고,
+/// 최상위에 url/fileUrl은 존재하지 않는다. 이 shape가 이 파일의 계약이다.
 class _RegisterSucceedsAdapter implements HttpClientAdapter {
   final List<String> requestedPaths = [];
+
+  /// path → 클라이언트가 보낸 body. 아바타 URL이 제대로 뽑혔는지 확인하는 데 쓴다.
+  final Map<String, Object?> sentBodies = {};
 
   @override
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     requestedPaths.add(options.path);
+    sentBodies[options.path] = options.data;
     final body = switch (options.path) {
       '/api/auth/register' => '{"token":"t","userId":"u1","role":"NURSE"}',
-      '/api/files/upload' => '{"url":"https://cdn.example/avatar.png"}',
+      '/api/files/upload' => '{"success":true,"data":{'
+          '"fileUrl":"/api/files/93488eec-86c3-44ff-a7e6-b3b6b80d1aac",'
+          '"fileName":"avatar.png","fileContentType":"image/png"}}',
       _ => '{}',
     };
     return ResponseBody.fromString(body, 200, headers: {
@@ -208,6 +218,23 @@ void main() {
       expect(okAdapter.requestedPaths, containsAllInOrder(
           ['/api/auth/register', '/api/files/upload', '/api/auth/profile']));
       expect(find.text('CHAT'), findsOneWidget, reason: '가입 성공 → /chat 이동');
+    });
+
+    testWidgets('업로드 응답의 envelope를 벗겨 아바타 URL을 계정에 붙인다', (tester) async {
+      // 회귀 대상(2026-07-29 prod): 최상위 url/fileUrl만 찾다가 둘 다 null이 나와
+      // updateProfileImage가 아예 호출되지 않았다. 파일은 서버에 뜬 채 고아가 되고
+      // 사용자는 아바타 없는 계정을 받았다.
+      final okAdapter = _RegisterSucceedsAdapter();
+      await pumpLoginPage(tester,
+          dioClient: DioClient()..dio.httpClientAdapter = okAdapter);
+      await fillRegisterForm(tester);
+      await pickAvatar(tester);
+
+      await submit(tester);
+
+      expect(okAdapter.sentBodies['/api/auth/profile'],
+          isA<Map>().having((m) => m['profileImageUrl'], 'profileImageUrl',
+              '/api/files/93488eec-86c3-44ff-a7e6-b3b6b80d1aac'));
     });
   });
 }
