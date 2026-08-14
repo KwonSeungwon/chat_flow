@@ -1,0 +1,20 @@
+{
+  "enabledPlugins": {},
+  "permissions": {
+    "allow": [
+      "Bash(flutter test:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(./gradlew test)",
+      "Bash(./gradlew :chat-service:test)",
+      "Bash(./gradlew :chat-service:test --no-daemon)",
+      "Bash(helm template:*)",
+      "Bash(gh run watch:*)",
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "mcp__plugin_playwright_playwright__browser_resize",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_network_requests",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "mcp__plugin_playwright_playwright__browser_wait_for"
+    ]
+  }
+}

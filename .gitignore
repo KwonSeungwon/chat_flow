@@ -1,5 +1,6 @@
 # Claude Code (로컬 전용 민감 정보)
-.claude/
+.claude/*
+!.claude/settings.json
 .omc/
 
 # Gradle
