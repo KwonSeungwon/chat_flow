@@ -11,7 +11,7 @@ Frontend (Flutter Web, Port 80 / nginx)
     ↓ HTTP (Dio) / WebSocket (STOMP via stomp_dart_client)
 Gateway Service (Spring Cloud Gateway, Port 8000)
     ├→ Chat Service (Port 8080) - 실시간 채팅, WebSocket/STOMP
-    ├→ AI Summary Service (Port 8081) - LangChain4J + Gemini 요약
+    ├→ AI Summary Service (Port 8081) - Spring AI + Gemini 요약
     └→ Search Service (Port 8082) - Elasticsearch 한국어 검색
 
 비동기 통신 (Kafka Topics):
@@ -26,7 +26,7 @@ Gateway Service (Spring Cloud Gateway, Port 8000)
 - **Frontend**: Flutter 3.22+, Dart 3.3+, Riverpod 2.5, GoRouter 14, Dio 5, stomp_dart_client 2, flutter_secure_storage 9, nginx (web 서빙)
 - **Data**: PostgreSQL 16 (prod) / H2 (local), Valkey 7.2 (Redis 호환), Elasticsearch 8.11 + Nori
 - **Messaging**: Apache Kafka 7.4
-- **AI**: LangChain4J 0.25 + Google Gemini 1.5 Flash
+- **AI**: Spring AI 1.1 (기본, `spring-ai` 프로필) / LangChain4J 0.36.2 (`langchain4j` 프로필로 전환 가능) + Google Gemini 2.5 Flash Lite
 - **Build**: Gradle 8.5 (backend), Flutter SDK (frontend)
 - **Monitoring**: Prometheus, Grafana, Kibana
 
@@ -47,7 +47,7 @@ chat_flow/
 ├── gateway-service/         # API Gateway (라우팅, CORS, Circuit Breaker)
 ├── frontend/                # Flutter Web + Android 프론트엔드
 │   ├── lib/core/            # 네트워크(Dio, STOMP), 라우터, 테마
-│   ├── lib/features/        # auth, chat, search 피처 레이어
+│   ├── lib/features/        # auth, chat, command_palette, profile, search 피처 레이어
 │   ├── lib/shared/          # ChatMessage, ChatRoom 모델
 │   ├── android/             # Android 네이티브 (minSdk 23)
 │   ├── web/                 # Flutter Web 빌드 출력 + chatflow-app.apk
@@ -116,7 +116,7 @@ flutter run -d chrome                                        # 웹 개발 서버
 flutter build web --release                                  # 웹 프로덕션 빌드
 flutter build apk --release                                  # Android APK 빌드
 
-# Docker 이미지 빌드 (EC2 배포용, amd64 크로스 빌드)
+# Docker 이미지 빌드 (레거시 로컬 크로스 빌드용 — 권장 배포 경로는 GH Actions → GHCR)
 docker buildx build --platform linux/amd64 \
   -t chatflow-frontend:prod --load .
 ```
@@ -208,6 +208,8 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 - **인덱스**: `chat_messages` (설정 파일: `search-service/src/main/resources/elasticsearch/`)
 
 ## API Endpoints
+
+> 아래는 핵심 엔드포인트만 발췌한 것이다. 실제 API 표면은 훨씬 넓다(컨트롤러 21개): 인증/유저(AuthController, UserController — gateway), 메시지 상호작용·신고·멘션 다이제스트·예약 메시지·읽음 상태·방 초대/밴/멤버 관리·파일·프로필·FCM 등. 전체 목록은 `**/controller/*.java`를 검색하라.
 
 ### Chat Service (Port 8080)
 - `GET /api/chat/rooms` - 채팅방 목록

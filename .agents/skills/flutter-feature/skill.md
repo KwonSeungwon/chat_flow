@@ -1,0 +1,187 @@
+---
+name: flutter-feature
+description: "ChatFlow Flutter 피처 구현 패턴 가이드. Riverpod StateNotifier 추가, GoRouter 새 경로 등록, Dio API 연동, STOMP WebSocket 구독 추가, Flutter 위젯/화면 개발 시 이 스킬을 사용한다. Flutter 3.22+, Dart 3.3+, Riverpod 2.5 환경에 특화된 ChatFlow 패턴을 제공한다."
+---
+
+# Flutter Feature 구현 스킬
+
+## 피처 레이어 구조
+
+```
+lib/features/{feature}/
+├── {name}_provider.dart      # Provider는 피처 루트에 (별도 providers/ 디렉토리 없음)
+├── screens/
+│   └── {feature}_screen.dart
+├── widgets/                  # 재사용 위젯
+├── dialogs/                  # 다이얼로그 (필요 시)
+├── state/                    # 상태 클래스 (필요 시)
+├── internal/                 # 내부 구현 (필요 시)
+└── helpers/                  # 헬퍼 (필요 시)
+```
+
+현재 피처: `auth`, `chat`, `command_palette`, `profile`, `search` — 구조가 가장 완성된 `chat`을 기준으로 따른다.
+
+공유 모델 → `lib/shared/models/`  
+피처 고유 모델 → `lib/features/{feature}/models/`
+
+## Riverpod StateNotifier 패턴
+
+```dart
+// lib/features/{feature}/{name}_provider.dart
+final chatRoomsProvider =
+    StateNotifierProvider<ChatRoomsNotifier, AsyncValue<List<ChatRoom>>>((ref) {
+  return ChatRoomsNotifier(ref.read(dioClientProvider));
+});
+
+class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
+  final DioClient _dio;
+
+  ChatRoomsNotifier(this._dio) : super(const AsyncValue.loading()) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      state = const AsyncValue.loading();
+      final response = await _dio.get('/api/chat/rooms');
+      // envelope unwrap은 공용 헬퍼 사용 (lib/core/network/api_response.dart)
+      // apiResponseList는 Spring Page shape({content: [...]})도 처리한다
+      final list = apiResponseList(response.data)
+          .map((e) => ChatRoom.fromJson(e as Map<String, dynamic>))
+          .toList();
+      state = AsyncValue.data(list);
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
+  }
+
+  Future<void> refresh() => _load();
+}
+```
+
+Provider 접근 패턴:
+```dart
+ref.watch(chatRoomsProvider)                        // 상태 감시 (build 내)
+ref.read(chatRoomsProvider.notifier).refresh()      // 메서드 호출
+```
+
+방(room) 단위 provider는 `StateNotifierProvider.family.autoDispose`를 사용한다 — 방을 나가면 상태가 정리되도록 (기존 per-room provider 6종이 이 패턴).
+
+## DioClient 사용 (기존 인터셉터 활용)
+
+```dart
+// ❌ 직접 생성 금지
+final dio = Dio();
+
+// ✅ JWT 인터셉터, 401 자동 처리 포함된 기존 클라이언트 사용
+final dio = ref.read(dioClientProvider);
+final response = await dio.get('/api/chat/rooms');
+
+// ApiResponse<T> unwrap — 반드시 공용 헬퍼 사용 (수동 ['data'] 파싱 금지)
+// lib/core/network/api_response.dart:
+//   unwrapApiResponse(payload)          → data 필드 or payload 그대로
+//   apiResponseMap(payload)             → Map<String, dynamic>?
+//   apiResponseList(payload)            → List (Spring Page {content: []} 포함)
+//   apiResponseField<T>(payload, 'key') → T? — 타입 인자 반드시 명시 (생략 시 타입 가드 무력화)
+final data = apiResponseMap(response.data);
+```
+
+## DTO 모델 패턴
+
+```dart
+class ChatRoom {
+  final int id;
+  final String name;
+  final DateTime createdAt;
+
+  ChatRoom({required this.id, required this.name, required this.createdAt});
+
+  factory ChatRoom.fromJson(Map<String, dynamic> json) => ChatRoom(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        // Spring LocalDateTime → ISO 8601 문자열 파싱
+        createdAt: DateTime.parse(json['createdAt'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'createdAt': createdAt.toIso8601String(),
+      };
+}
+```
+
+중요: Spring camelCase (`chatRoomId`) → Flutter도 동일 camelCase 유지
+
+## GoRouter 라우팅 추가
+
+```dart
+// lib/core/routing/app_router.dart에 추가
+GoRoute(
+  path: '/chat/:roomId/members',
+  builder: (context, state) {
+    final roomId = state.pathParameters['roomId']!;
+    return MembersScreen(roomId: roomId);
+  },
+),
+```
+
+인증 필요 라우트: 기존 `redirect` 로직에서 token null 체크 패턴 유지
+
+## STOMP WebSocket 구독
+
+```dart
+// 기존 StompService 활용
+late StompUnsubscribe _subscription;
+
+void _subscribe() {
+  _subscription = ref.read(stompServiceProvider).subscribe(
+    '/topic/chat/$roomId',
+    (StompFrame frame) {
+      final message = ChatMessage.fromJson(
+        json.decode(frame.body!) as Map<String, dynamic>,
+      );
+      // 상태 업데이트
+    },
+  );
+}
+
+@override
+void dispose() {
+  _subscription();  // 반드시 구독 해제
+  super.dispose();
+}
+```
+
+Web WS URL: 현재 origin에서 자동 파생 — 별도 설정 불필요
+
+## 플랫폼 분기 패턴
+
+```dart
+if (kIsWeb) {
+  // 웹 전용 로직
+} else {
+  // Android 전용 로직
+}
+
+// APK 다운로드: 기존 conditional import 패턴 유지
+import 'apk_downloader.dart';  // web/stub 3파일 패턴
+```
+
+## 새 피처 체크리스트
+
+- [ ] `lib/features/{feature}/` 구조 생성
+- [ ] StateNotifier + Provider 구현
+- [ ] DTO fromJson/toJson (camelCase 일치 확인)
+- [ ] GoRouter 경로 추가
+- [ ] Screen/Widget 구현
+- [ ] DioClient 사용 (직접 Dio 생성 금지)
+- [ ] dispose에서 STOMP unsubscribe
+
+## 빌드 오류 대응
+
+```bash
+flutter clean && flutter pub get   # 캐시 클리어
+flutter analyze                    # 정적 분석 (CI와 동일)
+flutter build web --release        # 웹 빌드 확인 (--web-renderer 플래그는 Flutter 3.29에서 제거됨)
+```

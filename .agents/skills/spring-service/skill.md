@@ -1,0 +1,156 @@
+---
+name: spring-service
+description: "ChatFlow Spring Boot 서비스 구현 패턴 가이드. JPA 엔티티 추가, REST API 신규 작성, Kafka Producer/Consumer 구현, STOMP 핸들러 추가, 서비스 레이어 작성 시 이 스킬을 사용한다. Spring Boot 3.2, Java 17, Gradle 멀티 모듈 환경에 특화된 ChatFlow 패턴을 제공한다."
+---
+
+# Spring Service 구현 스킬
+
+## 모듈 선택 기준
+
+| 구현 위치 | 대상 모듈 | 판단 기준 |
+|---------|---------|---------|
+| `common` | 공유 DTO, 공통 예외, ApiResponse | 2개 이상 서비스에서 사용하는 타입 |
+| `chat-service` | WebSocket, 채팅방, 메시지 영속화 | 실시간 통신 + JPA |
+| `ai-summary-service` | AI 요약, Gemini 연동 | Kafka Consumer + LangChain4J |
+| `search-service` | Elasticsearch 인덱싱/검색 | Kafka Consumer + ES |
+| `gateway-service` | 라우팅, CORS, Circuit Breaker | Spring Cloud Gateway |
+
+## 레이어별 구현 패턴
+
+### Controller
+
+```java
+@RestController
+@RequestMapping("/api/chat")
+@RequiredArgsConstructor
+@Slf4j
+public class ChatRoomController {
+    private final ChatRoomService chatRoomService;
+
+    @GetMapping("/rooms")
+    public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getRooms() {
+        // 팩토리는 ok() / error() — success()라는 메서드는 없다
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomService.getRooms()));
+    }
+}
+```
+
+규칙:
+- 모든 응답은 `ApiResponse<T>` (common 모듈) 래핑 필수
+- `@RequiredArgsConstructor` + `@Slf4j` (Lombok)
+- 경로: `/api/{서비스-domain}/...`
+
+### Service
+
+```java
+@Service
+@Transactional
+@RequiredArgsConstructor
+@Slf4j
+public class ChatRoomService {
+    private final ChatRoomRepository chatRoomRepository;
+    private final KafkaTemplate<String, ChatMessage> kafkaTemplate;
+
+    public ChatRoomResponse createRoom(CreateRoomRequest request) {
+        log.info("Creating chat room: {}", request.getName());
+        ChatRoomEntity entity = ChatRoomEntity.builder()
+            .name(request.getName())
+            .build();
+        return ChatRoomResponse.from(chatRoomRepository.save(entity));
+    }
+}
+```
+
+### JPA 엔티티
+
+```java
+@Entity
+@Table(name = "chat_rooms")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ChatRoomEntity {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String name;
+
+    @CreationTimestamp
+    private LocalDateTime createdAt;
+}
+```
+
+### Kafka Producer
+
+```java
+// chatRoomId를 파티션 키로 사용 — 같은 채팅방 메시지 순서 보장
+// 토픽 이름은 문자열 리터럴 대신 common의 KafkaTopics 상수 사용
+kafkaTemplate.send(
+    KafkaTopics.CHAT_MESSAGES,
+    message.getChatRoomId().toString(),  // partition key
+    message
+);
+```
+
+### Kafka Consumer
+
+```java
+@KafkaListener(topics = KafkaTopics.CHAT_MESSAGES, groupId = "search-group")  // 컴파일 상수라 직접 사용 가능
+public void consume(ConsumerRecord<String, ChatMessage> record) {
+    log.info("Received message for room: {}", record.key());
+    ChatMessage message = record.value();
+    // 처리 로직
+}
+```
+
+### WebSocket STOMP
+
+```java
+@Controller
+public class ChatController {
+    @MessageMapping("/chat.sendMessage")
+    @SendTo("/topic/chat/{roomId}")
+    public ChatMessage sendMessage(@DestinationVariable String roomId,
+                                   @Payload ChatMessage message) {
+        // 메시지 처리 + Kafka 발행
+        return message;
+    }
+}
+```
+
+## DTO 설계 원칙
+
+- Request DTO: `record` 클래스 + Bean Validation (`@NotBlank`, `@NotNull`)
+- Response DTO: `record` 클래스 (불변)
+- Kafka DTO: `@Data` Lombok (역직렬화를 위한 기본 생성자 필요)
+- 공유 DTO → `common` 모듈, 서비스 전용 DTO → 해당 서비스 `dto/` 패키지
+
+## 새 엔드포인트 추가 체크리스트
+
+- [ ] Controller 메서드 (ApiResponse 래핑)
+- [ ] Service 비즈니스 로직
+- [ ] DTO 클래스 (공유 여부 결정)
+- [ ] Repository 메서드 (필요 시)
+- [ ] Gateway 라우팅 규칙 확인: `gateway-service/src/main/resources/application-prod.yml` (`application.yml`은 없다. 로컬은 gitignored `application-local.yml` — `.example`에서 복사)
+- [ ] SecurityConfig `permitAll()` 경로 추가 (인증 불필요 시)
+- [ ] 프로필별 설정: `application-local.yml` / `application-prod.yml`
+
+## 설정 분리 패턴
+
+```yaml
+# application-local.yml
+spring:
+  datasource:
+    url: jdbc:h2:mem:chatflow
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# application-prod.yml
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST}:5432/chatflow
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+```
