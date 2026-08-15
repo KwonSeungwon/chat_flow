@@ -1,7 +1,16 @@
 {
   "kit": "personal-harness-kit",
   "scaffoldedWith": "0.1.0",
-  "presets": ["spring", "flutter"],
-  "features": { "codexAgents": true, "agentsSkills": true },
-  "secretPatterns": ["cfat_[A-Za-z0-9]+", "node\\.chatflow\\.ai\\.kr", "ksw@"]
+  "presets": [
+    "spring",
+    "flutter"
+  ],
+  "features": {
+    "codexAgents": true,
+    "agentsSkills": true
+  },
+  "secretPatterns": [
+    "cfat_[A-Za-z0-9]+",
+    "ssh\\s+\\w+@\\S+\\.kr"
+  ]
 }
