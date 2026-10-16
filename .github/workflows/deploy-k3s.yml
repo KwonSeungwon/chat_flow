@@ -30,8 +30,6 @@ on:
         options:
           - chat-service
           - gateway-service
-          - ai-summary-service
-          - search-service
           - frontend
         required: true
       tag:

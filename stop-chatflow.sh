@@ -55,7 +55,7 @@ EOF
 stop_backend_services() {
     log_step "백엔드 서비스 종료 중..."
     
-    local services=("gateway-service" "chat-service" "ai-summary-service" "search-service")
+    local services=("gateway-service" "chat-service")
     
     for service in "${services[@]}"; do
         if [ -f "logs/${service}.pid" ]; then
@@ -158,7 +158,7 @@ stop_docker_services() {
         docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
         
         # 개별 컨테이너들 확인 및 정리
-        local containers=$(docker ps -q --filter "name=valkey" --filter "name=kafka" --filter "name=elasticsearch" --filter "name=postgresql" --filter "name=prometheus" --filter "name=grafana" --filter "name=kibana" 2>/dev/null || true)
+        local containers=$(docker ps -q --filter "name=valkey" --filter "name=postgresql" --filter "name=prometheus" --filter "name=grafana" 2>/dev/null || true)
         
         if [ -n "$containers" ]; then
             log_info "남은 ChatFlow 컨테이너들 정리 중..."
@@ -176,7 +176,7 @@ stop_docker_services() {
 cleanup_by_ports() {
     log_step "포트 기반 프로세스 정리 중..."
     
-    local ports=(3000 8000 8080 8081 8082)
+    local ports=(3000 8000 8080)
     
     for port in "${ports[@]}"; do
         local pids=$(lsof -ti:$port 2>/dev/null || true)
@@ -240,7 +240,7 @@ check_final_status() {
     fi
     
     # 포트 사용 체크
-    local ports=(3000 8000 8080 8081 8082)
+    local ports=(3000 8000 8080)
     for port in "${ports[@]}"; do
         if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
             log_warning "포트 $port이 여전히 사용 중입니다."
@@ -268,14 +268,10 @@ print_completion() {
     echo -e "${WHITE}=== 📊 종료된 서비스 ===${NC}"
     echo -e "${CYAN}🚪 Gateway Service${NC}        (Port: 8000)"
     echo -e "${CYAN}💬 Chat Service${NC}           (Port: 8080)"  
-    echo -e "${CYAN}🤖 AI Summary Service${NC}     (Port: 8081)"
-    echo -e "${CYAN}🔍 Search Service${NC}         (Port: 8082)"
     echo -e "${CYAN}🎨 Vue3 Frontend${NC}          (Port: 3000)"
     echo ""
     echo -e "${WHITE}=== 🐳 종료된 인프라 ===${NC}"
     echo -e "${RED}🔴 Valkey${NC}                 (Port: 6379)"
-    echo -e "${PURPLE}🟣 Kafka + Zookeeper${NC}      (Port: 9092, 2181)"
-    echo -e "${BLUE}🔵 Elasticsearch + Kibana${NC}  (Port: 9200, 5601)"
     echo -e "${GREEN}🟢 PostgreSQL${NC}             (Port: 5432)"
     echo -e "${YELLOW}📊 Prometheus + Grafana${NC}    (Port: 9090, 3001)"
     echo ""

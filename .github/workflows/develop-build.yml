@@ -63,7 +63,7 @@ jobs:
     needs: [test]
     strategy:
       matrix:
-        service: [gateway-service, chat-service, ai-summary-service, search-service]
+        service: [gateway-service, chat-service]
     steps:
       - uses: actions/checkout@v4
 

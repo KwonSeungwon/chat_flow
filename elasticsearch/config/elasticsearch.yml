@@ -1,6 +1,0 @@
-cluster.name: "chatflow-cluster"
-network.host: 0.0.0.0
-discovery.type: single-node
-bootstrap.memory_lock: true
-xpack.security.enabled: false
-xpack.monitoring.collection.enabled: false

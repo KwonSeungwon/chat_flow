@@ -48,48 +48,6 @@ class FallbackControllerTest {
                 .verifyComplete();
     }
 
-    // ── AI Summary fallback ─────────────────────────────────────
-
-    @Test
-    void aiSummaryFallback_returns503WithRetryAfter60() {
-        StepVerifier.create(controller.aiSummaryFallback())
-                .assertNext(response -> {
-                    assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-                    assertEquals("60", response.getHeaders().getFirst("Retry-After"));
-
-                    Map<String, Object> body = response.getBody();
-                    assertNotNull(body);
-                    assertEquals(503, body.get("status"));
-                    assertEquals("SERVICE_UNAVAILABLE", body.get("code"));
-                    assertEquals("ai-summary-service", body.get("service"));
-                    assertEquals("AI 요약 서비스가 혼잡합니다. 잠시 후 다시 시도해주세요.",
-                            body.get("message"));
-                    assertEquals(60, body.get("retryAfterSeconds"));
-                    assertNotNull(body.get("timestamp"));
-                })
-                .verifyComplete();
-    }
-
-    // ── Search fallback ─────────────────────────────────────────
-
-    @Test
-    void searchFallback_returns503WithRetryAfter15() {
-        StepVerifier.create(controller.searchFallback())
-                .assertNext(response -> {
-                    assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-                    assertEquals("15", response.getHeaders().getFirst("Retry-After"));
-
-                    Map<String, Object> body = response.getBody();
-                    assertNotNull(body);
-                    assertEquals(503, body.get("status"));
-                    assertEquals("SERVICE_UNAVAILABLE", body.get("code"));
-                    assertEquals("search-service", body.get("service"));
-                    assertEquals("검색 서비스가 일시적으로 불안정합니다.", body.get("message"));
-                    assertEquals(15, body.get("retryAfterSeconds"));
-                })
-                .verifyComplete();
-    }
-
     // ── Files fallback ──────────────────────────────────────────
 
     @Test
