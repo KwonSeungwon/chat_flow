@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
-import '../../../shared/models/chat_message.dart';
 import '../../auth/auth_provider.dart';
 import '../bookmark_provider.dart';
 import '../chat_provider.dart';
@@ -12,6 +11,7 @@ import '../scheduled_messages_provider.dart';
 import '../admin/admin_event_state.dart';
 import '../dialogs/edit_message_dialog.dart';
 import '../dialogs/forward_dialog.dart';
+import '../dialogs/in_room_search.dart';
 import '../dialogs/readers_sheet.dart';
 import 'chat_input.dart';
 import 'chat_messages_list.dart';
@@ -43,41 +43,9 @@ class ChatRoomContent extends ConsumerStatefulWidget {
 
 class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   String? _replyScrollTarget;
-  bool _showSearch = false;
-  final _searchCtrl = TextEditingController();
   final _keyboardFocusNode = FocusNode();
-  List<ChatMessage> _searchResults = [];
-  bool _searching = false;
   /// Captured in initState: `ref` is unusable inside dispose().
   late final StateController<String?> _activeRoomId;
-
-  Future<void> _doSearch(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() => _searchResults = []);
-      return;
-    }
-    setState(() => _searching = true);
-    try {
-      final resp = await ref.read(dioClientProvider).dio.get(
-        '/api/search/rooms/${widget.roomId}/messages',
-        queryParameters: {'query': query.trim()},
-      );
-      if (!mounted) return;
-      final data = resp.data;
-      List<dynamic> items = [];
-      if (data is Map && data['data'] is List) {
-        items = data['data'] as List;
-      } else if (data is List) {
-        items = data;
-      }
-      setState(() {
-        _searchResults = items.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>)).toList();
-        _searching = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _searching = false);
-    }
-  }
 
   @override
   void initState() {
@@ -110,7 +78,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         activeRoomId.state = null;
       }
     });
-    _searchCtrl.dispose();
     _keyboardFocusNode.dispose();
     super.dispose();
   }
@@ -183,79 +150,11 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.keyF &&
             HardwareKeyboard.instance.isControlPressed) {
-          setState(() => _showSearch = !_showSearch);
+          showInRoomSearch(context, ref, widget.roomId);
         }
       },
       child: Column(
       children: [
-        // Inline room search (Ctrl+F or tap search icon)
-        if (!_showSearch && !chatState.isLoadingHistory)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8, top: 2),
-              child: IconButton(
-                icon: Icon(Icons.find_in_page_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
-                tooltip: '이 채팅방에서 검색 (Ctrl+F)',
-                onPressed: () => setState(() => _showSearch = true),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            ),
-          ),
-        if (_showSearch)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchCtrl,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: '이 채팅방에서 검색...',
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        suffixIcon: _searching
-                            ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                            : IconButton(icon: const Icon(Icons.search, size: 20), onPressed: () => _doSearch(_searchCtrl.text)),
-                      ),
-                      onSubmitted: _doSearch,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => setState(() { _showSearch = false; _searchResults = []; _searchCtrl.clear(); })),
-                ]),
-                if (_searchResults.isNotEmpty)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _searchResults.length,
-                      itemBuilder: (_, i) {
-                        final r = _searchResults[i];
-                        return ListTile(
-                          dense: true,
-                          title: Text(r.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                          subtitle: Text('${r.username} · ${r.timestamp.substring(0, 10)}', style: const TextStyle(fontSize: 11)),
-                          onTap: () => setState(() {
-                            _replyScrollTarget = r.effectiveId;
-                            _showSearch = false;
-                            _searchResults = [];
-                            _searchCtrl.clear();
-                          }),
-                        );
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
         // Pin banner
         Builder(builder: (context) {
           final roomData = ref.watch(chatRoomsProvider).whenOrNull(

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../core/constants/storage_keys.dart';
 import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,6 @@ extension NotificationPolicyX on NotificationPolicy {
   };
 }
 
-const _policyKey = 'chatflow.roomNotificationPolicies';
 const _policyStorage = FlutterSecureStorage();
 
 final roomNotificationPolicyProvider =
@@ -41,7 +41,7 @@ class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, Notificat
   final String? _userId;
 
   /// 사용자별 저장 키. userId가 없으면 읽지도 쓰지도 않는다.
-  static String storageKeyFor(String userId) => '$_policyKey.$userId';
+  static String storageKeyFor(String userId) => '${StorageKeys.roomNotificationPolicies}.$userId';
 
   RoomNotificationPolicyNotifier(this._userId) : super({}) { _load(); }
 

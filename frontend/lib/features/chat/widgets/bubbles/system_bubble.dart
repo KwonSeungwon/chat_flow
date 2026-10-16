@@ -16,7 +16,6 @@ class SystemBubble extends StatelessWidget {
   }
 
   IconData? get _alertIcon {
-    if (msg.content.startsWith('[처방알림]')) return Icons.medication_rounded;
     if (msg.content.startsWith('[검사알림]')) return Icons.science_rounded;
     return null;
   }

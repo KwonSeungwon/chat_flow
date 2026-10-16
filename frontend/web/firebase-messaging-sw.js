@@ -1,6 +1,4 @@
 // Firebase Cloud Messaging service worker — handles web push while app is in background.
-// NOTE: Replace appId below with your Web app ID from:
-//   Firebase Console → Project Settings → Your apps → Web app → SDK snippet
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 

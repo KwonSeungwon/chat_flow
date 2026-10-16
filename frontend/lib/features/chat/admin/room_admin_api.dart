@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../core/network/api_response.dart';
 import '../../../shared/models/message_report.dart';
-import '../../../shared/models/room_ban.dart';
 import '../../../shared/models/room_member.dart';
 import '../../../shared/models/room_role.dart';
 
@@ -96,18 +95,6 @@ class RoomAdminApi {
   // Bans (spec section 6.2)
   // ---------------------------------------------------------------------------
 
-  Future<List<RoomBan>> listBans(String roomId) async {
-    try {
-      final resp = await _dio.get('/api/chat/rooms/$roomId/bans');
-      final list = apiResponseList(resp.data);
-      return list
-          .map((e) => RoomBan.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
-  }
-
   Future<void> banUser(String roomId, String userId, String? reason) async {
     try {
       await _dio.post(
@@ -117,14 +104,6 @@ class RoomAdminApi {
           if (reason != null) 'reason': reason,
         },
       );
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
-  }
-
-  Future<void> unbanUser(String roomId, String userId) async {
-    try {
-      await _dio.delete('/api/chat/rooms/$roomId/bans/$userId');
     } on DioException catch (e) {
       throw _mapError(e);
     }
