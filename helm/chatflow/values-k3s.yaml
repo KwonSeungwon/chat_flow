@@ -14,7 +14,7 @@ global:
     registry: ghcr.io
     repository: kwonseungwon/chatflow
     pullPolicy: IfNotPresent
-    # 아래 5개 서비스가 전부 자기 tag를 지정하므로 이 값은 렌더되지 않는다(.helmignore 전제).
+    # 아래 3개 서비스가 전부 자기 tag를 지정하므로 이 값은 렌더되지 않는다(.helmignore 전제).
     # 일부러 pull 불가능한 센티널을 둔다 — 어떤 서비스의 image.tag가 실수로 빠지면
     # 그 즉시 ImagePullBackOff로 시끄럽게 실패해야 하기 때문이다.
     # 실제 sha를 폴백으로 두면 태그가 빠진 서비스가 조용히 옛 빌드로 배포되는데,

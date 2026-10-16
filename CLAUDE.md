@@ -122,7 +122,7 @@ docker buildx build --platform linux/amd64 \
 - **상태 관리**: Riverpod `StateNotifierProvider` — `authProvider`, `chatRoomsProvider`, `chatNotifierProvider(roomId)`, `themeModeProvider`
 - **WebSocket**: `StompService` — stomp_dart_client, 자동 재연결(지수 백오프, 최대 10회), Web은 현재 origin에서 URL 파생
 - **네트워크**: Dio + JWT Bearer 인터셉터, 401 시 secure storage 자동 삭제
-- **라우팅**: GoRouter — `/login`, `/chat`, `/chat/:roomId`, `/world/admin` (token 기반 redirect)
+- **라우팅**: GoRouter — `/login`, `/chat`, `/chat/:roomId`, `/world`, `/world/dungeon/:id`, `/world/admin` (token 기반 redirect)
 - **테마**: `themeModeProvider`(StateProvider) → `MaterialApp.router`의 `themeMode` 연동, AppBar 토글 버튼
 - **플랫폼 분기**: `kIsWeb` 조건부 로직 (WS URL 파생, APK 다운로드 버튼)
 - **조건부 import**: `apk_downloader.dart` → `dart:html` web/stub 3파일 패턴
@@ -148,6 +148,8 @@ docker buildx build --platform linux/amd64 \
 # 모두 기본값 있음
 VALKEY_HOST=localhost
 VALKEY_PORT=6379
+# 위키 던전 문제 검수 관리자 users.user_id (쉼표 구분, 비면 관리자 API 전부 403). 운영은 helm values-k3s의 chat-service.gameAdminUserIds
+GAME_ADMIN_USER_IDS=
 ```
 
 ## Service Ports
@@ -176,6 +178,11 @@ VALKEY_PORT=6379
 - `GET /api/chat/rooms/{id}` - 채팅방 상세
 - `POST /api/chat/rooms` - 채팅방 생성
 - WebSocket `/ws` → STOMP `/app/chat.sendMessage`, `/app/chat.addUser`
+
+### 위키 던전 (chat-service `game` 패키지, gateway `/api/game/**`)
+- `GET /api/game/dungeons`, `POST /api/game/dungeons/{id}/runs`, `GET /api/game/runs/{runId}/next`, `POST /api/game/runs/{runId}/answers`, `GET /api/game/me`, `GET /api/game/leaderboard`
+- 관리자: `POST /api/game/admin/questions/bulk`, `GET /api/game/admin/questions`, `PATCH /api/game/admin/questions/{id}`
+- 문제는 로컬 스킬 `wiki-quiz-gen`(리포 밖)으로 만들어 bulk 업로드 → 검수 승인한 것만 출제
 
 ## K3s 배포 (자체 인스턴스)
 
