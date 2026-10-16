@@ -31,7 +31,7 @@ class InviteLinkServiceTest {
     private InviteLinkService inviteLinkService;
 
     private static final String ROOM_ID = "room-42";
-    private static final String BASE_URL = "https://app.goosip.com";
+    private static final String BASE_URL = "https://app.gossiplog.com";
 
     @BeforeEach
     void setUp() throws Exception {

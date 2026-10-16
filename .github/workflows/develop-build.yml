@@ -134,12 +134,12 @@ jobs:
         working-directory: ./frontend
         # .env is gitignored but declared as a pubspec asset, so it
         # must exist at build time. The values are non-secret public
-        # endpoints (production app.goosip.com) used by native
+        # endpoints (production app.gossiplog.com) used by native
         # Android only — web derives the URL from window.location.
         run: |
           cat > .env <<'ENV'
-          API_BASE_URL=https://app.goosip.com
-          WS_URL=wss://app.goosip.com/ws-native
+          API_BASE_URL=https://app.gossiplog.com
+          WS_URL=wss://app.gossiplog.com/ws-native
           ENV
 
       - name: Flutter build web

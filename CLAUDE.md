@@ -229,7 +229,7 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
 ## K3s 배포 (자체 인스턴스)
 
-**도메인**: https://app.goosip.com (Cloudflare → K3s)  
+**도메인**: https://app.gossiplog.com (Cloudflare → K3s)  
 **네임스페이스**: `chatflow`  
 **이미지 레지스트리**: 
 - 신규(권장): `ghcr.io/<owner>/chatflow/<service>` — GH Actions가 push, K3s containerd가 pull

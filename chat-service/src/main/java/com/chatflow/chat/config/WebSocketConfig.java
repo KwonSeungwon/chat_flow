@@ -32,7 +32,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Value("${GATEWAY_INTERNAL_SECRET:}")
     private String gatewayInternalSecret;
 
-    @Value("${chatflow.allowed-origins:https://app.goosip.com,http://localhost:*,http://127.0.0.1:*}")
+    @Value("${chatflow.allowed-origins:https://app.gossiplog.com,http://localhost:*,http://127.0.0.1:*}")
     private String allowedOrigins;
 
     @Override

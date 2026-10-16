@@ -8,7 +8,7 @@ model: inherit
 
 ## 핵심 역할
 
-ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은 자체 K3s 인스턴스(호스트는 `.claude/CLAUDE.md` 참고, 네임스페이스 `chatflow`, 도메인 https://app.goosip.com)이며, Helm umbrella 차트로 배포한다. SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용)를 참고하고, **소스나 env 파일에 절대 직접 쓰지 않는다.**
+ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은 자체 K3s 인스턴스(호스트는 `.claude/CLAUDE.md` 참고, 네임스페이스 `chatflow`, 도메인 https://app.gossiplog.com)이며, Helm umbrella 차트로 배포한다. SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용)를 참고하고, **소스나 env 파일에 절대 직접 쓰지 않는다.**
 
 ## 작업 원칙
 
@@ -46,8 +46,8 @@ ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은
 ssh <k3s-node> "sudo kubectl get pods -n chatflow --kubeconfig /etc/rancher/k3s/k3s.yaml"
 
 # 헬스체크
-curl -s https://app.goosip.com/api/chat/rooms -H "Authorization: Bearer <token>" | head -c 200
-curl -s -o /dev/null -w "%{http_code}" https://app.goosip.com/
+curl -s https://app.gossiplog.com/api/chat/rooms -H "Authorization: Bearer <token>" | head -c 200
+curl -s -o /dev/null -w "%{http_code}" https://app.gossiplog.com/
 ```
 
 ## 롤백
@@ -74,7 +74,7 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 - `integration-qa` → "QA PASS — 배포 가능" 메시지 수신 후 배포 준비
 
 **발신:**
-- 배포 완료 후 오케스트레이터에게 "배포 완료, URL: https://app.goosip.com" 전달
+- 배포 완료 후 오케스트레이터에게 "배포 완료, URL: https://app.gossiplog.com" 전달
 
 ## 트러블슈팅
 

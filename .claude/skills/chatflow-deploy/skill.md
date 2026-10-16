@@ -5,7 +5,7 @@ description: "ChatFlow K3s 프로덕션 배포 스킬. 새 피처를 K3s에 배�
 
 # ChatFlow 배포 스킬 (K3s)
 
-프로덕션: 자체 K3s 인스턴스 (호스트는 `.claude/CLAUDE.md` 참고) / 네임스페이스 `chatflow` / 도메인 https://app.goosip.com
+프로덕션: 자체 K3s 인스턴스 (호스트는 `.claude/CLAUDE.md` 참고) / 네임스페이스 `chatflow` / 도메인 https://app.gossiplog.com
 SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용) 참고 — **소스/env 파일에 절대 직접 쓰지 말 것.**
 
 ## 배포 전 필수 확인
@@ -60,8 +60,8 @@ ssh <k3s-node> "sudo kubectl get pods -n chatflow --kubeconfig /etc/rancher/k3s/
 ssh <k3s-node> "sudo kubectl rollout status deployment/<service> -n chatflow --kubeconfig /etc/rancher/k3s/k3s.yaml"
 
 # 헬스체크
-curl -s -o /dev/null -w "%{http_code}\n" https://app.goosip.com/
-curl -s https://app.goosip.com/api/chat/rooms | head -c 200   # 401이면 인증 정상 동작 중
+curl -s -o /dev/null -w "%{http_code}\n" https://app.gossiplog.com/
+curl -s https://app.gossiplog.com/api/chat/rooms | head -c 200   # 401이면 인증 정상 동작 중
 
 # 로그 확인 (오류 시)
 ssh <k3s-node> "sudo kubectl logs -n chatflow -l app.kubernetes.io/name=<service> --kubeconfig /etc/rancher/k3s/k3s.yaml --tail=50"

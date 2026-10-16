@@ -31,9 +31,9 @@ class LinkPreviewCardState extends State<LinkPreviewCard> {
     // flutter_dotenv may not be initialized here, so fall back to production URL.
     try {
       // ignore: undefined_prefixed_name
-      return const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://app.goosip.com');
+      return const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://app.gossiplog.com');
     } catch (_) {
-      return 'https://app.goosip.com';
+      return 'https://app.gossiplog.com';
     }
   }
 
