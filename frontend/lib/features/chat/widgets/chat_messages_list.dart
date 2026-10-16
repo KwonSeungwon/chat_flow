@@ -21,7 +21,7 @@ class ChatMessagesList extends StatefulWidget {
   final Map<String, int> readCounts;
   /// If set, auto-scroll to this message after build
   final String? scrollToMessageId;
-  /// If set, briefly highlight this message (search result)
+  /// If set, briefly highlight this message (mention or notification jump)
   final String? highlightMessageId;
   final bool isLoadingHistory;
   final bool hasMoreHistory;

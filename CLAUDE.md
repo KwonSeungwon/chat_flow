@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ChatFlow는 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이다. AI 대화 요약(Google Gemini), 한국어 전문 검색(Elasticsearch + Nori), WebSocket 실시간 통신을 핵심 기능으로 제공한다.
+ChatFlow는 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이다. WebSocket(STOMP) 실시간 채팅을 핵심 기능으로 제공한다. 검색·AI 요약 서비스와 Elasticsearch·Kafka는 제거됐다(Gateway + Chat 2서비스 구성). `/world` 학습 게임(위키 던전)이 추가되는 중이다.
 
 ## Architecture
 
@@ -10,49 +10,38 @@ ChatFlow는 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫
 Frontend (Flutter Web, Port 80 / nginx)
     ↓ HTTP (Dio) / WebSocket (STOMP via stomp_dart_client)
 Gateway Service (Spring Cloud Gateway, Port 8000)
-    ├→ Chat Service (Port 8080) - 실시간 채팅, WebSocket/STOMP
-    ├→ AI Summary Service (Port 8081) - Spring AI + Gemini 요약
-    └→ Search Service (Port 8082) - Elasticsearch 한국어 검색
-
-비동기 통신 (Kafka Topics):
-    chat-messages: Chat → Search, AI Summary
-    ai-summaries: AI Summary → Search
+    └→ Chat Service (Port 8080) - 실시간 채팅, WebSocket/STOMP
 ```
 
 ## Tech Stack
 
 - **Backend**: Java 17+, Spring Boot 3.2, Spring Cloud Gateway, Spring WebSocket (STOMP)
 - **Frontend**: Flutter 3.22+, Dart 3.3+, Riverpod 2.5, GoRouter 14, Dio 5, stomp_dart_client 2, flutter_secure_storage 9, nginx (web 서빙)
-- **Data**: PostgreSQL 16 (prod) / H2 (local), Valkey 7.2 (Redis 호환), Elasticsearch 8.11 + Nori
-- **Messaging**: Apache Kafka 7.4
-- **AI**: Spring AI 1.1 (기본, `spring-ai` 프로필) / LangChain4J 0.36.2 (`langchain4j` 프로필로 전환 가능) + Google Gemini 2.5 Flash Lite
+- **Data**: PostgreSQL 16 (prod) / H2 (local), Valkey 7.2 (Redis 호환)
 - **Build**: Gradle 8.5 (backend), Flutter SDK (frontend)
-- **Monitoring**: Prometheus, Grafana, Kibana
+- **Monitoring**: Prometheus, Grafana
 
 ## Project Structure
 
 ```
 chat_flow/
 ├── common/                  # 공유 라이브러리 (BaseMessage, ChatMessage, ApiResponse)
-├── chat-service/            # 실시간 채팅 (WebSocket + Kafka + JPA 영속화)
+├── chat-service/            # 실시간 채팅 (WebSocket + JPA 영속화)
 │   ├── entity/              # ChatRoom, ChatMessageEntity
 │   ├── repository/          # ChatRoomRepository, ChatMessageRepository
 │   ├── controller/          # ChatController (WS), ChatRoomController (REST)
 │   └── service/             # ChatService
-├── ai-summary-service/      # AI 요약 (Kafka Consumer → Gemini → REST API)
 │   ├── controller/          # AiSummaryController
 │   └── service/             # AiSummaryService
-├── search-service/          # 검색 (Kafka Consumer → Elasticsearch 인덱싱 + REST API)
 ├── gateway-service/         # API Gateway (라우팅, CORS, Circuit Breaker)
 ├── frontend/                # Flutter Web + Android 프론트엔드
 │   ├── lib/core/            # 네트워크(Dio, STOMP), 라우터, 테마
-│   ├── lib/features/        # auth, chat, command_palette, profile, search 피처 레이어
+│   ├── lib/features/        # auth, chat, command_palette, profile, world 피처 레이어
 │   ├── lib/shared/          # ChatMessage, ChatRoom 모델
 │   ├── android/             # Android 네이티브 (minSdk 23)
 │   ├── web/                 # Flutter Web 빌드 출력 + chatflow-app.apk
 │   ├── nginx.conf           # nginx 리버스 프록시 설정
 │   └── Dockerfile           # nginx:alpine 컨테이너
-├── elasticsearch/           # 커스텀 Dockerfile (Nori 플러그인)
 ├── monitoring/              # Prometheus 설정
 ├── k8s/                     # Kubernetes 매니페스트
 └── scripts/                 # 배포 스크립트
@@ -63,7 +52,7 @@ chat_flow/
 ### Infrastructure (Docker)
 
 ```bash
-# 로컬 인프라 시작 (Valkey, Kafka, Elasticsearch, PostgreSQL, etc.)
+# 로컬 인프라 시작 (Valkey, PostgreSQL, etc.)
 docker compose -f docker-compose.local.yml up -d
 
 # 인프라 중지
@@ -82,8 +71,6 @@ docker compose -f docker-compose.local.yml down
 # 개별 서비스 실행
 ./gradlew :gateway-service:bootRun
 ./gradlew :chat-service:bootRun
-./gradlew :ai-summary-service:bootRun
-./gradlew :search-service:bootRun
 
 # 테스트
 ./gradlew test
@@ -96,14 +83,14 @@ docker compose -f docker-compose.local.yml down
 > cp gateway-service/src/main/resources/application-local.yml.example \
 >    gateway-service/src/main/resources/application-local.yml
 > ```
-> 다른 서비스(chat-service / ai-summary-service / search-service)도 `application-local.yml`이 동일하게 gitignored 상태다. 각 서비스에 `application-local.yml.example` 템플릿이 함께 제공되므로, 신규 체크아웃 시 동일하게 복사해서 시작한다:
+> chat-service도 `application-local.yml`이 동일하게 gitignored 상태다. `application-local.yml.example` 템플릿이 함께 제공되므로, 신규 체크아웃 시 동일하게 복사해서 시작한다:
 > ```bash
-> for svc in chat-service ai-summary-service search-service; do
+> for svc in chat-service; do
 >   cp "$svc/src/main/resources/application-local.yml.example" \
 >      "$svc/src/main/resources/application-local.yml"
 > done
 > ```
-> 각 템플릿은 Kafka consumer `value-deserializer`를 반드시 `StringDeserializer`로 지정한다(리스너 컨테이너 팩토리가 payload를 직접 역직렬화하므로 `JsonDeserializer`를 쓰면 이중 역직렬화로 런타임 오류). chat-service 템플릿의 `firebase.service-account-path`는 개발자별 절대경로로 교체한다.
+> chat-service 템플릿의 `firebase.service-account-path`는 개발자별 절대경로로 교체한다.
 
 ### Frontend (Flutter)
 
@@ -124,21 +111,20 @@ docker buildx build --platform linux/amd64 \
 
 ### Backend
 
-- **Gradle 멀티 모듈**: `settings.gradle`에 5개 서브프로젝트 정의, `common`은 공유 라이브러리
+- **Gradle 멀티 모듈**: `settings.gradle`에 3개 서브프로젝트 정의, `common`은 공유 라이브러리
 - **공통 모듈**: `common`은 `bootJar` 비활성화, 다른 서비스에서 `implementation project(':common')`로 참조
 - **프로필 기반 설정**: `application-local.yml` (개발), `application-prod.yml` (운영)
-- **Kafka 메시지**: JSON 직렬화, `ChatMessage` DTO 기반, chatRoomId를 파티션 키로 사용
 - **WebSocket**: STOMP 프로토콜, `/app/chat.sendMessage` (전송), `/topic/chat/{roomId}` (구독)
-- **패키지 구조**: `com.chatflow.{서비스명}` (예: `com.chatflow.chat`, `com.chatflow.search`)
+- **패키지 구조**: `com.chatflow.{서비스명}` (예: `com.chatflow.chat`, `com.chatflow.gateway`)
 - **Lombok**: 전체 서비스에서 `@Data`, `@Slf4j` 등 사용
 
 ### Frontend
 
-- **아키텍처**: Flutter 피처 레이어 (`lib/features/{auth,chat,search}`)
-- **상태 관리**: Riverpod `StateNotifierProvider` — `authProvider`, `chatRoomsProvider`, `chatNotifierProvider(roomId)`, `searchProvider`, `themeModeProvider`
+- **아키텍처**: Flutter 피처 레이어 (`lib/features/{auth,chat,command_palette,profile,world}`)
+- **상태 관리**: Riverpod `StateNotifierProvider` — `authProvider`, `chatRoomsProvider`, `chatNotifierProvider(roomId)`, `themeModeProvider`
 - **WebSocket**: `StompService` — stomp_dart_client, 자동 재연결(지수 백오프, 최대 10회), Web은 현재 origin에서 URL 파생
 - **네트워크**: Dio + JWT Bearer 인터셉터, 401 시 secure storage 자동 삭제
-- **라우팅**: GoRouter — `/login`, `/chat`, `/chat/:roomId`, `/search` (token 기반 redirect)
+- **라우팅**: GoRouter — `/login`, `/chat`, `/chat/:roomId`, `/world/admin` (token 기반 redirect)
 - **테마**: `themeModeProvider`(StateProvider) → `MaterialApp.router`의 `themeMode` 연동, AppBar 토글 버튼
 - **플랫폼 분기**: `kIsWeb` 조건부 로직 (WS URL 파생, APK 다운로드 버튼)
 - **조건부 import**: `apk_downloader.dart` → `dart:html` web/stub 3파일 패턴
@@ -161,14 +147,9 @@ docker buildx build --platform linux/amd64 \
 ## Environment Variables
 
 ```bash
-# 필수
-GEMINI_API_KEY=<Google Gemini API 키>
-
-# 선택 (기본값 있음)
+# 모두 기본값 있음
 VALKEY_HOST=localhost
 VALKEY_PORT=6379
-ELASTICSEARCH_URL=http://localhost:9200
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 ```
 
 ## Service Ports
@@ -178,33 +159,15 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 | Frontend (nginx)     | 80   |
 | Gateway              | 8000 |
 | Chat Service       | 8080 |
-| AI Summary Service | 8081 |
-| Search Service     | 8082 |
-| Kafka              | 9092 |
-| Zookeeper          | 2181 |
-| Elasticsearch      | 9200 |
 | PostgreSQL         | 5432 |
 | Valkey (Redis)     | 6379 |
 | Prometheus         | 9090 |
 | Grafana            | 3001 |
-| Kibana             | 5601 |
 
 ## Message Flow
 
 1. 클라이언트가 WebSocket으로 메시지 전송 → Chat Service
 2. Chat Service가 즉시 `/topic/chat/{roomId}`로 브로드캐스트 (실시간 전달)
-3. Chat Service가 Kafka `chat-messages` 토픽에 비동기 발행
-4. Search Service가 Kafka에서 소비 → Elasticsearch에 인덱싱
-5. AI Summary Service가 메시지 축적 (10개 임계값) → Gemini로 요약 생성 → Kafka `ai-summaries` 발행
-6. Search Service가 AI 요약도 Elasticsearch에 인덱싱
-
-## Elasticsearch Korean Search
-
-- **Nori 토크나이저**: 한국어 형태소 분석
-- **N-gram**: 1~3글자 부분 매칭
-- **동의어**: 채팅↔대화↔메시지, 요약↔정리, 검색↔찾기↔조회
-- **불용어**: 이, 그, 저, 것, 들, 의, 에, 를, 을, 는, 은, 가 등
-- **인덱스**: `chat_messages` (설정 파일: `search-service/src/main/resources/elasticsearch/`)
 
 ## API Endpoints
 
@@ -215,17 +178,6 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 - `GET /api/chat/rooms/{id}` - 채팅방 상세
 - `POST /api/chat/rooms` - 채팅방 생성
 - WebSocket `/ws` → STOMP `/app/chat.sendMessage`, `/app/chat.addUser`
-
-### AI Summary Service (Port 8081)
-- `GET /api/ai-summary/room/{roomId}` - 요약 조회
-- `POST /api/ai-summary/request` - 요약 요청 (body: `{chatRoomId}`)
-
-### Search Service (Port 8082)
-- `GET /api/search/korean?query=&roomId=&page=&size=` - 한국어 검색
-- `GET /api/search/ngram?query=&roomId=&page=&size=` - N-gram 검색
-- `GET /api/search/messages?query=&page=&size=` - 일반 검색
-- `GET /api/search/rooms/{roomId}/messages?query=` - 채팅방 내 검색
-- `GET /api/search/rooms/{roomId}/time-range?start=&end=` - 시간 범위 검색
 
 ## K3s 배포 (자체 인스턴스)
 
@@ -252,7 +204,7 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 ./scripts/deploy-k3s.sh secrets  # 없는 Secret만 생성 (기존 Secret은 건너뜀)
 ./scripts/deploy-k3s.sh all      # infra + secrets
 ```
-필수 env: `DEPLOY_DB_PASSWORD`, `DEPLOY_GEMINI_API_KEY`, `DEPLOY_JWT_SECRET`, `DEPLOY_GATEWAY_SECRET` (`scripts/.env.deploy`, gitignored). 이미지 빌드·배포는 이 스크립트가 하지 않는다 — GH Actions 경로를 쓴다.
+필수 env: `DEPLOY_DB_PASSWORD`, `DEPLOY_JWT_SECRET`, `DEPLOY_GATEWAY_SECRET` (`scripts/.env.deploy`, gitignored). 이미지 빌드·배포는 이 스크립트가 하지 않는다 — GH Actions 경로를 쓴다.
 
 ### 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 ```bash
@@ -265,9 +217,7 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
 
 ## Common Issues
 
-- AI 요약이 동작하지 않으면 `GEMINI_API_KEY` 환경 변수 확인
-- Elasticsearch 인덱스 문제 시 `IndexInitializer`가 앱 시작 시 자동 생성하므로 서비스 재시작
-- Kafka 연결 실패 시 Zookeeper → Kafka 순서로 시작되었는지 확인
+- Valkey 연결 실패 시 `VALKEY_HOST`/`VALKEY_PORT`와 컨테이너 기동 여부를 확인
 - WebSocket 연결은 `/ws-native` 경로로 Gateway 프록시됨 — SecurityConfig에서 `permitAll()` 필수
 - Flutter Web에서 WS URL은 현재 origin에서 자동 파생 (별도 설정 불필요)
 - Android APK는 `/chatflow-app.apk` 엔드포인트로 웹 UI에서 다운로드 가능 (nginx attachment 헤더)

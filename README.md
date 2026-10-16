@@ -1,7 +1,7 @@
-# ChatFlow - 실시간 채팅 + AI 요약 시스템 🚀
+# ChatFlow - 실시간 채팅 시스템 🚀
 
 > **현대적인 마이크로서비스 아키텍처**로 구축된 실시간 채팅 플랫폼  
-> AI 기반 대화 요약, 한국어 검색, 크로스 플랫폼 지원
+> WebSocket/STOMP 실시간 통신, 크로스 플랫폼 지원
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -40,47 +40,30 @@ graph TB
     
     subgraph "Service Layer"
         CHAT[Chat Service<br/>Port: 8080]
-        AI[AI Summary Service<br/>Port: 8081]
-        SEARCH[Search Service<br/>Port: 8082]
     end
     
     subgraph "Data Layer"
-        KAFKA[Apache Kafka<br/>Port: 9092]
         VALKEY[Valkey<br/>Port: 6379]
-        ES[Elasticsearch + Nori<br/>Port: 9200]
         POSTGRES[PostgreSQL<br/>Port: 5432]
     end
     
     subgraph "Monitoring Layer"
         PROMETHEUS[Prometheus<br/>Port: 9090]
         GRAFANA[Grafana<br/>Port: 3001]
-        KIBANA[Kibana<br/>Port: 5601]
     end
     
     WEB --> GATEWAY
     APK --> GATEWAY
     
     GATEWAY --> CHAT
-    GATEWAY --> AI  
-    GATEWAY --> SEARCH
     
-    CHAT --> KAFKA
     CHAT --> VALKEY
     CHAT --> POSTGRES
     
-    AI --> KAFKA
-    AI --> VALKEY
-    
-    SEARCH --> KAFKA
-    SEARCH --> ES
-    
     CHAT --> PROMETHEUS
-    AI --> PROMETHEUS
-    SEARCH --> PROMETHEUS
     GATEWAY --> PROMETHEUS
     
     PROMETHEUS --> GRAFANA
-    ES --> KIBANA
 ```
 
 ## 🚀 기술 스택
@@ -97,14 +80,9 @@ graph TB
 - ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat&logo=openjdk) **Java 21** - LTS 버전, 최신 기능
 - ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.2.0-6DB33F?style=flat&logo=spring) **Spring Boot 3.2** - 엔터프라이즈 프레임워크
 - ![Spring WebSocket](https://img.shields.io/badge/WebSocket-STOMP-6DB33F?style=flat&logo=spring) **Spring WebSocket** - 실시간 통신
-- ![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-7.4-000000?style=flat&logo=apachekafka) **Apache Kafka** - 이벤트 스트리밍
-- ![LangChain4J](https://img.shields.io/badge/LangChain4J-0.25-FF6B6B?style=flat) **LangChain4J** - AI 통합 프레임워크
-- ![Gemini](https://img.shields.io/badge/Gemini-2.0_Flash-4285F4?style=flat&logo=google) **Google Gemini** - AI 언어 모델
 
-### 🗄️ **Data & Search**
+### 🗄️ **Data**
 - ![Valkey](https://img.shields.io/badge/Valkey-7.2-DC382D?style=flat&logo=redis) **Valkey 7.2** - Redis 호환 인메모리 DB
-- ![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.11-005571?style=flat&logo=elasticsearch) **Elasticsearch 8.11** - 검색 엔진
-- ![Nori](https://img.shields.io/badge/Nori-Korean-005571?style=flat) **Nori 분석기** - 한국어 형태소 분석
 - ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-316192?style=flat&logo=postgresql) **PostgreSQL 16** - 관계형 데이터베이스
 
 ### 📊 **DevOps & Monitoring**
@@ -119,8 +97,6 @@ graph TB
 
 ### 🎯 **핵심 기능**
 - **🔄 실시간 채팅** - WebSocket/STOMP 기반 즉시 메시지 전송
-- **🤖 AI 요약 & Q&A** - Google Gemini 2.0 Flash로 대화 요약 + AI 질문 답변
-- **🔍 한국어 검색** - Nori 형태소 분석기 + N-gram 부분 매칭 + 의료 용어 동의어
 - **📱 크로스 플랫폼** - Flutter Web + Android APK 지원
 - **🏗️ 마이크로서비스** - 독립적이고 확장 가능한 아키텍처
 
@@ -128,27 +104,21 @@ graph TB
 - **🔄 인수인계 채팅방** - SBAR 구조화 템플릿 (Situation/Background/Assessment/Recommendation)
 - **📋 환자 카드 메시지** - 환자명/병실/진단/바이탈을 구조화된 카드로 공유
 - **🚨 긴급 메시지** - ROUTINE/URGENT/STAT 우선순위 플래그
-- **📊 AI SOAP 임상 노트** - HANDOFF 방 전용 SOAP 형식 자동 요약
-- **📝 교대 보고서** - AI 기반 근무 교대 인수인계 보고서 자동 생성
 - **👥 역할 기반 접근제어 (RBAC)** - 의사/간호사/약사/관리자 역할별 방 접근 제한
 - **✅ 읽음 확인** - STOMP 기반 실시간 읽음 상태 추적
-- **💊 처방/검사 알림** - Kafka 기반 오더 이벤트 → 채팅방 자동 시스템 알림
-- **📜 감사 로그** - 메시지 접근 이력 ES 인덱싱 (의료법 준수)
 - **🔐 메시지 암호화** - AES-256-GCM at-rest 암호화
 
 ### 💎 **고급 기능**
 - **🎨 모던 UI/UX** - Material 3 디자인, 채팅+의료 십자 앱 아이콘
 - **🌙 다크/라이트 모드** - 테마 토글 지원
-- **🚀 성능 최적화** - Valkey 캐싱, Outbox 패턴, 비동기 Kafka 파이프라인
+- **🚀 성능 최적화** - Valkey 캐싱, Outbox 패턴
 - **📈 실시간 모니터링** - Prometheus/Grafana 메트릭
 - **🔐 보안** - JWT 인증 + 토큰 블랙리스트, 비밀방 비밀번호, Gateway CORS
 - **🔔 FCM 푸시 알림** - Firebase Cloud Messaging 기반 실시간 알림
 
 ### 🎪 **사용자 경험**
 - **채팅방별 색상 구분** - 시각적 식별성 강화
-- **검색 결과 하이라이트** - 검색어 강조 표시
 - **반응형 디자인** - 768px 브레이크포인트 (모바일 drawer / 데스크톱 사이드바)
-- **의료 용어 동의어 검색** - 바이탈↔활력징후, 처방↔오더 등 15종 자동 매핑
 
 ## 🏃‍♂️ 빠른 시작
 
@@ -166,7 +136,7 @@ git clone https://github.com/KwonSeungwon/chat_flow.git
 cd chat_flow
 
 # 2. 인프라 서비스 실행 (백그라운드)
-docker compose up -d valkey kafka elasticsearch postgresql
+docker compose -f docker-compose.local.yml up -d valkey postgresql
 
 # 3. 백엔드 빌드 & 실행
 ./gradlew build
@@ -217,9 +187,7 @@ chat_flow/
 │   │   │   │       ├── chat_messages_list.dart # 메시지 버블 렌더링
 │   │   │   │       ├── chat_input.dart         # 입력창 + 이모지
 │   │   │   │       └── create_room_dialog.dart # 채팅방 생성 다이얼로그
-│   │   │   └── search/
-│   │   │       ├── search_provider.dart # SearchNotifier (한국어 검색)
-│   │   │       └── search_page.dart     # 검색 + 결과 하이라이트
+│   │   │   └── world/                 # 위키 던전 (/world, 진행 중)
 │   │   ├── shared/models/
 │   │   │   ├── chat_message.dart   # ChatMessage (fromJson/toJson)
 │   │   │   └── chat_room.dart      # ChatRoom (fromJson, isFull)
@@ -239,25 +207,13 @@ chat_flow/
 │       │   ├── ChatMessage.java       # 채팅 메시지 DTO
 │       │   ├── ApiResponse.java       # 공통 API 응답 래퍼
 │       │   └── ErrorResponse.java     # 공통 에러 응답 DTO
-│       ├── exception/
-│       │   └── BaseExceptionHandler.java  # 공통 예외 핸들러
-│       └── KafkaCommonConfig.java # Kafka 공통 설정
+│       └── exception/
+│           └── BaseExceptionHandler.java  # 공통 예외 핸들러
 ├── 💬 chat-service/                # 실시간 채팅 서비스 (Port: 8080)
 │   └── src/main/java/com/chatflow/chat/
 │       ├── ChatController.java    # WebSocket STOMP 핸들러
-│       ├── ChatService.java       # 메시지 처리 + Kafka 발행
+│       ├── ChatService.java       # 메시지 처리 + 영속화
 │       └── WebSocketConfig.java   # WebSocket/STOMP 설정
-├── 🤖 ai-summary-service/          # AI 요약 서비스 (Port: 8081)
-│   └── src/main/java/com/chatflow/aisummary/
-│       └── AiSummaryService.java  # Kafka 소비 → Gemini 요약 → Kafka 발행
-├── 🔍 search-service/              # 검색 서비스 (Port: 8082)
-│   └── src/main/java/com/chatflow/search/
-│       ├── SearchController.java      # REST API 엔드포인트
-│       ├── SearchService.java         # Kafka 소비 → ES 인덱싱
-│       ├── KoreanSearchService.java   # 한국어 검색 (Nori + N-gram)
-│       ├── ElasticsearchConfig.java   # ES 클라이언트 설정
-│       ├── IndexInitializer.java      # 인덱스 자동 생성
-│       └── ChatMessageDocument.java   # ES 도큐먼트 매핑
 ├── 🚪 gateway-service/             # API 게이트웨이 (Port: 8000)
 │   └── src/main/java/com/chatflow/gateway/
 │       ├── security/
@@ -271,11 +227,7 @@ chat_flow/
 ├── ⎈ helm/chatflow/               # Helm umbrella chart
 │   ├── Chart.yaml                 # 차트 메타데이터
 │   ├── values.yaml                # 공통 설정값
-│   └── charts/                    # 서비스별 subchart (5개)
-├── 🐳 elasticsearch/               # Elasticsearch 설정
-│   ├── Dockerfile                 # Nori 플러그인 포함
-│   └── config/
-│       └── korean-analyzer-config.json  # 한국어 분석기 설정
+│   └── charts/                    # 서비스별 subchart (3개)
 ├── 📊 monitoring/                  # 모니터링 설정
 │   └── prometheus.yml
 ├── 🚢 k8s/                        # Kubernetes 매니페스트
@@ -290,34 +242,12 @@ chat_flow/
 
 ## 🔧 환경 설정
 
-### 🌟 **필수 환경 변수**
-
-```bash
-# AI Summary Service - Gemini API 키
-export GEMINI_API_KEY="AIza-your-gemini-api-key"
-
-# 개발 환경에서 IDE 실행 시
-# IntelliJ IDEA: Run Configuration > Environment variables
-# VS Code: launch.json에 env 설정
-
-# Gemini API 키 발급 방법:
-# 1. https://aistudio.google.com/app/apikey 접속
-# 2. "Create API key" 클릭하여 새 키 생성
-# 3. 생성된 키를 환경변수에 설정
-```
-
-### ⚙️ **선택적 설정**
+### ⚙️ **환경 변수 (모두 기본값 있음)**
 
 ```bash
 # Valkey 연결 정보 (기본값)
 VALKEY_HOST=localhost
 VALKEY_PORT=6379
-
-# Elasticsearch 연결 정보 (기본값)  
-ELASTICSEARCH_URL=http://localhost:9200
-
-# Kafka 연결 정보 (기본값)
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
 # 로그 레벨 (개발: DEBUG, 운영: INFO)
 LOGGING_LEVEL_ROOT=INFO
@@ -361,16 +291,12 @@ logging:
 |------|-----|------|------|
 | **Grafana** | http://localhost:3001 | admin/admin | 모니터링 대시보드 |
 | **Prometheus** | http://localhost:9090 | - | 메트릭 수집기 |
-| **Kibana** | http://localhost:5601 | - | Elasticsearch 관리 |
 
 ### 🛠️ **인프라 서비스**
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
 | **Valkey** | 6379 | Redis 호환 캐시 |
-| **Kafka** | 9092 | 메시지 큐 |
-| **Elasticsearch** | 9200 | 검색 엔진 |
 | **PostgreSQL** | 5432 | 메인 데이터베이스 |
-| ~~Zookeeper~~ | ~~2181~~ | KRaft 모드 전환으로 제거됨 |
 
 ## 🌐 API 명세
 
@@ -402,32 +328,6 @@ POST /api/chat/rooms
 }
 ```
 
-### 🤖 **AI Summary & Q&A API**
-```http
-# 채팅방 요약 조회
-GET /api/ai-summary/room/{roomId}
-
-# 요약 요청
-POST /api/ai-summary/request
-{ "chatRoomId": "room_xxx" }
-
-# AI 질문 (대화 맥락 기반 답변)
-POST /api/ai-summary/ask
-{ "chatRoomId": "room_xxx", "question": "질문 내용" }
-```
-
-### 🔍 **Search API**
-```http
-# 한국어 검색
-GET /api/search/korean?query=안녕&roomId=general&page=0&size=20
-
-# N-gram 검색 (부분 매칭)
-GET /api/search/ngram?query=안녕&roomId=general
-
-# 시간대별 검색
-GET /api/search/rooms/{roomId}/time-range?start=2024-01-01T00:00:00&end=2024-01-02T00:00:00
-```
-
 ### 📊 **Health Check**
 ```http
 # 서비스 상태 확인
@@ -455,16 +355,12 @@ cd frontend
 flutter build web --release
 docker buildx build --platform linux/amd64 -t chatflow/frontend:prod --load .
 cd ..
-
-# Elasticsearch (Nori 포함)
-docker buildx build --platform linux/amd64 \
-  -t chatflow/elasticsearch:prod --load elasticsearch/
 ```
 
 ### ☸️ **K3s 배포 (현재 프로덕션)**
 
 ```bash
-# 1. 인프라 배포 (PostgreSQL, Valkey, Kafka KRaft, Elasticsearch)
+# 1. 인프라 배포 (PostgreSQL, Valkey)
 kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
 
 # 2. Secrets 생성 (DEPLOY_* env 4종 필요, 이미 있는 Secret은 건너뜀)
@@ -482,8 +378,7 @@ kubectl get pods -n chatflow
 ```
 
 > **K3s 특이사항**:
-> - `enableServiceLinks: false` — K8s 서비스 env 변수가 Kafka/Valkey와 충돌 방지
-> - Kafka KRaft 모드 (Zookeeper 제거, ~95Mi 절감)
+> - `enableServiceLinks: false` — K8s 서비스 env 변수가 Valkey와 충돌 방지
 > - JVM: `-Xmx256m -Xms128m -XX:+UseSerialGC` (시작 32초, 메모리 ~270Mi)
 
 ### ☸️ **Helm Chart 구조**
@@ -495,7 +390,7 @@ helm template chatflow helm/chatflow -f helm/chatflow/values-k3s.yaml
 helm upgrade chatflow helm/chatflow -n chatflow -f helm/chatflow/values-k3s.yaml
 ```
 
-> Helm umbrella chart에 5개 subchart(gateway, chat, ai-summary, search, frontend) 포함.
+> Helm umbrella chart에 3개 subchart(gateway, chat, frontend) 포함.
 > 모든 백엔드 Pod는 `securityContext` 적용 (non-root, readOnlyRootFilesystem, capabilities drop ALL).
 
 ### 🔄 **CI/CD Pipeline** (GitHub Actions)
@@ -515,15 +410,13 @@ helm upgrade chatflow helm/chatflow -n chatflow -f helm/chatflow/values-k3s.yaml
 
 # 개별 서비스 테스트
 ./gradlew :chat-service:test
-./gradlew :ai-summary-service:test
-./gradlew :search-service:test
 ./gradlew :gateway-service:test
 
 # JaCoCo 커버리지 리포트 (build/reports/jacoco/)
 ./gradlew jacocoTestReport
 ```
 
-각 서비스에 `@SpringBootTest` 컨텍스트 로드 테스트가 포함되어 있으며, 외부 의존성(Kafka, Redis, Elasticsearch)은 `@MockBean`으로 대체합니다.
+각 서비스에 `@SpringBootTest` 컨텍스트 로드 테스트가 포함되어 있으며, 외부 의존성(Redis 등)은 `@MockBean`으로 대체합니다.
 
 ### 🎨 **프론트엔드 테스트**
 ```bash
@@ -537,15 +430,6 @@ flutter analyze
 
 # 의존성 갱신
 flutter pub get
-```
-
-### 🔍 **한국어 검색 테스트**
-```bash
-# Elasticsearch 한국어 검색 테스트
-# 예상 결과:
-# - "날씨" 검색 → "오늘 날씨가 좋네요" 매칭
-# - "공원" 검색 → "공원을 걸었어요" 매칭
-# - "Spring" 검색 → "Spring Boot 연동" 매칭
 ```
 
 ## 🛡️ 코드 품질
@@ -588,7 +472,7 @@ flutter pub get
    feat: 새로운 채팅방 생성 모달 추가
    fix: Valkey 연결 오류 수정
    docs: README 업데이트
-   test: 한국어 검색 테스트 케이스 추가
+   test: 채팅방 멤버 권한 테스트 케이스 추가
    ```
 
 3. **코드 스타일**: 
@@ -607,8 +491,6 @@ flutter pub get
 - [x] Helm 기반 K8s 배포 + CI/CD 파이프라인
 - [x] 컨테이너 보안 강화 (non-root, securityContext)
 - [x] K3s 온프레미스 이관 (Cloudflare Tunnel)
-- [x] AI Q&A 기능 (대화 맥락 기반 질문 답변)
-- [x] Kafka KRaft 전환 (Zookeeper 제거)
 - [x] JVM 메모리 최적화 (SerialGC, 고정힙)
 - [ ] 파일 업로드 및 이미지 공유
 - [ ] 메시지 읽음/안읽음 상태
@@ -643,8 +525,6 @@ flutter pub get
 - **Spring Framework** - 강력한 백엔드 프레임워크
 - **Flutter** - 크로스 플랫폼 UI 프레임워크  
 - **Valkey** - Redis 호환 고성능 인메모리 DB
-- **Elasticsearch** - 확장 가능한 검색 엔진
-- **Apache Kafka** - 확장 가능한 이벤트 스트리밍 플랫폼
 
 ---
 

@@ -19,7 +19,7 @@ lib/features/{feature}/
 └── helpers/                  # 헬퍼 (필요 시)
 ```
 
-현재 피처: `auth`, `chat`, `command_palette`, `profile`, `search` — 구조가 가장 완성된 `chat`을 기준으로 따른다.
+현재 피처: `auth`, `chat`, `command_palette`, `profile`, `world` — 구조가 가장 완성된 `chat`을 기준으로 따른다.
 
 공유 모델 → `lib/shared/models/`  
 피처 고유 모델 → `lib/features/{feature}/models/`

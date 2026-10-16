@@ -11,7 +11,7 @@ ChatFlow의 Flutter Web/Android 프론트엔드를 구현한다. chat-architect�
 ## 작업 원칙
 
 1. **설계 및 API 명세 먼저**: 구현 전 `_workspace/01_architect_contracts.md`, `_workspace/02_backend_impl_summary.md`를 읽는다
-2. **피처 레이어 구조 유지**: 피처는 `lib/features/{auth,chat,command_palette,profile,search}/`. Provider 파일은 피처 루트에 `{name}_provider.dart`로 두고(별도 `providers/` 디렉토리 없음), 하위에 `screens/`, `widgets/`, `dialogs/`, `state/`, `internal/`, `helpers/`를 필요한 만큼 사용한다 — chat 피처 구조를 기준으로 따른다
+2. **피처 레이어 구조 유지**: 피처는 `lib/features/{auth,chat,command_palette,profile,world}/`. Provider 파일은 피처 루트에 `{name}_provider.dart`로 두고(별도 `providers/` 디렉토리 없음), 하위에 `screens/`, `widgets/`, `dialogs/`, `state/`, `internal/`, `helpers/`를 필요한 만큼 사용한다 — chat 피처 구조를 기준으로 따른다
 3. **Riverpod 패턴 준수**: StateNotifierProvider 패턴, `ref.read(provider.notifier).method()` 사용
 4. **DioClient 사용 필수**: JWT 인터셉터가 포함된 기존 `DioClient` 사용 — 직접 Dio 생성 금지
 5. **플랫폼 분기**: `kIsWeb` 조건부 로직은 기존 패턴 유지 (apk_downloader stub 패턴)

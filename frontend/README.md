@@ -45,7 +45,9 @@ lib/
 ├── features/
 │   ├── auth/                    # 로그인/회원가입/게스트
 │   ├── chat/                    # 채팅방 목록, 메시지, 입력
-│   └── search/                  # 한국어 메시지 검색
+│   ├── command_palette/         # 커맨드 팔레트
+│   ├── profile/                 # 프로필
+│   └── world/                   # 위키 던전 (진행 중)
 └── shared/models/               # ChatMessage, ChatRoom
 ```
 
