@@ -59,7 +59,7 @@ class AuthBlacklistTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        validToken = jwtUtil.generateToken("user-1", "testuser", "NURSE");
+        validToken = jwtUtil.generateToken("user-1", "testuser");
         validJti = jwtUtil.getJti(validToken);
 
         // Default: token is NOT blacklisted
@@ -72,7 +72,6 @@ class AuthBlacklistTest {
                 .userId("user-1")
                 .username("testuser")
                 .encodedPassword(bcryptPassword)
-                .role("NURSE")
                 .createdAt(LocalDateTime.now())
                 .build();
         when(userRepository.findByUsername("testuser")).thenReturn(Mono.just(user));
@@ -169,7 +168,7 @@ class AuthBlacklistTest {
         String bcryptPassword = passwordEncoder.encode("pass1234");
         UserEntity loginUser = UserEntity.builder()
                 .userId("user-login").username("loginuser")
-                .encodedPassword(bcryptPassword).role("NURSE")
+                .encodedPassword(bcryptPassword)
                 .createdAt(LocalDateTime.now())
                 .build();
         when(userRepository.findByUsername("loginuser")).thenReturn(Mono.just(loginUser));

@@ -24,9 +24,6 @@ public class UserEntity {
     @Column("encoded_password")
     private String encodedPassword;
 
-    @Column("role")
-    private String role;
-
     @Column("profile_image_url")
     private String profileImageUrl;
 

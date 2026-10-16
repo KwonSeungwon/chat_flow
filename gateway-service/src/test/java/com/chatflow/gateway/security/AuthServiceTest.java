@@ -46,25 +46,25 @@ class AuthServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void register_clientSuppliedAdminRole_ignored() {
+    void register_oldClientSendsRole_isIgnored() throws Exception {
+        // 옛 클라이언트는 요청에 role을 실어 보낸다. 역직렬화가 실패하지 않고 가입이 성공해야 한다.
+        var req = new com.fasterxml.jackson.databind.ObjectMapper()
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true)
+                .readValue("{\"username\":\"evil\",\"password\":\"password123\",\"role\":\"ADMIN\"}",
+                        AuthService.AuthRequest.class);
+
         when(userRepository.existsByUsername("evil")).thenReturn(Mono.just(false));
         when(passwordEncoder.encode("password123")).thenReturn("enc");
         when(userRepository.save(any(UserEntity.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(jwtUtil.generateToken(anyString(), eq("evil"), eq("NURSE"))).thenReturn("tok");
+        when(jwtUtil.generateToken(anyString(), eq("evil"))).thenReturn("tok");
         when(jwtUtil.getJti("tok")).thenReturn("jti");
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.empty());
 
-        var req = new AuthService.AuthRequest("evil", "password123", "ADMIN");
-
         StepVerifier.create(authService.register(req))
-                .assertNext(resp -> assertEquals("NURSE", resp.role()))
+                .assertNext(resp -> assertEquals("tok", resp.token()))
                 .verifyComplete();
-
-        var captor = org.mockito.ArgumentCaptor.forClass(UserEntity.class);
-        verify(userRepository).save(captor.capture());
-        assertEquals("NURSE", captor.getValue().getRole());
     }
 
     // ── login ────────────────────────────────────────────────────
@@ -74,13 +74,13 @@ class AuthServiceTest {
         // given: user exists with valid password
         UserEntity entity = UserEntity.builder()
                 .userId("user-1").username("user1")
-                .encodedPassword("encoded").role("NURSE")
+                .encodedPassword("encoded")
                 .profileImageUrl(null).createdAt(LocalDateTime.now())
                 .build();
 
         lenient().when(userRepository.findByUsername("user1")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("pass1234", "encoded")).thenReturn(true);
-        when(jwtUtil.generateToken("user-1", "user1", "NURSE")).thenReturn("new-token");
+        when(jwtUtil.generateToken("user-1", "user1")).thenReturn("new-token");
         when(jwtUtil.getJti("new-token")).thenReturn("new-jti-123");
 
         // Lua script execution (rotateActiveJti) — returns prev jti or empty
@@ -88,7 +88,7 @@ class AuthServiceTest {
                 .thenReturn(Flux.just("old-jti-prev"));
 
         // when
-        var req = new AuthService.AuthRequest("user1", "pass1234", null);
+        var req = new AuthService.AuthRequest("user1", "pass1234");
 
         StepVerifier.create(authService.login(req))
                 .assertNext(resp -> {
@@ -107,13 +107,13 @@ class AuthServiceTest {
         // given: user with no prior session
         UserEntity entity = UserEntity.builder()
                 .userId("user-2").username("newuser")
-                .encodedPassword("enc").role("DOCTOR")
+                .encodedPassword("enc")
                 .createdAt(LocalDateTime.now())
                 .build();
 
         when(userRepository.findByUsername("newuser")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("password", "enc")).thenReturn(true);
-        when(jwtUtil.generateToken("user-2", "newuser", "DOCTOR")).thenReturn("token-abc");
+        when(jwtUtil.generateToken("user-2", "newuser")).thenReturn("token-abc");
         when(jwtUtil.getJti("token-abc")).thenReturn("jti-first");
 
         // Lua script handles both first-time and rotation atomically — empty = no prev session
@@ -121,7 +121,7 @@ class AuthServiceTest {
                 .thenReturn(Flux.empty());
 
         // when
-        var req = new AuthService.AuthRequest("newuser", "password", "DOCTOR");
+        var req = new AuthService.AuthRequest("newuser", "password");
 
         StepVerifier.create(authService.login(req))
                 .assertNext(resp -> assertEquals("newuser", resp.username()))
@@ -138,7 +138,7 @@ class AuthServiceTest {
         // given: user exists but password wrong
         UserEntity entity = UserEntity.builder()
                 .userId("user-3").username("user3")
-                .encodedPassword("encoded").role("NURSE")
+                .encodedPassword("encoded")
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -146,7 +146,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("wrongpass", "encoded")).thenReturn(false);
 
         // when & then
-        var req = new AuthService.AuthRequest("user3", "wrongpass", null);
+        var req = new AuthService.AuthRequest("user3", "wrongpass");
 
         StepVerifier.create(authService.login(req))
                 .expectErrorSatisfies(err -> {
@@ -166,12 +166,12 @@ class AuthServiceTest {
 
         UserEntity saved = UserEntity.builder()
                 .userId("gen-uuid").username("newreg")
-                .encodedPassword("encoded-pw").role("NURSE")
+                .encodedPassword("encoded-pw")
                 .createdAt(LocalDateTime.now())
                 .build();
         when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(saved));
 
-        when(jwtUtil.generateToken(anyString(), eq("newreg"), eq("NURSE"))).thenReturn("reg-token");
+        when(jwtUtil.generateToken(anyString(), eq("newreg"))).thenReturn("reg-token");
         when(jwtUtil.getJti("reg-token")).thenReturn("reg-jti");
 
         // Lua script for rotateActiveJti — empty = first registration, no prev session
@@ -179,7 +179,7 @@ class AuthServiceTest {
                 .thenReturn(Flux.empty());
 
         // when
-        var req = new AuthService.AuthRequest("newreg", "securepass", null);
+        var req = new AuthService.AuthRequest("newreg", "securepass");
 
         StepVerifier.create(authService.register(req))
                 .assertNext(resp -> {
@@ -231,16 +231,16 @@ class AuthServiceTest {
 
         UserEntity saved = UserEntity.builder()
                 .userId("t-uuid").username("threadtest")
-                .encodedPassword("encoded-thread").role("NURSE")
+                .encodedPassword("encoded-thread")
                 .createdAt(LocalDateTime.now())
                 .build();
         when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(saved));
-        when(jwtUtil.generateToken(anyString(), eq("threadtest"), eq("NURSE"))).thenReturn("t-token");
+        when(jwtUtil.generateToken(anyString(), eq("threadtest"))).thenReturn("t-token");
         when(jwtUtil.getJti("t-token")).thenReturn("t-jti");
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.empty());
 
-        var req = new AuthService.AuthRequest("threadtest", "password123", null);
+        var req = new AuthService.AuthRequest("threadtest", "password123");
 
         StepVerifier.create(authService.register(req))
                 .assertNext(resp -> assertEquals("t-token", resp.token()))
@@ -258,7 +258,7 @@ class AuthServiceTest {
 
         UserEntity entity = UserEntity.builder()
                 .userId("user-t").username("threaduser")
-                .encodedPassword("enc").role("NURSE")
+                .encodedPassword("enc")
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -267,12 +267,12 @@ class AuthServiceTest {
             matchesThread.set(Thread.currentThread().getName());
             return true;
         });
-        when(jwtUtil.generateToken("user-t", "threaduser", "NURSE")).thenReturn("t-token2");
+        when(jwtUtil.generateToken("user-t", "threaduser")).thenReturn("t-token2");
         when(jwtUtil.getJti("t-token2")).thenReturn("t-jti2");
         when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
                 .thenReturn(Flux.empty());
 
-        var req = new AuthService.AuthRequest("threaduser", "pass1234", null);
+        var req = new AuthService.AuthRequest("threaduser", "pass1234");
 
         StepVerifier.create(authService.login(req))
                 .assertNext(resp -> assertEquals("threaduser", resp.username()))
@@ -291,7 +291,7 @@ class AuthServiceTest {
 
         UserEntity entity = UserEntity.builder()
                 .userId("user-cp").username("cpuser")
-                .encodedPassword("old-enc").role("NURSE")
+                .encodedPassword("old-enc")
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -325,7 +325,7 @@ class AuthServiceTest {
         // and that encode/save never run.
         UserEntity entity = UserEntity.builder()
                 .userId("user-cp2").username("cpuser2")
-                .encodedPassword("old-enc").role("NURSE")
+                .encodedPassword("old-enc")
                 .createdAt(LocalDateTime.now())
                 .build();
 
