@@ -54,6 +54,27 @@ spring:
               args:
                 retries: 2
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+        # ───────── 위키 던전 게임 (chat-service 내 /api/game) ─────────
+        # Retry는 GET만 — POST(정답 제출 등)는 재시도하면 이중 제출 위험
+        - id: game-service
+          uri: ${CHAT_SERVICE_URL}
+          predicates:
+            - Path=/api/game/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: gameCircuitBreaker
+                fallbackUri: forward:/api/fallback/game
+            - name: Retry
+              args:
+                retries: 2
+                methods: GET
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
         # ───────── WebSocket (레이트 리밋 제외 — 지속 연결) ─────────
         - id: websocket
           uri: ${CHAT_SERVICE_WS_URL}
@@ -172,6 +193,8 @@ resilience4j:
         base-config: default
         failure-rate-threshold: 70
         wait-duration-in-open-state: 60s
+      gameCircuitBreaker:
+        base-config: default
       # File — 대용량 업로드 가능, 느림 허용
       fileCircuitBreaker:
         base-config: default
@@ -184,6 +207,8 @@ resilience4j:
         cancel-running-future: true
     instances:
       chatCircuitBreaker:
+        base-config: default
+      gameCircuitBreaker:
         base-config: default
       fcmCircuitBreaker:
         base-config: default

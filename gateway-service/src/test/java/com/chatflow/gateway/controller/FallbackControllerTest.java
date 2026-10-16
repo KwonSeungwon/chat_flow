@@ -84,6 +84,22 @@ class FallbackControllerTest {
                 .verifyComplete();
     }
 
+    @Test
+    void gameFallback_returns503WithCorrectService() {
+        StepVerifier.create(controller.gameFallback())
+                .assertNext(response -> {
+                    assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+                    assertEquals("15", response.getHeaders().getFirst("Retry-After"));
+
+                    Map<String, Object> body = response.getBody();
+                    assertNotNull(body);
+                    assertEquals("game-service", body.get("service"));
+                    assertEquals("게임 서비스가 일시적으로 불안정합니다.", body.get("message"));
+                    assertEquals(15, body.get("retryAfterSeconds"));
+                })
+                .verifyComplete();
+    }
+
     // ── Body shape consistency across all fallbacks ──────────────
 
     @Test

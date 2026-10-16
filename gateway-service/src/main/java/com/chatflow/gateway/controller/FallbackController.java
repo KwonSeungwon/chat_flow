@@ -37,6 +37,11 @@ public class FallbackController {
         return buildFallback("fcm-service", "알림 서비스가 일시적으로 불안정합니다.", 30);
     }
 
+    @RequestMapping("/game")
+    public Mono<ResponseEntity<Map<String, Object>>> gameFallback() {
+        return buildFallback("game-service", "게임 서비스가 일시적으로 불안정합니다.", 15);
+    }
+
     private Mono<ResponseEntity<Map<String, Object>>> buildFallback(String service, String message, int retryAfterSeconds) {
         log.warn("Circuit breaker open: {} — 요청을 fallback으로 라우팅 (retry-after {}s)", service, retryAfterSeconds);
         Map<String, Object> body = new LinkedHashMap<>();

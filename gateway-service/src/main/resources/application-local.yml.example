@@ -57,6 +57,10 @@ spring:
           uri: http://localhost:8080
           predicates:
             - Path=/api/files/**
+        - id: game-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/game/**
 
   # Valkey Configuration (using Spring Data Redis for compatibility)
   data:
