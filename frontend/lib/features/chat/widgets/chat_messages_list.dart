@@ -500,7 +500,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 nextMsg.type.toUpperCase() != type;
             // Show time only if last in group OR next message is in a different minute
             bool showTime = isLastInGroup;
-            if (!showTime && nextMsg != null) {
+            if (!showTime) {
               try {
                 final t1 = DateTime.parse(msg.timestamp);
                 final t2 = DateTime.parse(nextMsg.timestamp);

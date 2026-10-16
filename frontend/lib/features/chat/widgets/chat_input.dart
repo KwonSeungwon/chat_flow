@@ -1100,14 +1100,12 @@ class _ChatInputState extends State<ChatInput> {
 class _CircleIconBtn extends StatelessWidget {
   final IconData icon;
   final bool enabled;
-  final bool active;
   final VoidCallback onTap;
   final double size;
   const _CircleIconBtn({
     required this.icon,
     required this.enabled,
     required this.onTap,
-    this.active = false,
     this.size = 40,
   });
 
@@ -1126,11 +1124,8 @@ class _CircleIconBtn extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: active ? AppColors.secondary.withAlpha(30) : cs.surfaceContainer,
-            border: Border.all(
-              color: active ? AppColors.secondary : cs.outline,
-              width: active ? 1.5 : 1,
-            ),
+            color: cs.surfaceContainer,
+            border: Border.all(color: cs.outline),
           ),
           child: Material(
             color: Colors.transparent,
@@ -1140,11 +1135,9 @@ class _CircleIconBtn extends StatelessWidget {
               child: Icon(
                 icon,
                 size: iconSize,
-                color: active
-                    ? AppColors.secondary
-                    : enabled
-                        ? cs.onSurfaceVariant
-                        : cs.onSurfaceVariant.withAlpha(80),
+                color: enabled
+                    ? cs.onSurfaceVariant
+                    : cs.onSurfaceVariant.withAlpha(80),
               ),
             ),
           ),
