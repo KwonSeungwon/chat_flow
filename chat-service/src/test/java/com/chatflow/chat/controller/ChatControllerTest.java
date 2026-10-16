@@ -143,6 +143,20 @@ class ChatControllerTest {
     }
 
     @Test
+    @DisplayName("retired type PATIENT_CARD from an old client is rejected with an error to the sender")
+    void sendMessage_typePatientCard_rejected() throws Exception {
+        InboundChatCommand command = objectMapper.readValue("""
+                {"chatRoomId":"room-1","content":"{}","type":"PATIENT_CARD"}
+                """, InboundChatCommand.class);
+
+        chatController.sendMessage(command, headerAccessor);
+
+        verifyNoInteractions(chatService);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq(USER_ID), eq("/queue/errors"), any(Map.class));
+    }
+
+    @Test
     @DisplayName("S-6: isAiGenerated in the payload never reaches the message")
     void sendMessage_aiGeneratedFlag_forcedFalse() throws Exception {
         InboundChatCommand command = objectMapper.readValue("""
@@ -158,7 +172,7 @@ class ChatControllerTest {
     }
 
     @Test
-    @DisplayName("null type defaults to CHAT; client fields (file, priority, clientMessageId) are carried")
+    @DisplayName("null type defaults to CHAT; client fields (file, clientMessageId) are carried, legacy priority ignored")
     void sendMessage_clientFieldsCarried_nullTypeDefaultsToChat() throws Exception {
         InboundChatCommand command = objectMapper.readValue("""
                 {"chatRoomId":"room-1","content":"see file","priority":"URGENT",
@@ -173,7 +187,6 @@ class ChatControllerTest {
         verify(chatService).processMessage(captor.capture(), any());
         ChatMessage sent = captor.getValue();
         assertThat(sent.getType()).isEqualTo(ChatMessage.MessageType.CHAT);
-        assertThat(sent.getPriority()).isEqualTo("URGENT");
         assertThat(sent.getFileUrl()).isEqualTo("/api/files/a.pdf");
         assertThat(sent.getFileName()).isEqualTo("a.pdf");
         assertThat(sent.getFileContentType()).isEqualTo("application/pdf");
@@ -370,8 +383,8 @@ class ChatControllerTest {
     }
 
     private InboundChatCommand buildCommand(ChatMessage.MessageType type) {
-        return new InboundChatCommand(ROOM_ID, "hello", type, null, null, null, null, null,
-                null, null, null, null);
+        return new InboundChatCommand(ROOM_ID, "hello", type.name(), null, null, null, null, null,
+                null, null, null);
     }
 
     private ChatMessage buildChatMessage() {

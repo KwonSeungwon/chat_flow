@@ -34,8 +34,8 @@ import static org.mockito.Mockito.*;
 /**
  * Focused tests for the mute gate added to MessageSenderService.send().
  *
- * <p>send() is the user-authored path: only CHAT, FILE and PATIENT_CARD are
- * accepted and all three are mute-gated. Server-authored JOIN/LEAVE/SYSTEM/
+ * <p>send() is the user-authored path: only CHAT and FILE are
+ * accepted and both are mute-gated. Server-authored JOIN/LEAVE/SYSTEM/
  * AI_SUMMARY are refused outright and must not even hit room_members.
  */
 @ExtendWith(MockitoExtension.class)
@@ -208,14 +208,14 @@ class MessageSenderServiceMuteGateTest {
         }
     }
 
-    // ── PATIENT_CARD is user-authored too (S-6 mute bypass) ────
+    // ── Every user-authored type is gated (S-6 mute bypass) ────
 
     @Test
-    void send_mutedUser_patientCard_blocked() {
+    void send_mutedUser_file_blockedWithMutedError() {
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                 .thenReturn(Optional.of(member(LocalDateTime.now().plusMinutes(30))));
 
-        messageSenderService.send(createMessage(ChatMessage.MessageType.PATIENT_CARD));
+        messageSenderService.send(createMessage(ChatMessage.MessageType.FILE));
 
         verify(chatPersistenceService, never()).persistMessageAndPublish(
                 any(), anyList());
@@ -227,8 +227,8 @@ class MessageSenderServiceMuteGateTest {
     }
 
     @Test
-    void send_mutedUser_patientCard_blocked_onThePreResolvedOverload() {
-        messageSenderService.send(createMessage(ChatMessage.MessageType.PATIENT_CARD),
+    void send_mutedUser_chat_blocked_onThePreResolvedOverload() {
+        messageSenderService.send(createMessage(ChatMessage.MessageType.CHAT),
                 member(LocalDateTime.now().plusMinutes(30)));
 
         verify(chatPersistenceService, never()).persistMessageAndPublish(

@@ -42,7 +42,6 @@ public class ChatMessageResponse {
     private String content;
     private LocalDateTime timestamp;
     private String type;
-    private String priority;
     private boolean isAiGenerated;
     private String fileUrl;
     private String fileName;

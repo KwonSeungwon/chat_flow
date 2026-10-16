@@ -27,7 +27,6 @@ class ChatMessageMapperTest {
                 .username("alice")
                 .content("hello")
                 .type("CHAT")
-                .priority("ROUTINE")
                 .timestamp(LocalDateTime.of(2026, 5, 30, 12, 0))
                 .isAiGenerated(false)
                 .fileUrl("https://example.com/file.pdf")
@@ -46,7 +45,6 @@ class ChatMessageMapperTest {
         assertThat(dto.getUsername()).isEqualTo("alice");
         assertThat(dto.getContent()).isEqualTo("hello");
         assertThat(dto.getType()).isEqualTo(BaseMessage.MessageType.CHAT);
-        assertThat(dto.getPriority()).isEqualTo("ROUTINE");
         assertThat(dto.getTimestamp()).isEqualTo(LocalDateTime.of(2026, 5, 30, 12, 0));
         assertThat(dto.isAiGenerated()).isFalse();
         assertThat(dto.getFileUrl()).isEqualTo("https://example.com/file.pdf");
@@ -90,7 +88,6 @@ class ChatMessageMapperTest {
                 .username("bob")
                 .content("world")
                 .type(BaseMessage.MessageType.FILE)
-                .priority("URGENT")
                 .timestamp(LocalDateTime.of(2026, 6, 1, 9, 30))
                 .isAiGenerated(false)
                 .fileUrl("https://example.com/doc.txt")
@@ -109,7 +106,6 @@ class ChatMessageMapperTest {
         assertThat(entity.getUsername()).isEqualTo("bob");
         assertThat(entity.getContent()).isEqualTo("world");
         assertThat(entity.getType()).isEqualTo("FILE");
-        assertThat(entity.getPriority()).isEqualTo("URGENT");
         assertThat(entity.getTimestamp()).isEqualTo(LocalDateTime.of(2026, 6, 1, 9, 30));
         assertThat(entity.isAiGenerated()).isFalse();
         assertThat(entity.getFileUrl()).isEqualTo("https://example.com/doc.txt");
@@ -275,7 +271,6 @@ class ChatMessageMapperTest {
                 .username("roundtrip-user")
                 .content("roundtrip content")
                 .type(BaseMessage.MessageType.CHAT)
-                .priority("ROUTINE")
                 .timestamp(LocalDateTime.of(2026, 5, 30, 15, 45))
                 .isAiGenerated(true)
                 .build();
@@ -289,7 +284,6 @@ class ChatMessageMapperTest {
         assertThat(restored.getUsername()).isEqualTo(original.getUsername());
         assertThat(restored.getContent()).isEqualTo(original.getContent());
         assertThat(restored.getType()).isEqualTo(original.getType());
-        assertThat(restored.getPriority()).isEqualTo(original.getPriority());
         assertThat(restored.getTimestamp()).isEqualTo(original.getTimestamp());
         // isAiGenerated is server-owned and never copied from the DTO (S-6)
         assertThat(restored.isAiGenerated()).isFalse();

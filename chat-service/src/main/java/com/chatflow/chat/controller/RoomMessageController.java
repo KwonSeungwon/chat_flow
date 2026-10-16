@@ -93,8 +93,6 @@ public class RoomMessageController {
         msg.setUsername(username != null ? username : userId);
         msg.setContent(body.content());
         msg.setType(ChatMessage.MessageType.CHAT);
-        msg.setPriority(body.priority() != null && !body.priority().isBlank()
-                ? body.priority() : "ROUTINE");
         if (body.parentMessageId() != null && !body.parentMessageId().isBlank()) {
             msg.setParentMessageId(body.parentMessageId());
         }
@@ -114,7 +112,6 @@ public class RoomMessageController {
             @NotBlank(message = "content는 필수입니다")
             String content,
 
-            String priority,
             String parentMessageId,
             String forwardedFrom,
             String fileUrl,

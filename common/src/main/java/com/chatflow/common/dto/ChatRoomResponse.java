@@ -45,7 +45,6 @@ public class ChatRoomResponse {
     @JsonProperty("isPrivate")
     private boolean isPrivate;
     private boolean allowInvites;
-    private String allowedRoles;
     private Integer participantCount;
     private Integer maxParticipants;
     private String createdBy;

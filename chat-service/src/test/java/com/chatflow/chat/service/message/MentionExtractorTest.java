@@ -12,19 +12,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MentionExtractorTest {
 
     private static final List<String> MEMBERS =
-            List.of("bob", "김간호사", "under_score", "phill.park");
+            List.of("bob", "김철수", "under_score", "phill.park");
 
     @Test
     void resolves_ascii_korean_underscore_and_dotted_names() {
         assertThat(MentionExtractor.resolve(
-                "hi @bob and @김간호사, also @under_score ok", MEMBERS))
-                .containsExactly("bob", "김간호사", "under_score");
+                "hi @bob and @김철수, also @under_score ok", MEMBERS))
+                .containsExactly("bob", "김철수", "under_score");
     }
 
     @Test
     void deduplicates_and_preserves_first_appearance_order() {
-        assertThat(MentionExtractor.resolve("@bob @김간호사 @bob", MEMBERS))
-                .containsExactly("bob", "김간호사");
+        assertThat(MentionExtractor.resolve("@bob @김철수 @bob", MEMBERS))
+                .containsExactly("bob", "김철수");
     }
 
     @Test
@@ -95,8 +95,8 @@ class MentionExtractorTest {
 
         @Test
         void allows_trailing_punctuation() {
-            assertThat(MentionExtractor.resolve("@bob, @김간호사! @phill.park.", MEMBERS))
-                    .containsExactly("bob", "김간호사", "phill.park");
+            assertThat(MentionExtractor.resolve("@bob, @김철수! @phill.park.", MEMBERS))
+                    .containsExactly("bob", "김철수", "phill.park");
         }
 
         @Test
@@ -119,9 +119,9 @@ class MentionExtractorTest {
 
         @Test
         void korean_particle_attached_directly_is_not_a_match() {
-            // "@김간호사님" — no space, so the name is ambiguous. The UI always
+            // "@김철수님" — no space, so the name is ambiguous. The UI always
             // inserts a trailing space, and the old regex failed here too.
-            assertThat(MentionExtractor.resolve("@김간호사님 안녕", MEMBERS)).isEmpty();
+            assertThat(MentionExtractor.resolve("@김철수님 안녕", MEMBERS)).isEmpty();
         }
 
         @Test
@@ -141,8 +141,8 @@ class MentionExtractorTest {
     void takes_an_unordered_collection_and_still_orders_by_appearance() {
         // 호출자(MentionTargets)는 List를 넘기지만 시그니처는 Collection이다.
         // 순서 없는 Set을 받아도 결과는 "본문 등장 순서 + 최장일치"여야 한다.
-        Set<String> unordered = new LinkedHashSet<>(List.of("bob", "bobby", "김간호사"));
-        assertThat(MentionExtractor.resolve("@김간호사 님, @bobby 도 봐주세요", unordered))
-                .containsExactly("김간호사", "bobby");
+        Set<String> unordered = new LinkedHashSet<>(List.of("bob", "bobby", "김철수"));
+        assertThat(MentionExtractor.resolve("@김철수 님, @bobby 도 봐주세요", unordered))
+                .containsExactly("김철수", "bobby");
     }
 }

@@ -96,11 +96,11 @@ public class ChatRoomController {
                 .name(request.name())
                 .description(request.description())
                 .color(request.color())
-                .roomType(request.roomType() != null
-                        ? RoomType.valueOf(request.roomType()) : null)
+                // Only GENERAL rooms are created here (DMs use /dm). A roomType in the
+                // request, including the retired HANDOFF from old clients, is ignored.
+                .roomType(RoomType.GENERAL)
                 .isPrivate(request.isPrivate() != null && request.isPrivate())
                 .password(request.password())
-                .allowedRoles(request.allowedRoles())
                 .allowInvites(request.allowInvites() != null
                         ? request.allowInvites() : true)
                 .build();
@@ -202,7 +202,7 @@ public class ChatRoomController {
     /**
      * DM 방 per-user soft-hide. 본인 화면에서만 숨김 처리.
      * 상대가 새 메시지 보내면 자동 재출현 (lastMessageAt > hidden_at).
-     * 단체방/HANDOFF는 hide 불가 -- 기존 leave 사용.
+     * 단체방은 hide 불가 -- 기존 leave 사용.
      */
     @RequireAuth
     @PostMapping("/{roomId}/hide")
@@ -284,14 +284,10 @@ public class ChatRoomController {
 
             String color,
 
-            String roomType,
-
             @JsonProperty("isPrivate")
             Boolean isPrivate,
 
             String password,
-
-            String allowedRoles,
 
             Boolean allowInvites
     ) {}

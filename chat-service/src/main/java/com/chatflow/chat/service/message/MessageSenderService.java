@@ -97,8 +97,8 @@ public class MessageSenderService {
         message.setAiGenerated(false);
 
         // Mute gate — muted users cannot post anything they authored, whatever the
-        // type: a caption (FILE) fires mention pushes and a PATIENT_CARD lands in
-        // the room just like text, so every user-sendable type is gated.
+        // type: a caption (FILE) fires mention pushes just like text, so every
+        // user-sendable type is gated.
         if (message.getUserId() != null) {
             // mutedUntil == now ⇒ 만료 (mute가 끝나는 그 순간부터는 발송 허용)
             if (resolvedMember != null && resolvedMember.getMutedUntil() != null

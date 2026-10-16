@@ -318,6 +318,33 @@ class ChatRoomControllerTest {
                     room.getId() == null && "Test".equals(room.getName())
             ), eq("user-1"), eq("alice"));
         }
+
+        @Test
+        @DisplayName("old client roomType HANDOFF + allowedRoles -> 201 GENERAL room, allowedRoles ignored")
+        void legacy_handoff_request_creates_general_room() throws Exception {
+            ChatRoom saved = room("r-new", "Ward", RoomType.GENERAL, "user-1");
+            when(chatRoomService.createRoom(any(ChatRoom.class), eq("user-1"), eq("alice")))
+                    .thenReturn(saved);
+            when(chatRoomMapper.toResponse(saved))
+                    .thenReturn(roomResponse("r-new", "Ward", "GENERAL", "user-1"));
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Ward",
+                    "roomType", "HANDOFF",
+                    "allowedRoles", "NURSE,DOCTOR"));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.data.roomType").value("GENERAL"));
+
+            verify(chatRoomService).createRoom(argThat(room ->
+                    room.getRoomType() == RoomType.GENERAL
+            ), eq("user-1"), eq("alice"));
+        }
     }
 
     // ── DeleteRoom ──────────────────────────────────────────────
