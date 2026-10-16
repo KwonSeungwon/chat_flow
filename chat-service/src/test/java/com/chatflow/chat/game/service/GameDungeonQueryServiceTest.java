@@ -43,7 +43,8 @@ class GameDungeonQueryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GameDungeonQueryService(dungeonRepository, questionRepository, progressRepository);
+        service = new GameDungeonQueryService(dungeonRepository, questionRepository, progressRepository,
+                new GameAdminGuard("admin-1"));
         dungeonRepository.save(GameDungeon.builder().id("k8s").name("쿠버네티스 성").sortOrder(1).buildingStyle("k8s").build());
         dungeonRepository.save(GameDungeon.builder().id("jvm").name("JVM 대장간").sortOrder(2).buildingStyle("jvm").build());
     }
@@ -72,8 +73,14 @@ class GameDungeonQueryServiceTest {
         progress("me", "jvm", LocalDateTime.now());
         progress("me", "k8s", null);
 
-        assertThat(service.me("me")).isEqualTo(new GameMeResponse(1, 8, false));
-        assertThat(service.me("nobody")).isEqualTo(new GameMeResponse(0, 8, false));
+        assertThat(service.me("me")).isEqualTo(new GameMeResponse(1, 8, false, false));
+        assertThat(service.me("nobody")).isEqualTo(new GameMeResponse(0, 8, false, false));
+    }
+
+    @Test
+    void me_flagsGameAdmins() {
+        assertThat(service.me("admin-1").admin()).isTrue();
+        assertThat(service.me("me").admin()).isFalse();
     }
 
     private void progress(String userId, String dungeonId, LocalDateTime clearedAt) {
