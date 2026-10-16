@@ -26,6 +26,7 @@ public class UserPresenceService {
     private final RoomFullnessService roomFullnessService;
     private final ParticipantRegistryService participantRegistry;
     private final PresenceBroadcastService presenceBroadcast;
+    private final RoomAccessPolicy roomAccessPolicy;
 
     /**
      * @return true if the user joined (presence registered); false if the join
@@ -39,6 +40,16 @@ public class UserPresenceService {
             return false;
         }
 
+        // Access gate on the ORIGINAL room, before the fullness gate: a non-member
+        // must not be redirected into an overflow sibling of a private/password/DM
+        // room (the redirect would both leak the room and spawn a public copy).
+        RoomAccessPolicy.JoinDecision original = roomAccessPolicy.canAutoJoin(
+                message.getChatRoomId(), currentUserId.isEmpty() ? null : currentUserId);
+        if (!original.allowed()) {
+            presenceBroadcast.sendJoinRefused(currentUserId, message.getChatRoomId(), original.reason());
+            return false;
+        }
+
         Set<String> existingUserIds = participantRegistry.getRoomParticipantUserIds(message.getChatRoomId());
         boolean alreadyJoined = !currentUserId.isEmpty() && existingUserIds.contains(currentUserId);
 
@@ -46,8 +57,8 @@ public class UserPresenceService {
             return false;
         }
 
-        // Re-checks RoomAccessPolicy (the fullness gate may have redirected the
-        // message to another room); a refused join must not broadcast JOIN.
+        // register re-checks RoomAccessPolicy (the fullness gate may have redirected
+        // the message to another room); a refused join must not broadcast JOIN.
         RoomAccessPolicy.JoinDecision decision = participantRegistry.register(message, sessionId);
         if (!decision.allowed()) {
             presenceBroadcast.sendJoinRefused(currentUserId, message.getChatRoomId(), decision.reason());

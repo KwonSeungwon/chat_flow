@@ -29,6 +29,7 @@ class UserPresenceServiceBanGateTest {
     @Mock private RoomFullnessService roomFullnessService;
     @Mock private ParticipantRegistryService participantRegistry;
     @Mock private PresenceBroadcastService presenceBroadcast;
+    @Mock private RoomAccessPolicy roomAccessPolicy;
 
     private UserPresenceService userPresenceService;
 
@@ -40,8 +41,11 @@ class UserPresenceServiceBanGateTest {
     @BeforeEach
     void setUp() {
         userPresenceService = new UserPresenceService(
-                banCheckService, roomFullnessService, participantRegistry, presenceBroadcast);
-        // Default: the access policy (inside register) accepts the join.
+                banCheckService, roomFullnessService, participantRegistry, presenceBroadcast,
+                roomAccessPolicy);
+        // Default: the access policy (pre-fullness gate and inside register) accepts the join.
+        lenient().when(roomAccessPolicy.canAutoJoin(any(), any()))
+                .thenReturn(new RoomAccessPolicy.JoinDecision(null));
         lenient().when(participantRegistry.register(any(), any()))
                 .thenReturn(new RoomAccessPolicy.JoinDecision(null));
     }
