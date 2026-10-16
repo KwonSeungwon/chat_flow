@@ -44,7 +44,9 @@ class _FakeStompService extends StompService {
 
 final _refProvider = Provider<Ref>((ref) => ref);
 
-Map<String, dynamic> _msg(String id, String timestamp, {String type = 'CHAT'}) => {
+Map<String, dynamic> _msg(String id, String timestamp,
+        {String type = 'CHAT'}) =>
+    {
       'messageId': id,
       'chatRoomId': 'room-1',
       'userId': 'u2',
@@ -64,8 +66,7 @@ ChatNotifier _notifier(
   void Function(RequestOptions options)? onRequest,
 }) {
   final dio = Dio(BaseOptions(baseUrl: 'http://test'));
-  dio.interceptors
-      .add(InterceptorsWrapper(onRequest: (options, handler) async {
+  dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
     onRequest?.call(options);
     final body = bodies[options.path];
     if (body == null) {
@@ -73,8 +74,8 @@ ChatNotifier _notifier(
       return;
     }
     if (onPath != null) await onPath(options.path);
-    handler
-        .resolve(Response(requestOptions: options, statusCode: 200, data: body));
+    handler.resolve(
+        Response(requestOptions: options, statusCode: 200, data: body));
   }));
   final notifier = ChatNotifier(
     _FakeDioClient(dio),
@@ -197,4 +198,3 @@ void main() {
         ['old', 'pending', 'new']);
   });
 }
-

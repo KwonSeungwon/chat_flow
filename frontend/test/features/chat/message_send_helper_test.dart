@@ -105,8 +105,8 @@ void main() {
 
     expect(h.queue.length, 1, reason: 'the queued original must be dropped');
     expect(h.state.messages, hasLength(1));
-    expect(h.state.messages.single.deliveryStatus,
-        MessageDeliveryStatus.sending);
+    expect(
+        h.state.messages.single.deliveryStatus, MessageDeliveryStatus.sending);
   });
 
   test('lateEcho_matchesFailedBubbleByClientId', () {
@@ -195,5 +195,32 @@ void main() {
 
     expect(h.state.messages, hasLength(1));
     expect(h.state.messages.single.messageId, 'm1');
+  });
+
+  test('foreignEchoWithOurClientId_kept', () {
+    h.stomp.connected = true;
+    h.helper.sendMessage(roomId: 'room-1', content: 'hi');
+    final ourId = h.state.messages.single.localId;
+    Map<String, dynamic> echo(String messageId, String userId) => {
+          'messageId': messageId,
+          'chatRoomId': 'room-1',
+          'userId': userId,
+          'username': userId,
+          'content': 'hi',
+          'type': 'CHAT',
+          'timestamp': '2026-10-16T10:00:00',
+          'clientMessageId': ourId,
+        };
+    // Another member reuses our id before our echo arrives...
+    h.dispatcher.dispatch(echo('x1', 'u2'));
+    expect(
+        h.state.messages.where((m) => m.localId == ourId).single.deliveryStatus,
+        MessageDeliveryStatus.sending);
+    // ...and after our id is settled.
+    h.dispatcher.dispatch(echo('m1', 'u1'));
+    h.dispatcher.dispatch(echo('x2', 'u2'));
+
+    expect(h.state.messages.map((m) => m.messageId),
+        unorderedEquals(['x1', 'm1', 'x2']));
   });
 }

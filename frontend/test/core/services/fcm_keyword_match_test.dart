@@ -17,8 +17,8 @@ void main() {
       }),
     });
 
-    expect(await FcmService.checkKeywordMatch('room-1', 'This is URGENT'),
-        isTrue);
+    expect(
+        await FcmService.checkKeywordMatch('room-1', 'This is URGENT'), isTrue);
     expect(await FcmService.checkKeywordMatch('room-1', 'all fine'), isFalse);
   });
 

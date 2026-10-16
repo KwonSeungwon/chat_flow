@@ -690,8 +690,8 @@ final chatNotifierProvider = StateNotifierProvider.autoDispose
   (ref, roomId) {
     // Only identity fields: unrelated auth changes (avatar, isLoading) must not
     // tear down the room socket and refetch history.
-    final (token, userId, username) = ref.watch(
-        authProvider.select((a) => (a.token, a.userId, a.username)));
+    final (token, userId, username) =
+        ref.watch(authProvider.select((a) => (a.token, a.userId, a.username)));
     final notifier = ChatNotifier(
       ref.watch(dioClientProvider),
       ref: ref,

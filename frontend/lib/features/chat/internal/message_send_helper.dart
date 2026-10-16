@@ -25,6 +25,7 @@ class MessageSendHelper {
   final OfflineMessageQueue offlineQueue;
   final Map<String, Timer> sendingTimers;
   final DioClient dioClient;
+
   /// Called after sending a state-owned reply so the input clears.
   /// (ThreadPanel passes replyOverride to bypass this.)
   final void Function() clearReplyTarget;
@@ -98,8 +99,12 @@ class MessageSendHelper {
       '_localId': localId,
     };
     final localMsg = ChatMessage(
-      chatRoomId: roomId, userId: userId, username: username,
-      content: content, type: type, priority: priority,
+      chatRoomId: roomId,
+      userId: userId,
+      username: username,
+      content: content,
+      type: type,
+      priority: priority,
       timestamp: timestamp,
       parentMessageId: parentMessageId,
       fileUrl: fileUrl,
@@ -108,7 +113,8 @@ class MessageSendHelper {
       localId: localId,
       deliveryStatus: MessageDeliveryStatus.sending,
     );
-    setState(getCurrentState().copyWith(messages: [...getCurrentState().messages, localMsg]));
+    setState(getCurrentState()
+        .copyWith(messages: [...getCurrentState().messages, localMsg]));
     if (stompService.isConnected) {
       _sendOrQueue(msg);
     } else {
@@ -123,7 +129,8 @@ class MessageSendHelper {
   void _sendOrQueue(Map<String, dynamic> msg) {
     try {
       // _localId is a client-only marker; strip it from the wire payload.
-      stompService.sendMessage(Map<String, dynamic>.from(msg)..remove('_localId'));
+      stompService
+          .sendMessage(Map<String, dynamic>.from(msg)..remove('_localId'));
     } catch (_) {
       offlineQueue.enqueue(msg);
     }
@@ -136,7 +143,8 @@ class MessageSendHelper {
       sendingTimers.remove(localId);
       if (!mounted()) return;
       final idx = getCurrentState().messages.indexWhere((m) =>
-          m.localId == localId && m.deliveryStatus == MessageDeliveryStatus.sending);
+          m.localId == localId &&
+          m.deliveryStatus == MessageDeliveryStatus.sending);
       if (idx < 0) return;
       final m = getCurrentState().messages[idx];
       final failed = m.copyWith(deliveryStatus: MessageDeliveryStatus.failed);
@@ -175,7 +183,8 @@ class MessageSendHelper {
       offlineQueue.removeByLocalId(localId);
       sendingTimers.remove(localId)?.cancel();
     }
-    final list = getCurrentState().messages.where((m) => m.localId != localId).toList();
+    final list =
+        getCurrentState().messages.where((m) => m.localId != localId).toList();
     setState(getCurrentState().copyWith(messages: list));
     // parentMessageId is resent as-is: the backend builds the preview from
     // the parent's stored row, so the parent need not be in the buffer.
@@ -232,7 +241,8 @@ class MessageSendHelper {
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
     final isFile = msg.isFileMessage;
     final content = '[전달] ${msg.username}: ${msg.content}';
-    final forwardedFrom = '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
+    final forwardedFrom =
+        '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
 
     if (stompService.isConnected) {
       stompService.sendMessage({

@@ -71,9 +71,8 @@ class FcmService {
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         ),
       );
-      final androidPlugin = _localNotifs
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+      final androidPlugin = _localNotifs.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _channelId,
@@ -99,7 +98,8 @@ class FcmService {
     FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
     // A rotated token has no topic subscriptions: replay this session's.
-    _messaging.onTokenRefresh.listen((token) => _resubscribeRooms(dio(), token));
+    _messaging.onTokenRefresh
+        .listen((token) => _resubscribeRooms(dio(), token));
 
     // App opened via notification tap (from background state)
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {

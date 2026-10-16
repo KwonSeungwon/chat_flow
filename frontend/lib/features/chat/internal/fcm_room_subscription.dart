@@ -7,6 +7,7 @@ import '../notification_policy_provider.dart';
 /// (Stage 2.5).
 class FcmRoomSubscription {
   final DioClient dioClient;
+
   /// Closure over Riverpod's NotificationPolicy lookup — keeps the helper
   /// agnostic of Ref while preserving the policy gate ('NotificationPolicy.all'
   /// only).

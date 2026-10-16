@@ -29,7 +29,8 @@ class StompMessageDispatcher {
   /// Whether the owning [StateNotifier] is still mounted.
   final bool Function() mounted;
 
-  /// Current user's ID — used for dedup of sending-status messages.
+  /// Current user's ID — only echoes from this user can settle a bubble
+  /// or be dropped as a duplicate.
   final String userId;
 
   /// Returns the room ID the notifier is currently joined to.
@@ -122,7 +123,8 @@ class StompMessageDispatcher {
     if (editedId == null || newContent == null) return;
     final updated = getCurrentState().messages.map((m) {
       if (m.effectiveId == editedId || m.messageId == editedId) {
-        return m.copyWith(content: newContent, edited: true, editedAt: editedAt);
+        return m.copyWith(
+            content: newContent, edited: true, editedAt: editedAt);
       }
       return m;
     }).toList();
@@ -150,8 +152,9 @@ class StompMessageDispatcher {
     // The echo of our own send carries the bubble's localId as
     // clientMessageId. Match on it first, whatever the bubble's status:
     // a late echo must also settle a bubble that already timed out to
-    // 'failed'.
-    final clientId = msg.clientMessageId;
+    // 'failed'. clientMessageId is visible to the whole room, so it only
+    // counts on an echo of our own message.
+    final clientId = msg.userId == userId ? msg.clientMessageId : null;
     var localIdx = clientId == null
         ? -1
         : existing.indexWhere((m) =>
@@ -159,13 +162,15 @@ class StompMessageDispatcher {
             m.deliveryStatus != MessageDeliveryStatus.sent);
     // Fallback for echoes without clientMessageId: content match on a
     // bubble still 'sending'.
-    if (localIdx < 0 && clientId == null) {
+    if (localIdx < 0 && msg.clientMessageId == null) {
       localIdx = existing.indexWhere((m) =>
           m.deliveryStatus == MessageDeliveryStatus.sending &&
           m.userId == msg.userId &&
           m.content == msg.content);
     }
-    if (localIdx < 0 && clientId != null && _resolvedClientIds.contains(clientId)) {
+    if (localIdx < 0 &&
+        clientId != null &&
+        _resolvedClientIds.contains(clientId)) {
       return;
     }
     if (localIdx >= 0) {
