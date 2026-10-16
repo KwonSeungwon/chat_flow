@@ -75,7 +75,7 @@ public class KoreanSearchService {
                 new BoolQuery.Builder().must(standardMultiMatch(query)));
         applyRoomsFilter(boolBuilder, chatRoomIds);
 
-        return executeAndMap(boolBuilder.build(), pageable, "content", null,
+        return executeAndMap(boolBuilder.build(), pageable, null,
                 "Error performing Korean search for query: " + query);
     }
 
@@ -86,7 +86,7 @@ public class KoreanSearchService {
                 new BoolQuery.Builder().must(ngramMultiMatch(query)));
         applyRoomsFilter(boolBuilder, chatRoomIds);
 
-        return executeAndMap(boolBuilder.build(), pageable, "content.ngram", 0.5,
+        return executeAndMap(boolBuilder.build(), pageable, 0.5,
                 "Error performing N-gram search for query: " + query);
     }
 
