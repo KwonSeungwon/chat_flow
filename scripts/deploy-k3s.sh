@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# macOS tar: 리소스 포크 파일(._) 제외
-export COPYFILE_DISABLE=1
-
 # ChatFlow K3s 배포 스크립트
 # 사용법: ./scripts/deploy-k3s.sh [step]
-# Steps: infra, secrets, images, helm, all
+# Steps: infra, secrets, all (= infra + secrets)
+#
+# 이미지 배포는 GH Actions "Deploy to K3s (manual)" (deploy-k3s.yml)로 한다.
+# Helm 배포는 helm/chatflow + values-k3s.yaml 기준으로 수동 실행한다.
 #
 # 필수 환경 변수 (scripts/.env.deploy 또는 환경에서 주입):
-#   DEPLOY_DB_PASSWORD, DEPLOY_GEMINI_API_KEY, DEPLOY_JWT_SECRET
-# 선택 환경 변수:
-#   DEPLOY_GATEWAY_SECRET (미설정 시 자동 생성)
+#   DEPLOY_DB_PASSWORD, DEPLOY_GEMINI_API_KEY, DEPLOY_JWT_SECRET, DEPLOY_GATEWAY_SECRET
+# 이미 존재하는 Secret은 건드리지 않는다 (회전은 kubectl로 직접).
 
 K3S_HOST="node.chatflow.ai.kr"
 K3S_USER="ksw"
@@ -29,8 +28,7 @@ fi
 : "${DEPLOY_DB_PASSWORD:?DEPLOY_DB_PASSWORD 환경 변수를 설정하세요 (scripts/.env.deploy 참고)}"
 : "${DEPLOY_GEMINI_API_KEY:?DEPLOY_GEMINI_API_KEY 환경 변수를 설정하세요}"
 : "${DEPLOY_JWT_SECRET:?DEPLOY_JWT_SECRET 환경 변수를 설정하세요}"
-# 게이트웨이 내부 시크릿 (미설정 시 자동 생성)
-DEPLOY_GATEWAY_SECRET="${DEPLOY_GATEWAY_SECRET:-$(openssl rand -base64 32)}"
+: "${DEPLOY_GATEWAY_SECRET:?DEPLOY_GATEWAY_SECRET 환경 변수를 설정하세요}"
 
 ssh_k3s() {
   ssh -o StrictHostKeyChecking=yes "$K3S_USER@$K3S_HOST" "$@"
@@ -50,140 +48,46 @@ step_infra() {
   ssh_k3s "kubectl get pods -n $NAMESPACE"
 }
 
+# Secret이 없을 때만 생성한다. 인자: <name> <kubectl create secret generic 인자...>
+create_secret_if_absent() {
+  local name="$1"; shift
+  if ssh_k3s "kubectl -n $NAMESPACE get secret $name >/dev/null 2>&1"; then
+    echo "  skip: $name (already exists)"
+  else
+    ssh_k3s "kubectl -n $NAMESPACE create secret generic $name $*"
+    echo "  created: $name"
+  fi
+}
+
 step_secrets() {
-  echo "=== Step 2: Create Secrets ==="
-  # 시크릿 값을 로컬에서 참조하여 SSH heredoc 없이 개별 명령으로 전달
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-postgresql-secret \
-    --from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
-    --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
-    --from-literal=DB_PASSWORD='$DEPLOY_DB_PASSWORD' \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-kafka-secret \
-    --from-literal=KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-valkey-secret \
-    --from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 \
-    --from-literal=VALKEY_PASSWORD= \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-elasticsearch-secret \
-    --from-literal=ELASTICSEARCH_URIS=http://elasticsearch:9200 \
-    --from-literal=ELASTICSEARCH_USERNAME= --from-literal=ELASTICSEARCH_PASSWORD= \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-gemini-secret \
-    --from-literal=GEMINI_API_KEY='$DEPLOY_GEMINI_API_KEY' \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-jwt-secret \
-    --from-literal=JWT_SECRET='$DEPLOY_JWT_SECRET' \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  ssh_k3s "kubectl -n $NAMESPACE create secret generic chatflow-gateway-internal-secret \
-    --from-literal=GATEWAY_INTERNAL_SECRET='$DEPLOY_GATEWAY_SECRET' \
-    --dry-run=client -o yaml | kubectl apply -f -"
-  echo "Secrets created."
+  echo "=== Step 2: Create Secrets (skip existing) ==="
+  create_secret_if_absent chatflow-postgresql-secret \
+    "--from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
+     --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
+     --from-literal=DB_PASSWORD='$DEPLOY_DB_PASSWORD'"
+  create_secret_if_absent chatflow-kafka-secret \
+    "--from-literal=KAFKA_BOOTSTRAP_SERVERS=kafka:9092"
+  create_secret_if_absent chatflow-valkey-secret \
+    "--from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 --from-literal=VALKEY_PASSWORD="
+  create_secret_if_absent chatflow-elasticsearch-secret \
+    "--from-literal=ELASTICSEARCH_URIS=http://elasticsearch:9200 \
+     --from-literal=ELASTICSEARCH_USERNAME= --from-literal=ELASTICSEARCH_PASSWORD="
+  create_secret_if_absent chatflow-gemini-secret \
+    "--from-literal=GEMINI_API_KEY='$DEPLOY_GEMINI_API_KEY'"
+  create_secret_if_absent chatflow-jwt-secret \
+    "--from-literal=JWT_SECRET='$DEPLOY_JWT_SECRET'"
+  create_secret_if_absent chatflow-gateway-internal-secret \
+    "--from-literal=GATEWAY_INTERNAL_SECRET='$DEPLOY_GATEWAY_SECRET'"
   ssh_k3s "kubectl get secrets -n $NAMESPACE"
-}
-
-step_images() {
-  echo "=== Step 3: Build & Transfer Images ==="
-  cd "$PROJECT_ROOT"
-
-  # Timestamp-based build tag to force Pod rollout (imagePullPolicy: Never + latest won't trigger rollout)
-  BUILD_TAG="$(date +%Y%m%d-%H%M%S)"
-  echo "Build tag: $BUILD_TAG"
-
-  # Build all backend services
-  ./gradlew bootJar --no-daemon
-
-  # Build Docker images (amd64) — tagged with both latest and BUILD_TAG
-  SERVICES="gateway-service chat-service ai-summary-service search-service"
-  for svc in $SERVICES; do
-    echo "Building $svc..."
-    docker buildx build --platform linux/amd64 --build-arg SERVICE_NAME=$svc \
-      -t docker.io/chatflow/$svc:latest \
-      -t docker.io/chatflow/$svc:$BUILD_TAG \
-      --load .
-  done
-
-  # Frontend
-  echo "Building frontend..."
-  cd frontend && flutter build web --release && cd ..
-  docker buildx build --platform linux/amd64 \
-    -t docker.io/chatflow/frontend:latest \
-    -t docker.io/chatflow/frontend:$BUILD_TAG \
-    --load frontend/
-
-  # Elasticsearch with Nori (no BUILD_TAG — rarely changes)
-  echo "Building elasticsearch..."
-  docker buildx build --platform linux/amd64 -t docker.io/chatflow/elasticsearch:latest --load elasticsearch/
-
-  # Save all images (include BUILD_TAG variants so containerd has them)
-  echo "Saving images..."
-  ALL_IMAGES=""
-  for svc in $SERVICES frontend; do
-    ALL_IMAGES="$ALL_IMAGES docker.io/chatflow/$svc:$BUILD_TAG"
-  done
-  ALL_IMAGES="$ALL_IMAGES docker.io/chatflow/elasticsearch:latest"
-  docker save $ALL_IMAGES | gzip > /tmp/chatflow-all-images.tar.gz
-  echo "Image bundle: $(ls -lh /tmp/chatflow-all-images.tar.gz | awk '{print $5}')"
-
-  # Transfer
-  echo "Transferring to K3s..."
-  scp_k3s /tmp/chatflow-all-images.tar.gz
-
-  # Import into K3s containerd
-  echo "Importing into K3s..."
-  ssh_k3s "sudo k3s ctr images import ~/chatflow-all-images.tar.gz"
-  echo "Images imported."
-  ssh_k3s "sudo k3s ctr images list | grep chatflow"
-
-  # Persist build tag for step_helm
-  echo "$BUILD_TAG" > /tmp/chatflow-build-tag
-  echo "Build tag saved: $BUILD_TAG"
-}
-
-step_helm() {
-  echo "=== Step 4: Helm Deploy ==="
-
-  # Read build tag from step_images (falls back to latest if run standalone)
-  BUILD_TAG=$(cat /tmp/chatflow-build-tag 2>/dev/null || echo "latest")
-  echo "Deploying with image tag: $BUILD_TAG"
-
-  # Copy helm chart to K3s
-  cd "$PROJECT_ROOT"
-  tar czf /tmp/chatflow-helm.tar.gz -C helm chatflow
-  scp_k3s /tmp/chatflow-helm.tar.gz
-
-  ssh_k3s "
-    cd ~ && rm -rf chatflow-chart && mkdir chatflow-chart &&
-    tar xzf chatflow-helm.tar.gz -C chatflow-chart &&
-    cd chatflow-chart/chatflow &&
-    helm dependency update . 2>/dev/null || true &&
-    helm upgrade --install chatflow . -n $NAMESPACE -f values-k3s.yaml \
-      --wait --timeout 5m
-  "
-  # global.image.tag=BUILD_TAG 미사용 이유:
-  # imagePullPolicy:Never 환경에서 부분 빌드 시 미빌드 서비스가 ErrImageNeverPull 발생.
-  # 대신 step_images()에서 빌드된 서비스만 rollout restart로 강제 롤아웃.
-  APP_SERVICES="gateway-service chat-service ai-summary-service search-service frontend"
-  for svc in $APP_SERVICES; do
-    ssh_k3s "kubectl rollout restart deployment/chatflow-$svc -n $NAMESPACE --kubeconfig /etc/rancher/k3s/k3s.yaml 2>/dev/null || true"
-  done
-  ssh_k3s "kubectl rollout status deployment -n $NAMESPACE --timeout=3m --kubeconfig /etc/rancher/k3s/k3s.yaml 2>/dev/null || true"
-  echo "Helm deploy complete."
-  ssh_k3s "kubectl get pods -n $NAMESPACE --kubeconfig /etc/rancher/k3s/k3s.yaml"
 }
 
 case "${1:-all}" in
   infra)   step_infra ;;
   secrets) step_secrets ;;
-  images)  step_images ;;
-  helm)    step_helm ;;
   all)
     step_infra
     step_secrets
-    step_images
-    step_helm
-    echo "=== K3s deployment complete! ==="
     ssh_k3s "kubectl get all -n $NAMESPACE"
     ;;
-  *) echo "Usage: $0 {infra|secrets|images|helm|all}" ;;
+  *) echo "Usage: $0 {infra|secrets|all}" ;;
 esac

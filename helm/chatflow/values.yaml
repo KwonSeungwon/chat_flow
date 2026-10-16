@@ -20,20 +20,10 @@ global:
       secretName: chatflow-elasticsearch-secret
     gemini:
       secretName: chatflow-gemini-secret
+    jwt:
+      secretName: chatflow-jwt-secret
 
   springProfile: prod,langchain4j
-
-# --- Ingress (단일 진입점) ---
-ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-  host: chatflow.example.com
-  tls:
-    enabled: false
-    secretName: chatflow-tls
 
 # --- 서비스별 기본값 ---
 gateway-service:
@@ -63,6 +53,9 @@ chat-service:
     name: chat-service
   service:
     port: 8080
+  fileStorage:
+    size: 5Gi
+    storageClass: local-path
   resources:
     requests:
       cpu: 250m

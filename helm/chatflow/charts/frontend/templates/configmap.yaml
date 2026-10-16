@@ -100,8 +100,19 @@ data:
                 add_header Cache-Control "no-cache";
             }
 
-            # Static assets — long cache (hash filenames, excludes exact-matched above)
-            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+            # Flutter assets and every other JS file keep stable filenames across
+            # builds (AssetManifest, fonts, canvaskit.js, ...), so they must revalidate.
+            location /assets/ {
+                add_header Cache-Control "no-cache, must-revalidate";
+            }
+            location ~* \.js$ {
+                add_header Cache-Control "no-cache, no-store, must-revalidate";
+                add_header Pragma "no-cache";
+                expires 0;
+            }
+
+            # CanvasKit wasm is versioned by engine hash — only file safe to cache long
+            location ~* ^/canvaskit/.*\.wasm$ {
                 expires 1y;
                 add_header Cache-Control "public, immutable";
             }

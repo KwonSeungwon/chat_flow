@@ -92,8 +92,6 @@ logging:
     org.apache.kafka: WARN
   pattern:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: /var/log/chatflow/ai-summary-service.log
   logback:
     rollingpolicy:
       max-file-size: 100MB

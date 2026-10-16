@@ -114,7 +114,7 @@ spec:
                 name: {{ include "chat-service.fullname" . }}
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             initialDelaySeconds: 30
             timeoutSeconds: 5
@@ -122,13 +122,13 @@ spec:
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             periodSeconds: 15
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: http
             periodSeconds: 10
             failureThreshold: 3

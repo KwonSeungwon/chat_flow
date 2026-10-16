@@ -38,4 +38,4 @@ Open PRs from `feature/*`, `refactor/*`, `hotfix/*`, or release branches into `d
 
 ## Security & Configuration Tips
 
-Do not commit real secrets. Use `.env.example` and `.env.prod.example` as templates, and keep local credentials in ignored environment files. Treat Firebase, JWT, database, Kafka, Elasticsearch, and AI provider settings as sensitive configuration.
+Do not commit real secrets. Use `.env.example` as the template, and keep local credentials in ignored environment files. Treat Firebase, JWT, database, Kafka, Elasticsearch, and AI provider settings as sensitive configuration.

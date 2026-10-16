@@ -34,7 +34,6 @@ Producer가 발행하는 DTO와 각 Consumer가 역직렬화하는 타입을 비
 
 체크 항목:
 - [ ] `chat-messages`: Chat Service producer DTO ↔ Search Service consumer 타입
-- [ ] `ai-summary-requests`: Chat Service → AI Summary consumer 타입
 - [ ] `ai-summaries`: AI Summary → Search Service consumer 타입
 
 ### Area 3: STOMP 토픽 경로 일관성

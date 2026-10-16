@@ -38,15 +38,14 @@ gh workflow run deploy-k3s.yml -f service=<service> -f tag=sha-<full-sha>
 gh run watch
 ```
 
-## 레거시 경로 — 로컬 cross-build (Docker daemon 필요할 때만)
+## 클러스터 부트스트랩 (이미지 배포 아님)
 
 ```bash
-./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
-./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import (amd64 크로스 빌드 → scp → k3s ctr import)
-./scripts/deploy-k3s.sh helm     # Helm 배포만 (helm/chatflow, values-k3s.yaml)
+./scripts/deploy-k3s.sh infra    # k8s/infra/k3s-infra.yaml 적용
+./scripts/deploy-k3s.sh secrets  # 없는 Secret만 생성 (DEPLOY_* env 4종 필수)
 ```
 
-로컬 Docker Desktop daemon이 hang이면 이 경로 전체가 막힌다 — GH Actions 경로를 우선하라.
+로컬 cross-build 경로(`images`/`helm`)는 제거됐다 — 이미지 배포는 위 GH Actions 경로만 쓴다.
 
 ## 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 
@@ -103,8 +102,3 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 | 프론트 흰 화면/구버전 | Cloudflare 캐시 | 캐시 퍼지 재실행 |
 | helm upgrade 후 이미지 회귀 | `kubectl set image` 드리프트 | `values-k3s.yaml` 태그를 실제 배포 태그로 갱신 후 upgrade |
 | STOMP 404 | Gateway `/ws-native` 라우트 누락 | `application-prod.yml` 라우트 + SecurityConfig `permitAll()` 확인 |
-
-## 레거시 참고 (사용 금지)
-
-`docker-compose.prod.yml`, `scripts/deploy-ec2.sh`, `.env.prod.example`은 EC2 시절 유물이다.
-2026-04 K3s 이관 이후 실제 배포에 쓰이지 않는다 — 절차를 이 파일들 기준으로 안내하지 말 것.
