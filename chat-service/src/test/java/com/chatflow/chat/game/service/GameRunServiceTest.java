@@ -509,6 +509,33 @@ class GameRunServiceTest {
     }
 
     @Test
+    void questionRejectedWhileQueued_isNotServed() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        Long queued = state(runId).getNormalQueue().get(0);
+        reject(queued);
+
+        answerCorrect(runId);
+
+        assertThat(state(runId).getCurrentQuestionId()).isNotEqualTo(queued);
+    }
+
+    @Test
+    void currentQuestionRejected_nextServesAnApprovedOne() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        Long current = state(runId).getCurrentQuestionId();
+        reject(current);
+
+        NextEncounter encounter = service.next(USER, runId);
+
+        assertThat(encounter.question().id()).isNotEqualTo(current);
+        assertThat(questionRepository.findById(encounter.question().id()).orElseThrow().getStatus())
+                .isEqualTo(GameQuestionStatus.APPROVED);
+        assertThat(state(runId).getCurrentQuestionId()).isEqualTo(encounter.question().id());
+    }
+
+    @Test
     void sameSeqTwice_returnsStoredResult() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
@@ -619,6 +646,12 @@ class GameRunServiceTest {
         int nextSeq = state(runId).getSeq() + 1;
         assertThatThrownBy(() -> service.answer(USER, "앨리스", runId, new AnswerRequest(nextSeq, 0)))
                 .isInstanceOfSatisfying(GameException.class, e -> assertThat(e.getCode()).isEqualTo("RUN_EXPIRED"));
+    }
+
+    private void reject(Long questionId) {
+        GameQuestion q = questionRepository.findById(questionId).orElseThrow();
+        q.setStatus(GameQuestionStatus.REJECTED);
+        questionRepository.saveAndFlush(q);
     }
 
     private RunState state(String runId) {

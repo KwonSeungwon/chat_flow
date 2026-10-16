@@ -9,6 +9,7 @@ import com.chatflow.chat.game.entity.GameMonster;
 import com.chatflow.chat.game.entity.GameProgress;
 import com.chatflow.chat.game.entity.GameProgressId;
 import com.chatflow.chat.game.entity.GameQuestion;
+import com.chatflow.chat.game.entity.GameQuestionStatus;
 import com.chatflow.chat.game.entity.GameTopic;
 import com.chatflow.chat.game.exception.GameException;
 import com.chatflow.chat.game.repository.GameAnswerRepository;
@@ -138,6 +139,12 @@ public class GameRunService {
         if (state.isFinished()) throw runExpired();
         touch(runId);
         GameQuestion question = question(state.getCurrentQuestionId());
+        if (question.getStatus() != GameQuestionStatus.APPROVED) {
+            // rejected after it was queued: serve an approved one instead
+            state.setCurrentQuestionId(takeNext(state));
+            save(state);
+            question = question(state.getCurrentQuestionId());
+        }
         GameTopic topic = topicRepository.findById(question.getTopicId()).orElseThrow();
         GameMonster monster = state.getPhase() == RunState.Phase.BOSS
                 ? monsterRepository.findByDungeonIdAndBossTrue(state.getDungeonId()).orElse(null)
@@ -297,22 +304,26 @@ public class GameRunService {
         });
     }
 
-    /** Next unanswered id from the phase queue, or a fresh draw when the queue has none left. */
+    /**
+     * Next unanswered, still-approved id from the phase queue, or a fresh draw when the queue has
+     * none left. Questions rejected since the run started are skipped.
+     */
     private Long takeNext(RunState state) {
+        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+        Set<Long> approved = Set.copyOf(pool);
         List<Long> queue = state.getPhase() == RunState.Phase.BOSS ? state.getBossQueue() : state.getNormalQueue();
         while (!queue.isEmpty()) {
             Long id = queue.remove(0);
-            if (!state.getAnsweredIds().contains(id)) return id;
+            if (!state.getAnsweredIds().contains(id) && approved.contains(id)) return id;
         }
-        return draw(state);
+        return draw(state, pool);
     }
 
     /**
      * Random approved question not yet answered in this run. Only when every question has been
      * answered are ids reused, and even then never the question just answered (if there is another).
      */
-    private Long draw(RunState state) {
-        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+    private Long draw(RunState state, List<Long> pool) {
         List<Long> candidates = pool.stream().filter(id -> !state.getAnsweredIds().contains(id)).toList();
         if (candidates.isEmpty()) {
             candidates = pool.size() >= 2
