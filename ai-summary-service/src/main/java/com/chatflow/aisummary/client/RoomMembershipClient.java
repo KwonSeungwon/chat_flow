@@ -32,7 +32,7 @@ public class RoomMembershipClient {
     @Autowired
     public RoomMembershipClient(
             RestClient.Builder builder,
-            @Value("${chatflow.chat-service.url:http://chat-service:8080}") String baseUrl,
+            @Value("${chatflow.chat-service.url:http://localhost:8080}") String baseUrl,
             @Value("${GATEWAY_INTERNAL_SECRET:}") String internalSecret) {
         this(builder.baseUrl(baseUrl).requestFactory(timeoutRequestFactory()).build(), internalSecret);
     }

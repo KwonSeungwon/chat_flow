@@ -63,11 +63,7 @@ public class AiSummaryService {
         this.geminiExecutor = geminiExecutor;
     }
 
-    // The AI_SUMMARY_REQUESTS topic listener was removed — MessageSenderService
-    // publishes long CHAT messages to BOTH chat-messages and ai-summary-requests,
-    // so listening on both buffered every long message twice (the 10-message
-    // trigger fired after 5 real messages, summary prompt had duplicates).
-    // chat-messages alone covers every CHAT message.
+    // Only chat-messages is consumed: it already carries every CHAT message.
 
     @KafkaListener(topics = KafkaTopics.CHAT_MESSAGES)
     public void handleChatMessage(String messageJson) {
