@@ -82,6 +82,10 @@ class AdminGameApi {
       return QuestionPage(items: items, total: total);
     } on DioException catch (e) {
       throw _mapError(e);
+    } on TypeError catch (_) {
+      throw _parseError();
+    } on FormatException catch (_) {
+      throw _parseError();
     }
   }
 
@@ -110,8 +114,15 @@ class AdminGameApi {
       return GameQuestion.fromJson(map);
     } on DioException catch (e) {
       throw _mapError(e);
+    } on TypeError catch (_) {
+      throw _parseError();
+    } on FormatException catch (_) {
+      throw _parseError();
     }
   }
+
+  static AdminGameApiException _parseError() =>
+      AdminGameApiException(code: 'PARSE_ERROR', message: '응답 형식 오류');
 
   static AdminGameApiException _mapError(DioException e) {
     final data = e.response?.data;

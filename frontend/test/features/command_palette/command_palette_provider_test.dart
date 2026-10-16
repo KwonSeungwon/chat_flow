@@ -35,8 +35,8 @@ void main() {
 
     test('substring scoring: earlier match scores higher', () {
       final actions = [
-        GoToRoomAction(roomId: '1', roomName: '회의-방'),    // '방' at index 3
-        GoToRoomAction(roomId: '2', roomName: '방-회의'),    // '방' at index 0
+        GoToRoomAction(roomId: '1', roomName: '회의-방'), // '방' at index 3
+        GoToRoomAction(roomId: '2', roomName: '방-회의'), // '방' at index 0
         GoToRoomAction(roomId: '3', roomName: '큰-방-모임'), // '방' at index 2
       ];
 

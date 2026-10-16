@@ -8,15 +8,29 @@ void main() {
     });
 
     test('unwraps {data: [...]}', () {
-      expect(apiResponseList({'data': [1, 2]}), [1, 2]);
+      expect(
+          apiResponseList({
+            'data': [1, 2]
+          }),
+          [1, 2]);
     });
 
     test('unwraps Spring Page {content: [...]}', () {
-      expect(apiResponseList({'content': [9]}), [9]);
+      expect(
+          apiResponseList({
+            'content': [9]
+          }),
+          [9]);
     });
 
     test('unwraps {data: {content: [...]}}', () {
-      expect(apiResponseList({'data': {'content': [5]}}), [5]);
+      expect(
+          apiResponseList({
+            'data': {
+              'content': [5]
+            }
+          }),
+          [5]);
     });
 
     test('returns empty list for null/malformed', () {
@@ -27,7 +41,11 @@ void main() {
 
   group('apiResponseField', () {
     test('reads field from {data: {...}} envelope', () {
-      expect(apiResponseField<Object>({'data': {'id': 7}}, 'id'), 7);
+      expect(
+          apiResponseField<Object>({
+            'data': {'id': 7}
+          }, 'id'),
+          7);
     });
     test('reads field from bare map (no data wrapper)', () {
       expect(apiResponseField<Object>({'id': 7}, 'id'), 7);

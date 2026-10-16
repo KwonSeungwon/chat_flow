@@ -70,8 +70,8 @@ void main() {
     test('sends PATCH with role body', () async {
       mock.responseData = {};
       await api.changeRole('room-1', 'u2', RoomRole.moderator);
-      expect(mock.captured.first.path,
-          '/api/chat/rooms/room-1/members/u2/role');
+      expect(
+          mock.captured.first.path, '/api/chat/rooms/room-1/members/u2/role');
       expect(mock.captured.first.method, 'PATCH');
       expect(mock.captured.first.data, {'role': 'MODERATOR'});
     });
@@ -82,8 +82,7 @@ void main() {
       mock.responseData = null;
       mock.statusCode = 204;
       await api.kickMember('room-1', 'u3');
-      expect(
-          mock.captured.first.path, '/api/chat/rooms/room-1/members/u3');
+      expect(mock.captured.first.path, '/api/chat/rooms/room-1/members/u3');
       expect(mock.captured.first.method, 'DELETE');
     });
   });
@@ -92,8 +91,8 @@ void main() {
     test('sends POST with minutes and returns mutedUntil', () async {
       mock.responseData = {'mutedUntil': '2099-12-31T23:59:59.000'};
       final result = await api.muteMember('room-1', 'u2', 30);
-      expect(mock.captured.first.path,
-          '/api/chat/rooms/room-1/members/u2/mute');
+      expect(
+          mock.captured.first.path, '/api/chat/rooms/room-1/members/u2/mute');
       expect(mock.captured.first.method, 'POST');
       expect(mock.captured.first.data, {'minutes': 30});
       expect(result.year, 2099);
@@ -105,8 +104,8 @@ void main() {
       mock.responseData = null;
       mock.statusCode = 204;
       await api.unmuteMember('room-1', 'u2');
-      expect(mock.captured.first.path,
-          '/api/chat/rooms/room-1/members/u2/mute');
+      expect(
+          mock.captured.first.path, '/api/chat/rooms/room-1/members/u2/mute');
       expect(mock.captured.first.method, 'DELETE');
     });
   });

@@ -47,8 +47,13 @@ void main() {
 
     test('fromJson이 localId를 올바르게 파싱', () {
       final json = {
-        'chatRoomId': 'r', 'userId': 'u', 'username': 'n',
-        'content': 'c', 'timestamp': 't', 'type': 'CHAT', 'localId': 'local-99',
+        'chatRoomId': 'r',
+        'userId': 'u',
+        'username': 'n',
+        'content': 'c',
+        'timestamp': 't',
+        'type': 'CHAT',
+        'localId': 'local-99',
       };
       final msg = ChatMessage.fromJson(json);
       expect(msg.localId, 'local-99');

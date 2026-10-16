@@ -57,16 +57,20 @@ void main() {
       final missing = ScheduledMessage.fromJson({'content': 'no id key'});
       expect(missing.id, 0);
 
-      final nullId = ScheduledMessage.fromJson({'id': null, 'content': 'null id'});
+      final nullId =
+          ScheduledMessage.fromJson({'id': null, 'content': 'null id'});
       expect(nullId.id, 0);
 
-      final stringId = ScheduledMessage.fromJson({'id': '99', 'content': 'string id'});
+      final stringId =
+          ScheduledMessage.fromJson({'id': '99', 'content': 'string id'});
       expect(stringId.id, 99);
 
-      final badString = ScheduledMessage.fromJson({'id': 'abc', 'content': 'non-numeric string'});
+      final badString = ScheduledMessage.fromJson(
+          {'id': 'abc', 'content': 'non-numeric string'});
       expect(badString.id, 0);
 
-      final boolId = ScheduledMessage.fromJson({'id': true, 'content': 'bool id'});
+      final boolId =
+          ScheduledMessage.fromJson({'id': true, 'content': 'bool id'});
       expect(boolId.id, 0);
     });
 
@@ -92,7 +96,8 @@ void main() {
         'scheduledAt': 'garbage',
       });
       expect(
-        m.scheduledAtDateTime.isAfter(before.subtract(const Duration(seconds: 1))),
+        m.scheduledAtDateTime
+            .isAfter(before.subtract(const Duration(seconds: 1))),
         true,
       );
     });

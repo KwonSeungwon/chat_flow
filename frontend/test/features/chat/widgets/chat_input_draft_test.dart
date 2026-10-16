@@ -76,7 +76,8 @@ void main() {
       expect(textField.controller!.text, isEmpty);
     });
 
-    testWidgets('방 B에 기존 draft가 있을 때 방 A에서 전환하면 방 B draft가 복원된다', (tester) async {
+    testWidgets('방 B에 기존 draft가 있을 때 방 A에서 전환하면 방 B draft가 복원된다',
+        (tester) async {
       SharedPreferences.setMockInitialValues({
         'chatflow.draft.room-B': 'saved draft B',
       });

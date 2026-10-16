@@ -16,7 +16,8 @@ List<String> highlightedAsMe(String content, {String? me}) =>
 void main() {
   group('findMentionSpans — general', () {
     test('finds ascii, Hangul, dotted and underscored names', () {
-      expect(highlighted('hi @bob and @김간호사, also @under_score and @phill.park'),
+      expect(
+          highlighted('hi @bob and @김간호사, also @under_score and @phill.park'),
           ['@bob', '@김간호사', '@under_score', '@phill.park']);
     });
 
@@ -105,11 +106,13 @@ void main() {
     });
 
     test('mixes me and others in one message, in order', () {
-      final spans = findMentionSpans('@alice @Phill Park @bob', me: 'Phill Park');
+      final spans =
+          findMentionSpans('@alice @Phill Park @bob', me: 'Phill Park');
       expect(spans.map((s) => s.isMe), [false, true, false]);
     });
 
-    test('a dotted longer name still flags me — the roster is not known here', () {
+    test('a dotted longer name still flags me — the roster is not known here',
+        () {
       // Documented limitation: with members "phill" and "phill.park" the server
       // resolves "@phill.park" to phill.park, but this helper has no roster to
       // do longest-match against, so it lights up for me="phill" too. isMe is a

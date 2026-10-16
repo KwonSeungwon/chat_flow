@@ -94,4 +94,27 @@ void main() {
     mock.status = 403;
     expect(await isGameAdmin(api), isFalse);
   });
+
+  test('isGameAdmin false on network error', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://localhost'));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (o, h) {
+      h.reject(DioException(
+          requestOptions: o, type: DioExceptionType.connectionError));
+    }));
+    expect(await isGameAdmin(AdminGameApi(dio)), isFalse);
+  });
+
+  test('malformed payload maps to AdminGameApiException', () async {
+    mock.data = {
+      'data': {
+        'items': [
+          {'id': 'x'}
+        ],
+        'total': 1
+      }
+    };
+    await expectLater(api.listQuestions(status: 'DRAFT'),
+        throwsA(isA<AdminGameApiException>()));
+    expect(await isGameAdmin(api), isFalse);
+  });
 }

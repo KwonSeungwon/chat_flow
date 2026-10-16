@@ -13,7 +13,8 @@ void main() {
     test('fromString parses case-insensitively', () {
       expect(ReportReasonX.fromString('SPAM'), ReportReason.spam);
       expect(ReportReasonX.fromString('harassment'), ReportReason.harassment);
-      expect(ReportReasonX.fromString('Inappropriate'), ReportReason.inappropriate);
+      expect(ReportReasonX.fromString('Inappropriate'),
+          ReportReason.inappropriate);
     });
 
     test('fromString falls back to other for unknown', () {

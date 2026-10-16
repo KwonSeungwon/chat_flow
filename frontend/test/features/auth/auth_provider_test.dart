@@ -100,8 +100,9 @@ class _NoAvatarAdapter extends _Adapter {
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     return ResponseBody.fromString(
-        '{"token":"t2","userId":"u2","role":"NURSE"}', 200, headers: {
-      Headers.contentTypeHeader: [Headers.jsonContentType],
-    });
+        '{"token":"t2","userId":"u2","role":"NURSE"}', 200,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        });
   }
 }

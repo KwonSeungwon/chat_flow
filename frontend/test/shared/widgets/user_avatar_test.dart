@@ -6,13 +6,16 @@ import 'package:chatflow/shared/widgets/user_avatar.dart';
 void main() {
   Widget _wrap(Widget w) => MaterialApp(home: Scaffold(body: Center(child: w)));
 
-  testWidgets('falls back to initial letter when imageUrl is null', (tester) async {
-    await tester.pumpWidget(_wrap(const UserAvatar(fallbackName: 'Alice', imageUrl: null)));
+  testWidgets('falls back to initial letter when imageUrl is null',
+      (tester) async {
+    await tester.pumpWidget(
+        _wrap(const UserAvatar(fallbackName: 'Alice', imageUrl: null)));
     expect(find.text('A'), findsOneWidget);
   });
 
   testWidgets('falls back when imageUrl is empty', (tester) async {
-    await tester.pumpWidget(_wrap(const UserAvatar(fallbackName: 'Bob', imageUrl: '')));
+    await tester
+        .pumpWidget(_wrap(const UserAvatar(fallbackName: 'Bob', imageUrl: '')));
     expect(find.text('B'), findsOneWidget);
   });
 

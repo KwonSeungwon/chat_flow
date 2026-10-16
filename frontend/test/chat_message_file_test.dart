@@ -82,7 +82,8 @@ void main() {
     });
 
     test('application/zip → false', () {
-      final msg = _make(fileContentType: 'application/zip', fileName: 'data.zip');
+      final msg =
+          _make(fileContentType: 'application/zip', fileName: 'data.zip');
       expect(msg.isPdfFile, isFalse);
     });
 

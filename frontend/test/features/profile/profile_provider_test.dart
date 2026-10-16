@@ -51,7 +51,8 @@ void main() {
     addTearDown(container.dispose);
   });
 
-  Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+  Future<void> settle() =>
+      Future<void>.delayed(const Duration(milliseconds: 20));
 
   test('userChange_refetches', () async {
     final sub = container.listen(profileProvider, (_, __) {});

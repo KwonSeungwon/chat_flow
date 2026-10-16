@@ -10,6 +10,7 @@ class _Mock extends Interceptor {
   final List<RequestOptions> captured = [];
   int listStatus = 200;
   int patchStatus = 200;
+  bool approvedHasItem = false;
 
   Map<String, dynamic> q(int id, String status) => {
         'id': id,
@@ -28,12 +29,14 @@ class _Mock extends Interceptor {
     int code = o.method == 'GET' ? listStatus : patchStatus;
     Object? data;
     if (o.method == 'GET') {
+      final st = o.queryParameters['status'];
+      final items = st == 'DRAFT'
+          ? [q(1, 'DRAFT')]
+          : (st == 'APPROVED' && approvedHasItem)
+              ? [q(1, 'APPROVED')]
+              : <Map<String, dynamic>>[];
       data = {
-        'data': {
-          'items':
-              o.queryParameters['status'] == 'DRAFT' ? [q(1, 'DRAFT')] : [],
-          'total': o.queryParameters['status'] == 'DRAFT' ? 1 : 0,
-        }
+        'data': {'items': items, 'total': items.length}
       };
     } else if (code == 409) {
       data = {'status': 409, 'code': 'DUPLICATE_QUESTION', 'message': 'dup'};
@@ -62,6 +65,9 @@ Widget _app(_Mock mock) {
 
 void main() {
   testWidgets('approve sends PATCH and removes card', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final mock = _Mock();
     await tester.pumpWidget(_app(mock));
     await tester.pumpAndSettle();
@@ -77,6 +83,9 @@ void main() {
   });
 
   testWidgets('403 shows admin-only message', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final mock = _Mock()..listStatus = 403;
     await tester.pumpWidget(_app(mock));
     await tester.pumpAndSettle();
@@ -84,6 +93,9 @@ void main() {
   });
 
   testWidgets('409 on approve shows snackbar and keeps card', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final mock = _Mock()..patchStatus = 409;
     await tester.pumpWidget(_app(mock));
     await tester.pumpAndSettle();
@@ -94,6 +106,9 @@ void main() {
   });
 
   testWidgets('edit saves content via PATCH', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final mock = _Mock();
     await tester.pumpWidget(_app(mock));
     await tester.pumpAndSettle();
@@ -106,5 +121,97 @@ void main() {
     expect((patch.data as Map)['stem'], '새 문제');
     expect((patch.data as Map)['choices'], ['가', '나', '다', '라']);
     expect((patch.data as Map)['answerIndex'], 1);
+  });
+
+  testWidgets('reject sends REJECTED and removes card', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final mock = _Mock();
+    await tester.pumpWidget(_app(mock));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('반려'));
+    await tester.pumpAndSettle();
+    final patch = mock.captured.firstWhere((o) => o.method == 'PATCH');
+    expect(patch.data, {'status': 'REJECTED'});
+    expect(find.text('문제1'), findsNothing);
+  });
+
+  testWidgets('status change reloads other tabs', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final mock = _Mock();
+    await tester.pumpWidget(_app(mock));
+    await tester.pumpAndSettle();
+    int approvedGets() => mock.captured
+        .where((o) =>
+            o.method == 'GET' && o.queryParameters['status'] == 'APPROVED')
+        .length;
+    await tester.tap(find.text('승인됨'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('검수 대기'));
+    await tester.pumpAndSettle();
+    final before = approvedGets();
+    expect(before, 1);
+    await tester.tap(find.text('승인'));
+    await tester.pumpAndSettle();
+    expect(approvedGets(), before + 1);
+  });
+
+  testWidgets('editing an APPROVED question removes it (reset to DRAFT)',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final mock = _Mock()..approvedHasItem = true;
+    await tester.pumpWidget(_app(mock));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('승인됨'));
+    await tester.pumpAndSettle();
+    expect(find.text('문제1'), findsOneWidget);
+    await tester.tap(find.text('수정'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '문제'), '고침');
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    expect(find.text('고침'), findsNothing);
+    expect(find.text('문제1'), findsNothing);
+  });
+
+  testWidgets('validation errors shown and save disabled', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final mock = _Mock();
+    await tester.pumpWidget(_app(mock));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('수정'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '보기 2'), '   ');
+    await tester.pumpAndSettle();
+    expect(find.text('내용을 입력하세요'), findsOneWidget);
+    final save =
+        tester.widget<FilledButton>(find.widgetWithText(FilledButton, '저장'));
+    expect(save.onPressed, isNull);
+    await tester.tap(find.text('저장'), warnIfMissed: false);
+    expect(mock.captured.where((o) => o.method == 'PATCH'), isEmpty);
+  });
+
+  testWidgets('changing the radio sends new answerIndex', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final mock = _Mock();
+    await tester.pumpWidget(_app(mock));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('수정'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Radio<int>).at(3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    final patch = mock.captured.firstWhere((o) => o.method == 'PATCH');
+    expect((patch.data as Map)['answerIndex'], 3);
   });
 }

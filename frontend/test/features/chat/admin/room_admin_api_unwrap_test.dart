@@ -63,11 +63,19 @@ void main() {
     });
 
     test('returns 0 when reportId is not numeric', () {
-      expect(parseReportId({'data': {'reportId': 'not-a-number'}}), 0);
+      expect(
+          parseReportId({
+            'data': {'reportId': 'not-a-number'}
+          }),
+          0);
     });
 
     test('coerces num to int (handles JSON double like 42.0)', () {
-      expect(parseReportId({'data': {'reportId': 42.0}}), 42);
+      expect(
+          parseReportId({
+            'data': {'reportId': 42.0}
+          }),
+          42);
     });
   });
 }

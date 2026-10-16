@@ -7,10 +7,11 @@ void main() {
   Future<void> openDialog(WidgetTester tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: Builder(builder: (ctx) => ElevatedButton(
-          onPressed: () => showMuteCustomTimeDialog(ctx),
-          child: const Text('open'),
-        )),
+        body: Builder(
+            builder: (ctx) => ElevatedButton(
+                  onPressed: () => showMuteCustomTimeDialog(ctx),
+                  child: const Text('open'),
+                )),
       ),
     ));
     await tester.tap(find.text('open'));
@@ -21,12 +22,13 @@ void main() {
     int? result;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: Builder(builder: (ctx) => ElevatedButton(
-          onPressed: () async {
-            result = await showMuteCustomTimeDialog(ctx);
-          },
-          child: const Text('open'),
-        )),
+        body: Builder(
+            builder: (ctx) => ElevatedButton(
+                  onPressed: () async {
+                    result = await showMuteCustomTimeDialog(ctx);
+                  },
+                  child: const Text('open'),
+                )),
       ),
     ));
     await tester.tap(find.text('open'));
@@ -59,12 +61,13 @@ void main() {
     int? result = -1;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: Builder(builder: (ctx) => ElevatedButton(
-          onPressed: () async {
-            result = await showMuteCustomTimeDialog(ctx);
-          },
-          child: const Text('open'),
-        )),
+        body: Builder(
+            builder: (ctx) => ElevatedButton(
+                  onPressed: () async {
+                    result = await showMuteCustomTimeDialog(ctx);
+                  },
+                  child: const Text('open'),
+                )),
       ),
     ));
     await tester.tap(find.text('open'));

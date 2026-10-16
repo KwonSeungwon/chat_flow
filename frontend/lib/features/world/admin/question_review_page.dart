@@ -42,10 +42,11 @@ class _QuestionListState extends ConsumerState<_QuestionList>
   static const _pageSize = 20;
   final List<GameQuestion> _items = [];
   int _total = 0;
-  int _page = 0;
+  bool _exhausted = false;
   bool _loading = false;
   bool _forbidden = false;
   String? _error;
+  int _seenRevision = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -53,9 +54,22 @@ class _QuestionListState extends ConsumerState<_QuestionList>
   @override
   void initState() {
     super.initState();
+    _seenRevision = ref.read(reviewRevisionProvider);
     _load();
   }
 
+  Future<void> _reload() async {
+    _items.clear();
+    _total = 0;
+    _exhausted = false;
+    _forbidden = false;
+    await _load();
+  }
+
+  /// Items are ordered by id, so the loaded items are a prefix of the server
+  /// list even after local removals. Fetch the page that contains offset
+  /// `_items.length` and merge by id, which avoids skipping or repeating
+  /// items when earlier ones were removed.
   Future<void> _load() async {
     if (_loading) return;
     setState(() {
@@ -63,14 +77,17 @@ class _QuestionListState extends ConsumerState<_QuestionList>
       _error = null;
     });
     try {
-      final res = await ref
-          .read(adminGameApiProvider)
-          .listQuestions(status: widget.status, page: _page, size: _pageSize);
+      final res = await ref.read(adminGameApiProvider).listQuestions(
+          status: widget.status,
+          page: _items.length ~/ _pageSize,
+          size: _pageSize);
       if (!mounted) return;
       setState(() {
-        _items.addAll(res.items);
+        final known = _items.map((e) => e.id).toSet();
+        final fresh = res.items.where((e) => !known.contains(e.id)).toList();
+        _items.addAll(fresh);
         _total = res.total;
-        _page++;
+        _exhausted = fresh.isEmpty;
       });
     } on AdminGameApiException catch (e) {
       if (!mounted) return;
@@ -108,7 +125,8 @@ class _QuestionListState extends ConsumerState<_QuestionList>
             explanation: explanation,
             status: status,
           );
-      if (!mounted) return true;
+      if (!mounted) return false;
+      final changedStatus = updated.status != widget.status;
       setState(() {
         final i = _items.indexWhere((e) => e.id == q.id);
         if (i < 0) return;
@@ -119,6 +137,11 @@ class _QuestionListState extends ConsumerState<_QuestionList>
           if (_total > 0) _total--;
         }
       });
+      if (changedStatus) {
+        final rev = ref.read(reviewRevisionProvider.notifier).state + 1;
+        _seenRevision = rev;
+        ref.read(reviewRevisionProvider.notifier).state = rev;
+      }
       return true;
     } on AdminGameApiException catch (e) {
       if (!mounted) return false;
@@ -130,6 +153,12 @@ class _QuestionListState extends ConsumerState<_QuestionList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    ref.listen<int>(reviewRevisionProvider, (_, rev) {
+      if (rev != _seenRevision) {
+        _seenRevision = rev;
+        _reload();
+      }
+    });
     if (_forbidden) {
       return const Center(child: Text('관리자만 볼 수 있습니다'));
     }
@@ -148,7 +177,7 @@ class _QuestionListState extends ConsumerState<_QuestionList>
       }
       return const Center(child: Text('문제가 없습니다'));
     }
-    final hasMore = _items.length < _total;
+    final hasMore = !_exhausted && _items.length < _total;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -209,7 +238,26 @@ class _QuestionCardState extends State<_QuestionCard> {
     _explanation = TextEditingController(text: q.explanation);
     _choices = [for (final c in q.choices) TextEditingController(text: c)];
     _answer = q.answerIndex;
+    for (final c in [_stem, _explanation, ..._choices]) {
+      c.addListener(_onText);
+    }
   }
+
+  void _onText() {
+    if (_editing) setState(() {});
+  }
+
+  String? _fieldError(TextEditingController c, int max) {
+    final t = c.text.trim();
+    if (t.isEmpty) return '내용을 입력하세요';
+    if (t.length > max) return '$max자 이하로 입력하세요';
+    return null;
+  }
+
+  bool get _valid =>
+      _fieldError(_stem, 500) == null &&
+      _fieldError(_explanation, 1000) == null &&
+      _choices.every((c) => _fieldError(c, 200) == null);
 
   @override
   void dispose() {
@@ -328,7 +376,9 @@ class _QuestionCardState extends State<_QuestionCard> {
       children: [
         TextField(
           controller: _stem,
-          decoration: const InputDecoration(labelText: '문제'),
+          decoration: InputDecoration(
+              labelText: '문제', errorText: _fieldError(_stem, 500)),
+          maxLength: 500,
           maxLines: null,
         ),
         RadioGroup<int>(
@@ -343,7 +393,11 @@ class _QuestionCardState extends State<_QuestionCard> {
                     Expanded(
                       child: TextField(
                         controller: _choices[i],
-                        decoration: InputDecoration(labelText: '보기 ${i + 1}'),
+                        decoration: InputDecoration(
+                          labelText: '보기 ${i + 1}',
+                          errorText: _fieldError(_choices[i], 200),
+                        ),
+                        maxLength: 200,
                       ),
                     ),
                   ],
@@ -353,7 +407,9 @@ class _QuestionCardState extends State<_QuestionCard> {
         ),
         TextField(
           controller: _explanation,
-          decoration: const InputDecoration(labelText: '해설'),
+          decoration: InputDecoration(
+              labelText: '해설', errorText: _fieldError(_explanation, 1000)),
+          maxLength: 1000,
           maxLines: null,
         ),
         const SizedBox(height: 8),
@@ -365,7 +421,7 @@ class _QuestionCardState extends State<_QuestionCard> {
               child: const Text('취소'),
             ),
             FilledButton(
-              onPressed: _busy
+              onPressed: _busy || !_valid
                   ? null
                   : () => _run(
                         () => widget.onSave(
