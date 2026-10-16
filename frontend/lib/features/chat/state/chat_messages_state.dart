@@ -13,8 +13,6 @@ class ChatMessagesState {
   final bool isConnected;
   final bool wasEverConnected;
   final bool isLoadingHistory;
-  final bool isAiLoading;
-  final bool isSummaryLoading;
   final bool hasMoreHistory;
   final String? errorMessage;
   /// messageId → read count (파생값 — readPositions로부터 계산)
@@ -36,8 +34,6 @@ class ChatMessagesState {
     this.isConnected = false,
     this.wasEverConnected = false,
     this.isLoadingHistory = false,
-    this.isAiLoading = false,
-    this.isSummaryLoading = false,
     this.hasMoreHistory = true,
     this.errorMessage,
     this.readCounts = const {},
@@ -55,8 +51,6 @@ class ChatMessagesState {
     bool? isConnected,
     bool? wasEverConnected,
     bool? isLoadingHistory,
-    bool? isAiLoading,
-    bool? isSummaryLoading,
     bool? hasMoreHistory,
     String? errorMessage,
     bool clearErrorMessage = false,
@@ -78,8 +72,6 @@ class ChatMessagesState {
       isConnected: newConnected,
       wasEverConnected: (wasEverConnected ?? this.wasEverConnected) || newConnected,
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
-      isAiLoading: isAiLoading ?? this.isAiLoading,
-      isSummaryLoading: isSummaryLoading ?? this.isSummaryLoading,
       hasMoreHistory: hasMoreHistory ?? this.hasMoreHistory,
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       readCounts: readCounts ?? this.readCounts,

@@ -103,7 +103,7 @@ void main() {
     addTearDown(container.dispose);
   });
 
-  test('cursor_ignoresOlderSummaries', () async {
+  test('cursor_ignoresOlderMergedMessages', () async {
     // 50 history messages from 10:00:00 on, so the room has more history.
     final history = [
       for (var i = 0; i < 50; i++)
@@ -114,10 +114,6 @@ void main() {
       container,
       {
         '/api/chat/rooms/room-1/messages': _ok(history),
-        // A summary older than every history message.
-        '/api/ai-summary/room/room-1': _ok([
-          _msg('s1', '2026-10-16T09:00:00', type: 'AI_SUMMARY'),
-        ]),
         '/api/chat/rooms/room-1/messages/cursor':
             _ok({'messages': [], 'hasMore': false}),
       },
@@ -130,6 +126,8 @@ void main() {
 
     final state = _stateOf(notifier);
     await notifier.joinRoom('room-1');
+    // A message older than every history message (e.g. a fetched thread reply).
+    notifier.mergeMessage(ChatMessage.fromJson(_msg('s1', '2026-10-16T09:00:00')));
     expect(state().messages.first.messageId, 's1');
     await notifier.loadMoreHistory('room-1');
 

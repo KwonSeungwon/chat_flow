@@ -7,7 +7,6 @@ import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
 import '../../features/chat/screens/mentions_screen.dart';
 import '../../features/chat/screens/scheduled_messages_screen.dart';
-import '../../features/search/search_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -80,10 +79,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
         ],
-      ),
-      GoRoute(
-        path: '/search',
-        builder: (context, state) => const SearchPage(),
       ),
       GoRoute(
         path: '/scheduled',
