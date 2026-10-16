@@ -31,7 +31,7 @@ import static org.mockito.Mockito.*;
  * - Subsequent requests (count > 1) skip expire()
  * - Requests exceeding MAX_REQUESTS (10) are rejected with 429 + Retry-After header
  * - Redis failure → fail-open (request passes through to the chain)
- * - X-Forwarded-For header is used to resolve client IP
+ * - CF-Connecting-IP resolves client IP; X-Forwarded-For is ignored
  * - Missing remote address falls back to "unknown"
  */
 @ExtendWith(MockitoExtension.class)
@@ -196,41 +196,56 @@ class LoginRateLimitFilterTest {
         verify(chain).filter(exchange);
     }
 
-    // ── X-Forwarded-For IP resolution ───────────────────────────
+    // ── Client IP resolution (X-Forwarded-For is never trusted) ──
 
     @Test
-    void xForwardedFor_usesFirstIpInChain() {
-        // X-Forwarded-For with multiple proxies → use first IP
-        when(valueOps.increment("rl:login:203.0.113.50")).thenReturn(Mono.just(1L));
-        when(redis.expire(eq("rl:login:203.0.113.50"), any(Duration.class)))
-                .thenReturn(Mono.just(true));
+    void cfConnectingIp_usedAsKey() {
+        when(valueOps.increment("rl:login:203.0.113.50")).thenReturn(Mono.just(2L));
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
-                        .header("X-Forwarded-For", "203.0.113.50, 70.41.3.18, 150.172.238.178")
+                        .header("CF-Connecting-IP", "203.0.113.50")
                         .build());
 
-        StepVerifier.create(filter.filter(exchange, chain))
-                .verifyComplete();
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        // Redis key uses the first IP from X-Forwarded-For
         verify(valueOps).increment("rl:login:203.0.113.50");
-        verify(chain).filter(exchange);
     }
 
     @Test
-    void xForwardedFor_singleIp_usedDirectly() {
-        when(valueOps.increment("rl:login:1.2.3.4")).thenReturn(Mono.just(2L));
+    void loginLimit_rotatingXff_stillLimited() {
+        // 같은 CF-Connecting-IP에서 XFF만 바꿔도 동일 키로 집계되어 429
+        when(valueOps.increment("rl:login:203.0.113.50")).thenReturn(Mono.just(11L));
+
+        for (String spoofed : new String[] {"1.1.1.1", "2.2.2.2", "3.3.3.3"}) {
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.post("/api/auth/login")
+                            .header("CF-Connecting-IP", "203.0.113.50")
+                            .header("X-Forwarded-For", spoofed)
+                            .build());
+
+            StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
+        }
+        verify(valueOps, never()).increment("rl:login:1.1.1.1");
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void xForwardedFor_aloneIsIgnored_fallsBackToRemoteAddress() {
+        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(1L));
+        when(redis.expire(eq("rl:login:127.0.0.1"), any(Duration.class))).thenReturn(Mono.just(true));
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
                         .header("X-Forwarded-For", "1.2.3.4")
+                        .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 12345))
                         .build());
 
-        StepVerifier.create(filter.filter(exchange, chain))
-                .verifyComplete();
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        verify(valueOps).increment("rl:login:1.2.3.4");
+        verify(valueOps).increment("rl:login:127.0.0.1");
     }
 
     // ── Boundary: exactly at limit passes, limit+1 rejects ──────

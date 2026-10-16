@@ -47,13 +47,6 @@ spring:
           uri: http://localhost:8080
           predicates:
             - Path=/api/files/**
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOriginPatterns: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
-            allowCredentials: true
 
   # Valkey Configuration (using Spring Data Redis for compatibility)
   data:
@@ -104,3 +97,8 @@ logging:
   level:
     org.springframework.cloud.gateway: DEBUG
     com.chatflow: DEBUG
+
+# CORS는 CorsConfig(CorsWebFilter) 단일 출처 — 로컬 개발 origin 허용
+chatflow:
+  cors:
+    allowed-origins: "http://localhost:*,http://127.0.0.1:*"

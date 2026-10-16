@@ -21,6 +21,8 @@ import java.util.UUID;
 @Service
 public class AuthService {
 
+    private static final String DEFAULT_ROLE = "NURSE";
+
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
     private final TokenBlacklistService tokenBlacklistService;
@@ -81,7 +83,8 @@ public class AuthService {
                                 new IllegalArgumentException("이미 존재하는 사용자명입니다: " + request.username()));
                     }
                     String userId = UUID.randomUUID().toString();
-                    String role = request.role() != null ? request.role() : "NURSE";
+                    // 클라이언트가 보낸 role은 무시 — 권한 상승 방지 (항상 기본 역할)
+                    String role = DEFAULT_ROLE;
 
                     return Mono.fromCallable(() -> passwordEncoder.encode(request.password()))
                             .subscribeOn(Schedulers.boundedElastic())

@@ -1,6 +1,6 @@
 package com.chatflow.gateway.security;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,13 +15,20 @@ import reactor.core.publisher.Mono;
 
 @Configuration
 @EnableWebFluxSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationWebFilter jwtAuthenticationWebFilter;
-
+    /**
+     * JWT 필터는 @Component로 등록하지 않는다 — WebFilter 빈은 서블릿 체인에 자동 등록되어
+     * Security 체인에서 한 번 더 실행되기 때문. 여기서 한 번만 생성해 Security 체인에만 연결한다.
+     */
     @Bean
-    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+    public SecurityWebFilterChain securityWebFilterChain(
+            ServerHttpSecurity http,
+            JwtUtil jwtUtil,
+            TokenBlacklistService tokenBlacklistService,
+            @Value("${GATEWAY_INTERNAL_SECRET:}") String gatewayInternalSecret) {
+        JwtAuthenticationWebFilter jwtAuthenticationWebFilter =
+                new JwtAuthenticationWebFilter(jwtUtil, tokenBlacklistService, gatewayInternalSecret);
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
@@ -35,12 +42,11 @@ public class SecurityConfig {
                 .authorizeExchange(exchanges -> exchanges
                         // Auth: only unauthenticated endpoints are permitAll
                         .pathMatchers("/api/auth/register", "/api/auth/login", "/api/auth/logout").permitAll()
-                        .pathMatchers("/api/chat/auth/**").permitAll()
                         // Mutation auth endpoints require authentication (blacklist-gated by JwtAuthenticationWebFilter)
                         .pathMatchers(HttpMethod.PUT, "/api/auth/profile", "/api/auth/password").authenticated()
                         .pathMatchers("/ws/**").permitAll()
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
-                        .pathMatchers("/actuator/health").permitAll()
+                        .pathMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .pathMatchers("/api/fallback/**").permitAll()
                         // FCM unsubscribe-all is token-only (the FCM device token identifies the
                         // device; Firebase verifies ownership) and destructive only against the
