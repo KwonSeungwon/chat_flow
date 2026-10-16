@@ -54,8 +54,8 @@ gateway-service:
     enabled: false
 
 chat-service:
-  # 위키 던전 문제 검수 관리자 (users.user_id, 쉼표 구분)
-  gameAdminUserIds: "872af00b-7b62-41ea-be06-dc0b08db5203"
+  # 위키 던전 문제 검수 관리자 (users.user_id, 쉼표 구분): 땅콩, wiki-quiz-bot(업로드 자동화)
+  gameAdminUserIds: "872af00b-7b62-41ea-be06-dc0b08db5203,a3e60e40-5353-41f0-ae63-d8e85951d626"
   enabled: true
   replicaCount: 1
   image:
