@@ -162,7 +162,8 @@ class ChatFlowApp extends ConsumerWidget {
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(fontScale.factor),
             ),
-            child: AppShortcuts(child: child ?? const SizedBox()),
+            child: AppShortcuts(
+                child: AuthHydrationGate(child: child ?? const SizedBox())),
           );
         },
       ),

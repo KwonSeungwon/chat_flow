@@ -62,11 +62,14 @@ class ChatPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
 
-    // Reactive auth guard — redirects to login on 401 or token expiry
+    // Reactive auth guard — redirects to login on 401 or token expiry.
+    // Before hydration the token is simply not read yet: wait, don't redirect.
     if (!auth.isAuthenticated) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go('/login');
-      });
+      if (auth.isHydrated) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) context.go('/login');
+        });
+      }
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
