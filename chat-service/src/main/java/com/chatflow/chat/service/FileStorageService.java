@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -71,6 +72,8 @@ public class FileStorageService {
 
         Path dest = uuidDir.resolve(originalFilename);
         Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
+        // 감지된 content type을 사이드카에 저장 — 다운로드 시 확장자가 아닌 이 값을 사용한다
+        Files.writeString(metaPath(uuid), detectedType, StandardCharsets.UTF_8);
 
         log.info("파일 저장 완료: uuid={}, name={}", uuid, originalFilename);
         return uuid;
@@ -114,10 +117,39 @@ public class FileStorageService {
             throw new IOException("파일을 읽을 수 없습니다.");
         }
 
-        String contentType = Files.probeContentType(filePath);
-        if (contentType == null) contentType = "application/octet-stream";
+        String fileName = filePath.getFileName().toString();
+        return new FileResource(resource, fileName, resolveContentType(uuid, fileName));
+    }
 
-        return new FileResource(resource, filePath.getFileName().toString(), contentType);
+    /** 업로드 시 감지된 content type. 사이드카가 없는 레거시 파일은 허용 목록에 속할 때만 이름 기반 추정값 사용. */
+    public String getContentType(String uuid) throws IOException {
+        Path uuidDir = resolveUuidDir(uuid);
+        try (var stream = Files.list(uuidDir)) {
+            String name = stream.filter(p -> !Files.isDirectory(p)).findFirst()
+                    .orElseThrow(() -> new IOException("파일을 찾을 수 없습니다: " + uuid))
+                    .getFileName().toString();
+            return resolveContentType(uuid, name);
+        }
+    }
+
+    private String resolveContentType(String uuid, String fileName) throws IOException {
+        Path meta = metaPath(uuid);
+        if (Files.isRegularFile(meta)) {
+            String stored = Files.readString(meta, StandardCharsets.UTF_8).trim();
+            if (config.getAllowedMimeTypes().contains(stored)) {
+                return stored;
+            }
+        } else {
+            String guessed = TIKA.detect(fileName);
+            if (config.getAllowedMimeTypes().contains(guessed)) {
+                return guessed;
+            }
+        }
+        return "application/octet-stream";
+    }
+
+    private Path metaPath(String uuid) throws IOException {
+        return resolveUuidDir(uuid).resolveSibling(uuid + ".meta").normalize();
     }
 
     public record FileResource(Resource resource, String fileName, String contentType) {}
