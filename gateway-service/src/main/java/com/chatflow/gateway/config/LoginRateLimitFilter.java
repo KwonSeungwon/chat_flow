@@ -4,7 +4,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -12,7 +14,7 @@ import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.List;
 
 /**
  * 로그인/회원가입 경로 전용 IP 기반 레이트 리밋 (Fixed Window, Redis 기반).
@@ -31,6 +33,13 @@ public class LoginRateLimitFilter implements WebFilter {
     private static final int WINDOW_SECONDS = 60;
     private static final int MAX_REQUESTS = 10;
 
+    /** INCR와 최초 EXPIRE를 한 번에 실행 — 둘 사이에서 끊겨 TTL 없는 키가 남는 일을 막는다. */
+    public static final RedisScript<Long> INCR_EXPIRE_SCRIPT = RedisScript.of(
+            "local c = redis.call('INCR', KEYS[1])\n" +
+            "if c == 1 or redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end\n" +
+            "return c",
+            Long.class);
+
     private final ReactiveStringRedisTemplate redis;
 
     public LoginRateLimitFilter(ReactiveStringRedisTemplate redis) {
@@ -39,7 +48,7 @@ public class LoginRateLimitFilter implements WebFilter {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        String path = exchange.getRequest().getPath().value();
+        String path = canonicalPath(exchange);
         if (!path.equals("/api/auth/login") && !path.equals("/api/auth/register")) {
             return chain.filter(exchange);
         }
@@ -47,14 +56,9 @@ public class LoginRateLimitFilter implements WebFilter {
         String ip = ClientIpResolver.resolve(exchange.getRequest());
         String key = KEY_PREFIX + ip;
 
-        return redis.opsForValue().increment(key)
-                .flatMap(count -> {
-                    // 첫 요청일 때만 TTL 설정
-                    Mono<Boolean> expire = (count != null && count == 1L)
-                            ? redis.expire(key, Duration.ofSeconds(WINDOW_SECONDS))
-                            : Mono.just(true);
-                    return expire.thenReturn(count != null ? count : 0L);
-                })
+        return redis.execute(INCR_EXPIRE_SCRIPT, List.of(key), List.of(String.valueOf(WINDOW_SECONDS)))
+                .next()
+                .defaultIfEmpty(0L)
                 .flatMap(count -> {
                     if (count > MAX_REQUESTS) {
                         log.warn("Login rate limit exceeded: ip={} path={} count={}", ip, path, count);
@@ -67,6 +71,17 @@ public class LoginRateLimitFilter implements WebFilter {
                     log.warn("Login rate limit check failed (fail-open): {}", e.getMessage());
                     return chain.filter(exchange);
                 });
+    }
+
+    /** 디코딩된 세그먼트로 정규화한다. "%6Cogin"이나 "//" 로 경로 비교를 우회하지 못하게 한다. */
+    private static String canonicalPath(ServerWebExchange exchange) {
+        StringBuilder sb = new StringBuilder();
+        for (PathContainer.Element e : exchange.getRequest().getPath().pathWithinApplication().elements()) {
+            if (e instanceof PathContainer.PathSegment seg && !seg.valueToMatch().isEmpty()) {
+                sb.append('/').append(seg.valueToMatch());
+            }
+        }
+        return sb.toString();
     }
 
     private Mono<Void> writeRateLimited(ServerWebExchange exchange) {
