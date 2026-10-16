@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -177,6 +178,37 @@ class ChatPersistenceServiceTest {
 
             assertTrue(capturePublished().getMentionedUsernames().isEmpty());
             verify(messageMentionRepository, never()).saveAll(any());
+        }
+    }
+
+    // ── Transactional publishing ────────────────────────────────
+
+    /**
+     * MessageEventListener는 fallbackExecution 없는 AFTER_COMMIT 리스너라, TX 밖에서
+     * 발행한 이벤트는 조용히 버려진다. @Transactional이 빠지면 단위 테스트는 모두
+     * 통과하는데 운영에서 방 브로드캐스트만 사라진다.
+     */
+    @Nested
+    class TransactionalPublishing {
+
+        private static final String WHY = " must be @Transactional: MessageEventListener is "
+                + "@TransactionalEventListener(AFTER_COMMIT) without fallbackExecution, so an "
+                + "event published outside a transaction is dropped and the room broadcast never happens";
+
+        @Test
+        void publishPresence_is_transactional() throws Exception {
+            assertNotNull(ChatPersistenceService.class
+                            .getMethod("publishPresence", ChatMessage.class)
+                            .getAnnotation(Transactional.class),
+                    "publishPresence (JOIN/LEAVE)" + WHY);
+        }
+
+        @Test
+        void persistMessageAndPublish_is_transactional() throws Exception {
+            assertNotNull(ChatPersistenceService.class
+                            .getMethod("persistMessageAndPublish", ChatMessage.class, List.class)
+                            .getAnnotation(Transactional.class),
+                    "persistMessageAndPublish" + WHY);
         }
     }
 }
