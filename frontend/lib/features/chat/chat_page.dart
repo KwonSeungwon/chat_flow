@@ -147,6 +147,11 @@ class ChatPage extends ConsumerWidget {
           }),
           // Wide (>=768): show all action buttons individually
           if (isWide) ...[
+            IconButton(
+              icon: const Icon(Icons.public, size: 20),
+              tooltip: '월드',
+              onPressed: () => context.push('/world'),
+            ),
             if (effectiveRoomId != null && roomData != null)
               IconButton(
                 icon: const Icon(Icons.settings_outlined, size: 20),
@@ -173,6 +178,8 @@ class ChatPage extends ConsumerWidget {
                     showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
                   } else if (value == 'participants') {
                     showRoomMembersSheet(context, effectiveRoomId);
+                  } else if (value == 'world') {
+                    context.push('/world');
                   }
                 },
                 itemBuilder: (context) => [
@@ -205,6 +212,16 @@ class ChatPage extends ConsumerWidget {
                         Icon(Icons.person_add_outlined, size: 20),
                         SizedBox(width: 8),
                         Text('초대 링크 복사'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'world',
+                    child: Row(
+                      children: [
+                        Icon(Icons.public, size: 20),
+                        SizedBox(width: 8),
+                        Text('월드'),
                       ],
                     ),
                   ),
