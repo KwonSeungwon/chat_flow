@@ -36,7 +36,7 @@ class DioClient {
   DioClient() {
     final baseUrl = kIsWeb
         ? _webOrigin()
-        : (dotenv.env['API_BASE_URL'] ?? 'https://app.chatflow.ai.kr');
+        : (dotenv.env['API_BASE_URL'] ?? 'https://app.goosip.com');
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),

@@ -19,7 +19,7 @@ String buildFullUrl(String relativeUrl) {
     final port = (uri.hasPort && uri.port != 80 && uri.port != 443) ? ':${uri.port}' : '';
     base = '${uri.scheme}://${uri.host}$port$relativeUrl';
   } else {
-    final apiBase = dotenv.env['API_BASE_URL'] ?? 'https://app.chatflow.ai.kr';
+    final apiBase = dotenv.env['API_BASE_URL'] ?? 'https://app.goosip.com';
     base = '$apiBase$relativeUrl';
   }
   // /api/files/** 경로는 인증이 필요하지만 브라우저 <img>/<a>가 Bearer 헤더를

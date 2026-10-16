@@ -312,14 +312,14 @@ class RoomInviteControllerTest {
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
             when(inviteLinkService.createInviteToken("r1")).thenReturn("tok-abc");
             when(inviteLinkService.getInviteUrl("tok-abc"))
-                    .thenReturn("https://app.chatflow.ai.kr/invite/tok-abc");
+                    .thenReturn("https://app.goosip.com/invite/tok-abc");
 
             mockMvc.perform(post("/api/chat/rooms/r1/invite-link")
                             .header("X-User-Id", "user-1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.token").value("tok-abc"))
-                    .andExpect(jsonPath("$.data.url").value("https://app.chatflow.ai.kr/invite/tok-abc"));
+                    .andExpect(jsonPath("$.data.url").value("https://app.goosip.com/invite/tok-abc"));
         }
     }
 

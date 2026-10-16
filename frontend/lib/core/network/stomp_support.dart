@@ -6,7 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// fallback.
 String resolveStompWsUrl() {
   if (kIsWeb) return deriveWebStompUrl(Uri.base);
-  return dotenv.env['WS_URL'] ?? 'wss://app.chatflow.ai.kr/ws-native';
+  return dotenv.env['WS_URL'] ?? 'wss://app.goosip.com/ws-native';
 }
 
 /// Pure: derive the web WS URL from a base URI.

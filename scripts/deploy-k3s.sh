@@ -12,7 +12,7 @@ set -euo pipefail
 #   DEPLOY_DB_PASSWORD, DEPLOY_GEMINI_API_KEY, DEPLOY_JWT_SECRET, DEPLOY_GATEWAY_SECRET
 # 이미 존재하는 Secret은 건드리지 않는다 (회전은 kubectl로 직접).
 
-K3S_HOST="node.chatflow.ai.kr"
+K3S_HOST="node.goosip.com"
 K3S_USER="ksw"
 NAMESPACE="chatflow"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

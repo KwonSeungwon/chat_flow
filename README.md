@@ -351,8 +351,8 @@ logging:
 | 서비스 | URL | 설명 |
 |--------|-----|------|
 | **웹 앱 (로컬)** | chrome (`flutter run -d chrome`) | Flutter Web 개발 서버 |
-| **웹 앱 (프로덕션)** | https://app.chatflow.ai.kr | K3s + Cloudflare Tunnel |
-| **Android APK** | https://app.chatflow.ai.kr/chatflow-app.apk | 웹 UI 다운로드 버튼 |
+| **웹 앱 (프로덕션)** | https://app.goosip.com | K3s + Cloudflare Tunnel |
+| **Android APK** | https://app.goosip.com/chatflow-app.apk | 웹 UI 다운로드 버튼 |
 | **API Gateway** | http://localhost:8000 | 통합 API 엔드포인트 |
 | **WebSocket** | ws://localhost:8000/ws-native | STOMP 실시간 통신 |
 
