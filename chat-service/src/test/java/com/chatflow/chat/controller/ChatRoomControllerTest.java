@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
@@ -76,6 +77,7 @@ class ChatRoomControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

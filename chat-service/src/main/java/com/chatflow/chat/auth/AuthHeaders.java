@@ -1,5 +1,9 @@
 package com.chatflow.chat.auth;
 
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -7,7 +11,8 @@ import java.security.MessageDigest;
 /**
  * Single source of truth for the gateway-injected auth header names, plus the
  * shared X-Username decode. AuthInterceptor + AuthenticatedUserResolver read
- * X-User-Id; JwtAuthFilter + WebSocketConfig read X-Username and decode it via
+ * the authenticated principal ({@link #authenticatedUserId()}); JwtAuthFilter
+ * + WebSocketConfig read X-Username and decode it via
  * {@link #decodeUsername(String)}. Keeping the names/decoding here avoids the
  * silent split that a stray literal or duplicated decode would cause.
  */
@@ -37,6 +42,19 @@ public final class AuthHeaders {
         } catch (Exception e) {
             return raw;
         }
+    }
+
+    /**
+     * The user id {@code JwtAuthFilter} authenticated for this request (gateway
+     * headers with a valid secret, or a verified JWT), or {@code null}. A raw
+     * X-User-Id header alone is never an identity.
+     */
+    public static String authenticatedUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        return auth.getPrincipal() instanceof String id && !id.isBlank() ? id : null;
     }
 
     /**

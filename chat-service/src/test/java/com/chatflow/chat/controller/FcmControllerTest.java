@@ -1,6 +1,7 @@
 package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +40,7 @@ class FcmControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

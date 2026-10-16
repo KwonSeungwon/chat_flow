@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.dto.ScheduledMessageDto;
 import com.chatflow.chat.entity.ScheduledMessageEntity;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
@@ -58,6 +59,7 @@ class ScheduledMessageControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

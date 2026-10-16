@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.mapper.MessageEditHistoryMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
@@ -62,6 +63,7 @@ class MessageInteractionControllerValidationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
