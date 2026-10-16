@@ -1,16 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/stomp_service.dart';
 import '../../../shared/models/chat_message.dart';
-import '../../../shared/models/patient_card.dart';
 import '../helpers/offline_message_queue.dart';
 import '../state/chat_messages_state.dart';
 
-/// Outbound message actions (send, retry, send patient card, upload file,
-/// forward). Extracted from ChatNotifier as part of Stage 2.5 to bring
+/// Outbound message actions (send, retry, upload file, forward). Extracted from ChatNotifier as part of Stage 2.5 to bring
 /// chat_notifier.dart back within the 700-LOC budget.
 ///
 /// Pure delegation via closures — does not inherit from or depend on
@@ -46,7 +43,6 @@ class MessageSendHelper {
   void sendMessage({
     required String roomId,
     required String content,
-    String priority = 'ROUTINE',
     ChatMessage? replyOverride,
   }) {
     // replyOverride lets ThreadPanel post replies without mutating
@@ -56,7 +52,6 @@ class MessageSendHelper {
       roomId: roomId,
       content: content,
       type: 'CHAT',
-      priority: priority,
       parentMessageId: reply?.effectiveId,
     );
     // Only clear when the reply came from state (main chat input).
@@ -64,7 +59,7 @@ class MessageSendHelper {
     if (reply != null && replyOverride == null) clearReplyTarget();
   }
 
-  /// Optimistic send for every user-sendable type (CHAT, FILE, PATIENT_CARD).
+  /// Optimistic send for every user-sendable type (CHAT, FILE).
   /// Shows a 'sending' bubble, then sends over STOMP or queues it for the
   /// reconnect flush. The bubble's localId travels as `clientMessageId` so
   /// the server echo replaces exactly this bubble. A retry passes the
@@ -73,7 +68,6 @@ class MessageSendHelper {
     required String roomId,
     required String content,
     required String type,
-    String priority = 'ROUTINE',
     String? parentMessageId,
     String? fileUrl,
     String? fileName,
@@ -89,7 +83,6 @@ class MessageSendHelper {
       'username': username,
       'content': content,
       'type': type,
-      'priority': priority,
       'timestamp': timestamp,
       if (parentMessageId != null) 'parentMessageId': parentMessageId,
       if (fileUrl != null) 'fileUrl': fileUrl,
@@ -104,7 +97,6 @@ class MessageSendHelper {
       username: username,
       content: content,
       type: type,
-      priority: priority,
       timestamp: timestamp,
       parentMessageId: parentMessageId,
       fileUrl: fileUrl,
@@ -192,20 +184,11 @@ class MessageSendHelper {
       roomId: msg.chatRoomId,
       content: msg.content,
       type: msg.type,
-      priority: msg.priority,
       parentMessageId: msg.parentMessageId,
       fileUrl: msg.fileUrl,
       fileName: msg.fileName,
       fileContentType: msg.fileContentType,
       localId: localId,
-    );
-  }
-
-  void sendPatientCard(String roomId, PatientCard card) {
-    sendTyped(
-      roomId: roomId,
-      content: jsonEncode(card.toJson()),
-      type: 'PATIENT_CARD',
     );
   }
 
@@ -251,7 +234,6 @@ class MessageSendHelper {
         'username': username,
         'content': content,
         'type': isFile ? 'FILE' : 'CHAT',
-        'priority': 'ROUTINE',
         'timestamp': DateTime.now().toIso8601String(),
         'forwardedFrom': forwardedFrom,
         if (isFile) 'fileUrl': msg.fileUrl,

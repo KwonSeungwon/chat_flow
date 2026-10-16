@@ -42,7 +42,6 @@ class _MockChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>>
     String roomType = 'GENERAL',
     bool isPrivate = false,
     String? password,
-    String? allowedRoles,
   }) async => null;
 }
 

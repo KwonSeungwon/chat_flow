@@ -117,7 +117,6 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
     String roomType = 'GENERAL',
     bool isPrivate = false,
     String? password,
-    String? allowedRoles,
   }) async {
     try {
       final resp = await _dioClient.dio.post('/api/chat/rooms', data: {
@@ -127,7 +126,6 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
         'roomType': roomType,
         'isPrivate': isPrivate,
         if (password != null) 'password': password,
-        if (allowedRoles != null) 'allowedRoles': allowedRoles,
       });
       // Extract room ID first — fetchRooms failure must not mask successful creation
       final roomId = apiResponseField<Object>(resp.data, 'id')?.toString();

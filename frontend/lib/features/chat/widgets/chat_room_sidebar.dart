@@ -330,7 +330,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
               controller: controller,
               autofocus: true,
               decoration: const InputDecoration(
-                hintText: '예: 환자명, 약명, STAT',
+                hintText: '예: 점심, 회의, 던전',
                 helperText: '콤마(,)로 구분',
                 border: OutlineInputBorder(),
               ),

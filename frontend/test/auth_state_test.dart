@@ -15,11 +15,6 @@ void main() {
   });
 
   group('AuthState 기본값', () {
-    test('role 기본값은 NURSE이다', () {
-      const state = AuthState();
-      expect(state.role, 'NURSE');
-    });
-
     test('username 기본값은 빈 문자열이다', () {
       const state = AuthState();
       expect(state.username, '');
@@ -42,14 +37,12 @@ void main() {
         token: 'old',
         userId: 'u1',
         username: 'alice',
-        role: 'DOCTOR',
         profileImageUrl: 'https://example.com/img.png',
       );
       final updated = original.copyWith(token: 'new');
       expect(updated.token, 'new');
       expect(updated.userId, 'u1');
       expect(updated.username, 'alice');
-      expect(updated.role, 'DOCTOR');
       expect(updated.profileImageUrl, 'https://example.com/img.png');
     });
 
@@ -78,12 +71,6 @@ void main() {
       final cleared = state.copyWith(error: null);
       expect(cleared.error, isNull);
     });
-
-    test('role을 변경할 수 있다', () {
-      const state = AuthState(role: 'NURSE');
-      final updated = state.copyWith(role: 'DOCTOR');
-      expect(updated.role, 'DOCTOR');
-    });
   });
 
   group('AuthState profileImageUrl 포함 생성', () {
@@ -92,7 +79,6 @@ void main() {
         token: 'tok',
         userId: '42',
         username: 'user1',
-        role: 'NURSE',
         profileImageUrl: '/api/files/uuid-abc/profile.png',
       );
       expect(state.profileImageUrl, '/api/files/uuid-abc/profile.png');

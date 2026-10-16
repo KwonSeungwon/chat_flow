@@ -12,7 +12,6 @@ class ChatMessage {
   final String content;
   final String timestamp;
   final String type; // CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, FILE
-  final String priority; // ROUTINE, URGENT, STAT
   final bool isAiGenerated;
   final String? fileUrl;
   final String? fileName;
@@ -41,7 +40,6 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     required this.type,
-    this.priority = 'ROUTINE',
     this.isAiGenerated = false,
     this.fileUrl,
     this.fileName,
@@ -77,7 +75,6 @@ class ChatMessage {
           json['type']?.toString() ??
           json['messageType']?.toString() ??
           'CHAT',
-      priority: json['priority']?.toString() ?? 'ROUTINE',
       isAiGenerated:
           json['isAiGenerated'] == true || json['aiGenerated'] == true,
       fileUrl: json['fileUrl']?.toString(),
@@ -124,7 +121,6 @@ class ChatMessage {
     'content': content,
     'timestamp': timestamp,
     'type': type,
-    'priority': priority,
     'isAiGenerated': isAiGenerated,
     'deleted': deleted,
     'edited': edited,
@@ -149,7 +145,6 @@ class ChatMessage {
     String? content,
     String? timestamp,
     String? type,
-    String? priority,
     bool? isAiGenerated,
     String? fileUrl,
     String? fileName,
@@ -174,7 +169,6 @@ class ChatMessage {
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
       type: type ?? this.type,
-      priority: priority ?? this.priority,
       isAiGenerated: isAiGenerated ?? this.isAiGenerated,
       fileUrl: fileUrl ?? this.fileUrl,
       fileName: fileName ?? this.fileName,

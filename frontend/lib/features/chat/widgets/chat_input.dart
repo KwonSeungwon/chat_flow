@@ -7,20 +7,15 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/constants/ui_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_message.dart';
-import '../../../shared/models/patient_card.dart';
 import '../helpers/draft_store.dart';
 import '../helpers/pasted_image.dart';
 import '../helpers/web_drop_target.dart';
 import 'drop_zone_overlay.dart';
-import 'patient_card_input_dialog.dart';
-import 'sbar_input_dialog.dart';
 import 'schedule_send_sheet.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
-  final bool isHandoff;
-  final void Function(String content, {String priority}) onSend;
-  final void Function(PatientCard card)? onSendPatientCard;
+  final void Function(String content) onSend;
   final Future<void> Function(String fileName, Uint8List bytes, String mimeType, String content)? onFilePick;
   final ChatMessage? replyTarget;
   final VoidCallback? onCancelReply;
@@ -41,9 +36,7 @@ class ChatInput extends StatefulWidget {
   const ChatInput({
     super.key,
     required this.isConnected,
-    this.isHandoff = false,
     required this.onSend,
-    this.onSendPatientCard,
     this.onFilePick,
     this.replyTarget,
     this.onCancelReply,
@@ -63,7 +56,6 @@ class _ChatInputState extends State<ChatInput> {
   final _controller = TextEditingController();
   final _focusNode  = FocusNode();
   final _keyboardFocusNode = FocusNode();
-  String _priority = 'ROUTINE';
   bool _isSending = false; // Guard against Korean IME double-send
   bool _isUploading = false;
   // Pending file attachment
@@ -305,8 +297,7 @@ class _ChatInputState extends State<ChatInput> {
         _focusNode.requestFocus();
       } else if (text.isNotEmpty) {
         _clearController();
-        widget.onSend(text, priority: _priority);
-        if (widget.isHandoff) setState(() => _priority = 'ROUTINE');
+        widget.onSend(text);
         _focusNode.requestFocus();
       }
     } finally {
@@ -606,111 +597,6 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
-  /// Priority toggle pill (ROUTINE / URGENT / STAT) for handoff rooms.
-  Widget _buildPriorityToggle({
-    required ColorScheme cs,
-    required double btnSize,
-    required bool isNarrow,
-  }) {
-    return GestureDetector(
-      onTap: widget.isConnected ? () {
-        setState(() {
-          _priority = _priority == 'ROUTINE' ? 'URGENT'
-              : _priority == 'URGENT' ? 'STAT' : 'ROUTINE';
-        });
-      } : null,
-      child: Container(
-        height: btnSize,
-        padding: EdgeInsets.symmetric(horizontal: isNarrow ? 5 : 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: _priority == 'STAT' ? const Color(0xFFD32F2F).withAlpha(25)
-              : _priority == 'URGENT' ? const Color(0xFFF57C00).withAlpha(25)
-              : cs.surfaceContainer,
-          border: Border.all(
-            color: _priority == 'STAT' ? const Color(0xFFD32F2F)
-                : _priority == 'URGENT' ? const Color(0xFFF57C00)
-                : cs.outline,
-            width: _priority != 'ROUTINE' ? 1.5 : 1,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            _priority,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: _priority == 'STAT' ? const Color(0xFFD32F2F)
-                  : _priority == 'URGENT' ? const Color(0xFFF57C00)
-                  : cs.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// SBAR / Patient-card popup menu for handoff rooms.
-  Widget _buildHandoffToolsMenu({
-    required ColorScheme cs,
-    required double btnSize,
-  }) {
-    return PopupMenuButton<String>(
-      enabled: widget.isConnected,
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints(minWidth: btnSize, minHeight: btnSize),
-      icon: Icon(
-        Icons.add_circle_outline,
-        size: 22,
-        color: widget.isConnected
-            ? cs.onSurfaceVariant
-            : cs.onSurfaceVariant.withAlpha(80),
-      ),
-      onSelected: (value) async {
-        if (value == 'sbar') {
-          showDialog(
-            context: context,
-            builder: (_) => SbarInputDialog(
-              onSend: (content) {
-                widget.onSend(content, priority: _priority);
-              },
-            ),
-          );
-        } else if (value == 'patient_card') {
-          final card = await showDialog<PatientCard>(
-            context: context,
-            builder: (_) => const PatientCardInputDialog(),
-          );
-          if (card != null && widget.onSendPatientCard != null) {
-            widget.onSendPatientCard!(card);
-          }
-        }
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(
-          value: 'sbar',
-          child: Row(
-            children: [
-              Icon(Icons.assignment_outlined, size: 20),
-              SizedBox(width: 8),
-              Text('SBAR 인수인계'),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'patient_card',
-          child: Row(
-            children: [
-              Icon(Icons.person_add_outlined, size: 20),
-              SizedBox(width: 8),
-              Text('환자 카드 전송'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   /// File-attach button (or upload spinner when uploading).
   Widget _buildFileAttachButton({
     required ColorScheme cs,
@@ -900,16 +786,6 @@ class _ChatInputState extends State<ChatInput> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Priority toggle (handoff rooms only)
-        if (widget.isHandoff) ...[
-          _buildPriorityToggle(cs: cs, btnSize: btnSize, isNarrow: isNarrow),
-          SizedBox(width: btnGap),
-        ],
-        // Handoff tools (SBAR + Patient card) — combined menu
-        if (widget.isHandoff) ...[
-          _buildHandoffToolsMenu(cs: cs, btnSize: btnSize),
-          SizedBox(width: btnGap),
-        ],
         // File attach button
         if (widget.onFilePick != null) ...[
           _buildFileAttachButton(cs: cs, btnSize: btnSize),

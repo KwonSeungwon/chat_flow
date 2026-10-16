@@ -28,7 +28,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
   final _formKey      = GlobalKey<FormState>();
   bool _obscurePassword = true;
   bool _obscureConfirm  = true;
-  String _selectedRole = 'NURSE';
   Uint8List? _profileImageBytes;
   String? _profileImageName;
 
@@ -80,7 +79,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final password = _passwordCtrl.text;
     final notifier = ref.read(authProvider.notifier);
     if (_isRegister) {
-      await notifier.register(username, password, role: _selectedRole);
+      await notifier.register(username, password);
       // Upload profile image after successful registration.
       // 가입이 실패했으면 토큰이 없다 → 업로드가 401을 받고, 그 401이 authProvider를
       // 리셋해 방금 띄운 실패 사유까지 지워버린다. 반드시 성공을 먼저 확인한다.
@@ -318,45 +317,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                             return '비밀번호가 일치하지 않습니다';
                                           }
                                           return null;
-                                        },
-                                      ),
-                                      const SizedBox(height: 12),
-                                      DropdownButtonFormField<String>(
-                                        initialValue: _selectedRole,
-                                        decoration: InputDecoration(
-                                          labelText: '역할',
-                                          prefixIcon: Icon(
-                                            Icons.badge_outlined,
-                                            size: 20,
-                                            color: colorScheme.onSurfaceVariant,
-                                          ),
-                                          filled: true,
-                                          fillColor: colorScheme.surfaceContainerHigh,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(color: colorScheme.outline),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(color: colorScheme.outline),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                            borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
-                                          ),
-                                          labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                        ),
-                                        dropdownColor: colorScheme.surfaceContainerHigh,
-                                        style: TextStyle(color: colorScheme.onSurface, fontSize: 15),
-                                        items: const [
-                                          DropdownMenuItem(value: 'DOCTOR',      child: Text('의사 (DOCTOR)')),
-                                          DropdownMenuItem(value: 'NURSE',       child: Text('간호사 (NURSE)')),
-                                          DropdownMenuItem(value: 'PHARMACIST',  child: Text('약사 (PHARMACIST)')),
-                                          DropdownMenuItem(value: 'ADMIN',       child: Text('관리자 (ADMIN)')),
-                                        ],
-                                        onChanged: (v) {
-                                          if (v != null) setState(() => _selectedRole = v);
                                         },
                                       ),
                                     ],

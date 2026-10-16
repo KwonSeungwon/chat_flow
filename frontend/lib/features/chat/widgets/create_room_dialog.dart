@@ -18,8 +18,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   int _selectedColorIndex = 0;
   bool _isCreating = false;
   bool _isPrivate = false;
-  bool _isHandoff = false;
-  final Set<String> _allowedRoles = {};
 
   static const _presetColors = [
     '#1976D2', // Blue
@@ -56,11 +54,9 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         name: _nameCtrl.text.trim(),
         description:
             _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        color: _isHandoff ? '#00796B' : _presetColors[_selectedColorIndex],
-        roomType: _isHandoff ? 'HANDOFF' : 'GENERAL',
+        color: _presetColors[_selectedColorIndex],
         isPrivate: _isPrivate,
         password: _isPrivate ? _passwordCtrl.text.trim() : null,
-        allowedRoles: _allowedRoles.isEmpty ? null : _allowedRoles.join(','),
       );
       if (mounted) {
         Navigator.of(context).pop();
@@ -93,39 +89,12 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              // Room type toggle
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('일반 채팅'), icon: Icon(Icons.chat_bubble_outline, size: 18)),
-                  ButtonSegment(value: true, label: Text('인수인계'), icon: Icon(Icons.swap_horiz_rounded, size: 18)),
-                ],
-                selected: {_isHandoff},
-                onSelectionChanged: (v) => setState(() => _isHandoff = v.first),
-                showSelectedIcon: false,
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  side: WidgetStatePropertyAll(BorderSide(color: colorScheme.outline)),
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return _isHandoff ? const Color(0xFF00796B).withAlpha(50) : colorScheme.primaryContainer;
-                    }
-                    return colorScheme.surfaceContainerHigh;
-                  }),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.selected)) {
-                      return _isHandoff ? const Color(0xFF00796B) : colorScheme.onPrimaryContainer;
-                    }
-                    return colorScheme.onSurface;
-                  }),
-                ),
-              ),
-              const SizedBox(height: 12),
               TextFormField(
                 controller: _nameCtrl,
-                decoration: InputDecoration(
-                  labelText: _isHandoff ? '인수인계방 이름' : '채팅방 이름',
-                  hintText: _isHandoff ? '예: 301호 김OO 인수인계' : '2~50자',
-                  prefixIcon: Icon(_isHandoff ? Icons.swap_horiz_rounded : Icons.tag),
+                decoration: const InputDecoration(
+                  labelText: '채팅방 이름',
+                  hintText: '2~50자',
+                  prefixIcon: Icon(Icons.tag),
                 ),
                 maxLength: 50,
                 autofocus: true,
@@ -183,45 +152,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                   },
                 ),
               ],
-              const SizedBox(height: 16),
-              Text(
-                '허용 역할 (선택 안 하면 전체 허용)',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  for (final role in const ['DOCTOR', 'NURSE', 'PHARMACIST', 'ADMIN'])
-                    FilterChip(
-                      label: Text(
-                        switch (role) {
-                          'DOCTOR'     => '의사',
-                          'NURSE'      => '간호사',
-                          'PHARMACIST' => '약사',
-                          _            => '관리자',
-                        },
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      selected: _allowedRoles.contains(role),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _allowedRoles.add(role);
-                          } else {
-                            _allowedRoles.remove(role);
-                          }
-                        });
-                      },
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                ],
-              ),
               const SizedBox(height: 16),
               Text(
                 '색상',

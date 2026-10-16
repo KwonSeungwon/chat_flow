@@ -114,34 +114,4 @@ void main() {
     });
   });
 
-  group('ChatRoom.isHandoff', () {
-    test('roomType이 HANDOFF이면 true를 반환한다', () {
-      final room = ChatRoom(
-        id: 'r1',
-        name: '인수인계방',
-        participantCount: 2,
-        roomType: 'HANDOFF',
-      );
-      expect(room.isHandoff, isTrue);
-    });
-
-    test('roomType이 GENERAL이면 false를 반환한다', () {
-      final room = ChatRoom(
-        id: 'r2',
-        name: '일반방',
-        participantCount: 2,
-        roomType: 'GENERAL',
-      );
-      expect(room.isHandoff, isFalse);
-    });
-
-    test('roomType이 기본값 GENERAL이면 isHandoff는 false이다', () {
-      final room = ChatRoom(
-        id: 'r3',
-        name: '기본방',
-        participantCount: 0,
-      );
-      expect(room.isHandoff, isFalse);
-    });
-  });
 }

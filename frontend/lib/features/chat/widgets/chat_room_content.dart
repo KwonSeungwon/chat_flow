@@ -359,23 +359,15 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
               lastOwn.effectiveId, lastOwn.content,
             );
           },
-          isHandoff: ref.watch(chatRoomsProvider).maybeWhen(
-            data: (rooms) =>
-                rooms.any((r) => r.id == widget.roomId && r.isHandoff),
-            orElse: () => false,
-          ),
           replyTarget: chatState.replyTarget,
           onCancelReply: () => chatNotifier.clearReplyTarget(),
           onTyping: () => chatNotifier.notifyTyping(widget.roomId),
           onMentionSearch: (query) => ref
               .read(chatNotifierProvider(widget.roomId).notifier)
               .searchMentionCandidates(widget.roomId, query),
-          onSend: (content, {String priority = 'ROUTINE'}) {
-            chatNotifier.sendMessage(
-                roomId: widget.roomId, content: content, priority: priority);
+          onSend: (content) {
+            chatNotifier.sendMessage(roomId: widget.roomId, content: content);
           },
-          onSendPatientCard: (card) =>
-              chatNotifier.sendPatientCard(widget.roomId, card),
           onFilePick: (fileName, bytes, mimeType, content) =>
               chatNotifier.uploadAndSendFile(
                 roomId: widget.roomId,

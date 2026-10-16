@@ -242,8 +242,6 @@ class ChatBubbleState extends State<ChatBubble> {
       );
     }
 
-    final isUrgent = widget.msg.priority.toUpperCase() == 'URGENT' || widget.msg.priority.toUpperCase() == 'STAT';
-
     final canReport = !widget.isMine && !widget.msg.deleted;
     final hasActions = canReport || widget.onDelete != null || widget.onEdit != null || widget.onViewEditHistory != null || widget.onReply != null || widget.onReaction != null || widget.onForward != null || widget.onPin != null || widget.onBookmark != null;
 
@@ -275,7 +273,6 @@ class ChatBubbleState extends State<ChatBubble> {
                   msg: widget.msg,
                   isMine: widget.isMine,
                   showAvatar: widget.showAvatar,
-                  isUrgent: isUrgent,
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -343,27 +340,15 @@ class ChatBubbleState extends State<ChatBubble> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                gradient: widget.msg.priority == 'STAT'
+                                gradient: widget.isAiQuestion
                                     ? const LinearGradient(
-                                        colors: [Color(0xFFE53935), Color(0xFFC62828)],
+                                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
                                       )
-                                    : widget.msg.priority == 'URGENT'
-                                        ? const LinearGradient(
-                                            colors: [Color(0xFFFB8C00), Color(0xFFE65100)],
-                                          )
-                                        : widget.isAiQuestion
-                                            ? const LinearGradient(
-                                                colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-                                              )
-                                            : AppColors.myBubbleGradient,
+                                    : AppColors.myBubbleGradient,
                                 borderRadius: radius,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: widget.msg.priority == 'STAT'
-                                        ? const Color(0xFFD32F2F).withAlpha(90)
-                                        : widget.msg.priority == 'URGENT'
-                                            ? const Color(0xFFF57C00).withAlpha(70)
-                                            : (widget.isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
+                                    color: (widget.isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
                                     blurRadius: 10,
                                     offset: const Offset(0, 3),
                                   ),
@@ -447,19 +432,11 @@ class ChatBubbleState extends State<ChatBubble> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: widget.msg.priority == 'STAT'
-                                    ? const Color(0xFFD32F2F).withAlpha(18)
-                                    : widget.msg.priority == 'URGENT'
-                                        ? const Color(0xFFF57C00).withAlpha(18)
-                                        : Theme.of(context).colorScheme.surfaceContainer,
+                                color: Theme.of(context).colorScheme.surfaceContainer,
                                 borderRadius: radius,
                                 border: Border.all(
-                                    color: widget.msg.priority == 'STAT'
-                                        ? const Color(0xFFD32F2F)
-                                        : widget.msg.priority == 'URGENT'
-                                            ? const Color(0xFFF57C00)
-                                            : Theme.of(context).colorScheme.outline.withAlpha(80),
-                                    width: (widget.msg.priority == 'STAT' || widget.msg.priority == 'URGENT') ? 1.5 : 1),
+                                    color: Theme.of(context).colorScheme.outline.withAlpha(80),
+                                    width: 1),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

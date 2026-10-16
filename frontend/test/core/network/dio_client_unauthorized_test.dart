@@ -129,12 +129,12 @@ void main() {
       }
     });
 
-    test('만료 처리 시 다섯 키를 모두 지운다', () async {
+    test('만료 처리 시 자격증명 키와 옛 직군 키를 모두 지운다', () async {
       FlutterSecureStorage.setMockInitialValues({
         StorageKeys.token: 'expired-token',
         StorageKeys.userId: 'u1',
         StorageKeys.username: 'alice',
-        StorageKeys.role: 'DOCTOR',
+        StorageKeys.legacyRole: 'DOCTOR',
         StorageKeys.profileImage: '/a.png',
       });
       final client = DioClient();
@@ -144,7 +144,7 @@ void main() {
           client.dio.post('/api/chat/rooms'), throwsA(isA<DioException>()));
 
       const storage = FlutterSecureStorage();
-      expect(await storage.read(key: StorageKeys.role), isNull);
+      expect(await storage.read(key: StorageKeys.legacyRole), isNull);
       expect(await storage.read(key: StorageKeys.profileImage), isNull);
     });
   });

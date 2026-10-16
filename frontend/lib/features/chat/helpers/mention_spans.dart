@@ -37,7 +37,7 @@ bool _isInnerNameChar(String c) => _isNameChar(c) || c == '.' || c == '-';
 ///
 /// Boundary rules mirror the server: the `@` must not follow a name character
 /// (`bob@phill.park` is an email, not a mention) and the name must not be
-/// followed by one (`@김간호사님` names nobody).
+/// followed by one (`@김철수님` names nobody).
 ///
 /// What cannot be mirrored is the server's longest-match over the roster. With
 /// members `phill` and `phill.park`, the server resolves `@phill.park` to
