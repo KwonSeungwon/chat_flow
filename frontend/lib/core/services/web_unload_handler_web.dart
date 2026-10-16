@@ -3,28 +3,37 @@ import 'dart:html' as html;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 class WebUnloadHandler {
   static bool _registered = false;
   static StreamSubscription<html.Event>? _sub;
+  static String? _cachedFcmToken;
+
+  /// The FCM token the beforeunload listener will send. Exposed for tests.
+  @visibleForTesting
+  static String? get cachedFcmToken => _cachedFcmToken;
 
   static void register({
     required String Function() jwtProvider,
     required Future<String?> Function() fcmTokenProvider,
     required String apiBaseUrl,
   }) {
+    // Eager cache so the synchronous beforeunload listener can read it
+    // without awaiting. Refreshed on every register (startup, after login):
+    // a lookup that failed or returned null earlier gets another chance.
+    // A failure (e.g. Firebase not initialized) leaves the cache as is —
+    // we intentionally no-op on unload in that case.
+    fcmTokenProvider().then((t) {
+      if (t != null) _cachedFcmToken = t;
+    }).catchError((Object _) {});
+
     if (_registered) return;
     _registered = true;
 
-    String? cachedFcmToken;
-    // Eager cache so the synchronous beforeunload listener can read it
-    // without awaiting. Null means Firebase hasn't initialized yet — we
-    // intentionally no-op in that case (the OS lifecycle will clean up
-    // any subscription on a fresh tab).
-    fcmTokenProvider().then((t) => cachedFcmToken = t);
-
     _sub = html.window.onBeforeUnload.listen((_) {
       final jwt = jwtProvider();
-      final fcm = cachedFcmToken;
+      final fcm = _cachedFcmToken;
       if (jwt.isEmpty || fcm == null || fcm.isEmpty) return;
 
       // fetch + keepalive: the browser is allowed to finish this in-flight
@@ -51,5 +60,6 @@ class WebUnloadHandler {
     _sub?.cancel();
     _sub = null;
     _registered = false;
+    _cachedFcmToken = null;
   }
 }
