@@ -90,9 +90,10 @@ class RoomReadStateControllerTest {
         }
 
         @Test
-        void returns_200_with_per_room_counts_when_userId_present() throws Exception {
+        void returns_200_with_per_room_counts_for_the_rooms_the_user_can_see() throws Exception {
+            // getVisibleRooms excludes other users' DMs and private rooms the caller is not in
             List<ChatRoom> rooms = List.of(room("r1", "A"), room("r2", "B"));
-            when(chatRoomService.getAllRooms()).thenReturn(rooms);
+            when(chatRoomService.getVisibleRooms("user-1")).thenReturn(rooms);
             when(unreadCountService.getUnreadCounts(eq("user-1"), eq(List.of("r1", "r2"))))
                     .thenReturn(Map.of("r1", 3L, "r2", 0L));
 
@@ -102,6 +103,7 @@ class RoomReadStateControllerTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.r1").value(3))
                     .andExpect(jsonPath("$.data.r2").value(0));
+            verify(chatRoomService, never()).getAllRooms();
         }
     }
 
