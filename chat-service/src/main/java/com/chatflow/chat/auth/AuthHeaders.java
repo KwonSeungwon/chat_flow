@@ -2,6 +2,7 @@ package com.chatflow.chat.auth;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /**
  * Single source of truth for the gateway-injected auth header names, plus the
@@ -14,6 +15,7 @@ public final class AuthHeaders {
 
     public static final String X_USER_ID = "X-User-Id";
     public static final String X_USERNAME = "X-Username";
+    public static final String X_GATEWAY_SECRET = "X-Gateway-Secret";
 
     private AuthHeaders() {}
 
@@ -35,5 +37,18 @@ public final class AuthHeaders {
         } catch (Exception e) {
             return raw;
         }
+    }
+
+    /**
+     * Constant-time check of an incoming X-Gateway-Secret value. Fails closed:
+     * an unconfigured (null/blank) expected secret never matches.
+     */
+    public static boolean gatewaySecretMatches(String expected, String incoming) {
+        if (expected == null || expected.isBlank() || incoming == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                incoming.getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -291,6 +291,18 @@ class ChatMessageMapperTest {
         assertThat(restored.getType()).isEqualTo(original.getType());
         assertThat(restored.getPriority()).isEqualTo(original.getPriority());
         assertThat(restored.getTimestamp()).isEqualTo(original.getTimestamp());
-        assertThat(restored.isAiGenerated()).isEqualTo(original.isAiGenerated());
+        // isAiGenerated is server-owned and never copied from the DTO (S-6)
+        assertThat(restored.isAiGenerated()).isFalse();
+    }
+
+    @Test
+    void toEntity_neverCopiesAiGeneratedFromDto() {
+        ChatMessage dto = ChatMessage.builder()
+                .messageId("msg-ai").chatRoomId("room-ai").userId("u").username("u")
+                .content("c").type(BaseMessage.MessageType.CHAT)
+                .isAiGenerated(true)
+                .build();
+
+        assertThat(mapper.toEntity(dto).isAiGenerated()).isFalse();
     }
 }

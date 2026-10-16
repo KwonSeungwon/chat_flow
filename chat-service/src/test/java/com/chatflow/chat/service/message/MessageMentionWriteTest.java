@@ -359,13 +359,14 @@ class MessageMentionWriteTest {
             msg.setUsername(SENDER_USERNAME);
             msg.setType(MessageType.SYSTEM);
             msg.setContent("@bob 님이 입장했습니다");
-            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             service.send(msg, null);
 
+            // SYSTEM is not user-sendable: send() refuses it before mention resolution
+            // or persistence, so no mention row and no push can come out of it.
             verify(roomMemberRepository, never()).findByRoomId(anyString());
-            verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+            verify(chatPersistenceService, never()).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), anyList());
             verifyNoInteractions(fcmNotificationService);
         }
     }

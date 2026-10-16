@@ -2,6 +2,8 @@ package com.chatflow.chat.service.message;
 
 import com.chatflow.chat.service.outbox.ChatPersistenceService;
 
+import com.chatflow.chat.dto.InboundChatCommand;
+import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageMentionEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
@@ -20,6 +22,8 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -58,7 +62,7 @@ public class MessageSenderService {
      */
     public void send(ChatMessage message) {
         RoomMemberEntity member = null;
-        if (MentionTargets.carriesUserText(message.getType()) && message.getUserId() != null) {
+        if (isUserSendable(message.getType()) && message.getUserId() != null) {
             member = roomMemberRepository.findByRoomIdAndUserId(
                     message.getChatRoomId(), message.getUserId()).orElse(null);
         }
@@ -73,16 +77,30 @@ public class MessageSenderService {
      *
      * @param resolvedMember the pre-fetched member entity used solely for the mute
      *                       gate. {@code null} means "no mute info available" — the
-     *                       mute gate is skipped (correct for legacy creator-only
-     *                       membership where no room_members row exists, and for
-     *                       server-authored message types).
+     *                       mute gate is skipped (no room_members row exists).
      */
     public void send(ChatMessage message, RoomMemberEntity resolvedMember) {
-        // Mute gate — muted users cannot post anything they typed themselves.
-        // FILE is in scope: its caption reaches the room *and* fires mention pushes
-        // at the members it names, so leaving files ungated would let a muted user
-        // keep tapping people on the shoulder.
-        if (MentionTargets.carriesUserText(message.getType()) && message.getUserId() != null) {
+        // Every caller of send() is a user-authored path (STOMP, REST, scheduled).
+        // Server-authored types (JOIN/LEAVE/SYSTEM/AI_SUMMARY) have their own
+        // publishers and must never be forgeable through here.
+        if (!isUserSendable(message.getType())) {
+            log.warn("Rejected non-user message type {} in room {}",
+                    message.getType(), message.getChatRoomId());
+            if (message.getUserId() != null) {
+                messagingTemplate.convertAndSendToUser(
+                        message.getUserId(),
+                        "/queue/errors",
+                        Map.of("type", "INVALID_MESSAGE_TYPE",
+                                "roomId", message.getChatRoomId() != null ? message.getChatRoomId() : ""));
+            }
+            return;
+        }
+        message.setAiGenerated(false);
+
+        // Mute gate — muted users cannot post anything they authored, whatever the
+        // type: a caption (FILE) fires mention pushes and a PATIENT_CARD lands in
+        // the room just like text, so every user-sendable type is gated.
+        if (message.getUserId() != null) {
             // mutedUntil == now ⇒ 만료 (mute가 끝나는 그 순간부터는 발송 허용)
             if (resolvedMember != null && resolvedMember.getMutedUntil() != null
                     && resolvedMember.getMutedUntil().isAfter(LocalDateTime.now())) {
@@ -101,25 +119,11 @@ public class MessageSenderService {
         message.setMessageId(UUID.randomUUID().toString());
         message.setTimestamp(LocalDateTime.now());
 
-        // Reply validation & preview generation
+        // Reply validation & preview generation. The parent (and the root it
+        // redirects to) must live in this room — otherwise a reply could leak a
+        // preview of a message from a room the sender cannot read.
         if (message.getParentMessageId() != null && !message.getParentMessageId().isBlank()) {
-            chatMessageRepository.findById(message.getParentMessageId())
-                    .ifPresentOrElse(parent -> {
-                        // Enforce 1-level depth: reply-to-reply redirects to root
-                        if (parent.getParentMessageId() != null) {
-                            message.setParentMessageId(parent.getParentMessageId());
-                            chatMessageRepository.findById(parent.getParentMessageId())
-                                    .ifPresent(root -> message.setParentMessagePreview(
-                                            buildPreview(root.getUsername(), root.getContent())));
-                        } else {
-                            message.setParentMessagePreview(
-                                    buildPreview(parent.getUsername(), parent.getContent()));
-                        }
-                    }, () -> {
-                        // Parent not found — clear reference
-                        message.setParentMessageId(null);
-                        message.setParentMessagePreview(null);
-                    });
+            resolveReplyTarget(message);
         }
 
         // Enrich message with room metadata
@@ -174,6 +178,39 @@ public class MessageSenderService {
                 "mention-" + mentioned.getUsername(), message.getUsername(),
                 message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
         }
+    }
+
+    private static boolean isUserSendable(MessageType type) {
+        return InboundChatCommand.ALLOWED_TYPES.contains(type);
+    }
+
+    private void resolveReplyTarget(ChatMessage message) {
+        Optional<ChatMessageEntity> parent = findInRoom(message.getParentMessageId(), message.getChatRoomId());
+        if (parent.isEmpty()) {
+            clearReply(message);
+            return;
+        }
+        // Enforce 1-level depth: reply-to-reply redirects to root
+        String rootId = parent.get().getParentMessageId();
+        if (rootId == null) {
+            message.setParentMessagePreview(
+                    buildPreview(parent.get().getUsername(), parent.get().getContent()));
+            return;
+        }
+        findInRoom(rootId, message.getChatRoomId()).ifPresentOrElse(root -> {
+            message.setParentMessageId(root.getMessageId());
+            message.setParentMessagePreview(buildPreview(root.getUsername(), root.getContent()));
+        }, () -> clearReply(message));
+    }
+
+    private Optional<ChatMessageEntity> findInRoom(String messageId, String roomId) {
+        return chatMessageRepository.findById(messageId)
+                .filter(m -> Objects.equals(m.getChatRoomId(), roomId));
+    }
+
+    private static void clearReply(ChatMessage message) {
+        message.setParentMessageId(null);
+        message.setParentMessagePreview(null);
     }
 
     private boolean shouldRequestAISummary(ChatMessage message) {
