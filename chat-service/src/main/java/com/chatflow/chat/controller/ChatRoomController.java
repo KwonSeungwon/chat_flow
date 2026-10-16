@@ -46,7 +46,12 @@ import java.util.stream.Collectors;
 public class ChatRoomController {
 
     private static final String PASSWORD_ATTEMPT_KEY_PREFIX = "chatflow:room:pw-attempts:";
-    private static final java.time.Duration PASSWORD_ATTEMPT_WINDOW = java.time.Duration.ofMinutes(1);
+    private static final long PASSWORD_ATTEMPT_WINDOW_SECONDS = 60;
+    static final org.springframework.data.redis.core.script.RedisScript<Long> PASSWORD_ATTEMPT_SCRIPT =
+            org.springframework.data.redis.core.script.RedisScript.of(
+                    "local n = redis.call('INCR', KEYS[1]) "
+                            + "if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end "
+                            + "return n", Long.class);
     private static final int MAX_PASSWORD_ATTEMPTS = 5;
 
     private final ChatRoomService chatRoomService;
@@ -150,14 +155,14 @@ public class ChatRoomController {
     }
 
     /**
-     * Fixed one-minute window per (room, user). The TTL is set before the first
-     * INCR, so a counter never outlives its window. Valkey down → not limited.
+     * Fixed one-minute window per (room, user). INCR and the first-hit EXPIRE run
+     * as one script, so a counter never exists without a TTL. Valkey down → not limited.
      */
     private boolean tooManyPasswordAttempts(String roomId, String userId) {
         String key = PASSWORD_ATTEMPT_KEY_PREFIX + roomId + ":" + userId;
         try {
-            redisTemplate.opsForValue().setIfAbsent(key, "0", PASSWORD_ATTEMPT_WINDOW);
-            Long attempts = redisTemplate.opsForValue().increment(key);
+            Long attempts = redisTemplate.execute(PASSWORD_ATTEMPT_SCRIPT, List.of(key),
+                    String.valueOf(PASSWORD_ATTEMPT_WINDOW_SECONDS));
             return attempts != null && attempts > MAX_PASSWORD_ATTEMPTS;
         } catch (org.springframework.dao.DataAccessException e) {
             log.warn("Password attempt limiter unavailable: {}", e.getMessage());
