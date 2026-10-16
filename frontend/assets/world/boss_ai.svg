@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 할루시네이션 미믹: 이빨 달린 보물상자, 소용돌이 눈, 떠다니는 물음표 -->
+  <ellipse cx="100" cy="186" rx="70" ry="10" fill="#000000" opacity="0.18"/>
+  <!-- chest base -->
+  <rect x="34" y="112" width="132" height="70" rx="8" fill="#b9783f"/>
+  <rect x="34" y="112" width="132" height="12" fill="#a0652f"/>
+  <rect x="34" y="150" width="132" height="8" fill="#ffd34d"/>
+  <rect x="88" y="140" width="24" height="28" rx="4" fill="#ffd34d"/>
+  <circle cx="100" cy="152" r="4" fill="#8a5a2a"/>
+  <!-- mouth interior -->
+  <path d="M38 112 L162 112 L156 78 L44 78 Z" fill="#7a1f3a"/>
+  <path d="M70 112 C80 96 120 96 130 112 Z" fill="#ff7aa8"/>
+  <!-- teeth -->
+  <polygon points="44,112 52,98 60,112" fill="#ffffff"/>
+  <polygon points="62,112 70,98 78,112" fill="#ffffff"/>
+  <polygon points="122,112 130,98 138,112" fill="#ffffff"/>
+  <polygon points="140,112 148,98 156,112" fill="#ffffff"/>
+  <polygon points="50,80 58,94 66,80" fill="#ffffff"/>
+  <polygon points="134,80 142,94 150,80" fill="#ffffff"/>
+  <polygon points="92,80 100,92 108,80" fill="#ffffff"/>
+  <!-- lid -->
+  <path d="M30 80 L170 80 L162 40 C150 18 50 18 38 40 Z" fill="#c98a4d"/>
+  <path d="M30 80 L170 80 L168 70 L32 70 Z" fill="#ffd34d"/>
+  <path d="M60 26 L60 70 M140 26 L140 70" stroke="#a0652f" stroke-width="6"/>
+  <!-- spiral eyes on lid -->
+  <circle cx="82" cy="46" r="13" fill="#ffffff"/><circle cx="118" cy="46" r="13" fill="#ffffff"/>
+  <path d="M82 46 m-8 0 a8 8 0 1 1 8 8 a5 5 0 1 1 -4 -6 a2 2 0 1 1 2 2" stroke="#e070aa" stroke-width="2.5" fill="none"/>
+  <path d="M118 46 m-8 0 a8 8 0 1 1 8 8 a5 5 0 1 1 -4 -6 a2 2 0 1 1 2 2" stroke="#5bd1e8" stroke-width="2.5" fill="none"/>
+  <!-- floating question marks (paths) -->
+  <path d="M20 30 C20 18 38 18 38 30 C38 38 29 38 29 46" stroke="#ff9ccf" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="29" cy="56" r="3.5" fill="#ff9ccf"/>
+  <path d="M164 14 C164 4 180 4 180 14 C180 21 172 21 172 28" stroke="#5bd1e8" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <circle cx="172" cy="36" r="3" fill="#5bd1e8"/>
+  <!-- sparkles -->
+  <path d="M176 70 L179 78 L187 81 L179 84 L176 92 L173 84 L165 81 L173 78 Z" fill="#ffd34d"/>
+  <path d="M14 96 L16 101 L21 103 L16 105 L14 110 L12 105 L7 103 L12 101 Z" fill="#ffd34d"/>
+</svg>

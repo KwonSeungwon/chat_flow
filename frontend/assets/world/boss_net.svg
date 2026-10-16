@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 타임아웃 와이번: 날개를 편 청록 와이번, 가슴의 모래시계 -->
+  <ellipse cx="100" cy="186" rx="70" ry="10" fill="#000000" opacity="0.18"/>
+  <!-- wings -->
+  <path d="M74 96 L8 40 L26 84 L4 98 L30 110 L18 130 L68 124 Z" fill="#22a497"/>
+  <path d="M126 96 L192 40 L174 84 L196 98 L170 110 L182 130 L132 124 Z" fill="#1b8d82"/>
+  <path d="M74 96 L26 84 M70 110 L30 110" stroke="#5fd3c4" stroke-width="2"/>
+  <path d="M126 96 L174 84 M130 110 L170 110" stroke="#4cc0b2" stroke-width="2"/>
+  <!-- tail -->
+  <path d="M120 170 C150 178 170 160 176 140" stroke="#34c3b5" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <polygon points="168,132 186,132 178,146" fill="#ff7a6b"/>
+  <!-- body -->
+  <path d="M66 180 C58 128 76 92 100 92 C124 92 142 128 134 180 Z" fill="#34c3b5"/>
+  <path d="M84 178 C82 140 90 118 100 118 C110 118 118 140 116 178 Z" fill="#c9f2ec"/>
+  <!-- hourglass -->
+  <rect x="86" y="128" width="28" height="4" rx="2" fill="#8a6a4a"/>
+  <rect x="86" y="164" width="28" height="4" rx="2" fill="#8a6a4a"/>
+  <path d="M90 132 L110 132 L100 148 L110 164 L90 164 L100 148 Z" fill="#ffffff" stroke="#8a6a4a" stroke-width="2"/>
+  <polygon points="94,160 106,160 100,151" fill="#ffd34d"/>
+  <polygon points="96,136 104,136 100,141" fill="#ffd34d"/>
+  <!-- neck + head -->
+  <path d="M90 100 C88 80 92 66 100 60 C108 66 112 80 110 100 Z" fill="#34c3b5"/>
+  <path d="M70 52 C72 30 128 30 130 52 C130 70 116 76 100 76 C84 76 70 70 70 52 Z" fill="#34c3b5"/>
+  <polygon points="78,36 66,10 90,32" fill="#e8f7f5"/>
+  <polygon points="122,36 134,10 110,32" fill="#e8f7f5"/>
+  <ellipse cx="86" cy="50" rx="8" ry="9" fill="#ffffff"/><ellipse cx="114" cy="50" rx="8" ry="9" fill="#ffffff"/>
+  <circle cx="87" cy="52" r="4" fill="#24304d"/><circle cx="113" cy="52" r="4" fill="#24304d"/>
+  <!-- sleepy lids -->
+  <path d="M78 46 L94 46 M106 46 L122 46" stroke="#1b8d82" stroke-width="4" stroke-linecap="round"/>
+  <path d="M90 66 Q100 72 110 66" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- zzz -->
+  <path d="M142 26 L152 26 L142 36 L152 36 M156 12 L164 12 L156 20 L164 20" stroke="#9aa6c2" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 120 142" width="120" height="142">
+  <!-- DB 슬라임: 데이터베이스 원기둥 모자 -->
+  <ellipse cx="60" cy="112" rx="44" ry="7" fill="#000000" opacity="0.15"/>
+  <path d="M14 110 C10 60 32 30 60 30 C88 30 110 60 106 110 Z" fill="#b39bff"/>
+  <path d="M22 100 C22 68 38 46 60 46" stroke="#d6caff" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="46" cy="72" r="8" fill="#ffffff"/><circle cx="74" cy="72" r="8" fill="#ffffff"/>
+  <circle cx="48" cy="74" r="4" fill="#24304d"/><circle cx="76" cy="74" r="4" fill="#24304d"/>
+  <path d="M48 92 Q60 84 72 92" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="44" y="12" width="32" height="20" fill="#6c8cff"/>
+  <ellipse cx="60" cy="32" rx="16" ry="5" fill="#4f6ee6"/>
+  <ellipse cx="60" cy="22" rx="16" ry="5" fill="#5a7bf0" opacity="0.6"/>
+  <ellipse cx="60" cy="12" rx="16" ry="5" fill="#9fb4ff"/>
+</svg>
