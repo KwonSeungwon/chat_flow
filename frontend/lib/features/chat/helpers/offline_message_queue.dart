@@ -32,5 +32,9 @@ class OfflineMessageQueue {
     }
   }
 
+  /// Drops a queued payload by its `_localId` (a retried original).
+  void removeByLocalId(String localId) =>
+      _queue.removeWhere((m) => m['_localId'] == localId);
+
   void clear() => _queue.clear();
 }

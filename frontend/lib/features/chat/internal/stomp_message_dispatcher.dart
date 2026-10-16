@@ -141,18 +141,39 @@ class StompMessageDispatcher {
     final state = getCurrentState();
     final existing = state.messages;
 
-    // Replace local 'sending' message with server-confirmed version
-    final sendingIdx = existing.indexWhere((m) =>
-        m.deliveryStatus == MessageDeliveryStatus.sending &&
-        m.userId == msg.userId &&
-        m.content == msg.content);
-    if (sendingIdx >= 0) {
+    // The echo of our own send carries the bubble's localId as
+    // clientMessageId. Match on it first, whatever the bubble's status:
+    // a late echo must also settle a bubble that already timed out to
+    // 'failed'.
+    final clientId = msg.clientMessageId;
+    var localIdx = clientId == null
+        ? -1
+        : existing.indexWhere((m) =>
+            m.localId == clientId &&
+            m.deliveryStatus != MessageDeliveryStatus.sent);
+    // Fallback for echoes without clientMessageId: content match on a
+    // bubble still 'sending'.
+    if (localIdx < 0 && clientId == null) {
+      localIdx = existing.indexWhere((m) =>
+          m.deliveryStatus == MessageDeliveryStatus.sending &&
+          m.userId == msg.userId &&
+          m.content == msg.content);
+    }
+    if (localIdx >= 0) {
       final replaced = List<ChatMessage>.from(existing);
-      replaced[sendingIdx] = msg;
+      // A history merge may already hold the server copy; then just drop
+      // the bubble.
+      if (existing.any((m) => m.effectiveId == msg.effectiveId)) {
+        replaced.removeAt(localIdx);
+      } else {
+        replaced[localIdx] = msg;
+      }
       // Cancel the timeout timer for the matched local message
-      final localId = existing[sendingIdx].localId;
-      onSendingConfirmed(localId);
-      setState(state.copyWith(messages: replaced));
+      onSendingConfirmed(existing[localIdx].localId);
+      setState(state.copyWith(
+        messages: replaced,
+        readCounts: computeReadCounts(replaced, state.readPositions),
+      ));
       return;
     }
 

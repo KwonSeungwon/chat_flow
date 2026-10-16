@@ -665,9 +665,11 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
 
             // Wrap with GlobalKey so we can scroll to this item
             if (isTarget) {
-              return KeyedSubtree(key: _targetKey, child: bubble);
+              bubble = KeyedSubtree(key: _targetKey, child: bubble);
             }
-            return bubble;
+            // Stable identity per message, so inserts above (history
+            // pages) don't hand one bubble's element state to another.
+            return KeyedSubtree(key: ValueKey(msg.effectiveId), child: bubble);
           },
         ),
 

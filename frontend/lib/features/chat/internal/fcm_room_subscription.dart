@@ -27,6 +27,7 @@ class FcmRoomSubscription {
         'token': token,
         'roomId': roomId,
       });
+      FcmService.noteRoomSubscription(roomId, subscribed: true);
     } catch (_) {
       // Best-effort — FCM failure must not interrupt room join
     }
@@ -40,6 +41,7 @@ class FcmRoomSubscription {
         'token': token,
         'roomId': roomId,
       });
+      FcmService.noteRoomSubscription(roomId, subscribed: false);
     } catch (_) {
       // Best-effort — FCM failure must not interrupt room leave
     }
