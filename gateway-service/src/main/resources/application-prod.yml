@@ -35,25 +35,6 @@ spring:
                 backoff:
                   firstBackoff: 50ms
                   maxBackoff: 500ms
-        # ───────── FHIR (의료 데이터, 중간) ─────────
-        - id: fhir-service
-          uri: ${CHAT_SERVICE_URL}
-          predicates:
-            - Path=/api/fhir/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: fhirCircuitBreaker
-                fallbackUri: forward:/api/fallback/fhir
-            - name: Retry
-              args:
-                retries: 2
-                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
         # ───────── FCM 알림 (외부 호출, 중간) ─────────
         - id: fcm-service
           uri: ${CHAT_SERVICE_URL}
@@ -221,10 +202,6 @@ resilience4j:
       # 채팅 API — 빠른 응답 기대, 표준 임계치
       chatCircuitBreaker:
         base-config: default
-      # FHIR — 의료 데이터, 약간 여유
-      fhirCircuitBreaker:
-        base-config: default
-        slow-call-duration-threshold: 5s
       # FCM — 외부 의존 (Firebase), failure 여유
       fcmCircuitBreaker:
         base-config: default
@@ -255,8 +232,6 @@ resilience4j:
         cancel-running-future: true
     instances:
       chatCircuitBreaker:
-        base-config: default
-      fhirCircuitBreaker:
         base-config: default
       fcmCircuitBreaker:
         base-config: default
