@@ -1,7 +1,8 @@
-# ChatFlow - 실시간 채팅 시스템 🚀
+# Gossiplog - 채팅 + 위키 던전 🚀
 
-> **현대적인 마이크로서비스 아키텍처**로 구축된 실시간 채팅 플랫폼  
-> WebSocket/STOMP 실시간 통신, 크로스 플랫폼 지원
+> **현대적인 마이크로서비스 아키텍처**로 구축된 캐주얼 채팅 앱 + 학습 게임 "위키 던전"  
+> WebSocket/STOMP 실시간 통신, 크로스 플랫폼 지원  
+> 내부 코드명과 패키지는 `chatflow`를 유지한다.
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -100,16 +101,18 @@ graph TB
 - **📱 크로스 플랫폼** - Flutter Web + Android APK 지원
 - **🏗️ 마이크로서비스** - 독립적이고 확장 가능한 아키텍처
 
-### 🏥 **EMR (병원 시스템) 연계 기능**
-- **🔄 인수인계 채팅방** - SBAR 구조화 템플릿 (Situation/Background/Assessment/Recommendation)
-- **📋 환자 카드 메시지** - 환자명/병실/진단/바이탈을 구조화된 카드로 공유
-- **🚨 긴급 메시지** - ROUTINE/URGENT/STAT 우선순위 플래그
-- **👥 역할 기반 접근제어 (RBAC)** - 의사/간호사/약사/관리자 역할별 방 접근 제한
+### 🗨️ **채팅 기능**
+- **👥 방 역할** - OWNER/MODERATOR/MEMBER 역할별 방 관리
 - **✅ 읽음 확인** - STOMP 기반 실시간 읽음 상태 추적
 - **🔐 메시지 암호화** - AES-256-GCM at-rest 암호화
+- **📣 멘션 · ⏰ 예약 메시지 · 📎 파일 전송**
+
+### 🎮 **위키 던전**
+- **🗺️ `/world` 학습 게임** - chat-service에 포함, 관리자는 `GAME_ADMIN_USER_IDS`로 지정
+- **📝 가입** - 사용자명과 비밀번호만 입력
 
 ### 💎 **고급 기능**
-- **🎨 모던 UI/UX** - Material 3 디자인, 채팅+의료 십자 앱 아이콘
+- **🎨 모던 UI/UX** - Material 3 디자인, Gossiplog 섬 앱 아이콘
 - **🌙 다크/라이트 모드** - 테마 토글 지원
 - **🚀 성능 최적화** - Valkey 캐싱, Outbox 패턴
 - **📈 실시간 모니터링** - Prometheus/Grafana 메트릭
@@ -156,7 +159,7 @@ flutter run -d chrome
 cd frontend
 flutter build apk --release
 # 빌드 결과: build/app/outputs/flutter-apk/app-release.apk
-# 또는 웹에서 /chatflow-app.apk 경로로 다운로드 가능
+# 또는 웹에서 /chatflow-app.apk 경로로 다운로드 가능 (현재 3.0.0 "Gossiplog")
 ```
 
 ## 📦 모듈 구조
