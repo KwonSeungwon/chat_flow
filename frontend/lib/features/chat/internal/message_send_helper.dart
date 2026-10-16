@@ -7,7 +7,8 @@ import '../../../shared/models/chat_message.dart';
 import '../helpers/offline_message_queue.dart';
 import '../state/chat_messages_state.dart';
 
-/// Outbound message actions (send, retry, upload file, forward). Extracted from ChatNotifier as part of Stage 2.5 to bring
+/// Outbound message actions (send, retry, upload file, forward).
+/// Extracted from ChatNotifier as part of Stage 2.5 to bring
 /// chat_notifier.dart back within the 700-LOC budget.
 ///
 /// Pure delegation via closures — does not inherit from or depend on

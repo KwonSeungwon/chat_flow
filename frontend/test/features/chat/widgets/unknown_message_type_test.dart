@@ -36,4 +36,29 @@ void main() {
     expect(find.text('{"name":"x"}'), findsOneWidget);
     expect(find.text('{"type":"LEGACY","a":"b"}'), findsOneWidget);
   });
+
+  // 서버 V20이 지우기 전의 실제 옛 의료 메시지 payload.
+  testWidgets('옛 PATIENT_CARD 메시지와 SBAR JSON 본문도 일반 말풍선으로 그린다',
+      (tester) async {
+    const cardBody = '{"patientName":"P","roomNumber":"101","diagnosis":"D"}';
+    const sbarBody = '{"type":"SBAR","situation":"s","background":"b",'
+        '"assessment":"a","recommendation":"r"}';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ChatMessagesList(
+          currentUsername: 'bob',
+          messages: [
+            message('m1', 'PATIENT_CARD', cardBody),
+            message('m2', 'CHAT', sbarBody),
+          ],
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ChatBubble), findsNWidgets(2));
+    expect(find.text(cardBody), findsOneWidget);
+    expect(find.text(sbarBody), findsOneWidget);
+  });
 }
