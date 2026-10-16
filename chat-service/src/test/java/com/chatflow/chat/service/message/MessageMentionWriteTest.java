@@ -10,7 +10,6 @@ import com.chatflow.chat.service.outbox.ChatPersistenceService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -113,8 +112,7 @@ class MessageMentionWriteTest {
             ArgumentCaptor<List<MessageMentionEntity>> mentionsCaptor =
                     ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), eq(KafkaTopics.CHAT_MESSAGES),
-                    eq("MESSAGE_SENT"), any(), mentionsCaptor.capture());
+                    any(ChatMessage.class), mentionsCaptor.capture());
 
             List<MessageMentionEntity> mentions = mentionsCaptor.getValue();
             assertThat(mentions).hasSize(1);
@@ -149,7 +147,7 @@ class MessageMentionWriteTest {
 
             ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+                    any(ChatMessage.class), captor.capture());
             return captor.getValue();
         }
 
@@ -192,7 +190,7 @@ class MessageMentionWriteTest {
 
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+                    any(ChatMessage.class), eq(List.of()));
         }
     }
 
@@ -216,8 +214,7 @@ class MessageMentionWriteTest {
             ArgumentCaptor<List<MessageMentionEntity>> mentionsCaptor =
                     ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(),
-                    mentionsCaptor.capture());
+                    any(ChatMessage.class), mentionsCaptor.capture());
             assertThat(mentionsCaptor.getValue()).isEmpty();
         }
     }
@@ -242,8 +239,7 @@ class MessageMentionWriteTest {
             ArgumentCaptor<List<MessageMentionEntity>> mentionsCaptor =
                     ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(),
-                    mentionsCaptor.capture());
+                    any(ChatMessage.class), mentionsCaptor.capture());
             assertThat(mentionsCaptor.getValue()).isEmpty();
         }
     }
@@ -268,8 +264,7 @@ class MessageMentionWriteTest {
 
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), eq(KafkaTopics.CHAT_MESSAGES),
-                    eq("MESSAGE_SENT"), any(), eq(List.of()));
+                    any(ChatMessage.class), eq(List.of()));
         }
 
         @Test
@@ -280,7 +275,7 @@ class MessageMentionWriteTest {
 
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+                    any(ChatMessage.class), eq(List.of()));
         }
 
         @Test
@@ -294,7 +289,7 @@ class MessageMentionWriteTest {
 
             ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+                    any(ChatMessage.class), captor.capture());
             assertThat(captor.getValue())
                     .extracting(MessageMentionEntity::getMentionedUserId)
                     .containsExactly("bob-id");
@@ -320,7 +315,7 @@ class MessageMentionWriteTest {
 
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+                    any(ChatMessage.class), eq(List.of()));
             verify(fcmNotificationService, never()).sendMessageNotification(
                     startsWith("mention-"), anyString(), anyString());
         }
@@ -340,7 +335,7 @@ class MessageMentionWriteTest {
 
             ArgumentCaptor<List<MessageMentionEntity>> captor = ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), captor.capture());
+                    any(ChatMessage.class), captor.capture());
             assertThat(captor.getValue())
                     .extracting(MessageMentionEntity::getMentionedUserId)
                     .containsExactly("bob-id");
@@ -367,7 +362,7 @@ class MessageMentionWriteTest {
             // or persistence, so no mention row and no push can come out of it.
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), anyList());
+                    any(ChatMessage.class), anyList());
             verifyNoInteractions(fcmNotificationService);
         }
     }
@@ -393,7 +388,7 @@ class MessageMentionWriteTest {
 
             verify(roomMemberRepository, never()).findByRoomId(anyString());
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+                    any(ChatMessage.class), eq(List.of()));
             verify(fcmNotificationService, never()).sendMessageNotification(
                     startsWith("mention-"), anyString(), anyString());
         }
@@ -484,8 +479,7 @@ class MessageMentionWriteTest {
             ArgumentCaptor<List<MessageMentionEntity>> mentionsCaptor =
                     ArgumentCaptor.forClass(List.class);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(),
-                    mentionsCaptor.capture());
+                    any(ChatMessage.class), mentionsCaptor.capture());
             assertThat(mentionsCaptor.getValue()).hasSize(1);
             assertThat(mentionsCaptor.getValue().get(0).getMentionedUserId()).isEqualTo("bob-id");
         }

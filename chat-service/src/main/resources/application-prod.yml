@@ -64,26 +64,6 @@ spring:
           max-idle: 4
           min-idle: 1
           max-wait: 2000ms
-  
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      acks: all  # Strongest durability guarantee
-      retries: 3
-      batch-size: 16384
-      linger-ms: 5
-      compression-type: snappy
-    consumer:
-      group-id: chat-service-prod-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      max-poll-records: 100
-    listener:
-      concurrency: 3
 
 chatflow:
   allowed-origins: "https://app.gossiplog.com,https://gossiplog.com"
@@ -91,8 +71,6 @@ chatflow:
     base-url: https://app.gossiplog.com
   file-storage:
     upload-dir: /app/uploads
-  kafka:
-    replication-factor: 3
 
 firebase:
   service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:classpath:firebase-service-account.json}
@@ -124,7 +102,6 @@ logging:
     com.chatflow: INFO
     org.springframework.web.socket: WARN
     org.hibernate: WARN
-    org.apache.kafka: WARN
   pattern:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
   logback:

@@ -10,7 +10,6 @@ import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.mapper.ChatRoomMapper;
 import com.chatflow.chat.service.RoomPermissionService;
-import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
 import com.chatflow.chat.service.room.RoomAccessPolicy;
@@ -62,7 +61,6 @@ class ChatRoomControllerTest {
     @Mock private ChatRoomService chatRoomService;
     @Mock private RoomMembershipService roomMembershipService;
     @Mock private DmRoomService dmRoomService;
-    @Mock private AuditService auditService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private RoomVisibilityService roomVisibilityService;
     @Mock private ChatRoomMapper chatRoomMapper;

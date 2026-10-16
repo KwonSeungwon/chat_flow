@@ -7,7 +7,6 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
 import com.chatflow.chat.mapper.ChatRoomMapper;
-import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
@@ -18,7 +17,6 @@ import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
-import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatRoomResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
@@ -50,7 +48,6 @@ public class ChatRoomController {
     private final RoomMembershipService roomMembershipService;
     private final RoomPermissionService roomPermissionService;
     private final DmRoomService dmRoomService;
-    private final AuditService auditService;
     private final StringRedisTemplate redisTemplate;
     private final RoomVisibilityService roomVisibilityService;
     private final ChatRoomMapper chatRoomMapper;
@@ -211,21 +208,17 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/hide")
     public ResponseEntity<ApiResponse<Void>> hideRoom(
             @PathVariable String roomId,
-            @AuthenticatedUser String userId,
-            @RequestHeader(value = "X-Username", required = false) String username) {
+            @AuthenticatedUser String userId) {
         ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
         if (room == null) {
-            auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDE_DENIED);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
         if (room.getRoomType() != RoomType.DIRECT) {
-            auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDE_DENIED);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("DM 방만 숨길 수 있습니다. 단체방은 나가기를 사용하세요."));
         }
         roomVisibilityService.hide(userId, roomId);
-        auditService.logAccess(userId, username, roomId, AuditEvent.ROOM_HIDDEN);
         return ResponseEntity.ok(ApiResponse.ok(null, "방을 숨겼습니다"));
     }
 
