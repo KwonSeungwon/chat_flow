@@ -77,8 +77,9 @@ class FileControllerTest {
 
     @Test
     void upload_withValidToken_returns200() throws Exception {
-        when(fileStorageService.store(any()))
-                .thenReturn(UUID.randomUUID().toString());
+        String uuid = UUID.randomUUID().toString();
+        when(fileStorageService.store(any())).thenReturn(uuid);
+        when(fileStorageService.getContentType(uuid)).thenReturn("image/jpeg");
 
         MockMultipartFile file = new MockMultipartFile("file", "test.jpg", "image/jpeg", JPEG_MAGIC);
         mockMvc.perform(multipart("/api/files/upload").file(file)

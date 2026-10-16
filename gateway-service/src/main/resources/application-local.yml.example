@@ -35,6 +35,15 @@ spring:
           uri: ws://localhost:8080
           predicates:
             - Path=/ws/**
+          filters:
+            # Every handshake through the gateway carries the internal secret —
+            # chat-service rejects WS handshakes without it. Identity is NOT
+            # implied: unauthenticated (browser) sockets authenticate on STOMP
+            # CONNECT with an Authorization: Bearer header.
+            - name: SetRequestHeader
+              args:
+                name: X-Gateway-Secret
+                value: ${GATEWAY_INTERNAL_SECRET:}
         - id: websocket-native
           uri: ws://localhost:8080
           predicates:
@@ -43,17 +52,19 @@ spring:
             # only /ws-native/** which is likely a latent prod bug — fix
             # there separately if confirmed.
             - Path=/ws-native,/ws-native/**
+          filters:
+            # Every handshake through the gateway carries the internal secret —
+            # chat-service rejects WS handshakes without it. Identity is NOT
+            # implied: unauthenticated (browser) sockets authenticate on STOMP
+            # CONNECT with an Authorization: Bearer header.
+            - name: SetRequestHeader
+              args:
+                name: X-Gateway-Secret
+                value: ${GATEWAY_INTERNAL_SECRET:}
         - id: file-service
           uri: http://localhost:8080
           predicates:
             - Path=/api/files/**
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOriginPatterns: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
-            allowCredentials: true
 
   # Valkey Configuration (using Spring Data Redis for compatibility)
   data:
@@ -96,6 +107,10 @@ resilience4j:
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
 
+# Must equal chat-service's GATEWAY_INTERNAL_SECRET (see its local template).
+# (an env var of the same name overrides this — env beats yml)
+GATEWAY_INTERNAL_SECRET: local-dev-gateway-internal-secret
+
 jwt:
   secret: chatflow-local-jwt-secret-key-must-be-at-least-32-bytes-long
   expiration-ms: 86400000
@@ -104,3 +119,8 @@ logging:
   level:
     org.springframework.cloud.gateway: DEBUG
     com.chatflow: DEBUG
+
+# CORS는 CorsConfig(CorsWebFilter) 단일 출처 — 로컬 개발 origin 허용
+chatflow:
+  cors:
+    allowed-origins: "http://localhost:*,http://127.0.0.1:*"

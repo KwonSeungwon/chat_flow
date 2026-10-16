@@ -138,4 +138,27 @@ class FileStorageServiceTest {
         // passwd.jpg 라는 이름으로 sanitize 되어야 함 (경로 컴포넌트 제거)
         assertTrue(uuidDir.toFile().listFiles() != null);
     }
+
+    // ── 감지된 content type ───────────────────────────────────
+
+    @Test
+    void download_contentTypeFromDetectedType_notExtension() throws IOException {
+        byte[] pngHeader = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0x00, 0x00, 0x00, 0x0D};
+        // 확장자는 .pdf 이지만 실제 내용은 PNG
+        MockMultipartFile file = new MockMultipartFile("file", "sneaky.pdf", "application/pdf", pngHeader);
+        String uuid = service.store(file);
+
+        assertEquals("image/png", service.loadAsResource(uuid).contentType());
+        assertEquals("image/png", service.getContentType(uuid));
+    }
+
+    @Test
+    void download_legacyFileWithoutSidecar_unknownExtensionFallsBackToOctetStream() throws IOException {
+        String uuid = UUID.randomUUID().toString();
+        Path dir = java.nio.file.Files.createDirectories(tempDir.resolve(uuid));
+        java.nio.file.Files.writeString(dir.resolve("note.html"), "<script>1</script>");
+
+        assertEquals("application/octet-stream", service.loadAsResource(uuid).contentType());
+    }
 }

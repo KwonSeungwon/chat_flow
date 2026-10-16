@@ -23,8 +23,10 @@ import org.mapstruct.Named;
  *       because the DTO has no counterpart. {@code deleted} is mapped to
  *       the DTO's {@code isDeleted} field (Task 0.7) and {@code edited}
  *       is mapped to the DTO's {@code edited} field (Task 0.10).</li>
- *   <li>DTO-only fields ({@code id}, {@code roomType}) are ignored on
- *       {@code toEntity} because the entity has no counterpart.</li>
+ *   <li>DTO-only fields ({@code id}, {@code roomType}, {@code clientMessageId})
+ *       are ignored because the entity has no counterpart.</li>
+ *   <li>{@code isAiGenerated} is never copied from the DTO on {@code toEntity}
+ *       — it is always {@code false} for rows chat-service writes.</li>
  * </ul>
  *
  * Stage 4-B foundation pilot. Future mappers (Room, EditHistory, etc.)
@@ -40,10 +42,13 @@ public interface ChatMessageMapper {
     @Mapping(target = "edited", expression = "java(entity.isEdited())")
     @Mapping(target = "roomType", ignore = true)
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "clientMessageId", ignore = true)
     ChatMessage toDto(ChatMessageEntity entity);
 
     @Mapping(target = "type", source = "type", qualifiedByName = "messageTypeToString")
-    @Mapping(target = "isAiGenerated", expression = "java(dto.isAiGenerated())")
+    // Server-owned: a DTO built from client input must never mark itself as AI output.
+    // chat-service writes no AI-authored rows (summaries live in ai-summary-service).
+    @Mapping(target = "isAiGenerated", constant = "false")
     @Mapping(target = "deleted", ignore = true)
     @Mapping(target = "edited", ignore = true)
     @Mapping(target = "editedAt", ignore = true)

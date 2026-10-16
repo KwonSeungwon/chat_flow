@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageMentionEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageMentionRepository;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.util.MessageEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -26,6 +28,7 @@ public class MentionDigestService {
     private final MessageMentionRepository mentionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final MessageEncryptor messageEncryptor;
+    private final RoomMemberRepository roomMemberRepository;
 
     private static final int MAX_DAYS = 365;
     private static final int PREVIEW_LENGTH = 140;
@@ -41,6 +44,20 @@ public class MentionDigestService {
                 : content;
     }
 
+    /** 사용자가 현재 멤버인 방의 멘션만 (강퇴/탈퇴한 방의 멘션은 노출하지 않는다). */
+    private List<MessageMentionEntity> memberRoomMentions(String userId, LocalDateTime since) {
+        List<MessageMentionEntity> rows =
+                mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, since);
+        if (rows.isEmpty()) return List.of();
+        Set<String> memberRooms = rows.stream()
+                .map(MessageMentionEntity::getRoomId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .filter(roomId -> roomMemberRepository.existsByRoomIdAndUserId(roomId, userId))
+                .collect(Collectors.toSet());
+        return rows.stream().filter(r -> memberRooms.contains(r.getRoomId())).toList();
+    }
+
     /**
      * List mention digest items for a user.
      *
@@ -50,8 +67,7 @@ public class MentionDigestService {
      */
     public List<MentionItemDto> list(String userId, String username, int days) {
         LocalDateTime since = LocalDateTime.now().minusDays(clamp(days));
-        List<MessageMentionEntity> rows =
-                mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, since);
+        List<MessageMentionEntity> rows = memberRoomMentions(userId, since);
         if (rows.isEmpty()) return List.of();
 
         Map<String, ChatMessageEntity> messages = chatMessageRepository
@@ -77,7 +93,7 @@ public class MentionDigestService {
      */
     public long unreadCount(String userId, String username, int days) {
         LocalDateTime since = LocalDateTime.now().minusDays(clamp(days));
-        return mentionRepository.countByMentionedUserIdAndReadFalseAndCreatedAtAfter(userId, since);
+        return memberRoomMentions(userId, since).stream().filter(r -> !r.isRead()).count();
     }
 
     @Transactional
