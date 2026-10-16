@@ -19,3 +19,6 @@ hpa:
   minReplicas: 2
   maxReplicas: 8
   targetCPUUtilizationPercentage: 70
+
+# Wiki Dungeon admin allow-list (comma-separated user ids). Empty denies every admin call.
+gameAdminUserIds: ""
