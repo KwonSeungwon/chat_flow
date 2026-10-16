@@ -7,6 +7,7 @@ import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
 import '../../features/chat/screens/mentions_screen.dart';
 import '../../features/chat/screens/scheduled_messages_screen.dart';
+import '../../features/world/admin/question_review_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -79,6 +80,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
         ],
+      ),
+      GoRoute(
+        path: '/world/admin',
+        builder: (context, state) => const QuestionReviewPage(),
       ),
       GoRoute(
         path: '/scheduled',
