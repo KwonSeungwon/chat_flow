@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/chat_strings.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/utils/url_helper.dart';
 import '../auth/auth_provider.dart';
@@ -355,16 +356,20 @@ class ChatPage extends ConsumerWidget {
           ),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: effectiveRoomId != null
-                    ? ChatRoomContent(
-                        roomId: effectiveRoomId,
-                        username: auth.username,
-                        scrollToMessageId: scrollToMessageId,
-                      )
-                    : const LobbyPlaceholder(),
+            // 채팅방 배경(라이트: 하늘→살구 세로 그라데이션)은 1100 제한 바깥까지 채운다.
+            child: DecoratedBox(
+              decoration: BoxDecoration(gradient: ChatPalette.of(context).roomBackground),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: effectiveRoomId != null
+                      ? ChatRoomContent(
+                          roomId: effectiveRoomId,
+                          username: auth.username,
+                          scrollToMessageId: scrollToMessageId,
+                        )
+                      : const LobbyPlaceholder(),
+                ),
               ),
             ),
           ),

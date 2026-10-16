@@ -16,23 +16,22 @@ class LobbyPlaceholder extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primary.withAlpha(30),
-                    AppColors.secondary.withAlpha(20),
-                  ],
-                ),
-                border: Border.all(
-                    color: AppColors.primary.withAlpha(60), width: 1),
+              width: 92,
+              height: 92,
+              decoration: ShapeDecoration(
+                shape: ContinuousRectangleBorder(
+                    borderRadius: BorderRadius.circular(72)),
+                gradient: AppColors.accentGradient,
+                shadows: [
+                  BoxShadow(
+                    color: AppColors.blue.withAlpha(70),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.forum_outlined,
-                  size: 40, color: AppColors.primary),
+              child: const Icon(Icons.forum_rounded,
+                  size: 42, color: Colors.white),
             ),
             const SizedBox(height: 24),
             Text(
@@ -48,7 +47,7 @@ class LobbyPlaceholder extends StatelessWidget {
               '채팅방을 선택하거나 새로 만들어\n대화를 시작할 수 있습니다',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: colorScheme.onSurfaceVariant, fontSize: 14, height: 1.5),
+                  color: ChatPalette.of(context).meta, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 28),
             FilledButton.icon(

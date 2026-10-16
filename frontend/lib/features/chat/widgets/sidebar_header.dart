@@ -30,9 +30,9 @@ class SidebarHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   child: Image.asset('assets/app_icon.png', width: 32, height: 32,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble, size: 20, color: Colors.white)),
+                    errorBuilder: (_, __, ___) => Icon(Icons.chat_bubble, size: 20, color: cs.primary)),
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -40,7 +40,7 @@ class SidebarHeader extends StatelessWidget {
                   style: TextStyle(
                     color: cs.onSurface,
                     fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -166,14 +166,13 @@ class SidebarHeader extends StatelessWidget {
             message: '새 채팅방',
             child: InkWell(
               onTap: onCreateTap,
-              borderRadius: BorderRadius.circular(8),
+              customBorder: const CircleBorder(),
               child: Container(
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  shape: BoxShape.circle,
                   color: cs.surfaceContainer,
-                  border: Border.all(color: cs.outline.withAlpha(80)),
                 ),
                 child: Icon(Icons.edit_outlined,
                     size: 16, color: cs.onSurfaceVariant),

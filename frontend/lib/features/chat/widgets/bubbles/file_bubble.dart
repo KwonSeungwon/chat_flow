@@ -5,6 +5,7 @@ import '../../../../core/utils/url_helper.dart';
 import '../../../../shared/models/chat_message.dart';
 import '../pdf_viewer_dialog.dart';
 import 'avatar.dart';
+import 'chat_bubble.dart' show bubbleRadius;
 
 class FileBubble extends StatelessWidget {
   final ChatMessage msg;
@@ -70,17 +71,20 @@ class FileBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final cp = ChatPalette.of(context);
+    final bubbleColor = isMine ? cp.myBubble : cp.otherBubble;
+    final onBubble = isMine ? cp.onMyBubble : cp.onOtherBubble;
+    final bubbleShadow = [
+      BoxShadow(color: cp.bubbleShadow, blurRadius: 8, offset: const Offset(0, 2)),
+    ];
+    final metaStyle = TextStyle(fontSize: 10, color: cp.meta);
     final screenWidth = MediaQuery.of(context).size.width;
     // Responsive image width for mobile
     final imageWidth = screenWidth < 600
         ? (screenWidth * 0.55).clamp(140.0, 220.0)
         : 220.0;
-    final radius = BorderRadius.only(
-      topLeft: const Radius.circular(20),
-      topRight: const Radius.circular(20),
-      bottomLeft: Radius.circular(isMine ? 20 : 5),
-      bottomRight: Radius.circular(isMine ? 5 : 20),
-    );
+    // 파일 메시지는 그룹핑 없이 매번 이름·아바타를 보이므로 늘 꼬리 모서리를 쓴다.
+    final radius = bubbleRadius(isMine: isMine, isFirstInGroup: true);
     final fullUrl = buildFullUrl(msg.fileUrl!);
 
     // Text content that user typed (not default [파일] prefix)
@@ -142,19 +146,17 @@ class FileBubble extends StatelessWidget {
               width: imageWidth,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: isMine ? null : cs.surfaceContainer,
-                gradient: isMine ? AppColors.myBubbleGradient : null,
+                color: bubbleColor,
                 borderRadius: BorderRadius.only(
                   bottomLeft: radius.bottomLeft,
                   bottomRight: radius.bottomRight,
                 ),
-                border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
               ),
               child: Text(
                 msg.content,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isMine ? Colors.white : cs.onSurface,
+                  color: onBubble,
                   height: 1.4,
                 ),
               ),
@@ -171,10 +173,9 @@ class FileBubble extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: fileMaxWidth),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isMine ? null : cs.surfaceContainer,
-            gradient: isMine ? AppColors.myBubbleGradient : null,
+            color: bubbleColor,
             borderRadius: radius,
-            border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
+            boxShadow: bubbleShadow,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -182,10 +183,10 @@ class FileBubble extends StatelessWidget {
               Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(25),
-                  borderRadius: BorderRadius.circular(8),
+                  color: cs.error.withAlpha(28),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.picture_as_pdf, size: 24, color: Colors.red),
+                child: Icon(Icons.picture_as_pdf, size: 24, color: cs.error),
               ),
               const SizedBox(width: 10),
               Flexible(
@@ -199,7 +200,7 @@ class FileBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: isMine ? Colors.white : cs.onSurface,
+                        color: onBubble,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -207,7 +208,7 @@ class FileBubble extends StatelessWidget {
                       'PDF 미리보기',
                       style: TextStyle(
                         fontSize: 11,
-                        color: isMine ? Colors.white.withAlpha(200) : cs.primary,
+                        color: isMine ? onBubble.withAlpha(170) : cs.primary,
                       ),
                     ),
                   ],
@@ -216,7 +217,7 @@ class FileBubble extends StatelessWidget {
               Icon(
                 Icons.chevron_right,
                 size: 20,
-                color: isMine ? Colors.white.withAlpha(180) : cs.onSurfaceVariant,
+                color: onBubble.withAlpha(150),
               ),
             ],
           ),
@@ -230,10 +231,9 @@ class FileBubble extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: fileMaxWidth),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isMine ? null : cs.surfaceContainer,
-          gradient: isMine ? AppColors.myBubbleGradient : null,
+          color: bubbleColor,
           borderRadius: radius,
-          border: isMine ? null : Border.all(color: cs.outline.withAlpha(80)),
+          boxShadow: bubbleShadow,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -241,7 +241,7 @@ class FileBubble extends StatelessWidget {
             Icon(
               Icons.insert_drive_file_outlined,
               size: 28,
-              color: isMine ? Colors.white.withAlpha(220) : cs.onSurfaceVariant,
+              color: onBubble.withAlpha(170),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -255,7 +255,7 @@ class FileBubble extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: isMine ? Colors.white : cs.onSurface,
+                      color: onBubble,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -266,7 +266,7 @@ class FileBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: isMine
-                            ? Colors.white.withAlpha(200)
+                            ? onBubble.withAlpha(170)
                             : cs.primary,
                         decoration: TextDecoration.underline,
                       ),
@@ -281,10 +281,10 @@ class FileBubble extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
       child: Row(
         mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isMine) ...[
             Avatar(name: msg.username, color: avatarColor(msg.username)),
@@ -296,12 +296,12 @@ class FileBubble extends StatelessWidget {
               children: [
                 if (!isMine)
                   Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 3),
+                    padding: const EdgeInsets.only(left: 2, bottom: 4),
                     child: Text(
                       msg.username,
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                        color: cp.name,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -312,7 +312,7 @@ class FileBubble extends StatelessWidget {
                   children: [
                     if (isMine)
                       Padding(
-                        padding: const EdgeInsets.only(right: 5, bottom: 3),
+                        padding: const EdgeInsets.only(right: 6, bottom: 2),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           mainAxisSize: MainAxisSize.min,
@@ -322,31 +322,19 @@ class FileBubble extends StatelessWidget {
                                 '읽음 $readCount',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Theme.of(context).colorScheme.primary.withAlpha(180),
-                                  fontWeight: FontWeight.w500,
+                                  color: cp.readCount,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            Text(
-                              time,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
-                              ),
-                            ),
+                            Text(time, style: metaStyle),
                           ],
                         ),
                       ),
                     Flexible(child: content),
                     if (!isMine)
                       Padding(
-                        padding: const EdgeInsets.only(left: 5, bottom: 3),
-                        child: Text(
-                          time,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
-                          ),
-                        ),
+                        padding: const EdgeInsets.only(left: 6, bottom: 2),
+                        child: Text(time, style: metaStyle),
                       ),
                   ],
                 ),
@@ -357,12 +345,12 @@ class FileBubble extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () => onOpenThread!(msg),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer.withAlpha(60),
-                          borderRadius: BorderRadius.circular(12),
+                          color: cp.otherBubble,
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                              color: Theme.of(context).colorScheme.primary.withAlpha(80),
+                              color: cs.primary.withAlpha(70),
                               width: 1),
                         ),
                         child: Row(

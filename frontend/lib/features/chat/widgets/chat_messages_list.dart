@@ -394,33 +394,41 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
   Widget build(BuildContext context) {
     if (widget.messages.isEmpty) {
       final colorScheme = Theme.of(context).colorScheme;
+      final cp = ChatPalette.of(context);
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colorScheme.surfaceContainer,
-                border: Border.all(color: colorScheme.outline),
+              width: 72,
+              height: 72,
+              decoration: ShapeDecoration(
+                shape: ContinuousRectangleBorder(
+                    borderRadius: BorderRadius.circular(56)),
+                color: cp.otherBubble,
+                shadows: [
+                  BoxShadow(
+                    color: cp.bubbleShadow,
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Icon(Icons.chat_bubble_outline_rounded,
-                  size: 30, color: colorScheme.onSurfaceVariant.withAlpha(100)),
+              child: Icon(Icons.chat_bubble_rounded,
+                  size: 32, color: colorScheme.primary.withAlpha(170)),
             ),
             const SizedBox(height: 16),
             Text(
               '아직 메시지가 없습니다',
               style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
                   fontSize: 15),
             ),
             const SizedBox(height: 4),
             Text(
               '첫 메시지를 보내보세요!',
-              style: TextStyle(color: colorScheme.onSurfaceVariant.withAlpha(150), fontSize: 13),
+              style: TextStyle(color: cp.meta, fontSize: 13),
             ),
           ],
         ),
@@ -511,7 +519,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
               );
             } else {
-              final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
               final isMine = msg.username == widget.currentUsername;
 
@@ -520,7 +527,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 isMine: isMine,
                 me: widget.currentUsername,
                 time: _formatTime(msg.timestamp),
-                isAiQuestion: isAiQuestion,
                 readCount: readCount,
                 onReply: (!msg.deleted && widget.onReplySelected != null)
                     ? () => widget.onReplySelected!(msg)
@@ -568,8 +574,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               bubble = AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withAlpha(isHighlighted ? 45 : 0),
-                  borderRadius: BorderRadius.circular(12),
+                  // 내 말풍선이 노랑이라 하이라이트는 파랑 계열로 띄운다.
+                  color: Theme.of(context).colorScheme.primary.withAlpha(isHighlighted ? 40 : 0),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: bubble,
               );
@@ -598,11 +605,11 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    gradient: AppColors.accentGradient,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withAlpha(90),
+                        color: AppColors.blue.withAlpha(90),
                         blurRadius: 14,
                         offset: const Offset(0, 4),
                       ),

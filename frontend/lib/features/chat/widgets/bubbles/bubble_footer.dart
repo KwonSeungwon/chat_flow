@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/chat_message.dart';
 
 // ─────────────────────────────────────────────────────────────────
@@ -36,18 +37,15 @@ class BubbleFooter extends StatelessWidget {
               onTap: () => onOpenThread!(msg),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                    horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withAlpha(60),
-                  borderRadius: BorderRadius.circular(12),
+                  color: ChatPalette.of(context).otherBubble,
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: Theme.of(context)
                         .colorScheme
                         .primary
-                        .withAlpha(80),
+                        .withAlpha(70),
                     width: 1,
                   ),
                 ),
@@ -77,7 +75,7 @@ class BubbleFooter extends StatelessWidget {
         // Reaction chips
         if (msg.reactions.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: 4),
             child: Wrap(
               spacing: 4,
               children: msg.reactions.entries.map((e) {
@@ -86,11 +84,17 @@ class BubbleFooter extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onReaction?.call(emoji),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
+                      color: ChatPalette.of(context).otherBubble,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: ChatPalette.of(context).bubbleShadow,
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
                     ),
                     child: Text('$emoji ${users.length}', style: const TextStyle(fontSize: 12)),
                   ),
@@ -108,8 +112,8 @@ class BubbleFooter extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Icon(
                   Icons.reply_rounded,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
+                  size: 14,
+                  color: ChatPalette.of(context).meta.withAlpha(150),
                 ),
               ),
             ),

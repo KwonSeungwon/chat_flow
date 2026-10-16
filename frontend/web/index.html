@@ -20,7 +20,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #0D0F14;
+      background: #EEF4FF;
       overflow: hidden;
       height: 100vh;
     }
@@ -28,7 +28,7 @@
     #chatflow-loader {
       position: fixed;
       inset: 0;
-      background: #0D0F14;
+      background: linear-gradient(180deg, #EEF4FF, #FDF3E7);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -53,13 +53,13 @@
     }
     .blob-1 {
       width: 320px; height: 320px;
-      background: #7C6FF7;
+      background: #6C8CFF;
       top: -60px; left: -80px;
       animation: drift1 8s ease-in-out infinite;
     }
     .blob-2 {
       width: 240px; height: 240px;
-      background: #4ECDC4;
+      background: #FFC48A;
       bottom: -40px; right: -60px;
       animation: drift2 10s ease-in-out infinite;
     }
@@ -71,14 +71,14 @@
     }
     .logo-ring {
       width: 80px; height: 80px;
-      border-radius: 18px;
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow:
-        0 0 0 1px rgba(13,148,136,0.3),
-        0 0 40px rgba(13,148,136,0.35),
-        0 8px 32px rgba(0,0,0,0.4);
+        0 0 0 1px rgba(108,140,255,0.25),
+        0 0 40px rgba(108,140,255,0.25),
+        0 8px 32px rgba(59,74,107,0.18);
       animation: logo-pulse 2.4s ease-in-out infinite;
       overflow: hidden;
     }
@@ -92,21 +92,21 @@
       inset: -8px;
       border-radius: 50%;
       border: 1.5px solid transparent;
-      border-top-color: rgba(124,111,247,0.6);
-      border-right-color: rgba(78,205,196,0.4);
+      border-top-color: rgba(108,140,255,0.6);
+      border-right-color: rgba(160,123,255,0.4);
       animation: orbit-spin 2s linear infinite;
     }
 
     /* App name */
     .app-name {
-      color: #F0F2F5;
+      color: #24304D;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 24px;
       font-weight: 700;
       letter-spacing: -0.5px;
     }
     .app-sub {
-      color: #545F72;
+      color: #6B7896;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 13px;
       letter-spacing: 0.2px;
@@ -117,20 +117,20 @@
     .progress-wrap {
       width: 140px;
       height: 2px;
-      background: #1E2130;
+      background: #E3E8F2;
       border-radius: 2px;
       overflow: hidden;
     }
     .progress-fill {
       height: 100%;
       border-radius: 2px;
-      background: linear-gradient(90deg, #7C6FF7, #4ECDC4);
+      background: linear-gradient(90deg, #6C8CFF, #A07BFF);
       animation: progress-sweep 1.8s ease-in-out infinite;
     }
 
     @keyframes logo-pulse {
-      0%, 100% { box-shadow: 0 0 0 1px rgba(13,148,136,0.3), 0 0 30px rgba(13,148,136,0.25), 0 8px 32px rgba(0,0,0,0.4); }
-      50% { box-shadow: 0 0 0 1px rgba(13,148,136,0.5), 0 0 60px rgba(13,148,136,0.5), 0 8px 40px rgba(0,0,0,0.5); }
+      0%, 100% { box-shadow: 0 0 0 1px rgba(108,140,255,0.25), 0 0 30px rgba(108,140,255,0.2), 0 8px 32px rgba(59,74,107,0.18); }
+      50% { box-shadow: 0 0 0 1px rgba(108,140,255,0.4), 0 0 60px rgba(108,140,255,0.35), 0 8px 40px rgba(59,74,107,0.24); }
     }
     @keyframes orbit-spin {
       from { transform: rotate(0deg); }
