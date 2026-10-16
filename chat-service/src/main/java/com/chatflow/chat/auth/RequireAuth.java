@@ -7,8 +7,8 @@ import java.lang.annotation.Target;
 
 /**
  * Marks a controller method as requiring an authenticated caller — the
- * AuthInterceptor short-circuits with 401 if the X-User-Id header is
- * missing or blank.
+ * AuthInterceptor short-circuits with 401 if JwtAuthFilter authenticated
+ * no user.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
