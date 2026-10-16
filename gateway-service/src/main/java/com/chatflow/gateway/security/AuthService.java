@@ -1,6 +1,7 @@
 package com.chatflow.gateway.security;
 
 import com.chatflow.common.security.SecurityKeys;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,6 @@ import java.util.UUID;
 @Slf4j
 @Service
 public class AuthService {
-
-    private static final String DEFAULT_ROLE = "NURSE";
 
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
@@ -66,8 +65,10 @@ public class AuthService {
         this.cacheTtl = Duration.ofMillis(expirationMs);
     }
 
-    public record AuthRequest(String username, String password, String role) {}
-    public record AuthResponse(String token, String userId, String username, String role, String profileImageUrl) {}
+    /** 옛 클라이언트가 보내는 role 등 알 수 없는 속성은 무시한다. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AuthRequest(String username, String password) {}
+    public record AuthResponse(String token, String userId, String username, String profileImageUrl) {}
 
     /**
      * 회원가입: DB write → active JTI 등록 → 토큰 발급
@@ -83,8 +84,6 @@ public class AuthService {
                                 new IllegalArgumentException("이미 존재하는 사용자명입니다: " + request.username()));
                     }
                     String userId = UUID.randomUUID().toString();
-                    // 클라이언트가 보낸 role은 무시 — 권한 상승 방지 (항상 기본 역할)
-                    String role = DEFAULT_ROLE;
 
                     return Mono.fromCallable(() -> passwordEncoder.encode(request.password()))
                             .subscribeOn(Schedulers.boundedElastic())
@@ -93,16 +92,15 @@ public class AuthService {
                                         .userId(userId)
                                         .username(request.username())
                                         .encodedPassword(encoded)
-                                        .role(role)
                                         .createdAt(LocalDateTime.now())
                                         .build();
 
                                 return userRepository.save(entity)
                                         .flatMap(saved -> {
-                                            String token = jwtUtil.generateToken(userId, request.username(), role);
+                                            String token = jwtUtil.generateToken(userId, request.username());
                                             String newJti = jwtUtil.getJti(token);
                                             return rotateActiveJti(userId, newJti, cacheTtl)
-                                                    .thenReturn(new AuthResponse(token, userId, request.username(), role, null));
+                                                    .thenReturn(new AuthResponse(token, userId, request.username(), null));
                                         });
                             });
                 });
@@ -122,11 +120,10 @@ public class AuthService {
                                 if (!matches) {
                                     return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
                                 }
-                                String role = entity.getRole() != null ? entity.getRole() : "NURSE";
-                                String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername(), role);
+                                String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername());
                                 String newJti = jwtUtil.getJti(token);
                                 return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
-                                        .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), role, entity.getProfileImageUrl()));
+                                        .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), entity.getProfileImageUrl()));
                             })
                 );
     }
