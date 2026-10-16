@@ -48,6 +48,7 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
       final resp = await dio.get(
         '/api/chat/rooms/${widget.roomId}/messages/${widget.parent.effectiveId}/replies',
       );
+      if (!mounted) return;
       final raw = (resp.data is Map) ? resp.data['data'] : resp.data;
       if (raw is List) {
         final notifier =

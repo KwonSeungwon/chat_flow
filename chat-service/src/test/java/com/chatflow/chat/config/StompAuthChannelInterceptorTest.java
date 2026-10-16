@@ -10,15 +10,23 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,16 +34,19 @@ class StompAuthChannelInterceptorTest {
 
     @Mock private RoomMembershipChecker membershipChecker;
     @Mock private MessageChannel channel;
+    @Mock private TokenBlacklistService tokenBlacklistService;
 
     private StompAuthChannelInterceptor interceptor;
 
     private static final String ROOM_ID = "room-abc";
     private static final String USER_ID = "user-123";
     private static final String USERNAME = "alice";
+    private static final String JWT_SECRET = "test-secret-for-chat-service-testing-12345";
 
     @BeforeEach
     void setUp() {
-        interceptor = new StompAuthChannelInterceptor(membershipChecker);
+        interceptor = new StompAuthChannelInterceptor(
+                membershipChecker, new JwtUtil(JWT_SECRET), tokenBlacklistService);
     }
 
     // ── Helper: build a STOMP message with session attributes ──────
@@ -65,6 +76,33 @@ class StompAuthChannelInterceptorTest {
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 
+    private Message<?> buildConnectMessageWithAuthorization(String authorization) {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setSessionAttributes(new HashMap<>());
+        accessor.setSessionId("session-1");
+        if (authorization != null) {
+            accessor.setNativeHeader("Authorization", authorization);
+        }
+        accessor.setLeaveMutable(true);
+        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+    }
+
+    private static String token(String secret, String subject, String username, String jti,
+                                Date expiresAt) {
+        return Jwts.builder()
+                .subject(subject)
+                .claim("username", username)
+                .id(jti)
+                .issuedAt(new Date())
+                .expiration(expiresAt)
+                .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+    }
+
+    private static Date inOneHour() {
+        return new Date(System.currentTimeMillis() + 3_600_000L);
+    }
+
     // ── CONNECT tests ──────────────────────────────────────────────
 
     @Nested
@@ -87,13 +125,91 @@ class StompAuthChannelInterceptorTest {
         }
 
         @Test
-        @DisplayName("passes through when no userId in session")
-        void connect_noUserId_passesThrough() {
-            Message<?> msg = buildConnectMessage(null);
+        @DisplayName("session identity wins — an Authorization header is not consulted")
+        void connect_sessionIdentityPresent_headerIgnored() {
+            StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+            Map<String, Object> sessionAttrs = new HashMap<>();
+            sessionAttrs.put("userId", USER_ID);
+            sessionAttrs.put("username", USERNAME);
+            accessor.setSessionAttributes(sessionAttrs);
+            accessor.setSessionId("session-1");
+            accessor.setNativeHeader("Authorization", "Bearer garbage");
+            accessor.setLeaveMutable(true);
+            Message<?> msg = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
             Message<?> result = interceptor.preSend(msg, channel);
 
-            assertThat(result).isNotNull();
+            assertThat(StompHeaderAccessor.wrap(result).getUser().getName()).isEqualTo(USER_ID);
+            verifyNoInteractions(tokenBlacklistService);
+        }
+
+        @Test
+        @DisplayName("valid Bearer header sets Principal and session identity")
+        void connect_withValidBearerHeader_setsPrincipal() {
+            String jwt = token(JWT_SECRET, USER_ID, USERNAME, "jti-1", inOneHour());
+            when(tokenBlacklistService.isBlacklisted("jti-1")).thenReturn(false);
+            Message<?> msg = buildConnectMessageWithAuthorization("Bearer " + jwt);
+
+            Message<?> result = interceptor.preSend(msg, channel);
+
+            StompHeaderAccessor resultAccessor = StompHeaderAccessor.wrap(result);
+            assertThat(resultAccessor.getUser()).isNotNull();
+            assertThat(resultAccessor.getUser().getName()).isEqualTo(USER_ID);
+            assertThat(resultAccessor.getSessionAttributes())
+                    .containsEntry("userId", USER_ID)
+                    .containsEntry("username", USERNAME);
+        }
+
+        @Test
+        @DisplayName("no session identity and no Authorization header — CONNECT rejected")
+        void connect_withoutAnyIdentity_rejected() {
+            Message<?> msg = buildConnectMessage(null);
+
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class);
+        }
+
+        @Test
+        @DisplayName("token signed with another secret — CONNECT rejected")
+        void connect_withForgedToken_rejected() {
+            String jwt = token("some-other-secret-that-is-at-least-32-bytes!!", USER_ID, USERNAME,
+                    "jti-2", inOneHour());
+            Message<?> msg = buildConnectMessageWithAuthorization("Bearer " + jwt);
+
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class);
+            assertThat(StompHeaderAccessor.wrap(msg).getSessionAttributes()).doesNotContainKey("userId");
+        }
+
+        @Test
+        @DisplayName("expired token — CONNECT rejected")
+        void connect_withExpiredToken_rejected() {
+            String jwt = token(JWT_SECRET, USER_ID, USERNAME, "jti-3",
+                    new Date(System.currentTimeMillis() - 60_000L));
+            Message<?> msg = buildConnectMessageWithAuthorization("Bearer " + jwt);
+
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class);
+        }
+
+        @Test
+        @DisplayName("blacklisted (logged-out) token — CONNECT rejected")
+        void connect_withBlacklistedToken_rejected() {
+            String jwt = token(JWT_SECRET, USER_ID, USERNAME, "jti-4", inOneHour());
+            when(tokenBlacklistService.isBlacklisted("jti-4")).thenReturn(true);
+            Message<?> msg = buildConnectMessageWithAuthorization("Bearer " + jwt);
+
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class);
+        }
+
+        @Test
+        @DisplayName("non-Bearer Authorization header — CONNECT rejected")
+        void connect_withNonBearerHeader_rejected() {
+            Message<?> msg = buildConnectMessageWithAuthorization("Basic dXNlcjpwYXNz");
+
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class);
         }
     }
 

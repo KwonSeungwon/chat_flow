@@ -111,25 +111,6 @@ void main() {
     });
   });
 
-  group('listBans', () {
-    test('sends GET and parses bans', () async {
-      mock.responseData = [
-        {
-          'userId': 'u5',
-          'username': 'Eve',
-          'bannedBy': 'Alice',
-          'reason': 'Spam',
-          'bannedAt': '2026-04-27T10:00:00.000',
-        },
-      ];
-      final bans = await api.listBans('room-1');
-      expect(mock.captured.first.path, '/api/chat/rooms/room-1/bans');
-      expect(mock.captured.first.method, 'GET');
-      expect(bans.length, 1);
-      expect(bans[0].userId, 'u5');
-    });
-  });
-
   group('banUser', () {
     test('sends POST with userId and reason', () async {
       mock.responseData = {'userId': 'u5', 'bannedAt': '2026-04-27T10:00:00'};
@@ -145,16 +126,6 @@ void main() {
       mock.statusCode = 201;
       await api.banUser('room-1', 'u5', null);
       expect(mock.captured.first.data, {'userId': 'u5'});
-    });
-  });
-
-  group('unbanUser', () {
-    test('sends DELETE to ban path', () async {
-      mock.responseData = null;
-      mock.statusCode = 204;
-      await api.unbanUser('room-1', 'u5');
-      expect(mock.captured.first.path, '/api/chat/rooms/room-1/bans/u5');
-      expect(mock.captured.first.method, 'DELETE');
     });
   });
 

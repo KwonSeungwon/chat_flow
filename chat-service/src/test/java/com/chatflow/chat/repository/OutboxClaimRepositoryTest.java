@@ -261,6 +261,28 @@ class OutboxClaimRepositoryTest {
         assertThat(count).isZero();
     }
 
+    // ---- deleteFailedBefore (FAILED retention) ----
+
+    @Test
+    @Transactional
+    void deleteFailedBefore_removesOnlyOldFailedRows() {
+        OutboxEvent oldFailed = eventWithStatus("topic-a", "old-failed", OutboxStatus.FAILED);
+        oldFailed.setProcessedAt(BASE.minusDays(10));
+        OutboxEvent recentFailed = eventWithStatus("topic-a", "recent-failed", OutboxStatus.FAILED);
+        recentFailed.setProcessedAt(BASE);
+        OutboxEvent oldProcessed = eventWithStatus("topic-a", "old-processed", OutboxStatus.PROCESSED);
+        oldProcessed.setProcessedAt(BASE.minusDays(10));
+        outboxEventRepository.save(oldFailed);
+        outboxEventRepository.save(recentFailed);
+        outboxEventRepository.save(oldProcessed);
+
+        int deleted = outboxEventRepository.deleteFailedBefore(BASE.minusDays(7));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(outboxEventRepository.countByStatus(OutboxStatus.FAILED)).isEqualTo(1);
+        assertThat(outboxEventRepository.countByStatus(OutboxStatus.PROCESSED)).isEqualTo(1);
+    }
+
     // ---- helpers ----
 
     private OutboxEvent pendingEvent(String topic, String partitionKey) {

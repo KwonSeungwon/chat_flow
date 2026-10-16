@@ -1,3 +1,5 @@
+import '../../core/utils/server_time.dart';
+
 class MentionItem {
   final String messageId;
   final String chatRoomId;
@@ -24,7 +26,7 @@ class MentionItem {
         read: json['read'] == true,
       );
 
-  DateTime get when => DateTime.tryParse(timestamp) ?? DateTime.now();
+  DateTime get when => parseServerDateTime(timestamp) ?? DateTime.now();
 
   MentionItem copyWith({bool? read}) => MentionItem(
         messageId: messageId,

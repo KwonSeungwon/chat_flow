@@ -100,5 +100,52 @@ void main() {
 
       expect(called, isFalse);
     });
+
+    test('/api/auth/register 의 401도 세션을 건드리지 않는다', () async {
+      final called = await fireUnauthorized(
+        path: '/api/auth/register',
+        storage: {StorageKeys.token: 'some-token'},
+      );
+
+      expect(called, isFalse);
+    });
+
+    test('방 비밀번호 /verify 의 401은 세션을 건드리지 않는다', () async {
+      final called = await fireUnauthorized(
+        path: '/api/chat/rooms/42/verify',
+        storage: {StorageKeys.token: 'some-token'},
+      );
+
+      expect(called, isFalse);
+    });
+
+    test('그 외 /api/auth/* (logout, password)의 401은 세션 만료로 처리한다', () async {
+      for (final path in ['/api/auth/logout', '/api/auth/password']) {
+        final called = await fireUnauthorized(
+          path: path,
+          storage: {StorageKeys.token: 'expired-token'},
+        );
+        expect(called, isTrue, reason: path);
+      }
+    });
+
+    test('만료 처리 시 다섯 키를 모두 지운다', () async {
+      FlutterSecureStorage.setMockInitialValues({
+        StorageKeys.token: 'expired-token',
+        StorageKeys.userId: 'u1',
+        StorageKeys.username: 'alice',
+        StorageKeys.role: 'DOCTOR',
+        StorageKeys.profileImage: '/a.png',
+      });
+      final client = DioClient();
+      client.dio.httpClientAdapter = _StatusAdapter(401);
+
+      await expectLater(
+          client.dio.post('/api/chat/rooms'), throwsA(isA<DioException>()));
+
+      const storage = FlutterSecureStorage();
+      expect(await storage.read(key: StorageKeys.role), isNull);
+      expect(await storage.read(key: StorageKeys.profileImage), isNull);
+    });
   });
 }

@@ -17,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,9 +35,9 @@ import static org.mockito.Mockito.*;
 /**
  * Focused tests for the mute gate added to MessageSenderService.send().
  *
- * <p>The gate covers the types that carry text the user typed — CHAT and FILE
- * (a file ships with a caption). Server-authored JOIN/LEAVE/SYSTEM text is never
- * gated, and must not even hit room_members.
+ * <p>send() is the user-authored path: only CHAT, FILE and PATIENT_CARD are
+ * accepted and all three are mute-gated. Server-authored JOIN/LEAVE/SYSTEM/
+ * AI_SUMMARY are refused outright and must not even hit room_members.
  */
 @ExtendWith(MockitoExtension.class)
 class MessageSenderServiceMuteGateTest {
@@ -186,45 +188,52 @@ class MessageSenderServiceMuteGateTest {
         }
     }
 
-    // ── Server-authored types skip the mute check ──────────────
+    // ── Server-authored types never go through send() ───────────
 
     @Nested
     class ServerAuthoredMessageTypes {
 
-        @Test
-        void joinMessage_muteCheckSkipped() {
-            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
-
-            ChatMessage message = createMessage(ChatMessage.MessageType.JOIN);
+        @ParameterizedTest
+        @EnumSource(value = ChatMessage.MessageType.class, names = {"JOIN", "LEAVE", "SYSTEM", "AI_SUMMARY"})
+        void serverAuthoredType_rejectedBeforeMuteLookup(ChatMessage.MessageType type) {
+            ChatMessage message = createMessage(type);
             messageSenderService.send(message);
 
-            // Nobody typed this text, so there is nothing to gate — and no reason
-            // to spend a room_members query finding that out.
+            // send() is the user-authored path only — a non-whitelisted type is refused
+            // before any room_members query or persistence.
             verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
-            verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+            verify(chatPersistenceService, never()).persistMessageAndPublish(
+                    any(), anyString(), anyString(), any(), anyList());
+            verify(messagingTemplate).convertAndSendToUser(
+                    eq(USER_ID), eq("/queue/errors"), any());
         }
+    }
 
-        @Test
-        void leaveMessage_muteCheckSkipped() {
-            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+    // ── PATIENT_CARD is user-authored too (S-6 mute bypass) ────
 
-            ChatMessage message = createMessage(ChatMessage.MessageType.LEAVE);
-            messageSenderService.send(message);
+    @Test
+    void send_mutedUser_patientCard_blocked() {
+        when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
+                .thenReturn(Optional.of(member(LocalDateTime.now().plusMinutes(30))));
 
-            verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
-        }
+        messageSenderService.send(createMessage(ChatMessage.MessageType.PATIENT_CARD));
 
-        @Test
-        void systemMessage_muteCheckSkipped() {
-            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
+        verify(chatPersistenceService, never()).persistMessageAndPublish(
+                any(), anyString(), anyString(), any(), anyList());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq(USER_ID), eq("/queue/errors"), payloadCaptor.capture());
+        assertEquals("MUTED", payloadCaptor.getValue().get("type"));
+    }
 
-            ChatMessage message = createMessage(ChatMessage.MessageType.SYSTEM);
-            messageSenderService.send(message);
+    @Test
+    void send_mutedUser_patientCard_blocked_onThePreResolvedOverload() {
+        messageSenderService.send(createMessage(ChatMessage.MessageType.PATIENT_CARD),
+                member(LocalDateTime.now().plusMinutes(30)));
 
-            verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
-        }
-
+        verify(chatPersistenceService, never()).persistMessageAndPublish(
+                any(), anyString(), anyString(), any(), anyList());
     }
 
     // ── FILE is user-authored, so the mute gate covers it ──────

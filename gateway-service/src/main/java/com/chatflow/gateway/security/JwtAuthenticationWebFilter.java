@@ -1,14 +1,11 @@
 package com.chatflow.gateway.security;
 
 import io.jsonwebtoken.Claims;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
@@ -18,15 +15,23 @@ import java.util.List;
 import java.util.Optional;
 
 @Slf4j
-@Component
-@RequiredArgsConstructor
 public class JwtAuthenticationWebFilter implements WebFilter {
 
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
 
-    @Value("${GATEWAY_INTERNAL_SECRET:}")
-    private String gatewayInternalSecret;
+    private String gatewayInternalSecret = "";
+
+    public JwtAuthenticationWebFilter(JwtUtil jwtUtil, TokenBlacklistService tokenBlacklistService) {
+        this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
+    }
+
+    public JwtAuthenticationWebFilter(JwtUtil jwtUtil, TokenBlacklistService tokenBlacklistService,
+                                      String gatewayInternalSecret) {
+        this(jwtUtil, tokenBlacklistService);
+        this.gatewayInternalSecret = gatewayInternalSecret;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {

@@ -3,84 +3,103 @@ package com.chatflow.search.service;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
+import com.chatflow.search.config.SearchKafkaConfig;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.util.SearchConstants;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Set;
 
 /**
  * Kafka 메시지를 수신하여 ES에 벌크 인덱싱 (indexing-only).
- * 버퍼에 축적 후 50건 또는 500ms 간격으로 flush.
  * 읽기(검색)는 {@link KoreanSearchService}에서 담당한다.
+ *
+ * <p>Durability contract: one Kafka poll batch becomes one bulk request
+ * holding index AND delete operations in arrival order. The listener returns
+ * (and the container commits offsets) only after the bulk succeeded; any
+ * failure is thrown so the shared {@code DefaultErrorHandler} retries and
+ * finally dead-letters. Operations are idempotent by document id, so
+ * replaying a batch (or its tail) is safe and keeps ordering.</p>
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class SearchService {
 
-    private static final int BULK_SIZE = 50;
-    private static final int MAX_BUFFER_SIZE = 5000;
-    private static final int MAX_RETRY_COUNT = 3;
+    private static final Set<ChatMessage.MessageType> NON_SEARCHABLE_TYPES = Set.of(
+            ChatMessage.MessageType.JOIN, ChatMessage.MessageType.LEAVE, ChatMessage.MessageType.SYSTEM);
 
     private final ElasticsearchClient elasticsearchClient;
     private final ObjectMapper objectMapper;
-    private final List<ChatMessageDocument> buffer = new ArrayList<>();
-    private final ReentrantLock bufferLock = new ReentrantLock();
-    private int consecutiveFailures = 0;
 
-    public SearchService(ElasticsearchClient elasticsearchClient, ObjectMapper objectMapper, MeterRegistry registry) {
-        this.elasticsearchClient = elasticsearchClient;
-        this.objectMapper = objectMapper;
-        Gauge.builder("chatflow.search.buffer.size", buffer, List::size)
-                .description("Search indexing buffer size")
-                .register(registry);
+    @KafkaListener(topics = {KafkaTopics.CHAT_MESSAGES, KafkaTopics.AI_SUMMARIES},
+            containerFactory = SearchKafkaConfig.BATCH_LISTENER_CONTAINER_FACTORY)
+    public void indexChatMessages(List<String> payloads) {
+        List<BulkOperation> operations = new ArrayList<>(payloads.size());
+        // operationRecordIndex.get(n) = position in payloads of the record that produced operations.get(n)
+        List<Integer> operationRecordIndex = new ArrayList<>(payloads.size());
+
+        for (int i = 0; i < payloads.size(); i++) {
+            ChatMessage message;
+            try {
+                message = objectMapper.readValue(payloads.get(i), ChatMessage.class);
+            } catch (JsonProcessingException e) {
+                // Persist everything before the bad record, then let the error handler
+                // commit up to it and retry/dead-letter from this record onward.
+                bulkWrite(operations, operationRecordIndex);
+                throw new BatchListenerFailedException("Kafka 메시지 역직렬화 실패", e, i);
+            }
+            BulkOperation operation = toOperation(message);
+            if (operation != null) {
+                operations.add(operation);
+                operationRecordIndex.add(i);
+            }
+        }
+
+        bulkWrite(operations, operationRecordIndex);
     }
 
-    @KafkaListener(topics = {KafkaTopics.CHAT_MESSAGES, KafkaTopics.AI_SUMMARIES})
-    public void indexChatMessage(String messageJson) {
-        ChatMessage message;
-        try {
-            message = objectMapper.readValue(messageJson, ChatMessage.class);
-        } catch (JsonProcessingException e) {
-            log.error("Kafka 메시지 역직렬화 실패", e);
-            return;
+    /** Maps a message to its index/delete operation, or {@code null} when nothing should be written. */
+    private BulkOperation toOperation(ChatMessage message) {
+        String id = message.getMessageId();
+        if (id == null || id.isBlank()) {
+            log.warn("Skipping message without messageId (chatRoomId={}, type={})",
+                    message.getChatRoomId(), message.getType());
+            return null;
         }
 
-        // Soft-deleted message → remove from ES immediately (not via buffer).
         if (message.isDeleted()) {
-            log.info("Removing deleted message {} from ES index", message.getMessageId());
-            try {
-                elasticsearchClient.delete(new co.elastic.clients.elasticsearch.core.DeleteRequest.Builder()
-                        .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                        .id(message.getMessageId())
-                        .build());
-            } catch (Exception e) {
-                log.error("Failed to delete message {} from ES index", message.getMessageId(), e);
-            }
-            return;
+            return BulkOperation.of(op -> op.delete(d -> d
+                    .index(SearchConstants.CHAT_MESSAGES_INDEX)
+                    .id(id)));
         }
 
-        // JOIN/LEAVE/SYSTEM 메시지는 검색 인덱싱 제외
-        if (message.getType() != null) {
-            var type = message.getType();
-            if (type == ChatMessage.MessageType.JOIN || type == ChatMessage.MessageType.LEAVE || type == ChatMessage.MessageType.SYSTEM) {
-                return;
-            }
+        if (message.getType() != null && NON_SEARCHABLE_TYPES.contains(message.getType())) {
+            return null;
         }
 
-        ChatMessageDocument document = ChatMessageDocument.builder()
+        ChatMessageDocument document = toDocument(message);
+        return BulkOperation.of(op -> op.index(idx -> idx
+                .index(SearchConstants.CHAT_MESSAGES_INDEX)
+                .id(id)
+                .document(document)));
+    }
+
+    private static ChatMessageDocument toDocument(ChatMessage message) {
+        return ChatMessageDocument.builder()
                 .id(message.getMessageId())
                 .messageId(message.getMessageId())
                 .chatRoomId(message.getChatRoomId())
@@ -88,93 +107,47 @@ public class SearchService {
                 .username(message.getUsername())
                 .content(message.getContent())
                 .timestamp(message.getTimestamp())
-                .messageType(message.getType().toString())
+                .messageType(message.getType() != null ? message.getType().name() : null)
                 .isAiGenerated(message.isAiGenerated())
                 .fileName(message.getFileName())
                 .fileUrl(message.getFileUrl())
                 .fileContentType(message.getFileContentType())
                 .parentMessageId(message.getParentMessageId())
                 .parentMessagePreview(message.getParentMessagePreview())
+                .forwardedFrom(message.getForwardedFrom())
+                .edited(message.isEdited())
                 .build();
-
-        bufferLock.lock();
-        try {
-            if (buffer.size() >= MAX_BUFFER_SIZE) {
-                log.warn("Buffer full ({} messages), dropping oldest batch to prevent OOM", buffer.size());
-                buffer.subList(0, BULK_SIZE).clear();
-            }
-            buffer.add(document);
-            if (buffer.size() >= BULK_SIZE) {
-                flushBuffer();
-            }
-        } finally {
-            bufferLock.unlock();
-        }
     }
 
-    @Scheduled(fixedDelay = 500)
-    public void scheduledFlush() {
-        bufferLock.lock();
-        try {
-            if (!buffer.isEmpty()) {
-                flushBuffer();
-            }
-        } finally {
-            bufferLock.unlock();
+    private void bulkWrite(List<BulkOperation> operations, List<Integer> operationRecordIndex) {
+        if (operations.isEmpty()) {
+            return;
         }
-    }
 
-    private void flushBuffer() {
-        if (buffer.isEmpty()) return;
-
-        List<ChatMessageDocument> batch = new ArrayList<>(buffer);
-        buffer.clear();
-
+        BulkResponse response;
         try {
-            BulkRequest.Builder br = new BulkRequest.Builder();
-            for (ChatMessageDocument doc : batch) {
-                br.operations(op -> op.index(idx -> idx
-                        .index(SearchConstants.CHAT_MESSAGES_INDEX)
-                        .id(doc.getId())
-                        .document(doc)));
-            }
-            BulkResponse response = elasticsearchClient.bulk(br.build());
-            if (response.errors()) {
-                // Item-level failures: log the first few and treat the batch as failed.
-                response.items().stream()
-                        .filter(i -> i.error() != null)
-                        .limit(5)
-                        .forEach(i -> log.error("Bulk item failed id={} : {}",
-                                i.id(), i.error() != null ? i.error().reason() : "unknown"));
-                throw new IllegalStateException("Bulk response contained item errors");
-            }
-            log.info("Bulk indexed {} messages", batch.size());
-            consecutiveFailures = 0;
-        } catch (Exception e) {
-            consecutiveFailures++;
-            if (consecutiveFailures <= MAX_RETRY_COUNT) {
-                log.error("Bulk indexing failed ({}/{}), re-queuing {} messages: {}",
-                        consecutiveFailures, MAX_RETRY_COUNT, batch.size(), e.getMessage());
-                buffer.addAll(0, batch);
-            } else {
-                log.error("Bulk indexing failed {} consecutive times, dropping {} messages to prevent OOM",
-                        consecutiveFailures, batch.size());
-                consecutiveFailures = 0;
+            response = elasticsearchClient.bulk(BulkRequest.of(b -> b.operations(operations)));
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalStateException(
+                    "Bulk indexing request failed (" + operations.size() + " operations)", e);
+        }
+
+        if (!response.errors()) {
+            log.debug("Bulk wrote {} operations", operations.size());
+            return;
+        }
+
+        // A delete of a missing document is reported without an error, so any error here is real.
+        List<BulkResponseItem> items = response.items();
+        for (int n = 0; n < items.size() && n < operationRecordIndex.size(); n++) {
+            BulkResponseItem item = items.get(n);
+            if (item.error() != null) {
+                log.error("Bulk item failed id={} type={} reason={}",
+                        item.id(), item.error().type(), item.error().reason());
+                throw new BatchListenerFailedException(
+                        "Bulk item failed: " + item.error().reason(), operationRecordIndex.get(n));
             }
         }
+        throw new IllegalStateException("Bulk response reported errors without a failed item");
     }
-
-    @PreDestroy
-    public void onShutdown() {
-        bufferLock.lock();
-        try {
-            if (!buffer.isEmpty()) {
-                log.info("Shutdown: flushing {} remaining messages", buffer.size());
-                flushBuffer();
-            }
-        } finally {
-            bufferLock.unlock();
-        }
-    }
-
 }

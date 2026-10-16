@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
+import '../auth/auth_provider.dart';
 import '../../shared/models/chat_message.dart';
 
 class SearchState {
@@ -38,10 +39,14 @@ class SearchState {
 class SearchNotifier extends StateNotifier<SearchState> {
   final DioClient _dioClient;
 
+  int _requestSeq = 0;
+
   SearchNotifier(this._dioClient) : super(const SearchState());
 
   Future<void> search(String query) async {
     if (query.trim().isEmpty) return;
+    // 느린 이전 응답이 새 검색 결과를 덮어쓰지 않도록 마지막 요청만 반영한다.
+    final seq = ++_requestSeq;
     state = state.copyWith(isLoading: true, hasSearched: true, clearError: true);
     try {
       final resp = await _dioClient.dio.get(
@@ -57,6 +62,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
       } else {
         items = [];
       }
+      if (seq != _requestSeq || !mounted) return;
       state = state.copyWith(
         results:
             items
@@ -66,6 +72,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
         isLoading: false,
       );
     } catch (_) {
+      if (seq != _requestSeq || !mounted) return;
       state = state.copyWith(
         results: [],
         total: 0,
@@ -79,5 +86,6 @@ class SearchNotifier extends StateNotifier<SearchState> {
 
 final searchProvider =
     StateNotifierProvider<SearchNotifier, SearchState>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   return SearchNotifier(ref.watch(dioClientProvider));
 });

@@ -15,16 +15,9 @@ class SystemBubble extends StatelessWidget {
     return msg.content;
   }
 
-  IconData? get _alertIcon {
-    if (msg.content.startsWith('[처방알림]')) return Icons.medication_rounded;
-    if (msg.content.startsWith('[검사알림]')) return Icons.science_rounded;
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final icon = _alertIcon;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -42,10 +35,6 @@ class SystemBubble extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 13, color: cs.onSurfaceVariant.withAlpha(160)),
-                  const SizedBox(width: 5),
-                ],
                 Flexible(
                   child: Text(
                     _text,

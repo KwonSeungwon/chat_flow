@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
+import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Per-room notification policy (ALL / MENTIONS_ONLY / MUTED)
@@ -28,37 +29,34 @@ extension NotificationPolicyX on NotificationPolicy {
   };
 }
 
-const _policyKey = 'chatflow.roomNotificationPolicies';
 const _policyStorage = FlutterSecureStorage();
 
 final roomNotificationPolicyProvider =
     StateNotifierProvider<RoomNotificationPolicyNotifier, Map<String, NotificationPolicy>>((ref) {
-  return RoomNotificationPolicyNotifier();
+  final userId = ref.watch(authProvider.select((a) => a.userId));
+  return RoomNotificationPolicyNotifier(userId);
 });
 
 class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, NotificationPolicy>> {
-  RoomNotificationPolicyNotifier() : super({}) { _load(); }
+  final String? _userId;
+
+  /// 사용자별 저장 키. userId가 없으면 읽지도 쓰지도 않는다.
+  static String storageKeyFor(String userId) => '${StorageKeys.roomNotificationPolicies}.$userId';
+
+  RoomNotificationPolicyNotifier(this._userId) : super({}) { _load(); }
 
   Future<void> _load() async {
+    final userId = _userId;
+    if (userId == null) return;
     try {
-      final raw = await _policyStorage.read(key: _policyKey);
+      final raw = await _policyStorage.read(key: storageKeyFor(userId));
+      if (!mounted) return;
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         state = decoded.map((k, v) => MapEntry(
           k,
           NotificationPolicy.values.firstWhere((e) => e.name == v, orElse: () => NotificationPolicy.all),
         ));
-      }
-      // Migration: absorb legacy chatflow.mutedRooms (List<String>) as MUTED, then delete
-      final legacy = await _policyStorage.read(key: StorageKeys.mutedRooms);
-      if (legacy != null && legacy.isNotEmpty) {
-        final migrated = Map<String, NotificationPolicy>.from(state);
-        for (final id in (jsonDecode(legacy) as List)) {
-          migrated[id.toString()] = NotificationPolicy.muted;
-        }
-        state = migrated;
-        await _persist();
-        await _policyStorage.delete(key: StorageKeys.mutedRooms);
       }
     } catch (_) {
       // first run or corrupted — start fresh
@@ -87,7 +85,10 @@ class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, Notificat
   }
 
   Future<void> _persist() async {
+    final userId = _userId;
+    if (userId == null) return;
     final serializable = state.map((k, v) => MapEntry(k, v.name));
-    await _policyStorage.write(key: _policyKey, value: jsonEncode(serializable));
+    await _policyStorage.write(
+        key: storageKeyFor(userId), value: jsonEncode(serializable));
   }
 }

@@ -111,7 +111,7 @@ spec:
                 name: {{ include "gateway-service.fullname" . }}
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -119,14 +119,14 @@ spec:
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: http
             periodSeconds: 10
             failureThreshold: 3

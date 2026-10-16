@@ -34,8 +34,8 @@ void main() {
     });
 
     test('host is preserved', () {
-      final uri = Uri.parse('https://app.chatflow.ai.kr/');
-      expect(deriveWebStompUrl(uri), 'wss://app.chatflow.ai.kr/ws-native');
+      final uri = Uri.parse('https://app.gossiplog.com/');
+      expect(deriveWebStompUrl(uri), 'wss://app.gossiplog.com/ws-native');
     });
 
     test('path in base URI is ignored', () {

@@ -58,7 +58,7 @@ class QuickReplyServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get(anyString())).thenReturn(null);
         when(redisTemplate.opsForList()).thenReturn(listOps);
-        when(listOps.range(eq("chatflow:summary:buffer:room-1"), eq(0L), eq(-1L)))
+        when(listOps.range(eq(RedisKeys.BUFFER_PREFIX + "room-1"), eq(0L), eq(-1L)))
                 .thenReturn(List.of(
                         json("회의 시작했어요", "alice"),
                         json("어디 회의실이에요?", "bob")));
@@ -143,5 +143,19 @@ class QuickReplyServiceTest {
         QuickReplyResponse result = service.generateQuickReplies("room-1", "m-x");
 
         assertThat(result.suggestions()).containsExactly("valid1", "valid2");
+    }
+
+    @Test
+    void quickReplies_readsSameBufferKeyAsSummaryWriter() throws Exception {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(anyString())).thenReturn(null);
+        when(redisTemplate.opsForList()).thenReturn(listOps);
+        when(listOps.range(anyString(), eq(0L), eq(-1L))).thenReturn(List.of());
+
+        service.generateQuickReplies("room-9", "m-1");
+
+        // The key AiSummaryService writes the buffer to (RedisKeys.BUFFER_PREFIX + roomId)
+        // is the one quick replies must read.
+        verify(listOps).range(RedisKeys.BUFFER_PREFIX + "room-9", 0L, -1L);
     }
 }

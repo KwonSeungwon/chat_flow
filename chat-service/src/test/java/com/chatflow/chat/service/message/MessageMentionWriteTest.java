@@ -285,7 +285,7 @@ class MessageMentionWriteTest {
 
         @Test
         @SuppressWarnings("unchecked")
-        void caption_mention_records_a_row_and_pushes_fcm() {
+        void caption_mention_records_a_row_without_a_dead_topic_push() {
             when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
                     List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
             when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
@@ -299,10 +299,11 @@ class MessageMentionWriteTest {
                     .extracting(MessageMentionEntity::getMentionedUserId)
                     .containsExactly("bob-id");
 
-            // 파일 알림 + bob 멘션 알림, 정확히 둘
+            // 방 토픽으로 가는 파일 알림 하나뿐. "mention-<username>" 토픽은 아무도
+            // 구독하지 않는 죽은 경로라 더 이상 발송하지 않는다.
             verify(fcmNotificationService).sendMessageNotification(
-                    eq("mention-bob"), eq(SENDER_USERNAME), anyString());
-            verify(fcmNotificationService, times(2)).sendMessageNotification(
+                    eq(ROOM_ID), eq(SENDER_USERNAME), anyString());
+            verify(fcmNotificationService, times(1)).sendMessageNotification(
                     anyString(), anyString(), anyString());
         }
 
@@ -359,13 +360,14 @@ class MessageMentionWriteTest {
             msg.setUsername(SENDER_USERNAME);
             msg.setType(MessageType.SYSTEM);
             msg.setContent("@bob 님이 입장했습니다");
-            when(chatRoomService.getRoom(ROOM_ID)).thenReturn(Optional.empty());
 
             service.send(msg, null);
 
+            // SYSTEM is not user-sendable: send() refuses it before mention resolution
+            // or persistence, so no mention row and no push can come out of it.
             verify(roomMemberRepository, never()).findByRoomId(anyString());
-            verify(chatPersistenceService).persistMessageAndPublish(
-                    any(ChatMessage.class), anyString(), anyString(), any(), eq(List.of()));
+            verify(chatPersistenceService, never()).persistMessageAndPublish(
+                    any(ChatMessage.class), anyString(), anyString(), any(), anyList());
             verifyNoInteractions(fcmNotificationService);
         }
     }
@@ -420,7 +422,7 @@ class MessageMentionWriteTest {
     class FcmMentionPush {
 
         @Test
-        void fcm_fired_for_resolved_member_not_for_stranger() {
+        void mention_sends_only_the_room_push_no_dead_mention_topic() {
             // given: @bob is a member, @stranger is not
             when(roomMemberRepository.findByRoomId(ROOM_ID)).thenReturn(
                     List.of(member(SENDER_USER_ID, SENDER_USERNAME), member("bob-id", "bob")));
@@ -430,18 +432,14 @@ class MessageMentionWriteTest {
             service.send(chatMessage("hey @bob and @stranger"),
                     member(SENDER_USER_ID, SENDER_USERNAME));
 
-            // then: FCM for room + FCM for bob (mention), but NOT for stranger
-            // room-level notification
+            // then: exactly one push, to the room topic. The per-user
+            // "mention-<username>" topic was never subscribed by any client, so
+            // sending to it was a dead path and is gone.
             verify(fcmNotificationService).sendMessageNotification(
                     eq(ROOM_ID), eq(SENDER_USERNAME), anyString());
-            // mention notification for bob
-            verify(fcmNotificationService).sendMessageNotification(
-                    eq("mention-bob"), eq(SENDER_USERNAME), anyString());
-            // NO mention notification for stranger
             verify(fcmNotificationService, never()).sendMessageNotification(
-                    eq("mention-stranger"), anyString(), anyString());
-            // total: exactly 2 calls
-            verify(fcmNotificationService, times(2)).sendMessageNotification(
+                    startsWith("mention-"), anyString(), anyString());
+            verify(fcmNotificationService, times(1)).sendMessageNotification(
                     anyString(), anyString(), anyString());
         }
 

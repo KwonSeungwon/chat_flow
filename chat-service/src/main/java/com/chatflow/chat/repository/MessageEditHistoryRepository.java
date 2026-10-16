@@ -20,6 +20,16 @@ public interface MessageEditHistoryRepository
     List<MessageEditHistoryEntity> findByMessageIdOrderByEditedAtDesc(String messageId);
 
     /**
+     * Deletes every edit-history row of one message. Called when the message is
+     * deleted — the pre-edit snapshots are plaintext copies of the text the author
+     * just removed, so keeping them would make the delete reversible by anyone who
+     * can read {@code /edits}.
+     */
+    @Modifying
+    @Query("DELETE FROM MessageEditHistoryEntity h WHERE h.messageId = :messageId")
+    int deleteByMessageId(@Param("messageId") String messageId);
+
+    /**
      * Deletes edit-history rows older than {@code cutoff}.
      * Native subquery form to stay compatible with PostgreSQL (DELETE
      * does not support LIMIT directly) — mirrors ChatMessageRepository.

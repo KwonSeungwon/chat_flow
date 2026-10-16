@@ -79,8 +79,6 @@ spring:
       group-id: chat-service-prod-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      properties:
-        spring.json.trusted.packages: "com.chatflow.common.dto"
       auto-offset-reset: earliest
       enable-auto-commit: false
       max-poll-records: 100
@@ -88,9 +86,9 @@ spring:
       concurrency: 3
 
 chatflow:
-  allowed-origins: "https://app.chatflow.ai.kr,https://chatflow.ai.kr"
+  allowed-origins: "https://app.gossiplog.com,https://gossiplog.com"
   frontend:
-    base-url: https://app.chatflow.ai.kr
+    base-url: https://app.gossiplog.com
   file-storage:
     upload-dir: /app/uploads
   kafka:
@@ -110,6 +108,8 @@ management:
   endpoint:
     health:
       show-details: never  # Hide sensitive info in production
+      probes:
+        enabled: true
   prometheus:
     metrics:
       export:
@@ -127,8 +127,6 @@ logging:
     org.apache.kafka: WARN
   pattern:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: /var/log/chatflow/chat-service.log
   logback:
     rollingpolicy:
       max-file-size: 100MB

@@ -13,7 +13,8 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "outbox_events", indexes = {
-    @Index(name = "idx_outbox_status_created", columnList = "status, createdAt")
+    @Index(name = "idx_outbox_status_created", columnList = "status, createdAt"),
+    @Index(name = "idx_outbox_claim_token", columnList = "claimToken")
 })
 public class OutboxEvent {
 

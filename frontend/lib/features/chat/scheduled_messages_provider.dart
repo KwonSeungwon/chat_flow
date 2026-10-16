@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/scheduled_message.dart';
+import '../auth/auth_provider.dart';
 
 class ScheduledMessagesNotifier
     extends StateNotifier<AsyncValue<List<ScheduledMessage>>> {
@@ -15,12 +16,14 @@ class ScheduledMessagesNotifier
     state = const AsyncValue.loading();
     try {
       final resp = await _dio.get('/api/chat/scheduled-messages');
+      if (!mounted) return;
       final raw = apiResponseList(resp.data);
       final items = raw
           .map((e) => ScheduledMessage.fromJson(e as Map<String, dynamic>))
           .toList();
       state = AsyncValue.data(items);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }
@@ -37,7 +40,7 @@ class ScheduledMessagesNotifier
       data: {
         'chatRoomId': chatRoomId,
         'content': content,
-        'scheduledAt': scheduledAt.toIso8601String(),
+        'scheduledAt': scheduledAt.toUtc().toIso8601String(),
       },
     );
     final inner = apiResponseMap(resp.data);
@@ -66,6 +69,7 @@ class ScheduledMessagesNotifier
 
 final scheduledMessagesProvider = StateNotifierProvider<
     ScheduledMessagesNotifier, AsyncValue<List<ScheduledMessage>>>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   final dio = ref.read(dioClientProvider).dio;
   return ScheduledMessagesNotifier(dio);
 });

@@ -16,7 +16,6 @@ Gateway Service (Spring Cloud Gateway, Port 8000)
 
 비동기 통신 (Kafka Topics):
     chat-messages: Chat → Search, AI Summary
-    ai-summary-requests: Chat → AI Summary
     ai-summaries: AI Summary → Search
 ```
 
@@ -230,11 +229,10 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
 ## K3s 배포 (자체 인스턴스)
 
-**도메인**: https://app.chatflow.ai.kr (Cloudflare → K3s)  
+**도메인**: https://app.gossiplog.com (Cloudflare → K3s)  
 **네임스페이스**: `chatflow`  
 **이미지 레지스트리**: 
 - 신규(권장): `ghcr.io/<owner>/chatflow/<service>` — GH Actions가 push, K3s containerd가 pull
-- 레거시: `docker.io/chatflow` (pullPolicy: Never — `scripts/deploy-k3s.sh`가 ctr import)
 
 > 배포 서버 접속 정보, Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md` (로컬 전용) 참고.
 
@@ -248,13 +246,13 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 - `K3S_HOST`, `K3S_USER`, `K3S_SSH_KEY` (private key)
 - `K3S_GHCR_USERNAME`, `K3S_GHCR_TOKEN` (read:packages PAT)
 
-### 레거시 흐름 — 로컬 cross-build (Docker daemon 필요)
+### 클러스터 부트스트랩 — `scripts/deploy-k3s.sh`
 ```bash
-./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
-./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import
-./scripts/deploy-k3s.sh helm     # Helm 배포만
+./scripts/deploy-k3s.sh infra    # k8s/infra/k3s-infra.yaml 적용 (PostgreSQL, Valkey 등)
+./scripts/deploy-k3s.sh secrets  # 없는 Secret만 생성 (기존 Secret은 건너뜀)
+./scripts/deploy-k3s.sh all      # infra + secrets
 ```
-이 흐름은 로컬 Docker Desktop이 응답할 때만 사용 — daemon hang 같은 SPOF 노출됨.
+필수 env: `DEPLOY_DB_PASSWORD`, `DEPLOY_GEMINI_API_KEY`, `DEPLOY_JWT_SECRET`, `DEPLOY_GATEWAY_SECRET` (`scripts/.env.deploy`, gitignored). 이미지 빌드·배포는 이 스크립트가 하지 않는다 — GH Actions 경로를 쓴다.
 
 ### 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 ```bash

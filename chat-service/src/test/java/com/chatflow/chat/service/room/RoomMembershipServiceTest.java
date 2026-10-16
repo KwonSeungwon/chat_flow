@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.room;
 
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Map;
@@ -38,7 +40,9 @@ class RoomMembershipServiceTest {
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private ParticipantService participantService;
     @Mock private RoomCacheEvictor roomCacheEvictor;
+    @Mock private RoomAccessPolicy roomAccessPolicy;
     @Mock private SetOperations<String, String> setOps;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private RoomMembershipService roomMembershipService;
 
@@ -53,7 +57,8 @@ class RoomMembershipServiceTest {
     void setUp() {
         roomMembershipService = new RoomMembershipService(
                 roomMemberRepository, redisTemplate, redisHealth,
-                messagingTemplate, participantService, roomCacheEvictor);
+                messagingTemplate, participantService, roomCacheEvictor, roomAccessPolicy,
+                eventPublisher);
     }
 
     // ── AddMemberIfAbsent ─────────────────────────────────────────
@@ -62,11 +67,11 @@ class RoomMembershipServiceTest {
     class AddMemberIfAbsent {
 
         @Test
-        void inserts_member_with_default_role_MEMBER() {
+        void inserts_member_with_role_MEMBER() {
             when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
                     .thenReturn(false);
 
-            roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME);
+            roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME, RoomRole.MEMBER);
 
             ArgumentCaptor<RoomMemberEntity> captor = ArgumentCaptor.forClass(RoomMemberEntity.class);
             verify(roomMemberRepository).save(captor.capture());
@@ -90,15 +95,15 @@ class RoomMembershipServiceTest {
             when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID))
                     .thenReturn(true);
 
-            roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME);
+            roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME, RoomRole.MEMBER);
 
             verify(roomMemberRepository, never()).save(any());
         }
 
         @Test
         void noop_on_blank_userId() {
-            roomMembershipService.addMemberIfAbsent(ROOM_ID, "", USERNAME);
-            roomMembershipService.addMemberIfAbsent(ROOM_ID, null, USERNAME);
+            roomMembershipService.addMemberIfAbsent(ROOM_ID, "", USERNAME, RoomRole.MEMBER);
+            roomMembershipService.addMemberIfAbsent(ROOM_ID, null, USERNAME, RoomRole.MEMBER);
 
             verifyNoInteractions(roomMemberRepository);
         }
@@ -111,7 +116,40 @@ class RoomMembershipServiceTest {
                     .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
             assertDoesNotThrow(() ->
-                    roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME));
+                    roomMembershipService.addMemberIfAbsent(ROOM_ID, USER_ID, USERNAME, RoomRole.MEMBER));
+        }
+    }
+
+    // ── GrantMembership ───────────────────────────────────────────
+
+    @Nested
+    class GrantMembership {
+
+        @Test
+        void inserts_MEMBER_row_when_policy_allows() {
+            when(roomAccessPolicy.canGrant(ROOM_ID, USER_ID, RoomAccessPolicy.GrantPath.INVITE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(null));
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
+
+            RoomAccessPolicy.JoinDecision d = roomMembershipService.grantMembership(
+                    ROOM_ID, USER_ID, USERNAME, RoomAccessPolicy.GrantPath.INVITE);
+
+            assertTrue(d.allowed());
+            ArgumentCaptor<RoomMemberEntity> captor = ArgumentCaptor.forClass(RoomMemberEntity.class);
+            verify(roomMemberRepository).save(captor.capture());
+            assertEquals(RoomRole.MEMBER, captor.getValue().getRole());
+        }
+
+        @Test
+        void writes_nothing_when_policy_denies() {
+            when(roomAccessPolicy.canGrant(ROOM_ID, USER_ID, RoomAccessPolicy.GrantPath.INVITE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.BANNED));
+
+            RoomAccessPolicy.JoinDecision d = roomMembershipService.grantMembership(
+                    ROOM_ID, USER_ID, USERNAME, RoomAccessPolicy.GrantPath.INVITE);
+
+            assertEquals(RoomAccessPolicy.Denial.BANNED, d.reason());
+            verifyNoInteractions(roomMemberRepository);
         }
     }
 
@@ -140,6 +178,26 @@ class RoomMembershipServiceTest {
 
             verify(participantService).syncParticipantCountFromRedis(ROOM_ID);
             verify(roomCacheEvictor).evict(ROOM_ID);
+        }
+
+        @Test
+        void leaveRoom_publishesRoomMemberRemovedEvent() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
+            when(redisHealth.isCircuitOpen()).thenReturn(true);
+
+            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            verify(eventPublisher).publishEvent(new RoomMemberRemovedEvent(
+                    ROOM_ID, USER_ID, RoomMemberRemovedEvent.Reason.LEFT));
+        }
+
+        @Test
+        void leaveRoom_nonMember_publishesNothing() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
+
+            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            verifyNoInteractions(eventPublisher);
         }
 
         @SuppressWarnings("unchecked")

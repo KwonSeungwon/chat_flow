@@ -23,7 +23,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V15) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V18) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -105,8 +105,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 15 versioned migrations (V1..V15) should have been executed")
-                .isEqualTo(15);
+                .as("All 18 versioned migrations (V1..V18) should have been executed")
+                .isEqualTo(18);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -299,6 +299,33 @@ class FlywayMigrationTest {
             assertThat(claimed)
                     .as("claim update (PENDING -> PROCESSING) should succeed after V15")
                     .isEqualTo(1);
+        }
+    }
+
+    // ── Test 9: V17 — outbox claim_token index ───────────────────────────
+
+    @Test
+    void v17_outboxClaimTokenIndexExists() throws SQLException {
+        assertThat(indexExists("outbox_events", "idx_outbox_claim_token"))
+                .as("Index idx_outbox_claim_token should exist on outbox_events (added by V17)")
+                .isTrue();
+    }
+
+    // ── Test 10: V18 — scheduled_messages status CHECK allows PROCESSING ──
+
+    @Test
+    void v18_scheduledMessagesStatusCheckAllowsEveryEnumValue() throws SQLException {
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                             + "WHERE conname = 'scheduled_messages_status_check'");
+             ResultSet rs = ps.executeQuery()) {
+            assertThat(rs.next()).as("scheduled_messages_status_check should exist").isTrue();
+            String definition = rs.getString(1);
+            for (com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus status
+                    : com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus.values()) {
+                assertThat(definition).contains("'" + status.name() + "'");
+            }
         }
     }
 

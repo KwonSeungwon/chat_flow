@@ -52,8 +52,8 @@ lib/
 ## 환경 변수 (.env)
 
 ```
-API_BASE_URL=https://app.chatflow.ai.kr   # Android 네이티브용
-WS_URL=wss://app.chatflow.ai.kr/ws-native # Android 네이티브용
+API_BASE_URL=https://app.gossiplog.com   # Android 네이티브용
+WS_URL=wss://app.gossiplog.com/ws-native # Android 네이티브용
 ```
 
 > 웹에서는 현재 origin에서 URL을 자동 파생하므로 .env 불필요.

@@ -8,6 +8,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'core/keyboard/app_shortcuts.dart';
+import 'core/network/dio_client.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/web_unload_handler.dart';
@@ -17,6 +18,7 @@ import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/auth_provider.dart';
 import 'features/chat/chat_rooms_provider.dart';
+import 'features/chat/state/room_update_listener.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -77,14 +79,14 @@ Future<void> main() async {
           : const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
     );
 
-    _initFirebaseInBackground();
+    _initFirebaseInBackground(container);
   }, (error, stack) {
     if (isHarmlessFocusTraversalError(error, stack)) return;
     debugPrint('[uncaught] $error\n$stack');
   });
 }
 
-Future<void> _initFirebaseInBackground() async {
+Future<void> _initFirebaseInBackground(ProviderContainer container) async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
@@ -99,7 +101,10 @@ Future<void> _initFirebaseInBackground() async {
     // FcmService.initialize() 내부 requestPermission은 web에서 user gesture 필요 —
     // hang되어도 전역 UI에 영향 없도록 await 없이 invoke (returned Future 무시 안전).
     // 오류는 내부에서 debugPrint로 로깅.
-    unawaited(FcmService.initialize().catchError((e) {
+    unawaited(FcmService.initialize(
+      activeRoomId: () => container.read(activeRoomIdProvider),
+      dio: () => container.read(dioClientProvider).dio,
+    ).catchError((e) {
       debugPrint('FcmService init failed: $e');
     }));
   } catch (e) {
@@ -127,6 +132,9 @@ class ChatFlowApp extends ConsumerWidget {
             .values
             .fold<int>(0, (sum, c) => sum + c))
         : 'ChatFlow';
+
+    // App-level STOMP (unread increments) follows the signed-in user.
+    ref.watch(roomUpdateListenerProvider);
 
     // On logout, clear unread counts so the tab badge doesn't linger on the
     // login screen. Listens for auth transitions from authenticated → not.

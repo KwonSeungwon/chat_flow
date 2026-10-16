@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/stomp_service.dart';
+import '../../core/utils/server_time.dart';
 import '../../shared/models/chat_message.dart';
 import '../../shared/models/patient_card.dart';
 import 'state/chat_messages_state.dart';
@@ -41,10 +42,30 @@ List<ChatMessage> parseSummariesResponse(dynamic data) {
       .toList();
 }
 
+/// Korean message for a refused join (`NOT_A_MEMBER` / `operation=addUser`).
+String joinRejectedMessage(String reason) {
+  switch (reason) {
+    case 'ROOM_NOT_FOUND':
+      return '채팅방을 찾을 수 없습니다.';
+    case 'BANNED':
+      return '이 채팅방에서 차단되어 입장할 수 없습니다.';
+    case 'DM_NOT_PARTICIPANT':
+      return '이 1:1 대화의 참여자가 아닙니다.';
+    case 'PRIVATE_REQUIRES_INVITE':
+      return '비공개 채팅방은 초대 링크로만 입장할 수 있습니다.';
+    case 'PASSWORD_REQUIRED':
+      return '비밀번호를 확인한 뒤 입장할 수 있습니다.';
+    case 'ROOM_FULL':
+      return '채팅방 정원이 가득 찼습니다.';
+    default:
+      return '이 채팅방에 입장할 수 없습니다.';
+  }
+}
+
 class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final DioClient _dioClient;
   final Ref _ref;
-  final StompService _stompService = StompService();
+  final StompService _stompService;
   final String _token;
   final String _username;
   final String _userId;
@@ -59,6 +80,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       MentionCandidateSource(_dioClient.dio);
   final OfflineMessageQueue _offlineQueue = OfflineMessageQueue();
   String? _currentRoomId;
+
+  /// Oldest timestamp loaded from the chat history endpoints: the `before`
+  /// cursor for the next page. Kept apart from state.messages so summaries
+  /// and live messages cannot move it.
+  DateTime? _historyCursor;
   Timer? _quickReplyDebounce;
   late final StompMessageDispatcher _dispatcher;
   late final ReadStateHelper _readState;
@@ -71,7 +97,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     required String token,
     required String username,
     required String userId,
+    StompService? stompService,
   })  : _ref = ref,
+        _stompService = stompService ?? StompService(),
         _token = token,
         _username = username,
         _userId = userId,
@@ -134,6 +162,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       clearRedirectTo: true,
     );
 
+    _historyCursor = null;
+
     // Fetch initial read positions for this room (non-blocking, best effort)
     _readState.fetchInitialReadPositions(roomId);
 
@@ -143,6 +173,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         '/api/chat/rooms/$roomId/messages',
         queryParameters: {'size': 50},
       );
+      if (!mounted) return;
       final data = resp.data;
       final items = apiResponseList(data);
       final history = <ChatMessage>[];
@@ -153,29 +184,26 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           debugPrint('[ChatNotifier] Message parse error: $parseErr');
         }
       }
-      history.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      // Merge history with any live STOMP messages already received
-      final live = state.messages;
-      final merged = [...history, ...live];
-      final seen = <String>{};
-      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
-      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      _advanceHistoryCursor(history);
+      _mergeMessages(history);
       state = state.copyWith(
-        messages: deduped,
         isLoadingHistory: false,
         hasMoreHistory: history.length >= 50,
       );
     } catch (e) {
       debugPrint('[ChatNotifier] joinRoom error: $e');
+      if (!mounted) return;
       state = state.copyWith(
           isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
     }
 
     // Load AI summaries and merge into history
     await _fetchSummaries(roomId);
+    if (!mounted) return;
 
     // Fetch last-read position and compute unread count for this session
     await _readState.fetchLastReadAndUpdateUnread(roomId);
+    if (!mounted) return;
 
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
@@ -193,19 +221,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
           if (connected) {
-            _offlineQueue.flush(
-              onDedup: (ids) {
-                if (!mounted) return;
-                final cleaned = state.messages
-                    .where((m) => m.localId == null || !ids.contains(m.localId))
-                    .toList();
-                state = state.copyWith(messages: cleaned);
-              },
-              // _localId is a client-only marker for optimistic-message dedup.
-              // Strip it before forwarding so STOMP doesn't carry a contract-leak field.
-              onSend: (msg) => _stompService.sendMessage(
-                  Map<String, dynamic>.from(msg)..remove('_localId')),
-            );
+            _send.flushOfflineQueue();
           }
         }
       },
@@ -274,6 +290,17 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         if (!mounted) return;
         state = state.copyWith(errorMessage: message);
       },
+      // Server refused addUser: the room is not joined. StompService has
+      // already stopped reconnecting; the screen leaves on notMember.
+      onJoinRejected: (rejectedRoomId, reason) {
+        if (!mounted) return;
+        _currentRoomId = null;
+        state = state.copyWith(
+          isConnected: false,
+          exitReason: ChatExitReason.notMember,
+          errorMessage: joinRejectedMessage(reason),
+        );
+      },
     );
 
     // Subscribe FCM token to room topic for push notifications (fire & forget)
@@ -288,13 +315,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     if (state.isLoadingHistory || !state.hasMoreHistory) return;
     state = state.copyWith(isLoadingHistory: true);
     try {
-      final oldestTimestamp =
-          state.messages.isNotEmpty ? state.messages.first.timestamp : null;
+      final cursor = _historyCursor;
       final resp = await _dioClient.dio.get(
         '/api/chat/rooms/$roomId/messages/cursor',
         queryParameters: {
           'size': 50,
-          if (oldestTimestamp != null) 'before': oldestTimestamp,
+          if (cursor != null) 'before': cursor.toUtc().toIso8601String(),
         },
       );
       final data = resp.data;
@@ -317,14 +343,10 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           debugPrint('[ChatNotifier] loadMoreHistory parse error: $parseErr');
         }
       }
-      newMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      final merged = [...newMessages, ...state.messages];
-      final seen = <String>{};
-      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
-      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       if (!mounted) return;
+      _advanceHistoryCursor(newMessages);
+      _mergeMessages(newMessages);
       state = state.copyWith(
-        messages: deduped,
         isLoadingHistory: false,
         hasMoreHistory: serverHasMore ?? newMessages.length >= 50,
       );
@@ -393,7 +415,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         return m.copyWith(
           content: newContent,
           edited: true,
-          editedAt: DateTime.now().toIso8601String(),
+          editedAt: DateTime.now().toUtc().toIso8601String(),
         );
       }
       return m;
@@ -441,12 +463,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final resp = await _dioClient.dio.get('/api/ai-summary/room/$roomId');
       final summaries = parseSummariesResponse(resp.data);
       if (summaries.isEmpty || !mounted) return;
-      final existing = state.messages;
-      final merged = [...existing, ...summaries];
-      final seen = <String>{};
-      final deduped = merged.where((m) => seen.add(m.effectiveId)).toList();
-      deduped.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      state = state.copyWith(messages: deduped);
+      _mergeMessages(summaries);
     } catch (_) {
       // Best-effort — summary load must not interrupt chat
     }
@@ -467,13 +484,42 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   /// Inserts a message into state if not already present (by effectiveId).
   /// Used by ThreadPanel to seed state with server-fetched replies that may
   /// not have arrived via STOMP yet.
-  void mergeMessage(ChatMessage msg) {
-    final existing = state.messages;
-    if (existing.any((m) => m.effectiveId == msg.effectiveId)) return;
-    final updated = [...existing, msg]
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    state = state.copyWith(messages: updated);
+  void mergeMessage(ChatMessage msg) => _mergeMessages([msg]);
+
+  /// The one way fetched messages (history pages, summaries, thread
+  /// replies) enter state. Messages already in state win over incoming
+  /// copies (they may carry live edits/reactions). The timeline is
+  /// re-sorted by parsed time and readCounts recomputed, since they are
+  /// positional.
+  void _mergeMessages(List<ChatMessage> incoming) {
+    if (incoming.isEmpty) return;
+    final kept = state.messages;
+    final seen = {for (final m in kept) m.effectiveId};
+    final merged = [
+      ...kept,
+      ...incoming.where((m) => seen.add(m.effectiveId)),
+    ];
+    final times = {for (final m in merged) m: _timeOf(m)};
+    merged.sort((a, b) => times[a]!.compareTo(times[b]!));
+    state = state.copyWith(
+      messages: merged,
+      readCounts: _readState.computeReadCounts(merged, state.readPositions),
+    );
   }
+
+  /// Moves the history cursor back to the oldest of [page].
+  void _advanceHistoryCursor(List<ChatMessage> page) {
+    for (final m in page) {
+      final t = _timeOf(m);
+      if (_historyCursor == null || t.isBefore(_historyCursor!)) {
+        _historyCursor = t;
+      }
+    }
+  }
+
+  static DateTime _timeOf(ChatMessage m) =>
+      parseServerDateTime(m.timestamp) ??
+      DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Called when user enters a room. Clears local unread count and persists last-read position.
   void markRoomRead(String roomId) => _readState.markRoomRead(roomId);
@@ -498,14 +544,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   Future<void> askAi(String roomId, String question) async {
     // Send AI question via STOMP for persistence
     final taggedContent = '$_aiQuestionPrefix$question';
-    _stompService.sendMessage({
-      'chatRoomId': roomId,
-      'userId': _userId,
-      'username': _username,
-      'content': taggedContent,
-      'type': 'CHAT',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    _send.sendTyped(roomId: roomId, content: taggedContent, type: 'CHAT');
     state = state.copyWith(isAiLoading: true);
 
     try {
@@ -518,12 +557,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       final msgJson = apiResponseMap(resp.data);
       if (msgJson != null) {
         final aiMsg = ChatMessage.fromJson(msgJson);
-        if (!state.messages.any((m) => m.effectiveId == aiMsg.effectiveId)) {
-          state = state.copyWith(
-              messages: [...state.messages, aiMsg], isAiLoading: false);
-        } else {
-          state = state.copyWith(isAiLoading: false);
-        }
+        _mergeMessages([aiMsg]);
+        state = state.copyWith(isAiLoading: false);
       } else {
         state = state.copyWith(isAiLoading: false);
       }
@@ -653,16 +688,19 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 final chatNotifierProvider = StateNotifierProvider.autoDispose
     .family<ChatNotifier, ChatMessagesState, String>(
   (ref, roomId) {
-    final auth = ref.watch(authProvider);
+    // Only identity fields: unrelated auth changes (avatar, isLoading) must not
+    // tear down the room socket and refetch history.
+    final (token, userId, username) =
+        ref.watch(authProvider.select((a) => (a.token, a.userId, a.username)));
     final notifier = ChatNotifier(
       ref.watch(dioClientProvider),
       ref: ref,
-      token: auth.token ?? '',
-      username: auth.username,
-      userId: auth.userId ?? '',
+      token: token ?? '',
+      username: username,
+      userId: userId ?? '',
     );
     // Guard: only join when token is available (prevents empty-token WebSocket on auth hydration)
-    if (auth.token != null) {
+    if (token != null) {
       notifier.joinRoom(roomId);
     }
     // StateNotifier.dispose()가 _stompService.dispose()를 호출하므로 ref.onDispose 중복 등록 제거.

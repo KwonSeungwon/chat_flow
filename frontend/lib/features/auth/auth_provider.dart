@@ -9,6 +9,7 @@ import '../../core/network/dio_client.dart';
 import '../../core/services/fcm_service.dart';
 import '../../core/services/web_unload_handler.dart';
 import '../../core/utils/url_helper.dart';
+import '../chat/chat_rooms_provider.dart' show appStompServiceProvider;
 
 class AuthState {
   final String? token;
@@ -39,6 +40,7 @@ class AuthState {
     String? username,
     String? role,
     String? profileImageUrl,
+    bool clearProfileImageUrl = false,
     bool? isLoading,
     String? error,
     bool? isHydrated,
@@ -48,7 +50,8 @@ class AuthState {
       userId: userId ?? this.userId,
       username: username ?? this.username,
       role: role ?? this.role,
-      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      profileImageUrl:
+          clearProfileImageUrl ? null : (profileImageUrl ?? this.profileImageUrl),
       isLoading: isLoading ?? this.isLoading,
       error: error,
       isHydrated: isHydrated ?? this.isHydrated,
@@ -62,13 +65,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   bool _fcmStopInFlight = false;
 
-  AuthNotifier(this._dioClient) : super(const AuthState()) {
+  /// 세션이 끝날 때(로그아웃/만료) 계정 범위 리소스(STOMP 연결 등)를 정리하는 훅.
+  final void Function()? _onSessionEnded;
+
+  AuthNotifier(this._dioClient, {void Function()? onSessionEnded})
+      : _onSessionEnded = onSessionEnded,
+        super(const AuthState()) {
     _dioClient.onUnauthorized = () {
       // 애초에 세션이 없으면 리셋할 것도, 끊을 푸시도 없다. 여기서 리셋해버리면
       // 회원가입 실패 직후 튀어나간 요청의 401이 방금 띄운 실패 사유까지 지운다.
       if (state.token == null) return;
       state = const AuthState(isHydrated: true);
       setAuthTokenForFiles(null);
+      _clearCredentials();
+      _onSessionEnded?.call();
       // Session expired/invalidated server-side (401) — stop FCM pushes for this
       // device, otherwise notifications keep arriving after the token dies.
       WebUnloadHandler.unregister();
@@ -103,9 +113,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else {
         // Token absent or already expired locally — clear and route to login.
         if (token != null) {
-          await _storage.delete(key: StorageKeys.token);
-          await _storage.delete(key: StorageKeys.userId);
-          await _storage.delete(key: StorageKeys.username);
+          await _clearCredentials();
           // The session's JWT expired while we were away — this device is still
           // subscribed to room topics, so pushes keep coming. Unsubscribe now.
           await _stopFcmPushes();
@@ -252,11 +260,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Detach the beforeunload handler so a future tab close after logout
     // doesn't fire POST /api/fcm/unsubscribe-all with a stale/empty JWT.
     WebUnloadHandler.unregister();
-    await _storage.delete(key: StorageKeys.token);
-    await _storage.delete(key: StorageKeys.userId);
-    await _storage.delete(key: StorageKeys.username);
-    await _storage.delete(key: StorageKeys.role);
-    await _storage.delete(key: StorageKeys.profileImage);
+    await _clearCredentials();
+    _onSessionEnded?.call();
     state = const AuthState(isHydrated: true);
   }
 
@@ -289,10 +294,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _storage.write(key: StorageKeys.role, value: role);
     if (profileImageUrl != null) {
       await _storage.write(key: StorageKeys.profileImage, value: profileImageUrl);
+    } else {
+      await _storage.delete(key: StorageKeys.profileImage);
+    }
+  }
+
+  Future<void> _clearCredentials() async {
+    try {
+      await clearStoredCredentials(_storage);
+    } catch (e) {
+      debugPrint('[AuthNotifier] clear credentials failed: $e');
+    }
+  }
+
+  /// 프로필 화면에서 아바타를 바꿨을 때 auth state/저장소에 반영한다 (서버 호출 없음).
+  Future<void> applyProfileImage(String? profileImageUrl) async {
+    if (profileImageUrl == null || profileImageUrl.isEmpty) {
+      await _storage.delete(key: StorageKeys.profileImage);
+      state = state.copyWith(clearProfileImageUrl: true);
+    } else {
+      await _storage.write(key: StorageKeys.profileImage, value: profileImageUrl);
+      state = state.copyWith(profileImageUrl: profileImageUrl);
     }
   }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(dioClientProvider));
+  return AuthNotifier(
+    ref.watch(dioClientProvider),
+    onSessionEnded: () => ref.read(appStompServiceProvider).disconnect(),
+  );
 });

@@ -1,6 +1,8 @@
 package com.chatflow.search.document;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,6 +33,13 @@ public class ChatMessageDocument {
 
     private String messageType;
 
+    /**
+     * Serialized as "isAiGenerated" to match the index mapping (Lombok's
+     * boolean getter would otherwise emit "aiGenerated"). The alias reads
+     * documents indexed before the rename.
+     */
+    @JsonProperty("isAiGenerated")
+    @JsonAlias({"aiGenerated"})
     private boolean isAiGenerated;
 
     private String fileName;
@@ -42,4 +51,8 @@ public class ChatMessageDocument {
     private String parentMessageId;
 
     private String parentMessagePreview;
+
+    private String forwardedFrom;
+
+    private boolean edited;
 }

@@ -260,6 +260,28 @@ class ChatRoomServiceTest {
         }
 
         @Test
+        void verifyPassword_roomWithNullPassword_returnsFalse() {
+            ChatRoom room = sampleRoom(ROOM_ID, "Open Room");
+            room.setPassword(null);
+
+            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
+
+            assertFalse(chatRoomService.verifyRoomPassword(ROOM_ID, "anything"));
+            assertFalse(chatRoomService.verifyRoomPassword(ROOM_ID, null));
+            verify(chatRoomRepository, never()).save(any());
+        }
+
+        @Test
+        void returns_false_for_null_input_against_legacy_plaintext() {
+            ChatRoom room = sampleRoom(ROOM_ID, "Legacy Room");
+            room.setPassword("pw");
+
+            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
+
+            assertFalse(chatRoomService.verifyRoomPassword(ROOM_ID, null));
+        }
+
+        @Test
         void returns_false_on_mismatch() {
             ChatRoom room = sampleRoom(ROOM_ID, "Locked Room");
             room.setPassword("$2a$10$hashedValue");

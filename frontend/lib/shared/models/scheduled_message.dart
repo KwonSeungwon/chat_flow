@@ -1,3 +1,5 @@
+import '../../core/utils/server_time.dart';
+
 class ScheduledMessage {
   final int id;
   final String chatRoomId;
@@ -25,7 +27,7 @@ class ScheduledMessage {
       );
 
   DateTime get scheduledAtDateTime =>
-      DateTime.tryParse(scheduledAt) ?? DateTime.now();
+      parseServerDateTime(scheduledAt) ?? DateTime.now();
 
   bool get isPending => status == 'PENDING';
 

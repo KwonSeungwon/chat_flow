@@ -47,6 +47,12 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.global.springProfile | quote }}
+            # Gateway 내부 시크릿 — chat-service /internal 멤버십 조회 시 X-Gateway-Secret으로 전송
+            - name: GATEWAY_INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chatflow-gateway-internal-secret
+                  key: GATEWAY_INTERNAL_SECRET
             # Kafka (외부 Secret)
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
@@ -90,7 +96,7 @@ spec:
                 name: {{ include "search-service.fullname" . }}
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             initialDelaySeconds: 30
             timeoutSeconds: 5
@@ -98,13 +104,13 @@ spec:
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: http
             periodSeconds: 15
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: http
             periodSeconds: 10
             failureThreshold: 3

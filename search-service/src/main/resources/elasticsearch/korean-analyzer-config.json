@@ -151,6 +151,13 @@
       },
       "fileContentType": {
         "type": "keyword"
+      },
+      "forwardedFrom": {
+        "type": "text",
+        "index": false
+      },
+      "edited": {
+        "type": "boolean"
       }
     }
   }

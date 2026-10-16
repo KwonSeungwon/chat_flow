@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/mention_item.dart';
+import '../auth/auth_provider.dart';
 
 class MentionsState {
   final AsyncValue<List<MentionItem>> items;
@@ -34,6 +35,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
     try {
       final resp =
           await _dio.get('/api/chat/mentions', queryParameters: {'days': days});
+      if (!mounted) return;
       final raw = apiResponseList(resp.data);
       final items = raw
           .map((e) => MentionItem.fromJson(e as Map<String, dynamic>))
@@ -43,6 +45,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
         unreadCount: items.where((m) => !m.read).length,
       );
     } catch (e, st) {
+      if (!mounted) return;
       state = state.copyWith(items: AsyncValue.error(e, st));
     }
   }
@@ -51,6 +54,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
     try {
       final resp = await _dio.get('/api/chat/mentions/unread-count',
           queryParameters: {'days': days});
+      if (!mounted) return;
       final inner = apiResponseMap(resp.data) ?? const {};
       final count = (inner['count'] as num?)?.toInt() ?? 0;
       state = state.copyWith(unreadCount: count);
@@ -82,6 +86,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
 
 final mentionsProvider =
     StateNotifierProvider<MentionsNotifier, MentionsState>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   final dio = ref.read(dioClientProvider).dio;
   return MentionsNotifier(dio);
 });

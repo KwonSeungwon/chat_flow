@@ -8,6 +8,5 @@ public final class KafkaTopics {
     private KafkaTopics() {}
 
     public static final String CHAT_MESSAGES = "chat-messages";
-    public static final String AI_SUMMARY_REQUESTS = "ai-summary-requests";
     public static final String AI_SUMMARIES = "ai-summaries";
 }

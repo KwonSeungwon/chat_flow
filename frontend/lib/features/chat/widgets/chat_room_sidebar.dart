@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, appStompServiceProvider, activeRoomIdProvider, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider, keywordAlertProvider, KeywordAlert;
+import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider;
 import 'create_room_dialog.dart';
 import 'sidebar_header.dart';
 import 'room_tile.dart';
@@ -40,71 +40,6 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     WidgetsBinding.instance.addObserver(this);
     _loadInitialUnreadCounts();
     _startRefreshTimer();
-    _initAppStomp();
-  }
-
-  /// Connect the app-level STOMP service for real-time unread increments.
-  void _initAppStomp() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_disposed) return;
-      final auth = ref.read(authProvider);
-      if (auth.token == null || auth.userId == null) return;
-      ref.read(appStompServiceProvider).connect(
-        userId: auth.userId!,
-        token: auth.token!,
-        onRoomUpdate: (
-          roomId,
-          type, {
-          List<String> mentionedUsernames = const [],
-          String content = '',
-          String senderUsername = '',
-        }) {
-          if (_disposed) return;
-          if (type != 'UNREAD_INCREMENT') return;
-          // Skip increment if user is currently viewing this room
-          final activeRoom = ref.read(activeRoomIdProvider);
-          if (activeRoom == roomId) return;
-
-          final policy = ref.read(roomNotificationPolicyProvider.notifier).policyFor(roomId);
-          final currentUsername = ref.read(authProvider).username;
-          final isMentioningMe = mentionedUsernames.contains(currentUsername);
-          // Keyword bypass: even MUTED/MENTIONS_ONLY rooms surface unread when
-          // user-defined keywords appear in the content (frontend-only).
-          final isKeywordHit =
-              ref.read(roomKeywordsProvider.notifier).matches(roomId, content);
-
-          // Policy-based filtering
-          switch (policy) {
-            case NotificationPolicy.muted:
-              if (!isKeywordHit) return; // muted — only keyword hits surface
-              break;
-            case NotificationPolicy.mentionsOnly:
-              if (!isMentioningMe && !isKeywordHit) return;
-              break;
-            case NotificationPolicy.all:
-              break;
-          }
-
-          // Surface in-app keyword alert banner
-          if (isKeywordHit) {
-            final rooms = ref.read(chatRoomsProvider).valueOrNull ?? [];
-            final room = rooms.where((r) => r.id == roomId).firstOrNull;
-            final roomName = room?.name ?? roomId;
-            final snippet = content.length > 60
-                ? '${content.substring(0, 60)}...'
-                : content;
-            ref.read(keywordAlertProvider.notifier).state = KeywordAlert(
-              roomId: roomId,
-              roomName: roomName,
-              senderUsername: senderUsername,
-              snippet: snippet,
-            );
-          }
-
-          ref.read(roomUnreadCountsProvider.notifier).increment(roomId);
-        },
-      );
-    });
   }
 
   void _startRefreshTimer() {
@@ -294,10 +229,12 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     try {
       if (policy == NotificationPolicy.all) {
         await dio.post('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+        FcmService.noteRoomSubscription(roomId, subscribed: true);
       } else {
         // MENTIONS_ONLY and MUTED both unsubscribe room topic
         // (mention-{username} topic remains subscribed so mentions still arrive)
         await dio.delete('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+        FcmService.noteRoomSubscription(roomId, subscribed: false);
       }
     } catch (_) {/* best-effort */}
   }

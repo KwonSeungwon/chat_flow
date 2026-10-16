@@ -1,5 +1,6 @@
 package com.chatflow.chat.event;
 
+import com.chatflow.chat.config.AsyncConfig;
 import com.chatflow.chat.service.UserPresenceService;
 import com.chatflow.chat.service.message.MentionTargets;
 import com.chatflow.common.dto.ChatMessage;
@@ -24,7 +25,7 @@ public class MessageEventListener {
     private final SimpMessagingTemplate messagingTemplate;
     private final UserPresenceService userPresenceService;
 
-    @Async("persistenceExecutor")
+    @Async(AsyncConfig.BROADCAST_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMessagePersisted(MessagePersistedEvent event) {
         ChatMessage message = event.getMessage();

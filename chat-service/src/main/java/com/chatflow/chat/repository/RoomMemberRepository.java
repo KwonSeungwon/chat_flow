@@ -19,6 +19,9 @@ public interface RoomMemberRepository extends JpaRepository<RoomMemberEntity, Ro
     List<RoomMemberEntity> findByRoomId(String roomId);
     Optional<RoomMemberEntity> findByRoomIdAndUserId(String roomId, String userId);
 
+    @Query("SELECT rm.roomId FROM RoomMemberEntity rm WHERE rm.userId = :userId")
+    List<String> findRoomIdsByUserId(@Param("userId") String userId);
+
     @Modifying
     @Transactional
     @Query("UPDATE RoomMemberEntity rm SET rm.lastReadAt = :at " +

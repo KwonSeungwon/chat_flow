@@ -29,14 +29,6 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic aiSummaryRequestsTopic() {
-        return TopicBuilder.name(KafkaTopics.AI_SUMMARY_REQUESTS)
-                .partitions(PARTITIONS)
-                .replicas(replicationFactor)
-                .build();
-    }
-
-    @Bean
     public NewTopic aiSummariesTopic() {
         return TopicBuilder.name(KafkaTopics.AI_SUMMARIES)
                 .partitions(PARTITIONS)

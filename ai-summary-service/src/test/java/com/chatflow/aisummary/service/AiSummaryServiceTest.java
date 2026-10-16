@@ -80,7 +80,7 @@ class AiSummaryServiceTest {
     private static final String BUFFER_PREFIX = "chatflow:buffer:";
     private static final String BUFFER_TIME_PREFIX = "chatflow:buffer-time:";
     private static final String ACTIVE_ROOMS_KEY = "chatflow:active-rooms";
-    private static final String SUMMARY_PREFIX = "chatflow:summary:";
+    private static final String SUMMARY_PREFIX = RedisKeys.SUMMARY_LIST_PREFIX;
     private static final String HASH_PREFIX = "chatflow:summary-hash:";
 
     @BeforeEach
@@ -120,6 +120,7 @@ class AiSummaryServiceTest {
         lenient().when(listOps.rightPush(anyString(), anyString())).thenReturn(bufferSizeAfterPush);
         lenient().when(listOps.size(anyString())).thenReturn(bufferSizeAfterPush);
         lenient().when(redisTemplate.expire(anyString(), any(Duration.class))).thenReturn(true);
+        lenient().when(setOps.add(anyString(), anyString())).thenReturn(1L);
     }
 
     // =======================================================================
@@ -325,7 +326,6 @@ class AiSummaryServiceTest {
             when(chatModelClient.generate(anyString())).thenReturn("AI summary result");
 
             // Stub getSummaries path — no existing summaries
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-trigger"))).thenReturn(null);
 
             // Stub kafkaTemplate.send
             when(kafkaTemplate.send(anyString(), anyString(), any()))
@@ -351,7 +351,6 @@ class AiSummaryServiceTest {
                     .thenReturn(bufferedJsons);
             when(valueOps.get(eq(HASH_PREFIX + "room-cleanup"))).thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("summary");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-cleanup"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -428,7 +427,6 @@ class AiSummaryServiceTest {
                     .thenReturn(bufferedJsons);
             when(valueOps.get(eq(HASH_PREFIX + "room-fields"))).thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("Test summary content");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-fields"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -469,7 +467,6 @@ class AiSummaryServiceTest {
                     .thenReturn(bufferedJsons);
             when(valueOps.get(eq(HASH_PREFIX + "room-handoff"))).thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("SOAP note");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-handoff"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -498,19 +495,20 @@ class AiSummaryServiceTest {
     class MalformedJsonTests {
 
         @Test
-        @DisplayName("malformed JSON does not throw and does not push to Redis")
-        void malformed_json_handled_gracefully() {
-            // handleChatMessage catches JsonProcessingException internally
-            service.handleChatMessage("{ not valid json !!!");
+        @DisplayName("malformed JSON is rethrown (-> DLT) and does not touch Redis")
+        void malformed_json_rethrown() {
+            assertThatThrownBy(() -> service.handleChatMessage("{ not valid json !!!"))
+                    .isInstanceOf(org.apache.kafka.common.errors.SerializationException.class);
 
             verifyNoInteractions(redisTemplate);
             verifyNoInteractions(chatModelClient);
         }
 
         @Test
-        @DisplayName("empty string does not throw")
-        void empty_string_handled() {
-            service.handleChatMessage("");
+        @DisplayName("empty string is rethrown (-> DLT)")
+        void empty_string_rethrown() {
+            assertThatThrownBy(() -> service.handleChatMessage(""))
+                    .isInstanceOf(org.apache.kafka.common.errors.SerializationException.class);
 
             verifyNoInteractions(redisTemplate);
         }
@@ -533,50 +531,44 @@ class AiSummaryServiceTest {
     @DisplayName("getSummaries: retrieve cached summaries from Redis")
     class GetSummariesTests {
 
+        private ChatMessage summary(String id, String content) {
+            return ChatMessage.builder()
+                    .messageId(id).chatRoomId("room-cached").userId("ai-system")
+                    .username("AI 요약봇").content(content)
+                    .type(ChatMessage.MessageType.AI_SUMMARY)
+                    .timestamp(LocalDateTime.of(2026, 7, 4, 12, 0, 0))
+                    .isAiGenerated(true).build();
+        }
+
         @Test
         @DisplayName("returns empty list when no cached summary")
         void no_cache_returns_empty() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-nocache"))).thenReturn(null);
+            when(redisTemplate.opsForList()).thenReturn(listOps);
+            when(listOps.range(eq(SUMMARY_PREFIX + "room-nocache"), eq(0L), eq(-1L))).thenReturn(List.of());
 
-            List<ChatMessage> result = service.getSummaries("room-nocache");
-
-            assertThat(result).isEmpty();
+            assertThat(service.getSummaries("room-nocache")).isEmpty();
         }
 
         @Test
-        @DisplayName("returns deserialized summaries when cache exists")
+        @DisplayName("returns deserialized summaries in order when cache exists")
         void cache_hit_returns_summaries() throws Exception {
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
-
-            ChatMessage summary = ChatMessage.builder()
-                    .messageId("sum-1")
-                    .chatRoomId("room-cached")
-                    .userId("ai-system")
-                    .username("AI 요약봇")
-                    .content("cached summary")
-                    .type(ChatMessage.MessageType.AI_SUMMARY)
-                    .timestamp(LocalDateTime.of(2026, 7, 4, 12, 0, 0))
-                    .isAiGenerated(true)
-                    .build();
-            String json = objectMapper.writeValueAsString(List.of(summary));
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-cached"))).thenReturn(json);
+            when(redisTemplate.opsForList()).thenReturn(listOps);
+            when(listOps.range(eq(SUMMARY_PREFIX + "room-cached"), eq(0L), eq(-1L)))
+                    .thenReturn(List.of(toJson(summary("s1", "first")), toJson(summary("s2", "second"))));
 
             List<ChatMessage> result = service.getSummaries("room-cached");
 
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).getContent()).isEqualTo("cached summary");
+            assertThat(result).extracting(ChatMessage::getContent).containsExactly("first", "second");
         }
 
         @Test
-        @DisplayName("returns empty list when cached JSON is malformed")
-        void malformed_cache_returns_empty() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-bad"))).thenReturn("not json");
+        @DisplayName("skips malformed entries")
+        void malformed_entry_skipped() throws Exception {
+            when(redisTemplate.opsForList()).thenReturn(listOps);
+            when(listOps.range(eq(SUMMARY_PREFIX + "room-bad"), eq(0L), eq(-1L)))
+                    .thenReturn(List.of("not json", toJson(summary("s1", "ok"))));
 
-            List<ChatMessage> result = service.getSummaries("room-bad");
-
-            assertThat(result).isEmpty();
+            assertThat(service.getSummaries("room-bad")).extracting(ChatMessage::getContent).containsExactly("ok");
         }
     }
 
@@ -604,6 +596,7 @@ class AiSummaryServiceTest {
         void non_empty_buffer_generates_summary() throws Exception {
             when(redisTemplate.opsForValue()).thenReturn(valueOps);
             when(redisTemplate.opsForSet()).thenReturn(setOps);
+            when(redisTemplate.opsForList()).thenReturn(listOps);
 
             List<String> bufferedJsons = List.of(
                     toJson(chatMessage("room-req", "m1", "hello"))
@@ -614,7 +607,6 @@ class AiSummaryServiceTest {
             // but generateSummary calls cacheSummary → getSummaries → valueOps.get(SUMMARY_PREFIX)
             // and then valueOps.set(HASH_PREFIX, ...) to store the hash.
             when(chatModelClient.generate(anyString())).thenReturn("On-demand summary");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-req"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -706,7 +698,6 @@ class AiSummaryServiceTest {
                     .thenReturn(bufferedJsons);
             when(valueOps.get(eq(HASH_PREFIX + "room-stale"))).thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("Time-based summary");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-stale"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -763,7 +754,6 @@ class AiSummaryServiceTest {
         @DisplayName("generates answer with conversation context")
         void answer_with_context() throws Exception {
             when(redisTemplate.opsForList()).thenReturn(listOps);
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
             List<String> rawMessages = List.of(
                     toJson(chatMessage("room-qa", "m1", "hello doctor"))
@@ -771,7 +761,6 @@ class AiSummaryServiceTest {
             when(listOps.range(eq(BUFFER_PREFIX + "room-qa"), eq(0L), eq(-1L)))
                     .thenReturn(rawMessages);
             when(chatModelClient.generate(anyString())).thenReturn("AI answer");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-qa"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -789,12 +778,10 @@ class AiSummaryServiceTest {
         @DisplayName("generates answer without context (empty buffer)")
         void answer_without_context() {
             when(redisTemplate.opsForList()).thenReturn(listOps);
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
             when(listOps.range(eq(BUFFER_PREFIX + "room-empty-qa"), eq(0L), eq(-1L)))
                     .thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("General answer");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-empty-qa"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -819,7 +806,6 @@ class AiSummaryServiceTest {
         @DisplayName("generates shift report from buffer context")
         void generates_report() throws Exception {
             when(redisTemplate.opsForList()).thenReturn(listOps);
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
             List<String> rawMessages = List.of(
                     toJson(chatMessage("room-shift", "m1", "patient stable"))
@@ -827,7 +813,6 @@ class AiSummaryServiceTest {
             when(listOps.range(eq(BUFFER_PREFIX + "room-shift"), eq(0L), eq(-1L)))
                     .thenReturn(rawMessages);
             when(chatModelClient.generate(anyString())).thenReturn("Shift report content");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-shift"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -846,12 +831,10 @@ class AiSummaryServiceTest {
         @DisplayName("generates shift report with empty context")
         void generates_report_empty_context() {
             when(redisTemplate.opsForList()).thenReturn(listOps);
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
             when(listOps.range(eq(BUFFER_PREFIX + "room-shift-e"), eq(0L), eq(-1L)))
                     .thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("Empty shift report");
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-shift-e"))).thenReturn(null);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -868,55 +851,89 @@ class AiSummaryServiceTest {
     // cacheSummary integration (via generateSummary path)
     // =======================================================================
     @Nested
-    @DisplayName("cacheSummary: appends to existing cached summaries")
+    @DisplayName("cacheSummary: atomic append to the cached summary list")
     class CacheSummaryTests {
 
         @Test
-        @DisplayName("appends new summary to existing cache list")
-        void appends_to_existing_cache() throws Exception {
+        @DisplayName("cacheSummary_concurrentAppends_bothKept: appends via RPUSH + LTRIM + EXPIRE, never read-modify-write")
+        void cacheSummary_concurrentAppends_bothKept() throws Exception {
             stubRedisForBuffering(10L);
-
-            // Existing cached summary
-            ChatMessage existing = ChatMessage.builder()
-                    .messageId("old-sum")
-                    .chatRoomId("room-append")
-                    .userId("ai-system")
-                    .username("AI 요약봇")
-                    .content("old summary")
-                    .type(ChatMessage.MessageType.AI_SUMMARY)
-                    .timestamp(LocalDateTime.of(2026, 7, 3, 12, 0, 0))
-                    .isAiGenerated(true)
-                    .build();
-            String existingJson = objectMapper.writeValueAsString(List.of(existing));
-
-            List<String> bufferedJsons = List.of(
-                    toJson(chatMessage("room-append", "m1", "msg1"))
-            );
             when(redisTemplate.execute(any(RedisScript.class), anyList()))
-                    .thenReturn(bufferedJsons);
+                    .thenReturn(List.of(toJson(chatMessage("room-append", "m1", "msg1"))));
             when(valueOps.get(eq(HASH_PREFIX + "room-append"))).thenReturn(null);
             when(chatModelClient.generate(anyString())).thenReturn("new summary");
-
-            // First call to getSummaries (from cacheSummary) returns existing
-            when(valueOps.get(eq(SUMMARY_PREFIX + "room-append"))).thenReturn(existingJson);
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
 
-            ChatMessage msg = chatMessage("room-append", "msg-trigger", "hello");
-            service.handleChatMessage(toJson(msg));
+            service.handleChatMessage(toJson(chatMessage("room-append", "msg-trigger", "hello")));
 
-            // Verify the summary list written to cache contains both old and new
             ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
-            // cacheSummary calls valueOps.set(key, json, TTL)
-            // The key is SUMMARY_PREFIX + "room-append"
-            verify(valueOps).set(eq(SUMMARY_PREFIX + "room-append"), jsonCaptor.capture(),
-                    eq(Duration.ofHours(24)));
+            verify(listOps).rightPush(eq(SUMMARY_PREFIX + "room-append"), jsonCaptor.capture());
+            verify(listOps).trim(SUMMARY_PREFIX + "room-append", -50L, -1L);
+            verify(redisTemplate).expire(SUMMARY_PREFIX + "room-append", Duration.ofHours(24));
+            // no whole-list overwrite of the summary key
+            verify(valueOps, never()).set(eq(SUMMARY_PREFIX + "room-append"), anyString(), any(Duration.class));
+            assertThat(objectMapper.readValue(jsonCaptor.getValue(), ChatMessage.class).getContent())
+                    .isEqualTo("new summary");
+        }
+    }
 
-            List<ChatMessage> cached = objectMapper.readValue(jsonCaptor.getValue(),
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, ChatMessage.class));
-            assertThat(cached).hasSize(2);
-            assertThat(cached.get(0).getContent()).isEqualTo("old summary");
-            assertThat(cached.get(1).getContent()).isEqualTo("new summary");
+    // =======================================================================
+    // B-9 / B-10 / B-11 regression tests
+    // =======================================================================
+    @Nested
+    @DisplayName("Audit remediation: idempotent buffer, honest rate-limit, DLT rethrow")
+    class AuditRemediationTests {
+
+        @Test
+        @DisplayName("buffer_duplicateMessageId_notCountedTwice")
+        void buffer_duplicateMessageId_notCountedTwice() throws Exception {
+            stubRedisForBuffering(1L);
+            String idsKey = RedisKeys.BUFFER_IDS_PREFIX + "room-dup";
+            when(setOps.add(idsKey, "m-dup")).thenReturn(1L).thenReturn(0L);
+
+            String json = toJson(chatMessage("room-dup", "m-dup", "hello"));
+            service.handleChatMessage(json);
+            service.handleChatMessage(json);
+
+            verify(listOps, times(1)).rightPush(eq(BUFFER_PREFIX + "room-dup"), anyString());
+        }
+
+        @Test
+        @DisplayName("requestSummary_rateLimited_returnsFalse_andTimerReRegistered")
+        void requestSummary_rateLimited_returnsFalse_andTimerReRegistered() throws Exception {
+            stubRedisForBuffering(0L);
+            when(chatModelClient.generate(anyString())).thenReturn("s");
+            when(kafkaTemplate.send(anyString(), anyString(), any()))
+                    .thenReturn(CompletableFuture.completedFuture(null));
+            when(redisTemplate.execute(any(RedisScript.class), anyList())).thenReturn(
+                    List.of(toJson(chatMessage("room-rl", "m1", "one")), toJson(chatMessage("room-rl", "m2", "two"))));
+            // drain the 10-token bucket
+            for (int i = 0; i < 10; i++) {
+                assertThat(service.requestSummary("room-rl")).isTrue();
+            }
+            clearInvocations(listOps, setOps, valueOps, redisTemplate);
+            stubRedisForBuffering(0L);
+
+            assertThat(service.requestSummary("room-rl")).isFalse();
+            assertThat(service.requestSummaryOutcome("room-rl"))
+                    .isEqualTo(AiSummaryService.SummaryOutcome.RATE_LIMITED);
+
+            // re-queued at the front in original order (m2 pushed first, m1 last)
+            org.mockito.InOrder order = inOrder(listOps);
+            order.verify(listOps).leftPush(eq(BUFFER_PREFIX + "room-rl"), contains("\"m2\""));
+            order.verify(listOps).leftPush(eq(BUFFER_PREFIX + "room-rl"), contains("\"m1\""));
+            // timer + active-room registration restored
+            verify(valueOps, atLeastOnce()).set(eq(BUFFER_TIME_PREFIX + "room-rl"), anyString(), any(Duration.class));
+            verify(setOps, atLeastOnce()).add(ACTIVE_ROOMS_KEY, "room-rl");
+        }
+
+        @Test
+        @DisplayName("listener_badJson_throws")
+        void listener_badJson_throws() {
+            assertThatThrownBy(() -> service.handleChatMessage("{ not valid json !!!"))
+                    .isInstanceOf(org.apache.kafka.common.errors.SerializationException.class);
+            verifyNoInteractions(redisTemplate);
         }
     }
 }

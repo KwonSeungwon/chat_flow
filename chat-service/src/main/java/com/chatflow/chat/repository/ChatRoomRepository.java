@@ -8,17 +8,21 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
     @Query("SELECT r FROM ChatRoom r ORDER BY COALESCE(r.lastMessageAt, r.createdAt) DESC")
     List<ChatRoom> findAllOrderByLastActivity();
-    Optional<ChatRoom> findByExternalId(String externalId);
 
-    @Modifying
-    @Query("UPDATE ChatRoom r SET r.participantCount = r.participantCount + 1 WHERE r.id = :roomId")
-    int incrementParticipantCount(@Param("roomId") String roomId);
+    /**
+     * Room-list query mirroring RoomAccessPolicy#isVisible: non-DM non-private
+     * rooms, plus any room the user holds a room_members row for.
+     */
+    @Query("SELECT r FROM ChatRoom r WHERE "
+            + "((r.roomType IS NULL OR r.roomType <> com.chatflow.chat.entity.RoomType.DIRECT) AND r.isPrivate = false) "
+            + "OR r.id IN (SELECT m.roomId FROM RoomMemberEntity m WHERE m.userId = :userId) "
+            + "ORDER BY COALESCE(r.lastMessageAt, r.createdAt) DESC")
+    List<ChatRoom> findVisibleOrderByLastActivity(@Param("userId") String userId);
 
     @Modifying
     @Query("UPDATE ChatRoom r SET r.participantCount = CASE WHEN r.participantCount > 0 THEN r.participantCount - 1 ELSE 0 END WHERE r.id = :roomId")

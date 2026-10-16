@@ -22,7 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,7 +102,7 @@ class ScheduledMessageControllerTest {
                     1L, "room-1", "hello", at, "PENDING", at);
 
             when(service.schedule(eq("room-1"), eq("user-1"), eq("alice"),
-                    eq("hello"), eq(at)))
+                    eq("hello"), eq(at.toInstant(ZoneOffset.UTC))))
                     .thenReturn(entity);
             when(scheduledMessageMapper.toDto(entity)).thenReturn(dto);
 
@@ -118,7 +120,55 @@ class ScheduledMessageControllerTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.id").value(1));
 
-            verify(service).schedule("room-1", "user-1", "alice", "hello", at);
+            verify(service).schedule("room-1", "user-1", "alice", "hello", at.toInstant(ZoneOffset.UTC));
+        }
+
+        @Test
+        @DisplayName("offset input (KST) is converted to the same instant, stored as UTC")
+        void schedule_offsetInput_storedAsUtc() throws Exception {
+            Instant expected = Instant.parse("2026-08-01T00:00:00Z");
+            ScheduledMessageEntity entity = ScheduledMessageEntity.builder()
+                    .id(2L).chatRoomId("room-1").userId("user-1").username("alice")
+                    .content("hello").scheduledAt(LocalDateTime.of(2026, 8, 1, 0, 0)).build();
+            when(service.schedule(eq("room-1"), eq("user-1"), eq("alice"), eq("hello"), eq(expected)))
+                    .thenReturn(entity);
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "chatRoomId", "room-1",
+                    "content", "hello",
+                    "scheduledAt", "2026-08-01T09:00:00+09:00"));
+
+            mockMvc.perform(post("/api/chat/scheduled-messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk());
+
+            verify(service).schedule("room-1", "user-1", "alice", "hello", expected);
+        }
+
+        @Test
+        @DisplayName("Dart toUtc().toIso8601String() form (Z suffix, millis) is accepted")
+        void schedule_zuluInputWithMillis_accepted() throws Exception {
+            Instant expected = Instant.parse("2026-08-01T00:00:00Z");
+            ScheduledMessageEntity entity = ScheduledMessageEntity.builder()
+                    .id(3L).chatRoomId("room-1").userId("user-1").username("alice")
+                    .content("hello").scheduledAt(LocalDateTime.of(2026, 8, 1, 0, 0)).build();
+            when(service.schedule(eq("room-1"), eq("user-1"), eq("alice"), eq("hello"), eq(expected)))
+                    .thenReturn(entity);
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "chatRoomId", "room-1",
+                    "content", "hello",
+                    "scheduledAt", "2026-08-01T00:00:00.000Z"));
+
+            mockMvc.perform(post("/api/chat/scheduled-messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk());
         }
 
         @Test
@@ -241,7 +291,7 @@ class ScheduledMessageControllerTest {
                     2L, "123", "hello", at, "PENDING", at);
 
             when(service.schedule(eq("123"), eq("user-1"), eq("alice"),
-                    eq("hello"), eq(at)))
+                    eq("hello"), eq(at.toInstant(ZoneOffset.UTC))))
                     .thenReturn(entity);
             when(scheduledMessageMapper.toDto(entity)).thenReturn(dto);
 

@@ -5,7 +5,7 @@ description: "ChatFlow K3s 프로덕션 배포 스킬. 새 피처를 K3s에 배�
 
 # ChatFlow 배포 스킬 (K3s)
 
-프로덕션: 자체 K3s 인스턴스 (호스트는 `.claude/CLAUDE.md` 참고) / 네임스페이스 `chatflow` / 도메인 https://app.chatflow.ai.kr
+프로덕션: 자체 K3s 인스턴스 (호스트는 `.claude/CLAUDE.md` 참고) / 네임스페이스 `chatflow` / 도메인 https://app.gossiplog.com
 SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용) 참고 — **소스/env 파일에 절대 직접 쓰지 말 것.**
 
 ## 배포 전 필수 확인
@@ -36,20 +36,19 @@ gh workflow run deploy-k3s.yml -f service=<service> -f tag=sha-<full-sha>
 gh run watch
 ```
 
-## 레거시 경로 — 로컬 cross-build (Docker daemon 필요할 때만)
+## 클러스터 부트스트랩 (이미지 배포 아님)
 
 ```bash
-./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
-./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import (amd64 크로스 빌드 → scp → k3s ctr import)
-./scripts/deploy-k3s.sh helm     # Helm 배포만 (helm/chatflow, values-k3s.yaml)
+./scripts/deploy-k3s.sh infra    # k8s/infra/k3s-infra.yaml 적용
+./scripts/deploy-k3s.sh secrets  # 없는 Secret만 생성 (DEPLOY_* env 4종 필수)
 ```
 
-로컬 Docker Desktop daemon이 hang이면 이 경로 전체가 막힌다 — GH Actions 경로를 우선하라.
+로컬 cross-build 경로(`images`/`helm`)는 제거됐다 — 이미지 배포는 위 GH Actions 경로만 쓴다.
 
 ## 프론트엔드 배포 후 Cloudflare 캐시 퍼지 (필수)
 
 토큰/Zone ID와 실행 명령은 `.claude/CLAUDE.md` 참고.
-존을 `timecapsule.chatflow.ai.kr`과 공유하므로 가능하면 URL 리스트 퍼지를 우선한다.
+존을 다른 서비스와 공유할 수 있으므로 가능하면 URL 리스트 퍼지를 우선한다.
 
 ## 배포 후 검증
 
@@ -61,8 +60,8 @@ ssh <k3s-node> "sudo kubectl get pods -n chatflow --kubeconfig /etc/rancher/k3s/
 ssh <k3s-node> "sudo kubectl rollout status deployment/<service> -n chatflow --kubeconfig /etc/rancher/k3s/k3s.yaml"
 
 # 헬스체크
-curl -s -o /dev/null -w "%{http_code}\n" https://app.chatflow.ai.kr/
-curl -s https://app.chatflow.ai.kr/api/chat/rooms | head -c 200   # 401이면 인증 정상 동작 중
+curl -s -o /dev/null -w "%{http_code}\n" https://app.gossiplog.com/
+curl -s https://app.gossiplog.com/api/chat/rooms | head -c 200   # 401이면 인증 정상 동작 중
 
 # 로그 확인 (오류 시)
 ssh <k3s-node> "sudo kubectl logs -n chatflow -l app.kubernetes.io/name=<service> --kubeconfig /etc/rancher/k3s/k3s.yaml --tail=50"
@@ -101,8 +100,3 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 | 프론트 흰 화면/구버전 | Cloudflare 캐시 | 캐시 퍼지 재실행 |
 | helm upgrade 후 이미지 회귀 | `kubectl set image` 드리프트 | `values-k3s.yaml` 태그를 실제 배포 태그로 갱신 후 upgrade |
 | STOMP 404 | Gateway `/ws-native` 라우트 누락 | `application-prod.yml` 라우트 + SecurityConfig `permitAll()` 확인 |
-
-## 레거시 참고 (사용 금지)
-
-`docker-compose.prod.yml`, `scripts/deploy-ec2.sh`, `.env.prod.example`은 EC2 시절 유물이다.
-2026-04 K3s 이관 이후 실제 배포에 쓰이지 않는다 — 절차를 이 파일들 기준으로 안내하지 말 것.

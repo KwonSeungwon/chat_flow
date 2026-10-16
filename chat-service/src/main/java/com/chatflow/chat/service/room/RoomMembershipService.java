@@ -3,11 +3,13 @@ package com.chatflow.chat.service.room;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -38,22 +40,35 @@ public class RoomMembershipService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ParticipantService participantService;
     private final RoomCacheEvictor roomCacheEvictor;
+    private final RoomAccessPolicy roomAccessPolicy;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * Idempotently inserts a (roomId, userId) row into room_members.
-     * Default role is MEMBER. Use the 4-arg overload to set OWNER/MODERATOR.
+     * The only entry point for user-initiated membership grants (invite link,
+     * password verify, DM create). Asks {@link RoomAccessPolicy#canGrant} first
+     * and inserts a MEMBER row only when the policy allows it.
+     *
+     * @return the policy decision; when denied, no row is written.
      */
-    public void addMemberIfAbsent(String roomId, String userId, String username) {
+    public RoomAccessPolicy.JoinDecision grantMembership(String roomId, String userId, String username,
+                                                         RoomAccessPolicy.GrantPath via) {
+        RoomAccessPolicy.JoinDecision decision = roomAccessPolicy.canGrant(roomId, userId, via);
+        if (!decision.allowed()) {
+            log.info("Membership grant denied: room={} user={} via={} reason={}",
+                    roomId, userId, via, decision.reason());
+            return decision;
+        }
         addMemberIfAbsent(roomId, userId, username, RoomRole.MEMBER);
+        return decision;
     }
 
     /**
      * Idempotently inserts a (roomId, userId) row into room_members.
-     * Called from every access-granting path (create, invite-join, password
-     * verify, DM create) so the room_members table tracks every legitimate
-     * member, not just users who happened to send a STOMP message.
+     * Package-private on purpose: outside this package only
+     * {@link #grantMembership} may create rows. The one in-package direct
+     * caller is owner seeding in {@link ChatRoomService#createRoom}.
      */
-    public void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
+    void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
         if (userId == null || userId.isBlank()) return;
         if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
         try {
@@ -90,6 +105,8 @@ public class RoomMembershipService {
         }
         // DB row 삭제 — source of truth; Redis/broadcast 전에 수행
         roomMemberRepository.deleteByRoomIdAndUserId(roomId, userId);
+        eventPublisher.publishEvent(new RoomMemberRemovedEvent(
+                roomId, userId, RoomMemberRemovedEvent.Reason.LEFT));
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {

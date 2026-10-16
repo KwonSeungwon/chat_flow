@@ -342,7 +342,6 @@ print_status() {
     echo -e "${YELLOW}📈 Grafana${NC}             http://localhost:3001 (admin/admin)"
     echo -e "${YELLOW}📊 Prometheus${NC}          http://localhost:9090"
     echo -e "${YELLOW}🔍 Kibana${NC}              http://localhost:5601"
-    echo -e "${YELLOW}📚 Swagger UI${NC}          http://localhost:8000/swagger-ui.html"
     echo ""
     echo -e "${WHITE}=== 🛠️ 인프라 서비스 ===${NC}"
     echo -e "${RED}🔴 Valkey${NC}               localhost:6379"

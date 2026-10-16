@@ -132,7 +132,6 @@ graph TB
 - **📝 교대 보고서** - AI 기반 근무 교대 인수인계 보고서 자동 생성
 - **👥 역할 기반 접근제어 (RBAC)** - 의사/간호사/약사/관리자 역할별 방 접근 제한
 - **✅ 읽음 확인** - STOMP 기반 실시간 읽음 상태 추적
-- **🏥 HL7 FHIR 연동** - 환자/처방 데이터 조회 API (Mock)
 - **💊 처방/검사 알림** - Kafka 기반 오더 이벤트 → 채팅방 자동 시스템 알림
 - **📜 감사 로그** - 메시지 접근 이력 ES 인덱싱 (의료법 준수)
 - **🔐 메시지 암호화** - AES-256-GCM at-rest 암호화
@@ -285,8 +284,8 @@ chat_flow/
 ├── 📋 docker-compose.local.yml    # 로컬 개발 환경 설정
 └── 🔄 .github/workflows/          # CI/CD 파이프라인
     ├── ci.yml                     # 테스트 + 품질 게이트 + Docker 빌드
-    ├── release.yaml               # GHCR 푸시 + 스테이징 배포
-    └── deploy-prod.yaml           # 프로덕션 배포 (승인 게이트)
+    ├── develop-build.yml          # develop push → GHCR 이미지 빌드
+    └── deploy-k3s.yml             # K3s 수동 롤아웃
 ```
 
 ## 🔧 환경 설정
@@ -352,8 +351,8 @@ logging:
 | 서비스 | URL | 설명 |
 |--------|-----|------|
 | **웹 앱 (로컬)** | chrome (`flutter run -d chrome`) | Flutter Web 개발 서버 |
-| **웹 앱 (프로덕션)** | https://app.chatflow.ai.kr | K3s + Cloudflare Tunnel |
-| **Android APK** | https://app.chatflow.ai.kr/chatflow-app.apk | 웹 UI 다운로드 버튼 |
+| **웹 앱 (프로덕션)** | https://app.gossiplog.com | K3s + Cloudflare Tunnel |
+| **Android APK** | https://app.gossiplog.com/chatflow-app.apk | 웹 UI 다운로드 버튼 |
 | **API Gateway** | http://localhost:8000 | 통합 API 엔드포인트 |
 | **WebSocket** | ws://localhost:8000/ws-native | STOMP 실시간 통신 |
 
@@ -363,7 +362,6 @@ logging:
 | **Grafana** | http://localhost:3001 | admin/admin | 모니터링 대시보드 |
 | **Prometheus** | http://localhost:9090 | - | 메트릭 수집기 |
 | **Kibana** | http://localhost:5601 | - | Elasticsearch 관리 |
-| **Swagger UI** | http://localhost:8000/swagger-ui.html | - | API 문서 |
 
 ### 🛠️ **인프라 서비스**
 | 서비스 | 포트 | 설명 |
@@ -444,21 +442,9 @@ GET /actuator/prometheus
 
 ### 🐳 **Docker 배포**
 
-#### 전체 스택 배포
-```bash
-# 프로덕션 환경 실행
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# 로그 확인
-docker-compose logs -f
-
-# 스케일링
-docker-compose up -d --scale chat-service=3
-```
-
 #### 개별 서비스 빌드
 ```bash
-# 백엔드 서비스들 (amd64 크로스 빌드 — EC2 t3.small은 로컬 빌드 불가)
+# 백엔드 서비스들 (amd64 크로스 빌드)
 docker buildx build --platform linux/amd64 \
   --build-arg SERVICE_NAME=chat-service -t chatflow/chat-service:prod --load .
 docker buildx build --platform linux/amd64 \
@@ -475,42 +461,19 @@ docker buildx build --platform linux/amd64 \
   -t chatflow/elasticsearch:prod --load elasticsearch/
 ```
 
-### 🖥️ **EC2 배포 (app.chatflow.ai.kr)**
-
-```bash
-# 1. 이미지 저장 & EC2 전송
-docker save chatflow/frontend:prod | gzip > /tmp/frontend.tar.gz
-scp -i ~/web-app-key.pem /tmp/frontend.tar.gz ubuntu@43.201.22.86:~/
-
-# 2. EC2에서 로드 & 재시작
-ssh -i ~/web-app-key.pem ubuntu@43.201.22.86 << 'EOF'
-  docker load < frontend.tar.gz
-  cd ~/chat_flow
-  docker compose -f docker-compose.prod.yml up --no-deps -d frontend
-  docker compose -f docker-compose.prod.yml ps
-  docker image prune -f   # 공간 정리
-EOF
-```
-
-> **레거시 EC2**: ubuntu@43.201.94.100 · t3.small (페이드아웃 중)
-> **현재 프로덕션**: K3s (온프레미스) · Cloudflare Tunnel
-
 ### ☸️ **K3s 배포 (현재 프로덕션)**
 
 ```bash
 # 1. 인프라 배포 (PostgreSQL, Valkey, Kafka KRaft, Elasticsearch)
 kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
 
-# 2. Secrets 생성
-bash scripts/create-secrets.sh chatflow
+# 2. Secrets 생성 (DEPLOY_* env 4종 필요, 이미 있는 Secret은 건너뜀)
+./scripts/deploy-k3s.sh secrets
 
-# 3. 이미지 빌드 & containerd import
-./gradlew bootJar && flutter build web --release
-docker save chatflow/gateway-service:latest ... | gzip > images.tar.gz
-scp images.tar.gz ksw@node.chatflow.ai.kr:~/
-ssh node.chatflow.ai.kr "sudo k3s ctr images import ~/images.tar.gz"
+# 3. 이미지: develop 머지 → develop-build.yml이 GHCR로 push →
+#    GitHub Actions "Deploy to K3s (manual)" (deploy-k3s.yml)로 롤아웃
 
-# 4. Helm 배포
+# 4. Helm 배포 (values-k3s.yaml의 서비스별 태그를 실제 sha로 고정)
 helm upgrade --install chatflow helm/chatflow \
   -n chatflow -f helm/chatflow/values-k3s.yaml
 
@@ -520,7 +483,6 @@ kubectl get pods -n chatflow
 
 > **K3s 특이사항**:
 > - `enableServiceLinks: false` — K8s 서비스 env 변수가 Kafka/Valkey와 충돌 방지
-> - `imagePullPolicy: Never` — containerd 로컬 이미지 사용
 > - Kafka KRaft 모드 (Zookeeper 제거, ~95Mi 절감)
 > - JVM: `-Xmx256m -Xms128m -XX:+UseSerialGC` (시작 32초, 메모리 ~270Mi)
 
@@ -541,8 +503,8 @@ helm upgrade chatflow helm/chatflow -n chatflow -f helm/chatflow/values-k3s.yaml
 | Workflow | 트리거 | 내용 |
 |----------|--------|------|
 | `ci.yml` | push/PR → main, develop | 백엔드 빌드(Checkstyle+JaCoCo+Test), 프론트엔드 lint+type-check+test+build, Docker 빌드, Trivy 보안 스캔 |
-| `release.yaml` | push → release/*, hotfix/* | GHCR 이미지 푸시 + 스테이징 Helm 배포 |
-| `deploy-prod.yaml` | workflow_dispatch | 프로덕션 배포 (수동 승인 게이트) |
+| `develop-build.yml` | push → develop | 서비스별 amd64 이미지를 GHCR로 push |
+| `deploy-k3s.yml` | workflow_dispatch | K3s에 선택한 service/tag 롤아웃 |
 
 ## 🧪 테스트
 

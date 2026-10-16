@@ -2,11 +2,13 @@ package com.chatflow.chat.service;
 
 import com.chatflow.chat.service.moderation.MuteResult;
 import com.chatflow.chat.entity.RoomMemberEntity;
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class MemberManagementService {
     private final RoomPermissionService roomPermissionService;
     private final SimpMessagingTemplate messagingTemplate;
     private final MemberListBroadcaster memberListBroadcaster;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void kickMember(String roomId, String actorUserId, String targetUserId) {
@@ -41,6 +44,8 @@ public class MemberManagementService {
 
         roomMemberRepository.deleteByRoomIdAndUserId(roomId, targetUserId);
         log.info("Member kicked: roomId={}, target={}, by={}", roomId, targetUserId, actorUserId);
+        eventPublisher.publishEvent(new RoomMemberRemovedEvent(
+                roomId, targetUserId, RoomMemberRemovedEvent.Reason.KICKED));
 
         sendKickedNotification(targetUserId, roomId, "KICKED", actorUsername, actorUserId);
         memberListBroadcaster.broadcast(roomId);

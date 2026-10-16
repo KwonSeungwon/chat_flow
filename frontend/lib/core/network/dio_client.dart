@@ -8,6 +8,22 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/storage_keys.dart';
 import 'api_response.dart';
 
+/// 저장된 세션 자격증명 5개 키를 모두 지운다. 로그아웃/만료/401 모두 이 경로를 쓴다.
+/// 하나라도 남으면 다음 계정이 이전 사용자의 role/아바타를 물려받는다.
+Future<void> clearStoredCredentials([
+  FlutterSecureStorage storage = const FlutterSecureStorage(),
+]) async {
+  for (final key in const [
+    StorageKeys.token,
+    StorageKeys.userId,
+    StorageKeys.username,
+    StorageKeys.role,
+    StorageKeys.profileImage,
+  ]) {
+    await storage.delete(key: key);
+  }
+}
+
 final dioClientProvider = Provider<DioClient>((ref) => DioClient());
 
 class DioClient {
@@ -20,7 +36,7 @@ class DioClient {
   DioClient() {
     final baseUrl = kIsWeb
         ? _webOrigin()
-        : (dotenv.env['API_BASE_URL'] ?? 'https://app.chatflow.ai.kr');
+        : (dotenv.env['API_BASE_URL'] ?? 'https://app.gossiplog.com');
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -38,18 +54,19 @@ class DioClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401) {
-          // /api/auth/* (login/register)의 401은 잘못된 자격증명 응답이므로 logout
-          // 처리하면 안 된다. 그 외 401은 토큰 만료/무효 → logout 처리.
+          // login/register의 401은 잘못된 자격증명 응답이므로 logout 처리하면 안 된다.
+          // 그 외(/api/auth/logout, /api/auth/password 등 포함) 401은 토큰 만료/무효 → logout 처리.
           final path = error.requestOptions.path;
-          final isAuthEndpoint = path.startsWith('/api/auth/');
+          // 방 비밀번호 검증(/verify)의 401도 틀린/누락 비밀번호 응답이다.
+          final isAuthEndpoint = path == '/api/auth/login' ||
+              path == '/api/auth/register' ||
+              path.endsWith('/verify');
           if (!isAuthEndpoint) {
             // 저장소에 토큰이 있으면 만료된 것. 헤더 검사 대신 storage 직접 조회 (대소문자/Dio 직렬화 무관).
             try {
               final stored = await _storage.read(key: StorageKeys.token);
               if (stored != null) {
-                await _storage.delete(key: StorageKeys.token);
-                await _storage.delete(key: StorageKeys.userId);
-                await _storage.delete(key: StorageKeys.username);
+                await clearStoredCredentials(_storage);
               }
             } catch (_) {/* best-effort */}
             // storage 동작과 무관하게 항상 onUnauthorized 호출 → state 리셋 + router redirect.

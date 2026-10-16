@@ -32,8 +32,7 @@ public class FileController {
             String uuid = fileStorageService.store(file);
             String originalFilename = file.getOriginalFilename() != null
                     ? file.getOriginalFilename() : "file";
-            String contentType = file.getContentType() != null
-                    ? file.getContentType() : "application/octet-stream";
+            String contentType = fileStorageService.getContentType(uuid);
 
             Map<String, Object> data = Map.of(
                     "fileUrl", "/api/files/" + uuid,
@@ -56,6 +55,7 @@ public class FileController {
     public ResponseEntity<Resource> download(@PathVariable String uuid) {
         try {
             FileResource fr = fileStorageService.loadAsResource(uuid);
+            // 업로드 시 감지된 타입 기준 — 확장자만 image인 비이미지는 attachment
             boolean isInline = fr.contentType().startsWith("image/")
                     || fr.contentType().equals("application/pdf");
             String disposition = isInline

@@ -4,6 +4,7 @@ import com.chatflow.chat.service.RoomPermissionService;
 
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.*;
+import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.MessageNotFoundException;
 import com.chatflow.chat.exception.ReportRateLimitException;
 import com.chatflow.chat.exception.SelfReportNotAllowedException;
@@ -28,7 +29,6 @@ public class MessageReportService {
 
     private static final int RATE_LIMIT_PER_MINUTE = 5;
     private static final Duration RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
-    private static final int MESSAGE_PREVIEW_MAX_LENGTH = 200;
 
     private final MessageReportRepository messageReportRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -41,6 +41,7 @@ public class MessageReportService {
      * Guards:
      * <ul>
      *   <li>Message must exist</li>
+     *   <li>Reporter must be a member of the message's room (403 otherwise)</li>
      *   <li>Reporter cannot report their own message (userId comparison)</li>
      *   <li>Idempotent: duplicate (messageId, reporterUserId) returns existing report id</li>
      *   <li>Rate limit: max 5 reports per user per minute</li>
@@ -56,7 +57,13 @@ public class MessageReportService {
                 .orElseThrow(() -> new MessageNotFoundException(
                         "메시지를 찾을 수 없습니다. messageId=" + messageId));
 
-        // 2. Self-report check (compare userId directly)
+        // 2. Reporter must be a member of the message's room — otherwise any
+        //    authenticated user could file reports into rooms they cannot see.
+        if (!roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), reporterUserId)) {
+            throw new ForbiddenException("방 멤버만 신고할 수 있습니다.");
+        }
+
+        // 2b. Self-report check (compare userId directly)
         if (reporterUserId.equals(message.getUserId())) {
             throw new SelfReportNotAllowedException(
                     "자신의 메시지는 신고할 수 없습니다. messageId=" + messageId);

@@ -25,6 +25,7 @@ class MessageSendHelper {
   final OfflineMessageQueue offlineQueue;
   final Map<String, Timer> sendingTimers;
   final DioClient dioClient;
+
   /// Called after sending a state-owned reply so the input clears.
   /// (ThreadPanel passes replyOverride to bypass this.)
   final void Function() clearReplyTarget;
@@ -51,43 +52,99 @@ class MessageSendHelper {
     // replyOverride lets ThreadPanel post replies without mutating
     // state.replyTarget (which is owned by the main chat input).
     final reply = replyOverride ?? getCurrentState().replyTarget;
-    final localId = const Uuid().v4();
-    final msg = {
+    sendTyped(
+      roomId: roomId,
+      content: content,
+      type: 'CHAT',
+      priority: priority,
+      parentMessageId: reply?.effectiveId,
+    );
+    // Only clear when the reply came from state (main chat input).
+    // Override callers (ThreadPanel) manage their own state.
+    if (reply != null && replyOverride == null) clearReplyTarget();
+  }
+
+  /// Optimistic send for every user-sendable type (CHAT, FILE, PATIENT_CARD).
+  /// Shows a 'sending' bubble, then sends over STOMP or queues it for the
+  /// reconnect flush. The bubble's localId travels as `clientMessageId` so
+  /// the server echo replaces exactly this bubble. A retry passes the
+  /// original [localId] so every echo of either attempt maps to one bubble.
+  void sendTyped({
+    required String roomId,
+    required String content,
+    required String type,
+    String priority = 'ROUTINE',
+    String? parentMessageId,
+    String? fileUrl,
+    String? fileName,
+    String? fileContentType,
+    String? localId,
+  }) {
+    localId ??= const Uuid().v4();
+    // UTC with offset: naive strings are parsed as UTC when sorting.
+    final timestamp = DateTime.now().toUtc().toIso8601String();
+    final msg = <String, dynamic>{
       'chatRoomId': roomId,
       'userId': userId,
       'username': username,
       'content': content,
-      'type': 'CHAT',
+      'type': type,
       'priority': priority,
-      'timestamp': DateTime.now().toIso8601String(),
-      if (reply != null) 'parentMessageId': reply.effectiveId,
+      'timestamp': timestamp,
+      if (parentMessageId != null) 'parentMessageId': parentMessageId,
+      if (fileUrl != null) 'fileUrl': fileUrl,
+      if (fileName != null) 'fileName': fileName,
+      if (fileContentType != null) 'fileContentType': fileContentType,
+      'clientMessageId': localId,
       '_localId': localId,
     };
-    // Show local message immediately with 'sending' status
     final localMsg = ChatMessage(
-      chatRoomId: roomId, userId: userId, username: username,
-      content: content, type: 'CHAT', priority: priority,
-      timestamp: msg['timestamp']!,
-      parentMessageId: reply?.effectiveId,
+      chatRoomId: roomId,
+      userId: userId,
+      username: username,
+      content: content,
+      type: type,
+      priority: priority,
+      timestamp: timestamp,
+      parentMessageId: parentMessageId,
+      fileUrl: fileUrl,
+      fileName: fileName,
+      fileContentType: fileContentType,
       localId: localId,
       deliveryStatus: MessageDeliveryStatus.sending,
     );
-    setState(getCurrentState().copyWith(messages: [...getCurrentState().messages, localMsg]));
+    setState(getCurrentState()
+        .copyWith(messages: [...getCurrentState().messages, localMsg]));
     if (stompService.isConnected) {
-      final sendPayload = Map<String, dynamic>.from(msg)..remove('_localId');
-      stompService.sendMessage(sendPayload);
+      _sendOrQueue(msg);
     } else {
       offlineQueue.enqueue(msg);
     }
-    // Only clear when the reply came from state (main chat input).
-    // Override callers (ThreadPanel) manage their own state.
-    if (reply != null && replyOverride == null) clearReplyTarget();
-    // 10초 내 서버 확인(동일 localId 메시지가 sent로 교체) 없으면 failed로 표시
+    _armSendingTimeout(localId);
+  }
+
+  /// Sends a queued payload; if the socket died between the isConnected
+  /// check and the write (StompBadStateException), queues it for the
+  /// reconnect flush.
+  void _sendOrQueue(Map<String, dynamic> msg) {
+    try {
+      // _localId is a client-only marker; strip it from the wire payload.
+      stompService
+          .sendMessage(Map<String, dynamic>.from(msg)..remove('_localId'));
+    } catch (_) {
+      offlineQueue.enqueue(msg);
+    }
+  }
+
+  /// 10초 내 서버 확인(동일 clientMessageId 에코가 sent로 교체) 없으면 failed로 표시
+  void _armSendingTimeout(String localId) {
+    sendingTimers.remove(localId)?.cancel();
     sendingTimers[localId] = Timer(const Duration(seconds: 10), () {
       sendingTimers.remove(localId);
       if (!mounted()) return;
       final idx = getCurrentState().messages.indexWhere((m) =>
-          m.localId == localId && m.deliveryStatus == MessageDeliveryStatus.sending);
+          m.localId == localId &&
+          m.deliveryStatus == MessageDeliveryStatus.sending);
       if (idx < 0) return;
       final m = getCurrentState().messages[idx];
       final failed = m.copyWith(deliveryStatus: MessageDeliveryStatus.failed);
@@ -97,53 +154,59 @@ class MessageSendHelper {
     });
   }
 
-  /// 실패한 메시지 재전송. 기존 localMsg를 제거하고 sendMessage 재호출.
+  /// Called on (re)connect. Queued bubbles stay visible: each goes back to
+  /// 'sending' with a fresh timeout, and its echo replaces it by
+  /// clientMessageId.
+  void flushOfflineQueue() {
+    offlineQueue.flush(
+      onDedup: (ids) {
+        if (!mounted()) return;
+        setState(getCurrentState().copyWith(messages: [
+          for (final m in getCurrentState().messages)
+            ids.contains(m.localId)
+                ? m.copyWith(deliveryStatus: MessageDeliveryStatus.sending)
+                : m,
+        ]));
+        ids.forEach(_armSendingTimeout);
+      },
+      onSend: _sendOrQueue,
+    );
+  }
+
+  /// 실패한 메시지 재전송. 대기열의 원본과 기존 버블을 지우고 같은 내용으로 다시 보낸다.
   void retryFailedMessage(ChatMessage msg) {
     if (msg.deliveryStatus != MessageDeliveryStatus.failed) return;
-    final list = getCurrentState().messages.where((m) => m.localId != msg.localId).toList();
-    setState(getCurrentState().copyWith(messages: list));
-    // Preserve thread association on retry — without replyOverride, a failed
-    // reply would silently re-post as a top-level message.
-    ChatMessage? parent;
-    if (msg.parentMessageId != null) {
-      parent = getCurrentState().messages
-          .cast<ChatMessage?>()
-          .firstWhere(
-              (m) => m?.effectiveId == msg.parentMessageId,
-              orElse: () => null);
-      // Parent evicted from the 500-message buffer (or deleted) — build a
-      // minimal stub so the wire-format still carries parentMessageId.
-      // The backend computes parentMessagePreview from the parent's stored
-      // row, so a stub with only messageId set is sufficient.
-      parent ??= ChatMessage(
-        chatRoomId: msg.chatRoomId,
-        userId: '',
-        username: '',
-        content: '',
-        type: 'CHAT',
-        priority: 'ROUTINE',
-        timestamp: msg.timestamp,
-        messageId: msg.parentMessageId,
-      );
+    final localId = msg.localId;
+    if (localId != null) {
+      // Still queued from an offline send — drop it, or the reconnect
+      // flush would deliver it alongside the retry.
+      offlineQueue.removeByLocalId(localId);
+      sendingTimers.remove(localId)?.cancel();
     }
-    sendMessage(
+    final list =
+        getCurrentState().messages.where((m) => m.localId != localId).toList();
+    setState(getCurrentState().copyWith(messages: list));
+    // parentMessageId is resent as-is: the backend builds the preview from
+    // the parent's stored row, so the parent need not be in the buffer.
+    sendTyped(
       roomId: msg.chatRoomId,
       content: msg.content,
+      type: msg.type,
       priority: msg.priority,
-      replyOverride: parent,
+      parentMessageId: msg.parentMessageId,
+      fileUrl: msg.fileUrl,
+      fileName: msg.fileName,
+      fileContentType: msg.fileContentType,
+      localId: localId,
     );
   }
 
   void sendPatientCard(String roomId, PatientCard card) {
-    stompService.sendMessage({
-      'chatRoomId': roomId,
-      'userId': userId,
-      'username': username,
-      'content': jsonEncode(card.toJson()),
-      'type': 'PATIENT_CARD',
-      'priority': 'ROUTINE',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    sendTyped(
+      roomId: roomId,
+      content: jsonEncode(card.toJson()),
+      type: 'PATIENT_CARD',
+    );
   }
 
   Future<void> uploadAndSendFile({
@@ -158,30 +221,28 @@ class MessageSendHelper {
       bytes: bytes,
       mimeType: mimeType,
     );
+    if (!mounted()) return;
     final fileUrl = result['fileUrl']?.toString() ?? '';
     final storedName = result['fileName']?.toString() ?? fileName;
     final contentType = result['fileContentType']?.toString() ?? mimeType;
 
     final msgContent = content.isNotEmpty ? content : '[파일] $storedName';
 
-    stompService.sendMessage({
-      'chatRoomId': roomId,
-      'userId': userId,
-      'username': username,
-      'content': msgContent,
-      'type': 'FILE',
-      'fileUrl': fileUrl,
-      'fileName': storedName,
-      'fileContentType': contentType,
-      'priority': 'ROUTINE',
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    sendTyped(
+      roomId: roomId,
+      content: msgContent,
+      type: 'FILE',
+      fileUrl: fileUrl,
+      fileName: storedName,
+      fileContentType: contentType,
+    );
   }
 
   Future<bool> forwardMessage(String targetRoomId, ChatMessage msg) async {
     final isFile = msg.isFileMessage;
     final content = '[전달] ${msg.username}: ${msg.content}';
-    final forwardedFrom = '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
+    final forwardedFrom =
+        '${msg.username}: ${msg.content.length > 100 ? '${msg.content.substring(0, 100)}...' : msg.content}';
 
     if (stompService.isConnected) {
       stompService.sendMessage({

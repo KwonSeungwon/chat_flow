@@ -29,7 +29,8 @@ class StompMessageDispatcher {
   /// Whether the owning [StateNotifier] is still mounted.
   final bool Function() mounted;
 
-  /// Current user's ID — used for dedup of sending-status messages.
+  /// Current user's ID — only echoes from this user can settle a bubble
+  /// or be dropped as a duplicate.
   final String userId;
 
   /// Returns the room ID the notifier is currently joined to.
@@ -54,6 +55,12 @@ class StompMessageDispatcher {
   /// 'sending'-status message.  The [String?] is the localId of the
   /// matched optimistic message (used to cancel the timeout timer).
   final void Function(String? localId) onSendingConfirmed;
+
+  /// clientMessageIds whose bubble already settled to a server message.
+  /// A retry reuses its clientMessageId, so the server can echo one id
+  /// twice; the second echo is dropped. Bounded, oldest evicted first.
+  final Set<String> _resolvedClientIds = <String>{};
+  static const _resolvedClientIdsCap = 200;
 
   // -------------------------------------------------------------------
   // Public entry point — called from ChatNotifier._onMessage
@@ -116,7 +123,8 @@ class StompMessageDispatcher {
     if (editedId == null || newContent == null) return;
     final updated = getCurrentState().messages.map((m) {
       if (m.effectiveId == editedId || m.messageId == editedId) {
-        return m.copyWith(content: newContent, edited: true, editedAt: editedAt);
+        return m.copyWith(
+            content: newContent, edited: true, editedAt: editedAt);
       }
       return m;
     }).toList();
@@ -141,18 +149,51 @@ class StompMessageDispatcher {
     final state = getCurrentState();
     final existing = state.messages;
 
-    // Replace local 'sending' message with server-confirmed version
-    final sendingIdx = existing.indexWhere((m) =>
-        m.deliveryStatus == MessageDeliveryStatus.sending &&
-        m.userId == msg.userId &&
-        m.content == msg.content);
-    if (sendingIdx >= 0) {
+    // The echo of our own send carries the bubble's localId as
+    // clientMessageId. Match on it first, whatever the bubble's status:
+    // a late echo must also settle a bubble that already timed out to
+    // 'failed'. clientMessageId is visible to the whole room, so it only
+    // counts on an echo of our own message.
+    final clientId = msg.userId == userId ? msg.clientMessageId : null;
+    var localIdx = clientId == null
+        ? -1
+        : existing.indexWhere((m) =>
+            m.localId == clientId &&
+            m.deliveryStatus != MessageDeliveryStatus.sent);
+    // Fallback for echoes without clientMessageId: content match on a
+    // bubble still 'sending'.
+    if (localIdx < 0 && msg.clientMessageId == null) {
+      localIdx = existing.indexWhere((m) =>
+          m.deliveryStatus == MessageDeliveryStatus.sending &&
+          m.userId == msg.userId &&
+          m.content == msg.content);
+    }
+    if (localIdx < 0 &&
+        clientId != null &&
+        _resolvedClientIds.contains(clientId)) {
+      return;
+    }
+    if (localIdx >= 0) {
+      if (clientId != null) {
+        _resolvedClientIds.add(clientId);
+        if (_resolvedClientIds.length > _resolvedClientIdsCap) {
+          _resolvedClientIds.remove(_resolvedClientIds.first);
+        }
+      }
       final replaced = List<ChatMessage>.from(existing);
-      replaced[sendingIdx] = msg;
+      // A history merge may already hold the server copy; then just drop
+      // the bubble.
+      if (existing.any((m) => m.effectiveId == msg.effectiveId)) {
+        replaced.removeAt(localIdx);
+      } else {
+        replaced[localIdx] = msg;
+      }
       // Cancel the timeout timer for the matched local message
-      final localId = existing[sendingIdx].localId;
-      onSendingConfirmed(localId);
-      setState(state.copyWith(messages: replaced));
+      onSendingConfirmed(existing[localIdx].localId);
+      setState(state.copyWith(
+        messages: replaced,
+        readCounts: computeReadCounts(replaced, state.readPositions),
+      ));
       return;
     }
 

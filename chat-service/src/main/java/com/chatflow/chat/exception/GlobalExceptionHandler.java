@@ -81,13 +81,6 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
                 .body(ErrorResponse.of(404, "MESSAGE_NOT_FOUND", e.getMessage()));
     }
 
-    @ExceptionHandler(MutedException.class)
-    public ResponseEntity<ErrorResponse> handleMuted(MutedException e) {
-        log.warn("User is muted: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.LOCKED)
-                .body(ErrorResponse.of(423, "MUTED", e.getMessage()));
-    }
-
     /**
      * scheduledAt parsing failures from ScheduledMessageController. Maps to a
      * stable 400 + machine-readable code so the frontend can surface a

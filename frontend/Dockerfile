@@ -1,5 +1,5 @@
 # Flutter Web — pre-built locally (flutter build web --release)
-# Run: flutter build web --release --web-renderer canvaskit
+# Run: flutter build web --release
 # Then: docker buildx build --platform linux/amd64 -t chatflow-frontend:latest --load frontend/
 
 FROM nginx:alpine AS production-stage

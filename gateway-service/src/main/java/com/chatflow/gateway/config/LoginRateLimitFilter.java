@@ -44,7 +44,7 @@ public class LoginRateLimitFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
-        String ip = resolveClientIp(exchange);
+        String ip = ClientIpResolver.resolve(exchange.getRequest());
         String key = KEY_PREFIX + ip;
 
         return redis.opsForValue().increment(key)
@@ -78,15 +78,5 @@ public class LoginRateLimitFilter implements WebFilter {
         var buffer = exchange.getResponse().bufferFactory()
                 .wrap(body.getBytes(StandardCharsets.UTF_8));
         return exchange.getResponse().writeWith(Mono.just(buffer));
-    }
-
-    private static String resolveClientIp(ServerWebExchange exchange) {
-        String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        return exchange.getRequest().getRemoteAddress() != null
-                ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()
-                : "unknown";
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -47,7 +48,7 @@ public class KoreanSearchService {
             applyRoomFilter(boolBuilder, chatRoomId);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, "content", null,
+        return executeAndMap(boolBuilder.build(), pageable, null,
                 "Error performing Korean search for query: " + query);
     }
 
@@ -59,7 +60,33 @@ public class KoreanSearchService {
             applyRoomFilter(boolBuilder, chatRoomId);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, "content.ngram", 0.5,
+        return executeAndMap(boolBuilder.build(), pageable, 0.5,
+                "Error performing N-gram search for query: " + query);
+    }
+
+    /**
+     * Korean search across several rooms (the caller's member rooms).
+     * {@code chatRoomIds} must be non-empty; the controller short-circuits
+     * the no-rooms case.
+     */
+    public Page<ChatMessageDocument> searchKoreanContentInRooms(
+            String query, Collection<String> chatRoomIds, Pageable pageable) {
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(standardMultiMatch(query)));
+        applyRoomsFilter(boolBuilder, chatRoomIds);
+
+        return executeAndMap(boolBuilder.build(), pageable, null,
+                "Error performing Korean search for query: " + query);
+    }
+
+    /** N-gram search across several rooms (the caller's member rooms). */
+    public Page<ChatMessageDocument> searchWithNgramInRooms(
+            String query, Collection<String> chatRoomIds, Pageable pageable) {
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(ngramMultiMatch(query)));
+        applyRoomsFilter(boolBuilder, chatRoomIds);
+
+        return executeAndMap(boolBuilder.build(), pageable, 0.5,
                 "Error performing N-gram search for query: " + query);
     }
 
@@ -103,7 +130,7 @@ public class KoreanSearchService {
             boolBuilder = excludeSystemMessages(boolBuilder);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, null, null,
+        return executeAndMap(boolBuilder.build(), pageable, null,
                 "Error in searchWithFilters for roomId: " + roomId);
     }
 
@@ -153,6 +180,21 @@ public class KoreanSearchService {
         );
     }
 
+    /**
+     * Restricts the bool query to the given rooms with an exact {@code terms}
+     * filter on {@code chatRoomId} (keyword in the index mapping). Exact
+     * matching is required here: this filter is an authorization boundary.
+     */
+    static void applyRoomsFilter(BoolQuery.Builder builder, Collection<String> chatRoomIds) {
+        List<FieldValue> values = chatRoomIds.stream().map(FieldValue::of).toList();
+        builder.filter(f -> f
+                .terms(t -> t
+                        .field("chatRoomId")
+                        .terms(v -> v.value(values))
+                )
+        );
+    }
+
     // ── shared execution ─────────────────────────────────────────────────
 
     /**
@@ -169,13 +211,12 @@ public class KoreanSearchService {
      *
      * @param boolQuery       the fully-built bool query
      * @param pageable        pagination (offset + size)
-     * @param highlightField  field to highlight, or {@code null} for no highlight
      * @param minScore        minimum score threshold, or {@code null} for none
      * @param errorLogContext message logged (at ERROR) if the search fails
      */
     private Page<ChatMessageDocument> executeAndMap(
             BoolQuery boolQuery, Pageable pageable,
-            String highlightField, Double minScore,
+            Double minScore,
             String errorLogContext) {
 
         int from = (int) pageable.getOffset();
@@ -214,15 +255,6 @@ public class KoreanSearchService {
 
                 if (minScore != null) {
                     s.minScore(minScore);
-                }
-
-                if (highlightField != null) {
-                    s.highlight(h -> h
-                            .fields(highlightField, hf -> hf
-                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
-                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
-                            )
-                    );
                 }
 
                 return s;

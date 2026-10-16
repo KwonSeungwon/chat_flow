@@ -7,7 +7,6 @@ dependencies {
     api 'org.springframework.boot:spring-boot-starter-data-redis'
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-    api 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
     
     // Needed to compile BaseExceptionHandler's ServletRequestBindingException /
     // HttpRequestMethodNotSupportedException handlers — both transitively extend
@@ -16,6 +15,13 @@ dependencies {
     // keeping it off common's runtime graph avoids leaking it into the WebFlux
     // gateway. Do NOT remove — the framework-4xx handlers won't compile without it.
     compileOnly 'jakarta.servlet:jakarta.servlet-api'
+
+    // BaseExceptionHandler / ErrorResponse use spring-web types (ResponseEntity,
+    // @ExceptionHandler, HttpStatus). They used to arrive transitively through
+    // springdoc-openapi-starter-webmvc-ui; every consuming service (webmvc and the
+    // webflux gateway) provides spring-web at runtime, so compileOnly is enough.
+    compileOnly 'org.springframework:spring-web'
+    testImplementation 'org.springframework:spring-web'
 
     // MessageEncryptor emits a Micrometer failure counter. Every consuming
     // service provides micrometer-core at runtime via spring-boot-starter-actuator,
