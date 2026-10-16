@@ -1,5 +1,6 @@
 package com.chatflow.aisummary.exception;
 
+import com.chatflow.aisummary.client.MembershipCheckUnavailableException;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.exception.BaseExceptionHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -24,5 +25,26 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
         log.warn("AI rate limit exceeded: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(ApiResponse.error(e.getMessage()));
+    }
+
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<ApiResponse<?>> handleUnauthenticated(UnauthenticatedException e) {
+        log.warn("Unauthenticated AI request: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("인증이 필요합니다."));
+    }
+
+    @ExceptionHandler(RoomAccessDeniedException.class)
+    public ResponseEntity<ApiResponse<?>> handleRoomAccessDenied(RoomAccessDeniedException e) {
+        log.warn("Room access denied: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("방 멤버가 아닙니다."));
+    }
+
+    @ExceptionHandler(MembershipCheckUnavailableException.class)
+    public ResponseEntity<ApiResponse<?>> handleMembershipUnavailable(MembershipCheckUnavailableException e) {
+        log.error("Membership check unavailable: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("권한 확인을 할 수 없습니다. 잠시 후 다시 시도해 주세요."));
     }
 }

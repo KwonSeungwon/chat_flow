@@ -53,3 +53,12 @@ logging:
   level:
     com.chatflow: DEBUG
     co.elastic.clients: DEBUG
+
+# Room-membership checks against chat-service's /internal/rooms/** endpoints.
+chatflow:
+  chat-service:
+    url: http://localhost:8080
+
+# Must equal chat-service's GATEWAY_INTERNAL_SECRET — sent as X-Gateway-Secret
+# on membership calls. Local-dev placeholder only.
+GATEWAY_INTERNAL_SECRET: local-dev-gateway-internal-secret
