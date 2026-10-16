@@ -21,6 +21,7 @@ import com.chatflow.chat.game.repository.GameQuestionRepository;
 import com.chatflow.chat.game.repository.GameTopicRepository;
 import com.chatflow.chat.repository.RepositoryTestConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -39,12 +44,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -70,6 +81,10 @@ class GameRunServiceTest {
     private GameAnswerRepository answerRepository;
     @Autowired
     private GameProgressRepository progressRepository;
+    @Autowired
+    private EntityManager entityManager;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, String> store = new HashMap<>();
@@ -88,12 +103,12 @@ class GameRunServiceTest {
         lenient().when(ops.get(anyString())).thenAnswer(inv -> store.get(inv.<String>getArgument(0)));
         lenient().doAnswer(inv -> store.put(inv.getArgument(0), inv.getArgument(1)))
                 .when(ops).set(anyString(), anyString(), any(Duration.class));
+        lenient().when(ops.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenAnswer(inv -> store.putIfAbsent(inv.getArgument(0), inv.getArgument(1)) == null);
         lenient().when(redis.delete(anyString())).thenAnswer(inv -> store.remove(inv.<String>getArgument(0)) != null);
         lenient().when(redis.expire(anyString(), any(Duration.class))).thenReturn(true);
 
-        Clock clock = Clock.fixed(NOW.atZone(ZONE).toInstant(), ZONE);
-        service = new GameRunService(redis, objectMapper, dungeonRepository, topicRepository, monsterRepository,
-                questionRepository, answerRepository, progressRepository, clock, new Random(42));
+        service = newService(progressRepository);
 
         dungeonRepository.save(GameDungeon.builder().id("jvm").name("JVM 대장간").sortOrder(2)
                 .buildingStyle("jvm").build());
@@ -242,7 +257,7 @@ class GameRunServiceTest {
     }
 
     @Test
-    void bossWrong_resetsStreak_losesHeart_andRequeuesQuestion() {
+    void bossWrong_resetsStreak_losesHeart_andServesANewQuestion() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
         for (int i = 0; i < 5; i++) answerCorrect(runId);
@@ -257,7 +272,109 @@ class GameRunServiceTest {
         assertThat(wrong.failed()).isFalse();
         RunState state = state(runId);
         assertThat(state.getBossStreak()).isZero();
-        assertThat(state.getBossQueue()).last().isEqualTo(missed);
+        assertThat(state.getBossQueue()).doesNotContain(missed);
+        assertThat(state.getCurrentQuestionId()).isNotEqualTo(missed);
+        assertThat(state.getAnsweredIds()).contains(missed);
+    }
+
+    @Test
+    void thirdBossMiss_nextServesAFreshQuestion() {
+        approved(10);
+        String runId = service.start(USER, "jvm").runId();
+        for (int i = 0; i < 5; i++) answerCorrect(runId);
+        answerCorrect(runId);
+        answerCorrect(runId);
+        Long missed = state(runId).getCurrentQuestionId();
+        answerWrong(runId);
+
+        NextEncounter next = service.next(USER, runId);
+
+        assertThat(next.monster().isBoss()).isTrue();
+        assertThat(next.question().id()).isNotEqualTo(missed);
+        assertThat(state(runId).getAnsweredIds()).hasSize(8).doesNotContain(next.question().id());
+    }
+
+    @Test
+    void fiveQuestionDungeon_neverServesTheSameQuestionTwiceInARow() {
+        approved(5);
+        String runId = service.start(USER, "jvm").runId();
+        // normal: 5 kills with one miss; boss: hit, miss, then three hits
+        boolean[] plan = {true, false, true, true, true, true, true, false, true, true, true};
+        List<Long> served = new ArrayList<>();
+        AnswerResult last = null;
+        for (boolean correct : plan) {
+            served.add(service.next(USER, runId).question().id());
+            last = correct ? answerCorrect(runId) : answerWrong(runId);
+        }
+
+        assertThat(last.cleared()).isTrue();
+        for (int i = 1; i < served.size(); i++) {
+            assertThat(served.get(i)).as("serve #%d", i).isNotEqualTo(served.get(i - 1));
+        }
+        // the first five serves cover the whole pool before anything repeats
+        assertThat(Set.copyOf(served.subList(0, 5))).hasSize(5);
+    }
+
+    @Test
+    void concurrentSubmit_loserGetsWinnersResult() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        RunState before = state(runId);
+        String claimKey = "chatflow:game:run:" + runId + ":seq:1";
+        AnswerResult winner = new AnswerResult(true, 1, "exp", "GC", "src", 3, 1, false, false, false);
+        // the winner finishes between our first read and our claim
+        doAnswer(inv -> {
+            RunState s = state(runId);
+            s.getAnswered().put(1, winner);
+            s.setSeq(2);
+            store.put("chatflow:game:run:" + runId, objectMapper.writeValueAsString(s));
+            return false;
+        }).when(ops).setIfAbsent(eq(claimKey), anyString(), any(Duration.class));
+
+        AnswerResult result = service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0));
+
+        assertThat(result).isEqualTo(winner);
+        assertThat(answerRepository.findAll()).isEmpty();
+        assertThat(before.getSeq()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentSubmit_whileWinnerStillRunning_returns409() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        store.put("chatflow:game:run:" + runId + ":seq:1", "1");
+
+        assertThatThrownBy(() -> service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0)))
+                .isInstanceOfSatisfying(GameException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(409);
+                    assertThat(e.getCode()).isEqualTo("ANSWER_IN_PROGRESS");
+                });
+        assertThat(answerRepository.findAll()).isEmpty();
+        assertThat(state(runId).getSeq()).isEqualTo(1);
+    }
+
+    @Test
+    void progressInsertedConcurrently_isUpdatedInstead() {
+        approved(8);
+        progressRepository.saveAndFlush(GameProgress.builder().userId(USER).dungeonId("jvm")
+                .bestStreak(4).username("old").build());
+        entityManager.clear();
+        // simulate the race: our first read misses the row the other run just inserted
+        GameProgressRepository racing = mock(GameProgressRepository.class, delegatesTo(progressRepository));
+        doReturn(Optional.empty()).doAnswer(inv -> progressRepository.findById(inv.getArgument(0)))
+                .when(racing).findById(any());
+        GameRunService racingService = newService(racing);
+        String runId = racingService.start(USER, "jvm").runId();
+
+        AnswerResult result = racingService.answer(USER, "앨리스", runId, new AnswerRequest(1, 0));
+
+        assertThat(result).isNotNull();
+        entityManager.flush();
+        entityManager.clear();
+        GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
+        assertThat(progress.getUsername()).isEqualTo("앨리스");
+        assertThat(progress.getBestStreak()).isEqualTo(4);
+        assertThat(answerRepository.findAll()).hasSize(1);
     }
 
     @Test
@@ -325,7 +442,7 @@ class GameRunServiceTest {
         assertThat(last.hearts()).isZero();
         assertThat(last.failed()).isTrue();
         assertThat(last.cleared()).isFalse();
-        assertThat(store).isEmpty();
+        assertThat(store).doesNotContainKey("chatflow:game:run:" + runId);
         GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
         assertThat(progress.getClearedAt()).isNull();
     }
@@ -405,7 +522,41 @@ class GameRunServiceTest {
                 .isInstanceOfSatisfying(GameException.class, e -> assertThat(e.getCode()).isEqualTo("GAME_UNAVAILABLE"));
     }
 
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void redisDownOnAnswer_returns503_andRollsBackTheAnswer() {
+        try {
+            approved(8);
+            String runId = service.start(USER, "jvm").runId();
+            org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
+                    .when(ops).set(anyString(), anyString(), any(Duration.class));
+            TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+            assertThatThrownBy(() -> tx.execute(s -> service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0))))
+                    .isInstanceOfSatisfying(GameException.class, e -> {
+                        assertThat(e.getStatus()).isEqualTo(503);
+                        assertThat(e.getCode()).isEqualTo("GAME_UNAVAILABLE");
+                    });
+            assertThat(answerRepository.count()).isZero();
+            assertThat(progressRepository.count()).isZero();
+            assertThat(store).doesNotContainKey("chatflow:game:run:" + runId + ":seq:1");
+        } finally {
+            answerRepository.deleteAll();
+            progressRepository.deleteAll();
+            monsterRepository.deleteAll();
+            questionRepository.deleteAll();
+            topicRepository.deleteAll();
+            dungeonRepository.deleteAll();
+        }
+    }
+
     // ---- helpers ----
+
+    private GameRunService newService(GameProgressRepository progress) {
+        Clock clock = Clock.fixed(NOW.atZone(ZONE).toInstant(), ZONE);
+        return new GameRunService(redis, objectMapper, dungeonRepository, topicRepository, monsterRepository,
+                questionRepository, answerRepository, progress, entityManager, clock, new Random(42));
+    }
 
     private AnswerResult answerCorrect(String runId) {
         RunState s = state(runId);

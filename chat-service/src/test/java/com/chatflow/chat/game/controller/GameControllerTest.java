@@ -130,7 +130,7 @@ class GameControllerTest {
         when(dungeonQueryService.dungeons(USER)).thenReturn(List.of(
                 new DungeonSummary("jvm", "JVM 대장간", "jvm", true, false, 4)));
         when(dungeonQueryService.me(USER)).thenReturn(new GameMeResponse(1, 8, false));
-        when(leaderboardService.top()).thenReturn(List.of(new LeaderboardEntry("u1", "앨리스", 2, 30)));
+        when(leaderboardService.top()).thenReturn(List.of(new LeaderboardEntry("앨리스", 2, 30)));
 
         mockMvc.perform(get("/api/game/dungeons").header("X-User-Id", USER))
                 .andExpect(jsonPath("$.data[0].open").value(true))
@@ -141,6 +141,7 @@ class GameControllerTest {
                 .andExpect(jsonPath("$.data.graduated").value(false));
         mockMvc.perform(get("/api/game/leaderboard").header("X-User-Id", USER))
                 .andExpect(jsonPath("$.data[0].username").value("앨리스"))
-                .andExpect(jsonPath("$.data[0].correctCount").value(30));
+                .andExpect(jsonPath("$.data[0].correctCount").value(30))
+                .andExpect(jsonPath("$.data[0].userId").doesNotExist());
     }
 }

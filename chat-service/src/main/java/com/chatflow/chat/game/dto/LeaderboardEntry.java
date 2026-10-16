@@ -1,4 +1,5 @@
 package com.chatflow.chat.game.dto;
 
-public record LeaderboardEntry(String userId, String username, long clearedCount, long correctCount) {
+/** Public leaderboard row. The user id is deliberately not exposed. */
+public record LeaderboardEntry(String username, long clearedCount, long correctCount) {
 }

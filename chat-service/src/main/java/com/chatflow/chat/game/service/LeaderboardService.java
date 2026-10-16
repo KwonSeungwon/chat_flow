@@ -52,13 +52,16 @@ public class LeaderboardService {
         Map<String, Long> correct = answerRepository.countCorrectGroupedByUser().stream()
                 .collect(Collectors.toMap(GameAnswerRepository.UserCorrectCount::getUserId,
                         GameAnswerRepository.UserCorrectCount::getCorrectCount));
+        record Ranked(String userId, LeaderboardEntry entry) {
+        }
         return progressRepository.countClearedGroupedByUser().stream()
-                .map(r -> new LeaderboardEntry(r.getUserId(), r.getUsername(), r.getClearedCount(),
-                        correct.getOrDefault(r.getUserId(), 0L)))
-                .sorted(Comparator.comparingLong(LeaderboardEntry::clearedCount).reversed()
-                        .thenComparing(Comparator.comparingLong(LeaderboardEntry::correctCount).reversed())
-                        .thenComparing(LeaderboardEntry::userId))
+                .map(r -> new Ranked(r.getUserId(), new LeaderboardEntry(r.getUsername(), r.getClearedCount(),
+                        correct.getOrDefault(r.getUserId(), 0L))))
+                .sorted(Comparator.comparingLong((Ranked r) -> r.entry().clearedCount()).reversed()
+                        .thenComparing(Comparator.comparingLong((Ranked r) -> r.entry().correctCount()).reversed())
+                        .thenComparing(Ranked::userId))
                 .limit(LIMIT)
+                .map(Ranked::entry)
                 .toList();
     }
 

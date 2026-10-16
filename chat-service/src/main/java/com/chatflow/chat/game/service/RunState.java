@@ -6,8 +6,10 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One dungeon run, stored as JSON in Valkey under {@code chatflow:game:run:{runId}}.
@@ -31,6 +33,8 @@ public class RunState {
     private List<Long> normalQueue = new ArrayList<>();
     private List<Long> bossQueue = new ArrayList<>();
     private Map<Integer, AnswerResult> answered = new LinkedHashMap<>();
+    /** Every question answered in this run; its answer was revealed, so it is not served again. */
+    private Set<Long> answeredIds = new LinkedHashSet<>();
     /** Consecutive correct answers in this run (any phase); the max feeds {@code game_progress.best_streak}. */
     private int streak;
     private int bestStreak;

@@ -51,7 +51,7 @@ class LeaderboardServiceTest {
 
     @Test
     void cacheHit_returnsCachedWithoutQueryingDb() throws Exception {
-        List<LeaderboardEntry> cached = List.of(new LeaderboardEntry("u1", "앨리스", 3, 40));
+        List<LeaderboardEntry> cached = List.of(new LeaderboardEntry("앨리스", 3, 40));
         when(ops.get(KEY)).thenReturn(objectMapper.writeValueAsString(cached));
 
         assertThat(service.top()).isEqualTo(cached);
@@ -71,18 +71,18 @@ class LeaderboardServiceTest {
 
         assertThat(top).hasSize(20);
         // clearedCount 2: u2,u5,u8,... → u5(9) before u2(7) before the rest (0)
-        assertThat(top.get(0)).isEqualTo(new LeaderboardEntry("u5", "name5", 2, 9));
-        assertThat(top.get(1)).isEqualTo(new LeaderboardEntry("u2", "name2", 2, 7));
+        assertThat(top.get(0)).isEqualTo(new LeaderboardEntry("name5", 2, 9));
+        assertThat(top.get(1)).isEqualTo(new LeaderboardEntry("name2", 2, 7));
         assertThat(top.get(2).clearedCount()).isEqualTo(2);
         assertThat(top.get(2).correctCount()).isZero();
         // u1 has the most correct answers but only clearedCount 1 → ranks after every clearedCount 2
-        int u1Rank = top.stream().map(LeaderboardEntry::userId).toList().indexOf("u1");
+        int u1Rank = top.stream().map(LeaderboardEntry::username).toList().indexOf("name1");
         int lastTwo = (int) top.stream().filter(e -> e.clearedCount() == 2).count();
         assertThat(u1Rank).isEqualTo(lastTwo);
 
         ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
         verify(ops).set(eq(KEY), json.capture(), eq(Duration.ofSeconds(60)));
-        assertThat(json.getValue()).contains("\"userId\":\"u5\"");
+        assertThat(json.getValue()).contains("\"username\":\"name5\"").doesNotContain("userId");
     }
 
     @Test
@@ -93,7 +93,7 @@ class LeaderboardServiceTest {
         org.mockito.Mockito.doThrow(new RedisConnectionFailureException("down"))
                 .when(ops).set(anyString(), anyString(), eq(Duration.ofSeconds(60)));
 
-        assertThat(service.top()).containsExactly(new LeaderboardEntry("u1", "a", 1, 0));
+        assertThat(service.top()).containsExactly(new LeaderboardEntry("a", 1, 0));
     }
 
     private static GameProgressRepository.UserClearCount clear(String userId, String username, long cleared) {

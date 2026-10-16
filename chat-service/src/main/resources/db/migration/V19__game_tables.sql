@@ -75,6 +75,9 @@ CREATE TABLE IF NOT EXISTS game_answer (
 CREATE INDEX IF NOT EXISTS idx_game_answer_user_due
     ON game_answer (user_id, next_due_at);
 
+CREATE INDEX IF NOT EXISTS idx_game_answer_user_question_id
+    ON game_answer (user_id, question_id, id);
+
 -- Seed: 8 buildings (building_style = id) and one boss per building.
 INSERT INTO game_dungeon (id, name, sort_order, building_style) VALUES
     ('k8s',   '쿠버네티스 성', 1, 'k8s'),

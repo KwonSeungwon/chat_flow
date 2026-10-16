@@ -20,7 +20,9 @@ import com.chatflow.chat.game.repository.GameTopicRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.Session;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +31,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -51,6 +56,8 @@ public class GameRunService {
     static final int MIN_APPROVED_TO_OPEN = 5;
     private static final String RUN_KEY_PREFIX = "chatflow:game:run:";
     private static final Duration RUN_TTL = Duration.ofMinutes(30);
+    private static final Duration SEQ_CLAIM_TTL = Duration.ofSeconds(10);
+    private static final String UNIQUE_VIOLATION = "23505";
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -60,6 +67,7 @@ public class GameRunService {
     private final GameQuestionRepository questionRepository;
     private final GameAnswerRepository answerRepository;
     private final GameProgressRepository progressRepository;
+    private final EntityManager entityManager;
     private final Clock clock;
     private final Random random;
 
@@ -67,16 +75,17 @@ public class GameRunService {
     public GameRunService(StringRedisTemplate redis, ObjectMapper objectMapper,
                           GameDungeonRepository dungeonRepository, GameTopicRepository topicRepository,
                           GameMonsterRepository monsterRepository, GameQuestionRepository questionRepository,
-                          GameAnswerRepository answerRepository, GameProgressRepository progressRepository) {
+                          GameAnswerRepository answerRepository, GameProgressRepository progressRepository,
+                          EntityManager entityManager) {
         this(redis, objectMapper, dungeonRepository, topicRepository, monsterRepository, questionRepository,
-                answerRepository, progressRepository, Clock.systemDefaultZone(), new SecureRandom());
+                answerRepository, progressRepository, entityManager, Clock.systemDefaultZone(), new SecureRandom());
     }
 
     GameRunService(StringRedisTemplate redis, ObjectMapper objectMapper,
                    GameDungeonRepository dungeonRepository, GameTopicRepository topicRepository,
                    GameMonsterRepository monsterRepository, GameQuestionRepository questionRepository,
                    GameAnswerRepository answerRepository, GameProgressRepository progressRepository,
-                   Clock clock, Random random) {
+                   EntityManager entityManager, Clock clock, Random random) {
         this.redis = redis;
         this.objectMapper = objectMapper;
         this.dungeonRepository = dungeonRepository;
@@ -85,6 +94,7 @@ public class GameRunService {
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.progressRepository = progressRepository;
+        this.entityManager = entityManager;
         this.clock = clock;
         this.random = random;
     }
@@ -156,11 +166,29 @@ public class GameRunService {
             throw GameException.validation("choiceIndex는 0~3이어야 합니다.");
         }
 
+        if (!claimSeq(runId, request.seq())) {
+            AnswerResult won = load(userId, runId).getAnswered().get(request.seq());
+            if (won != null) {
+                return won;
+            }
+            throw new GameException(409, "ANSWER_IN_PROGRESS", "답안을 처리하는 중입니다.");
+        }
+        try {
+            return applyAnswer(userId, username, runId, state, request.seq(), choice);
+        } catch (RuntimeException e) {
+            releaseSeq(runId, request.seq());
+            throw e;
+        }
+    }
+
+    private AnswerResult applyAnswer(String userId, String username, String runId, RunState state,
+                                     int seq, int choice) {
         LocalDateTime now = now();
         GameQuestion question = question(state.getCurrentQuestionId());
         GameTopic topic = topicRepository.findById(question.getTopicId()).orElseThrow();
         boolean correct = choice == question.getAnswerIndex();
         recordAnswer(userId, question.getId(), correct, now);
+        state.getAnsweredIds().add(question.getId());
 
         boolean cleared = false;
         if (correct) {
@@ -179,8 +207,8 @@ public class GameRunService {
             state.setStreak(0);
             state.setHearts(state.getHearts() - 1);
             if (state.getPhase() == RunState.Phase.BOSS) {
+                // the next boss question is a new one (takeNext never re-serves an answered id)
                 state.setBossStreak(0);
-                state.getBossQueue().add(question.getId());
             }
         }
         boolean failed = !cleared && state.getHearts() <= 0;
@@ -194,7 +222,7 @@ public class GameRunService {
         if (cleared || failed) {
             delete(runId);
         } else {
-            state.getAnswered().put(request.seq(), result);
+            state.getAnswered().put(seq, result);
             state.setSeq(state.getSeq() + 1);
             state.setCurrentQuestionId(takeNext(state));
             save(state);
@@ -220,9 +248,12 @@ public class GameRunService {
     /** Creates the progress row on first answer, refreshes the display name, and records a clear. */
     private void upsertProgress(String userId, String username, RunState state, boolean cleared,
                                 LocalDateTime now) {
-        GameProgress progress = progressRepository.findById(new GameProgressId(userId, state.getDungeonId()))
-                .orElseGet(() -> GameProgress.builder().userId(userId).dungeonId(state.getDungeonId())
-                        .bestStreak(0).build());
+        GameProgressId id = new GameProgressId(userId, state.getDungeonId());
+        GameProgress progress = progressRepository.findById(id).orElse(null);
+        if (progress == null) {
+            insertProgressIfAbsent(userId, state.getDungeonId());
+            progress = progressRepository.findById(id).orElseThrow();
+        }
         if (cleared) {
             if (progress.getClearedAt() == null) progress.setClearedAt(now);
             progress.setBestStreak(Math.max(progress.getBestStreak(), state.getBestStreak()));
@@ -238,16 +269,55 @@ public class GameRunService {
         progressRepository.saveAll(rows);
     }
 
+    /**
+     * Inserts an empty progress row under a savepoint. Two concurrent first answers by the same user
+     * (two runs) race on the PK; the loser's unique violation is rolled back to the savepoint, so the
+     * surrounding transaction stays usable (Postgres would otherwise abort it) and the row the winner
+     * inserted is updated instead.
+     */
+    private void insertProgressIfAbsent(String userId, String dungeonId) {
+        entityManager.unwrap(Session.class).doWork(conn -> {
+            Savepoint savepoint = conn.setSavepoint();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO game_progress (user_id, dungeon_id, best_streak) VALUES (?, ?, 0)")) {
+                ps.setString(1, userId);
+                ps.setString(2, dungeonId);
+                ps.executeUpdate();
+                conn.releaseSavepoint(savepoint);
+            } catch (SQLException e) {
+                if (!UNIQUE_VIOLATION.equals(e.getSQLState())) throw e;
+                conn.rollback(savepoint);
+                log.info("game_progress ({}, {}) inserted concurrently; updating it instead", userId, dungeonId);
+            }
+        });
+    }
+
+    /** Next unanswered id from the phase queue, or a fresh draw when the queue has none left. */
     private Long takeNext(RunState state) {
         List<Long> queue = state.getPhase() == RunState.Phase.BOSS ? state.getBossQueue() : state.getNormalQueue();
-        if (queue.isEmpty()) {
-            List<Long> approved = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
-            if (approved.isEmpty()) {
-                throw new GameException(409, "DUNGEON_CLOSED", "출제할 문제가 없습니다.");
-            }
-            return approved.get(random.nextInt(approved.size()));
+        while (!queue.isEmpty()) {
+            Long id = queue.remove(0);
+            if (!state.getAnsweredIds().contains(id)) return id;
         }
-        return queue.remove(0);
+        return draw(state);
+    }
+
+    /**
+     * Random approved question not yet answered in this run. Only when every question has been
+     * answered are ids reused, and even then never the question just answered (if there is another).
+     */
+    private Long draw(RunState state) {
+        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+        List<Long> candidates = pool.stream().filter(id -> !state.getAnsweredIds().contains(id)).toList();
+        if (candidates.isEmpty()) {
+            candidates = pool.size() >= 2
+                    ? pool.stream().filter(id -> !id.equals(state.getCurrentQuestionId())).toList()
+                    : pool;
+        }
+        if (candidates.isEmpty()) {
+            throw new GameException(409, "DUNGEON_CLOSED", "출제할 문제가 없습니다.");
+        }
+        return candidates.get(random.nextInt(candidates.size()));
     }
 
     /** Appends random ids from {@code pool} to {@code target} until it has {@code size}, skipping excluded/duplicates. */
@@ -331,6 +401,28 @@ public class GameRunService {
         } catch (DataAccessException e) {
             throw unavailable(e);
         }
+    }
+
+    /** {@code SET ...:seq:{seq} NX EX 10}; false if another request already holds this seq. */
+    private boolean claimSeq(String runId, int seq) {
+        try {
+            return Boolean.TRUE.equals(redis.opsForValue()
+                    .setIfAbsent(seqClaimKey(runId, seq), "1", SEQ_CLAIM_TTL));
+        } catch (DataAccessException e) {
+            throw unavailable(e);
+        }
+    }
+
+    private void releaseSeq(String runId, int seq) {
+        try {
+            redis.delete(seqClaimKey(runId, seq));
+        } catch (DataAccessException e) {
+            log.warn("Could not release seq claim {}:{} (expires in {}s)", runId, seq, SEQ_CLAIM_TTL.toSeconds());
+        }
+    }
+
+    private static String seqClaimKey(String runId, int seq) {
+        return RUN_KEY_PREFIX + runId + ":seq:" + seq;
     }
 
     private static GameException unavailable(DataAccessException e) {
