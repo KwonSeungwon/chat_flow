@@ -11,6 +11,7 @@ import com.chatflow.chat.result.Result;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.InviteLinkService;
 import com.chatflow.chat.service.room.ParticipantService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -212,6 +213,42 @@ class RoomInviteControllerTest {
         }
 
         @Test
+        @DisplayName("non-member cannot broadcast an invite into the room -> 403")
+        void _403_when_inviter_not_room_member() throws Exception {
+            doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                    .when(membershipGuard).requireMember("r1", "outsider");
+
+            mockMvc.perform(post("/api/chat/rooms/r1/invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"targetUsername\":\"bob\"}")
+                            .header("X-User-Id", "outsider")
+                            .header("X-Username", "mallory"))
+                    .andExpect(status().isForbidden());
+
+            verify(roomMembershipService, never())
+                    .sendInviteMessage(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("targetUsername over 50 chars -> 400 VALIDATION_ERROR")
+        void _400_when_targetUsername_too_long() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    Map.of("targetUsername", "x".repeat(51)));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.targetUsername").exists());
+
+            verify(roomMembershipService, never())
+                    .sendInviteMessage(anyString(), anyString(), anyString());
+        }
+
+        @Test
         void _200_and_sendInviteMessage_called_on_success() throws Exception {
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
             when(participantService.isRoomFull("r1")).thenReturn(false);
@@ -354,7 +391,8 @@ class RoomInviteControllerTest {
         void _400_when_room_full() throws Exception {
             when(inviteLinkService.resolveToken("tok-abc")).thenReturn(Result.ok("r1"));
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
-            when(participantService.isRoomFull("r1")).thenReturn(true);
+            when(roomMembershipService.grantMembership("r1", "user-1", "alice", RoomAccessPolicy.GrantPath.INVITE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.ROOM_FULL));
 
             String body = objectMapper.writeValueAsString(
                     Map.of("token", "tok-abc"));
@@ -369,10 +407,27 @@ class RoomInviteControllerTest {
         }
 
         @Test
-        void _200_and_addMemberIfAbsent_called_on_success() throws Exception {
+        void _403_when_banned_user_uses_invite_link() throws Exception {
             when(inviteLinkService.resolveToken("tok-abc")).thenReturn(Result.ok("r1"));
             when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
-            when(participantService.isRoomFull("r1")).thenReturn(false);
+            when(roomMembershipService.grantMembership("r1", "user-1", "alice", RoomAccessPolicy.GrantPath.INVITE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.BANNED));
+
+            mockMvc.perform(post("/api/chat/rooms/join-by-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"token\":\"tok-abc\"}")
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        void _200_and_grantMembership_via_INVITE_on_success() throws Exception {
+            when(inviteLinkService.resolveToken("tok-abc")).thenReturn(Result.ok("r1"));
+            when(chatRoomService.getRoom("r1")).thenReturn(Optional.of(room("r1", "Room", true)));
+            when(roomMembershipService.grantMembership("r1", "user-1", "alice", RoomAccessPolicy.GrantPath.INVITE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(null));
 
             String body = objectMapper.writeValueAsString(
                     Map.of("token", "tok-abc"));
@@ -386,8 +441,6 @@ class RoomInviteControllerTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.roomId").value("r1"))
                     .andExpect(jsonPath("$.data.roomName").value("Room"));
-
-            verify(roomMembershipService).addMemberIfAbsent("r1", "user-1", "alice");
         }
     }
 }

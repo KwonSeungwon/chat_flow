@@ -90,7 +90,7 @@ class ChatControllerTest {
                 .roomId(ROOM_ID).userId(USER_ID).username(USERNAME)
                 .role(RoomRole.MEMBER).joinedAt(LocalDateTime.now()).build();
         when(membershipChecker.findMember(ROOM_ID, USER_ID))
-                .thenReturn(Optional.of(new MembershipResult(memberEntity, false)));
+                .thenReturn(Optional.of(new MembershipResult(memberEntity)));
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
 
         chatController.sendMessage(message, headerAccessor);
@@ -99,22 +99,6 @@ class ChatControllerTest {
         verify(chatService).processMessage(message, memberEntity);
         // Verify the single-arg overload is NOT called (no duplicate lookup)
         verify(chatService, never()).processMessage(message);
-    }
-
-    @Test
-    @DisplayName("sendMessage passes through via legacy createdBy fallback — null entity forwarded")
-    void sendMessage_passes_through_via_legacy_createdBy_fallback() {
-        ChatMessage message = buildChatMessage();
-
-        // Legacy creator: MembershipResult with null entity
-        when(membershipChecker.findMember(ROOM_ID, USER_ID))
-                .thenReturn(Optional.of(MembershipResult.CREATOR_ONLY));
-        when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
-
-        chatController.sendMessage(message, headerAccessor);
-
-        // Verify the two-arg overload is called with null (creator-only, no member row)
-        verify(chatService).processMessage(message, null);
     }
 
     // ── addUser ────────────────────────────────────────────────────
@@ -127,6 +111,32 @@ class ChatControllerTest {
         chatController.addUser(message, headerAccessor);
 
         verify(chatService).addUser(message, "session-1");
+    }
+
+    @Test
+    @DisplayName("addUser records chatRoomId on the session only when the join is accepted")
+    void addUser_records_session_room_only_on_accepted_join() {
+        ChatMessage message = buildChatMessage();
+        when(chatService.addUser(message, "session-1")).thenReturn(true);
+
+        chatController.addUser(message, headerAccessor);
+
+        org.assertj.core.api.Assertions.assertThat(
+                headerAccessor.getSessionAttributes().get("chatRoomId")).isEqualTo(ROOM_ID);
+    }
+
+    @Test
+    @DisplayName("addUser refused by the access policy leaves no chatRoomId on the session")
+    void addUser_refused_does_not_record_session_room() {
+        ChatMessage message = buildChatMessage();
+        when(chatService.addUser(message, "session-1")).thenReturn(false);
+
+        chatController.addUser(message, headerAccessor);
+
+        // Without a session room, disconnect cleanup cannot emit LEAVE for a room
+        // the user never entered.
+        org.assertj.core.api.Assertions.assertThat(
+                headerAccessor.getSessionAttributes()).doesNotContainKey("chatRoomId");
     }
 
     @Test

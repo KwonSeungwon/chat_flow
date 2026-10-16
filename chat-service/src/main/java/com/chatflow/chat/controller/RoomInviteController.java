@@ -7,6 +7,7 @@ import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.InviteLinkService;
 import com.chatflow.chat.service.room.ParticipantService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
@@ -14,6 +15,7 @@ import com.chatflow.chat.result.Result;
 import com.chatflow.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,7 +44,7 @@ public class RoomInviteController {
     private final ParticipantService participantService;
     private final StringRedisTemplate redisTemplate;
 
-    @RequireAuth
+    @RequireMember
     @PostMapping("/{roomId}/invite")
     public ResponseEntity<ApiResponse<Void>> inviteUser(
             @PathVariable String roomId,
@@ -127,12 +129,19 @@ public class RoomInviteController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        if (participantService.isRoomFull(roomId)) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("채팅방이 만석입니다 (최대 10명)."));
+        // Seed membership — invite link is a valid access grant, but the policy
+        // still refuses banned users, DMs and full rooms.
+        RoomAccessPolicy.JoinDecision decision = roomMembershipService.grantMembership(
+                room.getId(), userId, username, RoomAccessPolicy.GrantPath.INVITE);
+        if (!decision.allowed()) {
+            HttpStatus status = switch (decision.reason()) {
+                case ROOM_NOT_FOUND -> HttpStatus.NOT_FOUND;
+                case ROOM_FULL -> HttpStatus.BAD_REQUEST;
+                default -> HttpStatus.FORBIDDEN;
+            };
+            return ResponseEntity.status(status)
+                    .body(ApiResponse.error(ChatRoomController.denialMessage(decision.reason())));
         }
-        // Seed membership — invite link is a valid access grant.
-        roomMembershipService.addMemberIfAbsent(room.getId(), userId, username);
         Map<String, String> data = new LinkedHashMap<>();
         data.put("roomId", room.getId());
         data.put("roomName", room.getName());
@@ -143,6 +152,7 @@ public class RoomInviteController {
 
     public record InviteRequest(
             @NotBlank(message = "targetUsername이 필요합니다")
+            @Size(max = 50, message = "targetUsername은 50자를 초과할 수 없습니다")
             String targetUsername
     ) {}
 

@@ -13,6 +13,7 @@ import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
 import com.chatflow.common.dto.ChatRoomResponse;
@@ -67,6 +68,7 @@ class ChatRoomControllerTest {
     @Mock private ChatRoomMapper chatRoomMapper;
     @Mock private RoomMembershipGuard membershipGuard;
     @Mock private RoomPermissionService roomPermissionService;
+    @Mock private RoomAccessPolicy roomAccessPolicy;
 
     @InjectMocks
     private ChatRoomController controller;
@@ -109,19 +111,35 @@ class ChatRoomControllerTest {
     class GetAllRooms {
 
         @Test
-        void returns_all_rooms_when_no_userId_header() throws Exception {
-            List<ChatRoom> rooms = List.of(
-                    room("r1", "Room A", RoomType.GENERAL, "u1"),
-                    room("r2", "Room B", RoomType.GENERAL, "u2"));
-            when(chatRoomService.getAllRooms()).thenReturn(rooms);
-            when(chatRoomMapper.toResponseList(rooms)).thenReturn(List.of(
-                    roomResponse("r1", "Room A", "GENERAL", "u1"),
-                    roomResponse("r2", "Room B", "GENERAL", "u2")));
+        void anonymous_gets_only_policy_visible_rooms() throws Exception {
+            ChatRoom publicRoom = room("r1", "Room A", RoomType.GENERAL, "u1");
+            ChatRoom dm = room("r2", "DM", RoomType.DIRECT, null);
+            when(chatRoomService.getAllRooms()).thenReturn(List.of(publicRoom, dm));
+            when(roomAccessPolicy.isVisible(publicRoom, null)).thenReturn(true);
+            when(roomAccessPolicy.isVisible(dm, null)).thenReturn(false);
+            when(chatRoomMapper.toResponseList(List.of(publicRoom))).thenReturn(List.of(
+                    roomResponse("r1", "Room A", "GENERAL", "u1")));
 
             mockMvc.perform(get("/api/chat/rooms"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true))
-                    .andExpect(jsonPath("$.data.length()").value(2));
+                    .andExpect(jsonPath("$.data.length()").value(1))
+                    .andExpect(jsonPath("$.data[0].id").value("r1"));
+        }
+
+        @Test
+        void authenticated_user_gets_visible_rooms_query_not_global_list() throws Exception {
+            List<ChatRoom> rooms = List.of(room("r1", "Mine", RoomType.DIRECT, null));
+            when(chatRoomService.getVisibleRooms("user-1")).thenReturn(rooms);
+            when(roomVisibilityService.getHiddenMap("user-1")).thenReturn(Map.of());
+            when(chatRoomMapper.toResponseList(rooms)).thenReturn(List.of(
+                    roomResponse("r1", "Mine", "DIRECT", null)));
+
+            mockMvc.perform(get("/api/chat/rooms").header("X-User-Id", "user-1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.length()").value(1));
+
+            verify(chatRoomService, never()).getAllRooms();
         }
 
         @SuppressWarnings("unchecked")
@@ -131,7 +149,7 @@ class ChatRoomControllerTest {
             ChatRoom hidden = room("r2", "Hidden", RoomType.DIRECT, "u1");
             List<ChatRoom> rooms = List.of(visible, hidden);
 
-            when(chatRoomService.getAllRooms()).thenReturn(rooms);
+            when(chatRoomService.getVisibleRooms("user-1")).thenReturn(rooms);
             when(chatRoomMapper.toResponseList(any(List.class))).thenReturn(List.of(
                     roomResponse("r1", "Visible", "DIRECT", "u1")));
 
@@ -512,6 +530,8 @@ class ChatRoomControllerTest {
         void returns_200_when_valid() throws Exception {
             ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
             when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
+                    eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
             when(chatRoomMapper.toResponse(dm))
                     .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
 
@@ -527,8 +547,110 @@ class ChatRoomControllerTest {
                     .andExpect(jsonPath("$.success").value(true))
                     .andExpect(jsonPath("$.data.id").value("r-dm"));
 
-            verify(roomMembershipService).addMemberIfAbsent("r-dm", "user-1", "alice");
-            verify(roomMembershipService).addMemberIfAbsent("r-dm", "u2", "bob");
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "user-1", "alice", RoomAccessPolicy.GrantPath.DM_CREATE);
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "u2", "bob", RoomAccessPolicy.GrantPath.DM_CREATE);
+        }
+    }
+
+    // ── VerifyPassword ──────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/chat/rooms/{roomId}/verify")
+    class VerifyPassword {
+
+        private final String body = "{\"password\":\"pw\"}";
+
+        @Test
+        void returns_401_without_userId() throws Exception {
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isUnauthorized());
+            verify(roomMembershipService, never()).grantMembership(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_403_for_dm_room_without_checking_password() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "DM", RoomType.DIRECT, null)));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+
+            verify(chatRoomService, never()).verifyRoomPassword(anyString(), any());
+            verify(roomMembershipService, never()).grantMembership(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_403_and_grants_nothing_when_password_wrong() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(false);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+
+            verify(roomMembershipService, never()).grantMembership(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_200_and_grants_via_PASSWORD_on_success() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(true);
+            when(roomMembershipService.grantMembership("r1", "user-1", "alice",
+                    RoomAccessPolicy.GrantPath.PASSWORD)).thenReturn(new RoomAccessPolicy.JoinDecision(null));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data").value(true));
+        }
+
+        @Test
+        void returns_403_when_policy_refuses_grant_e_g_banned() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(true);
+            when(roomMembershipService.grantMembership("r1", "user-1", null,
+                    RoomAccessPolicy.GrantPath.PASSWORD))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.BANNED));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // ── Participants ────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/chat/rooms/{roomId}/participants")
+    class Participants {
+
+        @Test
+        void returns_401_without_userId() throws Exception {
+            mockMvc.perform(get("/api/chat/rooms/r1/participants"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        void returns_403_for_non_member() throws Exception {
+            doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                    .when(membershipGuard).requireMember("r1", "outsider");
+
+            mockMvc.perform(get("/api/chat/rooms/r1/participants").header("X-User-Id", "outsider"))
+                    .andExpect(status().isForbidden());
+
+            verify(redisTemplate, never()).opsForSet();
         }
     }
 

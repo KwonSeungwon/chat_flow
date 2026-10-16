@@ -3,6 +3,7 @@ package com.chatflow.chat.service.presence;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.room.ParticipantService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,8 +17,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * Redis SET-backed participant registry + room_members backfill. Entry
- * format: "userId:sessionId:username".
+ * Redis SET-backed participant registry + policy-gated room_members
+ * auto-join row. Entry format: "userId:sessionId:username".
  */
 @Slf4j
 @Service
@@ -29,32 +30,54 @@ public class ParticipantRegistryService {
     private final StringRedisTemplate redisTemplate;
     private final RoomMemberRepository roomMemberRepository;
     private final ParticipantService participantService;
+    private final RoomAccessPolicy roomAccessPolicy;
 
-    public void register(ChatMessage message, String sessionId) {
-        String key = KEY_PREFIX + message.getChatRoomId();
+    /**
+     * Registers the session's presence and, for an authenticated user, the
+     * implicit room_members row — but only if {@link RoomAccessPolicy#canAutoJoin}
+     * allows it. The policy is re-checked here (not just in the STOMP handler)
+     * because {@code RoomFullnessService} may have redirected the message to a
+     * different room since the caller's check.
+     *
+     * @return the policy decision; when denied nothing was written to Redis
+     *         or room_members.
+     */
+    public RoomAccessPolicy.JoinDecision register(ChatMessage message, String sessionId) {
+        String roomId = message.getChatRoomId();
         String safeUserId = message.getUserId() != null ? message.getUserId() : "anonymous";
+        boolean authenticated = !safeUserId.equals("anonymous");
+
+        RoomAccessPolicy.JoinDecision decision =
+                roomAccessPolicy.canAutoJoin(roomId, authenticated ? safeUserId : null);
+        if (!decision.allowed()) {
+            log.warn("Join refused by access policy: room={} user={} reason={}",
+                    roomId, safeUserId, decision.reason());
+            return decision;
+        }
+
+        String key = KEY_PREFIX + roomId;
         String safeSessionId = sessionId != null ? sessionId : "unknown";
         String entry = safeUserId + ":" + safeSessionId + ":" + message.getUsername();
 
         redisTemplate.opsForSet().add(key, entry);
         redisTemplate.expire(key, 7, TimeUnit.DAYS);
-        syncParticipantCount(message.getChatRoomId());
+        syncParticipantCount(roomId);
 
-        if (!safeUserId.equals("anonymous") &&
-                !roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), safeUserId)) {
+        if (authenticated && !roomMemberRepository.existsByRoomIdAndUserId(roomId, safeUserId)) {
             try {
                 String safeUsername = message.getUsername() != null ? message.getUsername() : "anonymous";
                 roomMemberRepository.save(RoomMemberEntity.builder()
-                        .roomId(message.getChatRoomId())
+                        .roomId(roomId)
                         .userId(safeUserId)
                         .username(safeUsername)
                         .joinedAt(LocalDateTime.now())
                         .build());
             } catch (DataIntegrityViolationException e) {
                 log.info("RoomMember already exists (concurrent insert): roomId={} userId={}",
-                        message.getChatRoomId(), safeUserId);
+                        roomId, safeUserId);
             }
         }
+        return decision;
     }
 
     public Set<String> getRoomParticipantUserIds(String roomId) {

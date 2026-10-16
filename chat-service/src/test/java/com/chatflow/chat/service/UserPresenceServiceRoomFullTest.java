@@ -4,6 +4,7 @@ import com.chatflow.chat.service.presence.BanCheckService;
 import com.chatflow.chat.service.presence.ParticipantRegistryService;
 import com.chatflow.chat.service.presence.PresenceBroadcastService;
 import com.chatflow.chat.service.presence.RoomFullnessService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,9 @@ class UserPresenceServiceRoomFullTest {
     void setUp() {
         userPresenceService = new UserPresenceService(
                 banCheckService, roomFullnessService, participantRegistry, presenceBroadcast);
+        // Default: the access policy (inside register) accepts the join.
+        lenient().when(participantRegistry.register(any(), any()))
+                .thenReturn(new RoomAccessPolicy.JoinDecision(null));
     }
 
     private ChatMessage createJoinMessage() {

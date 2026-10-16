@@ -102,10 +102,16 @@ public class ChatController {
                 chatMessage.setUserId(verifiedUserId);
                 chatMessage.setUsername(verifiedUsername);
             }
-            sessionAttrs.put("chatRoomId", chatMessage.getChatRoomId());
         }
         String sessionId = headerAccessor.getSessionId();
-        chatService.addUser(chatMessage, sessionId);
+        // Join gate (RoomAccessPolicy) runs inside the presence pipeline; a refused
+        // join has already been answered on /user/queue/errors. Record the room on
+        // the session only on success, and only after any full-room redirect, so
+        // disconnect cleanup never emits LEAVE for a room the user never entered.
+        boolean joined = chatService.addUser(chatMessage, sessionId);
+        if (joined && sessionAttrs != null) {
+            sessionAttrs.put("chatRoomId", chatMessage.getChatRoomId());
+        }
     }
 
     @MessageMapping("/chat.typing")

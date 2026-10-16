@@ -1,6 +1,7 @@
 package com.chatflow.chat.service.presence;
 
 import com.chatflow.chat.service.outbox.ChatPersistenceService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,20 @@ public class PresenceBroadcastService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final ChatPersistenceService chatPersistenceService;
+
+    /**
+     * Per-user refusal for a STOMP addUser the access policy denied. Same
+     * NOT_A_MEMBER frame shape ChatController uses for other STOMP ops, plus
+     * the denial reason so the client can prompt for a password / invite.
+     */
+    public void sendJoinRefused(String userId, String roomId, RoomAccessPolicy.Denial reason) {
+        if (userId == null || userId.isBlank()) return;
+        messagingTemplate.convertAndSendToUser(userId, "/queue/errors",
+                Map.of("type", "NOT_A_MEMBER",
+                        "operation", "addUser",
+                        "roomId", roomId != null ? roomId : "",
+                        "reason", reason != null ? reason.name() : ""));
+    }
 
     public void broadcastJoin(ChatMessage message, int participantCount) {
         message.setType(ChatMessage.MessageType.JOIN);

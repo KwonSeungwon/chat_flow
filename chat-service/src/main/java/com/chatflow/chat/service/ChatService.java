@@ -32,12 +32,13 @@ public class ChatService {
         messageSenderService.send(message, resolvedMember);
     }
 
-    public void addUser(ChatMessage message) {
-        userPresenceService.join(message);
+    public boolean addUser(ChatMessage message) {
+        return userPresenceService.join(message);
     }
 
-    public void addUser(ChatMessage message, String sessionId) {
-        userPresenceService.join(message, sessionId);
+    /** @return true if the join was accepted (see {@link UserPresenceService#join}). */
+    public boolean addUser(ChatMessage message, String sessionId) {
+        return userPresenceService.join(message, sessionId);
     }
 
     public void removeUser(String roomId, String username) {

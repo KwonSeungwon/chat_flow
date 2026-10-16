@@ -3,6 +3,9 @@ package com.chatflow.chat.service.presence;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.room.ParticipantService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
+import com.chatflow.chat.service.room.RoomAccessPolicy.Denial;
+import com.chatflow.chat.service.room.RoomAccessPolicy.JoinDecision;
 import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,12 +35,14 @@ class ParticipantRegistryServiceTest {
     @Mock SetOperations<String, String> setOperations;
     @Mock RoomMemberRepository roomMemberRepository;
     @Mock ParticipantService participantService;
+    @Mock RoomAccessPolicy roomAccessPolicy;
 
     private ParticipantRegistryService registry;
 
     @BeforeEach
     void setUp() {
-        registry = new ParticipantRegistryService(redisTemplate, roomMemberRepository, participantService);
+        registry = new ParticipantRegistryService(
+                redisTemplate, roomMemberRepository, participantService, roomAccessPolicy);
     }
 
     @Test
@@ -66,10 +71,11 @@ class ParticipantRegistryServiceTest {
         msg.setUserId("user-1");
         msg.setUsername("alice");
 
+        when(roomAccessPolicy.canAutoJoin("room-1", "user-1")).thenReturn(new JoinDecision(null));
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(false);
 
-        registry.register(msg, "session-1");
+        assertThat(registry.register(msg, "session-1").allowed()).isTrue();
 
         verify(setOperations).add("chatflow:room:participants:room-1", "user-1:session-1:alice");
         verify(redisTemplate).expire(eq("chatflow:room:participants:room-1"), anyLong(), any());
@@ -84,6 +90,7 @@ class ParticipantRegistryServiceTest {
         msg.setUserId("user-1");
         msg.setUsername("alice");
 
+        when(roomAccessPolicy.canAutoJoin("room-1", "user-1")).thenReturn(new JoinDecision(null));
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(false);
         when(roomMemberRepository.save(any(RoomMemberEntity.class)))
@@ -99,6 +106,7 @@ class ParticipantRegistryServiceTest {
         msg.setUserId("user-1");
         msg.setUsername("alice");
 
+        when(roomAccessPolicy.canAutoJoin("room-1", "user-1")).thenReturn(new JoinDecision(null));
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(false);
         when(roomMemberRepository.save(any(RoomMemberEntity.class)))
@@ -116,6 +124,7 @@ class ParticipantRegistryServiceTest {
         msg.setUserId("user-1");
         msg.setUsername("alice");
 
+        when(roomAccessPolicy.canAutoJoin("room-1", "user-1")).thenReturn(new JoinDecision(null));
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-1")).thenReturn(true);
 
@@ -125,6 +134,23 @@ class ParticipantRegistryServiceTest {
         verify(setOperations).add("chatflow:room:participants:room-1", "user-1:session-1:alice");
         // But save() never attempted
         verify(roomMemberRepository, never()).save(any(RoomMemberEntity.class));
+    }
+
+    @Test
+    void register_dmRoomNonParticipant_doesNotInsertMemberRow() {
+        ChatMessage msg = new ChatMessage();
+        msg.setChatRoomId("dm-1");
+        msg.setUserId("intruder");
+        msg.setUsername("mallory");
+
+        when(roomAccessPolicy.canAutoJoin("dm-1", "intruder"))
+                .thenReturn(new JoinDecision(Denial.DM_NOT_PARTICIPANT));
+
+        assertThat(registry.register(msg, "session-1").allowed()).isFalse();
+
+        verify(roomMemberRepository, never()).save(any(RoomMemberEntity.class));
+        // No presence either — a refused join leaves no trace in the room.
+        verifyNoInteractions(redisTemplate, participantService);
     }
 
     @Test

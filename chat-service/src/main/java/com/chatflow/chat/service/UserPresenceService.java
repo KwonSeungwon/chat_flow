@@ -4,6 +4,7 @@ import com.chatflow.chat.service.presence.BanCheckService;
 import com.chatflow.chat.service.presence.ParticipantRegistryService;
 import com.chatflow.chat.service.presence.PresenceBroadcastService;
 import com.chatflow.chat.service.presence.RoomFullnessService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +15,7 @@ import java.util.Set;
 /**
  * Orchestrates a user's join/leave lifecycle for a chat room. Delegates
  * gate checks (ban, room-full), registry side effects (Redis SET +
- * room_members backfill), and STOMP broadcast to focused collaborators.
+ * policy-gated room_members auto-join), and STOMP broadcast to focused collaborators.
  */
 @Slf4j
 @Service
@@ -26,34 +27,46 @@ public class UserPresenceService {
     private final ParticipantRegistryService participantRegistry;
     private final PresenceBroadcastService presenceBroadcast;
 
-    public void join(ChatMessage message, String sessionId) {
+    /**
+     * @return true if the user joined (presence registered); false if the join
+     *         was refused (banned, DM full, or denied by RoomAccessPolicy). The
+     *         refused user has already been sent a {@code /user/queue/errors} frame.
+     */
+    public boolean join(ChatMessage message, String sessionId) {
         String currentUserId = message.getUserId() != null ? message.getUserId() : "";
 
         if (banCheckService.checkBanGate(currentUserId, message.getChatRoomId(), message.getUsername())) {
-            return;
+            return false;
         }
 
         Set<String> existingUserIds = participantRegistry.getRoomParticipantUserIds(message.getChatRoomId());
         boolean alreadyJoined = !currentUserId.isEmpty() && existingUserIds.contains(currentUserId);
 
         if (roomFullnessService.handleIfFull(message, currentUserId, alreadyJoined)) {
-            return;
+            return false;
         }
 
-        participantRegistry.register(message, sessionId);
+        // Re-checks RoomAccessPolicy (the fullness gate may have redirected the
+        // message to another room); a refused join must not broadcast JOIN.
+        RoomAccessPolicy.JoinDecision decision = participantRegistry.register(message, sessionId);
+        if (!decision.allowed()) {
+            presenceBroadcast.sendJoinRefused(currentUserId, message.getChatRoomId(), decision.reason());
+            return false;
+        }
 
         if (alreadyJoined) {
             log.debug("User {} reconnected to room {} via additional session — suppressing JOIN broadcast",
                     message.getUsername(), message.getChatRoomId());
-            return;
+            return true;
         }
 
         int participantCount = participantRegistry.getRoomParticipantUserIds(message.getChatRoomId()).size();
         presenceBroadcast.broadcastJoin(message, participantCount);
+        return true;
     }
 
-    public void join(ChatMessage message) {
-        join(message, null);
+    public boolean join(ChatMessage message) {
+        return join(message, null);
     }
 
     public void leave(String roomId, String username, String sessionId) {

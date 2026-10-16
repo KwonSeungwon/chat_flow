@@ -38,22 +38,34 @@ public class RoomMembershipService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ParticipantService participantService;
     private final RoomCacheEvictor roomCacheEvictor;
+    private final RoomAccessPolicy roomAccessPolicy;
 
     /**
-     * Idempotently inserts a (roomId, userId) row into room_members.
-     * Default role is MEMBER. Use the 4-arg overload to set OWNER/MODERATOR.
+     * The only entry point for user-initiated membership grants (invite link,
+     * password verify, DM create). Asks {@link RoomAccessPolicy#canGrant} first
+     * and inserts a MEMBER row only when the policy allows it.
+     *
+     * @return the policy decision; when denied, no row is written.
      */
-    public void addMemberIfAbsent(String roomId, String userId, String username) {
+    public RoomAccessPolicy.JoinDecision grantMembership(String roomId, String userId, String username,
+                                                         RoomAccessPolicy.GrantPath via) {
+        RoomAccessPolicy.JoinDecision decision = roomAccessPolicy.canGrant(roomId, userId, via);
+        if (!decision.allowed()) {
+            log.info("Membership grant denied: room={} user={} via={} reason={}",
+                    roomId, userId, via, decision.reason());
+            return decision;
+        }
         addMemberIfAbsent(roomId, userId, username, RoomRole.MEMBER);
+        return decision;
     }
 
     /**
      * Idempotently inserts a (roomId, userId) row into room_members.
-     * Called from every access-granting path (create, invite-join, password
-     * verify, DM create) so the room_members table tracks every legitimate
-     * member, not just users who happened to send a STOMP message.
+     * Package-private on purpose: outside this package only
+     * {@link #grantMembership} may create rows. The one in-package direct
+     * caller is owner seeding in {@link ChatRoomService#createRoom}.
      */
-    public void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
+    void addMemberIfAbsent(String roomId, String userId, String username, RoomRole role) {
         if (userId == null || userId.isBlank()) return;
         if (roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) return;
         try {

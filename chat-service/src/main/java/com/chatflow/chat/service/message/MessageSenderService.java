@@ -73,9 +73,8 @@ public class MessageSenderService {
      *
      * @param resolvedMember the pre-fetched member entity used solely for the mute
      *                       gate. {@code null} means "no mute info available" — the
-     *                       mute gate is skipped (correct for legacy creator-only
-     *                       membership where no room_members row exists, and for
-     *                       server-authored message types).
+     *                       mute gate is skipped (correct for server-authored
+     *                       message types).
      */
     public void send(ChatMessage message, RoomMemberEntity resolvedMember) {
         // Mute gate — muted users cannot post anything they typed themselves.
