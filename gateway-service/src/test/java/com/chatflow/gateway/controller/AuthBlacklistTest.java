@@ -289,14 +289,15 @@ class AuthBlacklistTest {
 
     @Test
     void queryParamToken_onFileGet_stillAuthenticates() {
-        webTestClient.get().uri("/api/files/abc?token=" + validToken)
+        webTestClient.get().uri("/api/files/3f2b8c1e-aaaa-4bbb-8ccc-1234567890ab?token=" + validToken)
                 .exchange()
                 .expectStatus().value(status -> org.junit.jupiter.api.Assertions.assertNotEquals(401, status));
     }
 
     @Test
     void queryParamToken_onFilePathWithDotSegments_isIgnored() {
-        for (String p : new String[] {"/api/files/%2e%2e/users/me", "/api/files/%2E%2E/users/me", "/api/files/./../users/me"}) {
+        for (String p : new String[] {"/api/files/%2e%2e/users/me", "/api/files/%2E%2E/users/me", "/api/files/./../users/me",
+                "/api/files/..%2fusers/me", "/api/files/..%2Fusers/me", "/api/files/abc/extra", "/api/files/a%2Fb", "/api/files/a%5Cb"}) {
             webTestClient.get().uri(uriBuilder -> uriBuilder.path("/").build().resolve(p + "?token=" + validToken))
                     .exchange()
                     .expectStatus().isUnauthorized();

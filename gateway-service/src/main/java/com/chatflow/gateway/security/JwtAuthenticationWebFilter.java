@@ -101,13 +101,15 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth));
     }
 
+    private static final java.util.regex.Pattern FILE_PATH = java.util.regex.Pattern.compile("^/api/files/[A-Za-z0-9-]+$");
+
     private String extractToken(ServerHttpRequest request) {
         String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
         // 쿼리 파라미터 토큰은 헤더를 못 붙이는 경로만 허용: WebSocket 연결, <img>가 쓰는 파일 GET
-        // 디코딩된 세그먼트로 판단한다. "." / ".." 세그먼트("%2e%2e" 포함)가 있으면 /api/files/ 접두를 믿을 수 없다.
+        // ws 경로는 디코딩된 세그먼트로 판단하고 "." / ".." 세그먼트가 있으면 거부한다.
         StringBuilder sb = new StringBuilder();
         for (org.springframework.http.server.PathContainer.Element e : request.getPath().pathWithinApplication().elements()) {
             if (e instanceof org.springframework.http.server.PathContainer.PathSegment seg) {
@@ -123,7 +125,9 @@ public class JwtAuthenticationWebFilter implements WebFilter {
         String path = sb.toString();
         boolean ws = path.equals("/ws") || path.startsWith("/ws/")
                 || path.equals("/ws-native") || path.startsWith("/ws-native/");
-        boolean file = HttpMethod.GET.equals(request.getMethod()) && path.startsWith("/api/files/");
+        // 파일은 디코딩하지 않은 원본 경로가 "/api/files/{uuid}" 형태일 때만 (%2f, .., 추가 세그먼트 거부)
+        boolean file = HttpMethod.GET.equals(request.getMethod())
+                && FILE_PATH.matcher(request.getPath().value()).matches();
         if (!ws && !file) {
             return null;
         }
