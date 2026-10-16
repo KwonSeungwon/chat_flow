@@ -27,12 +27,15 @@ class ChatRoomContent extends ConsumerStatefulWidget {
   final String username;
   final String? scrollToMessageId;
 
-  const ChatRoomContent({
-    super.key,
+  /// Keyed by [roomId] unless a key is given: switching rooms must build a
+  /// fresh State (initState re-runs activeRoomId/markRoomRead, and search,
+  /// scroll and reply state never leak into the next room).
+  ChatRoomContent({
+    Key? key,
     required this.roomId,
     required this.username,
     this.scrollToMessageId,
-  });
+  }) : super(key: key ?? ValueKey(roomId));
 
   @override
   ConsumerState<ChatRoomContent> createState() => ChatRoomContentState();
@@ -45,6 +48,8 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   final _keyboardFocusNode = FocusNode();
   List<ChatMessage> _searchResults = [];
   bool _searching = false;
+  /// Captured in initState: `ref` is unusable inside dispose().
+  late final StateController<String?> _activeRoomId;
 
   Future<void> _doSearch(String query) async {
     if (query.trim().isEmpty) {
@@ -57,6 +62,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         '/api/search/rooms/${widget.roomId}/messages',
         queryParameters: {'query': query.trim()},
       );
+      if (!mounted) return;
       final data = resp.data;
       List<dynamic> items = [];
       if (data is Map && data['data'] is List) {
@@ -69,17 +75,24 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         _searching = false;
       });
     } catch (_) {
-      setState(() => _searching = false);
+      if (mounted) setState(() => _searching = false);
     }
   }
 
   @override
   void initState() {
     super.initState();
+    _activeRoomId = ref.read(activeRoomIdProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Track which room the user is viewing so AppStompService can skip unread increments
-      ref.read(activeRoomIdProvider.notifier).state = widget.roomId;
+      _activeRoomId.state = widget.roomId;
+      // Clear keyword alert when navigating to the alerted room (a room
+      // switch builds a new State, so this runs once per room).
+      final alert = ref.read(keywordAlertProvider);
+      if (alert != null && alert.roomId == widget.roomId) {
+        ref.read(keywordAlertProvider.notifier).state = null;
+      }
       ref.read(chatNotifierProvider(widget.roomId).notifier)
           .markRoomRead(widget.roomId);
     });
@@ -87,8 +100,16 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
 
   @override
   void dispose() {
-    // Clear active room on leave so unread increments resume for this room
-    ref.read(activeRoomIdProvider.notifier).state = null;
+    // Clear active room on leave so unread increments resume for this room.
+    // Deferred: providers cannot be modified during dispose. Only if it is
+    // still ours — on a room switch the next room has set itself by then.
+    final activeRoomId = _activeRoomId;
+    final roomId = widget.roomId;
+    Future.microtask(() {
+      if (activeRoomId.mounted && activeRoomId.state == roomId) {
+        activeRoomId.state = null;
+      }
+    });
     _searchCtrl.dispose();
     _keyboardFocusNode.dispose();
     super.dispose();
@@ -101,13 +122,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
     if (widget.scrollToMessageId != oldWidget.scrollToMessageId &&
         widget.scrollToMessageId != null) {
       _replyScrollTarget = null;
-    }
-    // Clear keyword alert when navigating to the alerted room
-    if (widget.roomId != oldWidget.roomId) {
-      final alert = ref.read(keywordAlertProvider);
-      if (alert != null && alert.roomId == widget.roomId) {
-        Future.microtask(() => ref.read(keywordAlertProvider.notifier).state = null);
-      }
     }
   }
 
@@ -126,7 +140,9 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
     // Route away on room exit (deleted or full)
     ref.listen(chatNotifierProvider(widget.roomId), (_, next) {
       if (!context.mounted) return;
-      if (next.exitReason == ChatExitReason.deleted) {
+      if (next.exitReason == ChatExitReason.deleted ||
+          next.exitReason == ChatExitReason.notMember) {
+        // notMember: the reason SnackBar comes from the errorMessage listener.
         context.go('/chat');
       } else if (next.exitReason == ChatExitReason.full) {
         final redirectTo = next.redirectTo;
@@ -285,7 +301,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           return GestureDetector(
             onTap: () {
               ref.read(keywordAlertProvider.notifier).state = null;
-              context.push('/chat/${alert.roomId}');
+              context.go('/chat/${alert.roomId}');
             },
             child: Container(
               width: double.infinity,

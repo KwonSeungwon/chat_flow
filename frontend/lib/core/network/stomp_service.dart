@@ -15,14 +15,26 @@ typedef KickedCallback = void Function(String reason, String? byUserId, String? 
 typedef MutedCallback = void Function(DateTime mutedUntil, String? byUserId, String? byUsername);
 typedef BannedCallback = void Function(String roomId);
 typedef TransientErrorCallback = void Function(String type, String message);
+typedef JoinRejectedCallback = void Function(String roomId, String reason);
+typedef StompClientFactory = StompClient Function(StompConfig config);
 
 class StompService {
+  StompService({StompClientFactory? clientFactory})
+      : _clientFactory = clientFactory ?? _defaultClientFactory;
+
+  static StompClient _defaultClientFactory(StompConfig config) =>
+      StompClient(config: config);
+
+  final StompClientFactory _clientFactory;
   StompClient? _client;
   bool _connected = false;
   bool _manualDisconnect = false;
   int _retryCount = 0;
   static const int _maxRetries = 10;
   Timer? _reconnectTimer;
+  /// Bumped by connect()/disconnect(): a reconnect that awaited a token
+  /// refresh across either must not create a client.
+  int _session = 0;
 
   String? _currentRoomId;
   String? _currentUsername;
@@ -40,6 +52,7 @@ class StompService {
   MutedCallback? _onMuted;
   BannedCallback? _onBanned;
   TransientErrorCallback? _onTransientError;
+  JoinRejectedCallback? _onJoinRejected;
 
   bool get isConnected => _connected;
 
@@ -60,6 +73,7 @@ class StompService {
     MutedCallback? onMuted,
     BannedCallback? onBanned,
     TransientErrorCallback? onTransientError,
+    JoinRejectedCallback? onJoinRejected,
   }) {
     _currentRoomId = roomId;
     _currentUsername = username;
@@ -77,6 +91,9 @@ class StompService {
     _onMuted = onMuted;
     _onBanned = onBanned;
     _onTransientError = onTransientError;
+    _onJoinRejected = onJoinRejected;
+    _session++;
+    _reconnectTimer?.cancel();
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -88,24 +105,49 @@ class StompService {
 
     final wsUrl = resolveStompWsUrl();
 
-    _client = StompClient(
-      config: StompConfig(
+    // Callbacks are bound to this client instance: a deactivated client's
+    // late onWebSocketDone must not flip state or schedule a reconnect for
+    // the client that replaced it.
+    late final StompClient client;
+    bool isCurrent() => identical(_client, client);
+    client = _clientFactory(
+      StompConfig(
         url: wsUrl,
-        onConnect: (frame) => _onConnect(frame),
-        onDisconnect: (frame) => _onDisconnect(),
-        onStompError: (frame) => _onError(),
-        onWebSocketError: (error) => _onError(),
+        // Reconnects are owned by _scheduleReconnect (backoff + fresh token);
+        // the library's fixed-delay reconnect would race it with a stale token.
+        reconnectDelay: Duration.zero,
+        onConnect: (frame) {
+          if (isCurrent()) _onConnect(frame);
+        },
+        onDisconnect: (frame) {
+          if (isCurrent()) _onDisconnect();
+        },
+        onWebSocketDone: () {
+          if (isCurrent()) _onDisconnect();
+        },
+        onStompError: (frame) {
+          if (isCurrent()) _onError();
+        },
+        onWebSocketError: (error) {
+          if (isCurrent()) _onError();
+        },
         heartbeatIncoming: const Duration(seconds: 10),
         heartbeatOutgoing: const Duration(seconds: 10),
+        // Browsers cannot set WS handshake headers, so the STOMP CONNECT
+        // frame header is the only auth path on web; the server requires it
+        // on every platform.
+        stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
       ),
     );
-    _client!.activate();
+    _client = client;
+    client.activate();
   }
 
   void _onConnect(StompFrame frame) {
     _connected = true;
     _retryCount = 0;
+    _reconnectTimer?.cancel();
     _onConnectionChanged?.call(true);
 
     // Subscribe to room messages
@@ -263,6 +305,15 @@ class StompService {
             _onBanned?.call(bannedRoomId);
           } else if (type == 'MUTED') {
             _onTransientError?.call(type!, '음소거 상태에서는 메시지를 보낼 수 없습니다.');
+          } else if (type == 'NOT_A_MEMBER' &&
+              data['operation']?.toString() == 'addUser') {
+            // Join refused: stop reconnecting, or every reconnect re-sends
+            // addUser and gets refused again.
+            final roomId = data['roomId']?.toString() ?? _currentRoomId ?? '';
+            final reason = data['reason']?.toString() ?? '';
+            final onJoinRejected = _onJoinRejected;
+            disconnect();
+            onJoinRejected?.call(roomId, reason);
           } else if (type == 'NOT_A_MEMBER') {
             _onTransientError?.call(type!, '이 채팅방의 멤버가 아닙니다.');
           } else {
@@ -299,15 +350,19 @@ class StompService {
   }
 
   void _scheduleReconnect() {
+    // onWebSocketError and onWebSocketDone both fire for one drop.
+    if (_reconnectTimer?.isActive ?? false) return;
     if (_retryCount >= _maxRetries) return;
     final delay = Duration(seconds: (1 << _retryCount).clamp(1, 30));
     _retryCount++;
     _reconnectTimer?.cancel();
+    final session = _session;
     _reconnectTimer = Timer(delay, () async {
       if (!_manualDisconnect && _currentToken != null) {
         // Refresh token from secure storage before reconnecting
         if (_tokenProvider != null) {
           final freshToken = await _tokenProvider!();
+          if (_manualDisconnect || session != _session) return;
           if (freshToken != null) _currentToken = freshToken;
         }
         _doConnect(_currentToken!);
@@ -350,6 +405,7 @@ class StompService {
 
   void disconnect() {
     _manualDisconnect = true;
+    _session++;
     _reconnectTimer?.cancel();
     _client?.deactivate();
     _connected = false;
@@ -369,6 +425,7 @@ class StompService {
     _onMuted = null;
     _onBanned = null;
     _onTransientError = null;
+    _onJoinRejected = null;
   }
 
   void dispose() {

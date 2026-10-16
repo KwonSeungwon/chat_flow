@@ -17,6 +17,11 @@ typedef RoomUpdateCallback = void Function(
 /// (e.g. /user/queue/room-updates for unread increments).
 /// Separate from per-room StompService to avoid lifecycle coupling.
 class AppStompService {
+  AppStompService({StompClient Function(StompConfig config)? clientFactory})
+      : _clientFactory =
+            clientFactory ?? ((config) => StompClient(config: config));
+
+  final StompClient Function(StompConfig config) _clientFactory;
   StompClient? _client;
   bool _connected = false;
   bool _manualDisconnect = false;
@@ -35,7 +40,13 @@ class AppStompService {
     required String token,
     required RoomUpdateCallback onRoomUpdate,
   }) {
-    if (_connected && _userId == userId) return;
+    if (_connected && _userId == userId) {
+      // Same user, live socket: keep it, but the latest caller's callback
+      // and token win (the previous owner may be gone).
+      _onRoomUpdate = onRoomUpdate;
+      _token = token;
+      return;
+    }
     disconnect();
     _userId = userId;
     _token = token;
@@ -50,19 +61,39 @@ class AppStompService {
 
     final url = resolveStompWsUrl();
 
-    _client = StompClient(
-      config: StompConfig(
+    // Callbacks are bound to this client instance so a deactivated client's
+    // late onWebSocketDone cannot schedule a reconnect over its replacement.
+    late final StompClient client;
+    bool isCurrent() => identical(_client, client);
+    client = _clientFactory(
+      StompConfig(
         url: url,
+        // Reconnects are owned by _scheduleReconnect (backoff).
+        reconnectDelay: Duration.zero,
+        // Browsers cannot set WS handshake headers; the STOMP CONNECT frame
+        // header is the auth path the server requires on every platform.
+        stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
-        onConnect: _onConnect,
-        onDisconnect: (_) => _onDisconnect(),
+        onConnect: (frame) {
+          if (isCurrent()) _onConnect(frame);
+        },
+        onDisconnect: (_) {
+          if (isCurrent()) _onDisconnect();
+        },
+        onWebSocketDone: () {
+          if (isCurrent()) _onDisconnect();
+        },
         onStompError: (f) => debugPrint('[AppSTOMP] Error: ${f.body}'),
-        onWebSocketError: (e) => debugPrint('[AppSTOMP] WS error: $e'),
+        onWebSocketError: (e) {
+          debugPrint('[AppSTOMP] WS error: $e');
+          if (isCurrent()) _onDisconnect();
+        },
         heartbeatIncoming: const Duration(seconds: 15),
         heartbeatOutgoing: const Duration(seconds: 15),
       ),
     );
-    _client!.activate();
+    _client = client;
+    client.activate();
   }
 
   void _onConnect(StompFrame frame) {
@@ -106,6 +137,8 @@ class AppStompService {
   }
 
   void _scheduleReconnect() {
+    // onWebSocketError and onWebSocketDone both fire for one drop.
+    if (_reconnectTimer?.isActive ?? false) return;
     if (_retryCount >= _maxRetries) return;
     final delay = Duration(seconds: (1 << _retryCount).clamp(2, 60));
     _retryCount++;

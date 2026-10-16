@@ -17,6 +17,7 @@ import 'core/theme/font_scale_provider.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/auth_provider.dart';
 import 'features/chat/chat_rooms_provider.dart';
+import 'features/chat/state/room_update_listener.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -127,6 +128,9 @@ class ChatFlowApp extends ConsumerWidget {
             .values
             .fold<int>(0, (sum, c) => sum + c))
         : 'ChatFlow';
+
+    // App-level STOMP (unread increments) follows the signed-in user.
+    ref.watch(roomUpdateListenerProvider);
 
     // On logout, clear unread counts so the tab badge doesn't linger on the
     // login screen. Listens for auth transitions from authenticated → not.

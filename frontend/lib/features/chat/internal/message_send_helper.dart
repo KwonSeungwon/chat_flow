@@ -75,7 +75,13 @@ class MessageSendHelper {
     setState(getCurrentState().copyWith(messages: [...getCurrentState().messages, localMsg]));
     if (stompService.isConnected) {
       final sendPayload = Map<String, dynamic>.from(msg)..remove('_localId');
-      stompService.sendMessage(sendPayload);
+      try {
+        stompService.sendMessage(sendPayload);
+      } catch (_) {
+        // Socket died between the isConnected check and the write
+        // (StompBadStateException): queue it for the reconnect flush.
+        offlineQueue.enqueue(msg);
+      }
     } else {
       offlineQueue.enqueue(msg);
     }
