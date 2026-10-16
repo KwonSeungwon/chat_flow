@@ -66,4 +66,4 @@
 
 ### 배포
 
-develop 머지 → develop-build → 3개 서비스 태그 고정 → DB 백업 → helm upgrade(V20) → CF 퍼지 → QA E2E(로그인 화면, 가입에 직군 없음, 방 만들기에 인수인계 없음, 채팅 송수신, 월드) → 아이콘·탭 제목 확인. 후속: `users.role`·`allowed_roles`·`priority` 컬럼 DROP 릴리스.
+develop 머지 → develop-build → 3개 서비스 태그 고정 → DB 백업 → helm upgrade(V20) → CF 퍼지 → QA E2E(로그인 화면, 가입에 직군 없음, 방 만들기에 인수인계 없음, 채팅 송수신, 월드) → 아이콘·탭 제목 확인. 후속: `users.role`·`allowed_roles`·`priority` 컬럼 DROP 릴리스. 이 마이그레이션에서 V20의 정규화(HANDOFF→GENERAL, PATIENT_CARD·SBAR 삭제)를 한 번 더 돌린다(롤링 중 옛 파드가 쓴 행 정리).
