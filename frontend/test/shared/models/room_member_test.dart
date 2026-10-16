@@ -45,21 +45,14 @@ void main() {
       });
       expect(member.mutedUntil, isNotNull);
       // 타임존 없는 서버 시각은 UTC로 해석한다.
-      expect(
-          member.mutedUntil!.toUtc(), DateTime.utc(2099, 12, 31, 23, 59, 59));
+      expect(member.mutedUntil!.toUtc(), DateTime.utc(2099, 12, 31, 23, 59, 59));
     });
 
     test('naive mutedUntil is UTC, offset mutedUntil is respected', () {
       final naive = RoomMember.fromJson({
-        'userId': 'u',
-        'username': 'n',
-        'mutedUntil': '2099-01-01T00:00:00'
-      });
+        'userId': 'u', 'username': 'n', 'mutedUntil': '2099-01-01T00:00:00'});
       final offset = RoomMember.fromJson({
-        'userId': 'u',
-        'username': 'n',
-        'mutedUntil': '2099-01-01T09:00:00+09:00'
-      });
+        'userId': 'u', 'username': 'n', 'mutedUntil': '2099-01-01T09:00:00+09:00'});
       expect(naive.mutedUntil!.isAtSameMomentAs(offset.mutedUntil!), isTrue);
     });
 

@@ -8,14 +8,13 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
         home: Scaffold(
-          body: Builder(
-              builder: (ctx) => TextButton(
-                    onPressed: () => showDialog(
-                      context: ctx,
-                      builder: (_) => const ChangePasswordDialog(),
-                    ),
-                    child: const Text('open'),
-                  )),
+          body: Builder(builder: (ctx) => TextButton(
+            onPressed: () => showDialog(
+              context: ctx,
+              builder: (_) => const ChangePasswordDialog(),
+            ),
+            child: const Text('open'),
+          )),
         ),
       ),
     ));
@@ -33,14 +32,13 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
         home: Scaffold(
-          body: Builder(
-              builder: (ctx) => TextButton(
-                    onPressed: () => showDialog(
-                      context: ctx,
-                      builder: (_) => const ChangePasswordDialog(),
-                    ),
-                    child: const Text('open'),
-                  )),
+          body: Builder(builder: (ctx) => TextButton(
+            onPressed: () => showDialog(
+              context: ctx,
+              builder: (_) => const ChangePasswordDialog(),
+            ),
+            child: const Text('open'),
+          )),
         ),
       ),
     ));
@@ -60,14 +58,13 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
         home: Scaffold(
-          body: Builder(
-              builder: (ctx) => TextButton(
-                    onPressed: () => showDialog(
-                      context: ctx,
-                      builder: (_) => const ChangePasswordDialog(),
-                    ),
-                    child: const Text('open'),
-                  )),
+          body: Builder(builder: (ctx) => TextButton(
+            onPressed: () => showDialog(
+              context: ctx,
+              builder: (_) => const ChangePasswordDialog(),
+            ),
+            child: const Text('open'),
+          )),
         ),
       ),
     ));

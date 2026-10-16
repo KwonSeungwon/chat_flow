@@ -127,8 +127,7 @@ void main() {
     final state = _stateOf(notifier);
     await notifier.joinRoom('room-1');
     // A message older than every history message (e.g. a fetched thread reply).
-    notifier
-        .mergeMessage(ChatMessage.fromJson(_msg('s1', '2026-10-16T09:00:00')));
+    notifier.mergeMessage(ChatMessage.fromJson(_msg('s1', '2026-10-16T09:00:00')));
     expect(state().messages.first.messageId, 's1');
     await notifier.loadMoreHistory('room-1');
 

@@ -28,8 +28,8 @@ void main() {
       );
 
   /// Text.rich — 스팬으로 쪼개져 하이라이트가 붙은 상태.
-  final highlighted = find.byWidgetPredicate((w) =>
-      w is Text && w.data == null && w.textSpan?.toPlainText() == content);
+  final highlighted = find.byWidgetPredicate(
+      (w) => w is Text && w.data == null && w.textSpan?.toPlainText() == content);
 
   /// 평문 Text — 하이라이트 없음.
   final plain = find.byWidgetPredicate((w) => w is Text && w.data == content);
@@ -42,14 +42,16 @@ void main() {
       expect(plain, findsNothing);
     });
 
-    testWidgets('전달된 메시지는 강조하지 않는다 — 서버가 멘션 행을 만들지 않는다', (tester) async {
+    testWidgets('전달된 메시지는 강조하지 않는다 — 서버가 멘션 행을 만들지 않는다',
+        (tester) async {
       await tester.pumpWidget(wrap(message(forwardedFrom: 'carol: $content')));
 
       expect(plain, findsOneWidget);
       expect(highlighted, findsNothing);
     });
 
-    testWidgets('공백뿐인 forwardedFrom은 전달이 아니다 — 서버 판정과 같아야 한다', (tester) async {
+    testWidgets('공백뿐인 forwardedFrom은 전달이 아니다 — 서버 판정과 같아야 한다',
+        (tester) async {
       // MentionTargets는 isBlank()로 걸러 멘션 행을 만든다. 여기서 전달로 보면
       // 알림은 오는데 버블에는 아무 표시가 없다.
       await tester.pumpWidget(wrap(message(forwardedFrom: '   ')));

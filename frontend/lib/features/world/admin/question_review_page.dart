@@ -47,6 +47,7 @@ class _QuestionListState extends ConsumerState<_QuestionList>
   bool _forbidden = false;
   String? _error;
   int _seenRevision = 0;
+  int _generation = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -59,19 +60,25 @@ class _QuestionListState extends ConsumerState<_QuestionList>
   }
 
   Future<void> _reload() async {
-    _items.clear();
-    _total = 0;
-    _exhausted = false;
-    _forbidden = false;
+    _generation++;
+    setState(() {
+      _items.clear();
+      _total = 0;
+      _exhausted = false;
+      _forbidden = false;
+      _loading = false;
+    });
     await _load();
   }
 
   /// Items are ordered by id, so the loaded items are a prefix of the server
   /// list even after local removals. Fetch the page that contains offset
   /// `_items.length` and merge by id, which avoids skipping or repeating
-  /// items when earlier ones were removed.
+  /// items when earlier ones were removed. Responses from an older
+  /// generation (a reload started meanwhile) are ignored.
   Future<void> _load() async {
     if (_loading) return;
+    final gen = _generation;
     setState(() {
       _loading = true;
       _error = null;
@@ -81,7 +88,7 @@ class _QuestionListState extends ConsumerState<_QuestionList>
           status: widget.status,
           page: _items.length ~/ _pageSize,
           size: _pageSize);
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       setState(() {
         final known = _items.map((e) => e.id).toSet();
         final fresh = res.items.where((e) => !known.contains(e.id)).toList();
@@ -90,7 +97,7 @@ class _QuestionListState extends ConsumerState<_QuestionList>
         _exhausted = fresh.isEmpty;
       });
     } on AdminGameApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       setState(() {
         if (e.isForbidden) {
           _forbidden = true;
@@ -99,7 +106,7 @@ class _QuestionListState extends ConsumerState<_QuestionList>
         }
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && gen == _generation) setState(() => _loading = false);
     }
   }
 

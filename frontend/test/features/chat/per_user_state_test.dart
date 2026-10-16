@@ -72,11 +72,7 @@ void main() {
     addTearDown(sub.close);
     await loginAs('alice');
     await container.read(bookmarksProvider.notifier).add(BookmarkEntry(
-        messageId: 'm1',
-        roomId: 'r',
-        username: 'a',
-        content: 'c',
-        timestamp: 't'));
+        messageId: 'm1', roomId: 'r', username: 'a', content: 'c', timestamp: 't'));
     expect(container.read(bookmarksProvider), hasLength(1));
 
     await loginAs('bob');
@@ -90,9 +86,7 @@ void main() {
     final sub = container.listen(roomKeywordsProvider, (_, __) {});
     addTearDown(sub.close);
     await loginAs('alice');
-    await container
-        .read(roomKeywordsProvider.notifier)
-        .setKeywords('r1', ['urgent']);
+    await container.read(roomKeywordsProvider.notifier).setKeywords('r1', ['urgent']);
 
     await loginAs('bob');
     expect(container.read(roomKeywordsProvider), isEmpty);
@@ -133,8 +127,7 @@ void main() {
     await container.read(roomKeywordsProvider.notifier).setKeywords('r', ['y']);
     final all = await const FlutterSecureStorage().readAll();
     expect(all.keys.where((k) => k.startsWith('chatflow.roomKeywords')),
-        ['chatflow.roomKeywords'],
-        reason: 'legacy key untouched, nothing new written');
+        ['chatflow.roomKeywords'], reason: 'legacy key untouched, nothing new written');
     expect(all['chatflow.roomKeywords'], '{"r":["x"]}');
   });
 }

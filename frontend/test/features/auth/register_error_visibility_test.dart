@@ -118,8 +118,7 @@ void main() {
 
   /// LoginPage는 가입 성공 시 GoRouterState.of(context)를 읽으므로 라우터가 있어야
   /// 성공 경로를 태울 수 있다. 실패 경로는 라우터 없이도 돌지만 하나로 통일한다.
-  Future<void> pumpLoginPage(WidgetTester tester,
-      {DioClient? dioClient}) async {
+  Future<void> pumpLoginPage(WidgetTester tester, {DioClient? dioClient}) async {
     // 기본 800x600 뷰포트에선 회원가입 버튼이 화면 밖(y≈684)이라 탭이 빗나간다.
     tester.view.physicalSize = const Size(1000, 2200);
     tester.view.devicePixelRatio = 1.0;
@@ -216,13 +215,8 @@ void main() {
 
       await submit(tester);
 
-      expect(
-          okAdapter.requestedPaths,
-          containsAllInOrder([
-            '/api/auth/register',
-            '/api/files/upload',
-            '/api/auth/profile'
-          ]));
+      expect(okAdapter.requestedPaths, containsAllInOrder(
+          ['/api/auth/register', '/api/files/upload', '/api/auth/profile']));
       expect(find.text('CHAT'), findsOneWidget, reason: '가입 성공 → /chat 이동');
     });
 
@@ -238,8 +232,7 @@ void main() {
 
       await submit(tester);
 
-      expect(
-          okAdapter.sentBodies['/api/auth/profile'],
+      expect(okAdapter.sentBodies['/api/auth/profile'],
           isA<Map>().having((m) => m['profileImageUrl'], 'profileImageUrl',
               '/api/files/93488eec-86c3-44ff-a7e6-b3b6b80d1aac'));
     });

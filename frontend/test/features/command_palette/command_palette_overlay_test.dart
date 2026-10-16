@@ -31,6 +31,7 @@ class _MockCommandPaletteNotifier extends StateNotifier<CommandPaletteState>
     final matched = all.where((a) => a.matchScore(query) > 0).toList();
     state = CommandPaletteState(query: query, results: matched);
   }
+
 }
 
 // ---------------------------------------------------------------------------

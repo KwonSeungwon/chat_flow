@@ -30,7 +30,8 @@ void main() {
     });
 
     test('Jackson 배열 형식은 UTC', () {
-      expect(parseServerDateTime('[2026, 5, 7, 14, 30, 0, 123000000]')!.toUtc(),
+      expect(
+          parseServerDateTime('[2026, 5, 7, 14, 30, 0, 123000000]')!.toUtc(),
           DateTime.utc(2026, 5, 7, 14, 30, 0, 123));
     });
 

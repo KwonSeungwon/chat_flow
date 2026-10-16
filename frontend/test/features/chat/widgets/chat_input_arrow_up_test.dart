@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chatflow/features/chat/widgets/chat_input.dart';
 
-Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _wrap(Widget child) =>
+    MaterialApp(home: Scaffold(body: child));
 
 void main() {
   group('ChatInput ArrowUp edit-last-message', () {
-    testWidgets('ArrowUp on empty input calls onEditLastMessage',
-        (tester) async {
+    testWidgets('ArrowUp on empty input calls onEditLastMessage', (tester) async {
       var called = false;
 
       await tester.pumpWidget(_wrap(
@@ -30,8 +30,7 @@ void main() {
       expect(called, isTrue);
     });
 
-    testWidgets('ArrowUp with text in input does NOT call onEditLastMessage',
-        (tester) async {
+    testWidgets('ArrowUp with text in input does NOT call onEditLastMessage', (tester) async {
       var called = false;
 
       await tester.pumpWidget(_wrap(
@@ -75,8 +74,7 @@ void main() {
       // No crash = pass
     });
 
-    testWidgets('ArrowUp with Shift held does NOT call onEditLastMessage',
-        (tester) async {
+    testWidgets('ArrowUp with Shift held does NOT call onEditLastMessage', (tester) async {
       var called = false;
 
       await tester.pumpWidget(_wrap(

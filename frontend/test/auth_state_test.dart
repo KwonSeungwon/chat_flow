@@ -55,8 +55,7 @@ void main() {
 
     test('profileImageUrl을 업데이트할 수 있다', () {
       final original = AuthState(token: 't1', username: 'bob');
-      final updated =
-          original.copyWith(profileImageUrl: 'https://cdn/avatar.jpg');
+      final updated = original.copyWith(profileImageUrl: 'https://cdn/avatar.jpg');
       expect(updated.profileImageUrl, 'https://cdn/avatar.jpg');
       expect(updated.token, 't1');
       expect(updated.username, 'bob');

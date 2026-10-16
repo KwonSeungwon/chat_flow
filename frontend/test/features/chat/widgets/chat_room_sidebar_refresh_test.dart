@@ -12,7 +12,8 @@ class _MockChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>>
     implements ChatRoomsNotifier {
   int fetchCallCount = 0;
 
-  _MockChatRoomsNotifier(List<ChatRoom> rooms) : super(AsyncValue.data(rooms));
+  _MockChatRoomsNotifier(List<ChatRoom> rooms)
+      : super(AsyncValue.data(rooms));
 
   @override
   Future<void> fetchRooms() async {
@@ -42,8 +43,7 @@ class _MockChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>>
     bool isPrivate = false,
     String? password,
     String? allowedRoles,
-  }) async =>
-      null;
+  }) async => null;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,11 +81,13 @@ class _RefreshableRoomList extends ConsumerWidget {
             );
           }
           return RefreshIndicator(
-            onRefresh: () => ref.read(chatRoomsProvider.notifier).fetchRooms(),
+            onRefresh: () =>
+                ref.read(chatRoomsProvider.notifier).fetchRooms(),
             child: ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               itemCount: rooms.length,
-              itemBuilder: (_, i) => ListTile(title: Text(rooms[i].name)),
+              itemBuilder: (_, i) =>
+                  ListTile(title: Text(rooms[i].name)),
             ),
           );
         },
@@ -96,13 +98,12 @@ class _RefreshableRoomList extends ConsumerWidget {
 
 void main() {
   group('Sidebar pull-to-refresh pattern', () {
-    testWidgets('RefreshIndicator is present when rooms list is non-empty',
+    testWidgets(
+        'RefreshIndicator is present when rooms list is non-empty',
         (tester) async {
       final rooms = [
-        ChatRoom(
-            id: '1', name: 'General', participantCount: 3, maxParticipants: 10),
-        ChatRoom(
-            id: '2', name: 'Random', participantCount: 1, maxParticipants: 10),
+        ChatRoom(id: '1', name: 'General', participantCount: 3, maxParticipants: 10),
+        ChatRoom(id: '2', name: 'Random', participantCount: 1, maxParticipants: 10),
       ];
       final notifier = _MockChatRoomsNotifier(rooms);
 
@@ -121,7 +122,8 @@ void main() {
       expect(find.text('Random'), findsOneWidget);
     });
 
-    testWidgets('RefreshIndicator is present when rooms list is empty',
+    testWidgets(
+        'RefreshIndicator is present when rooms list is empty',
         (tester) async {
       final notifier = _MockChatRoomsNotifier([]);
 
@@ -141,8 +143,7 @@ void main() {
 
     testWidgets('pull-to-refresh triggers fetchRooms', (tester) async {
       final rooms = [
-        ChatRoom(
-            id: '1', name: 'Room A', participantCount: 2, maxParticipants: 10),
+        ChatRoom(id: '1', name: 'Room A', participantCount: 2, maxParticipants: 10),
       ];
       final notifier = _MockChatRoomsNotifier(rooms);
 
