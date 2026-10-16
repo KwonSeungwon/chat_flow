@@ -11,6 +11,7 @@ import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.ChatMessageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -110,12 +111,13 @@ public class RoomMessageController {
 
     public record SendMessageRequest(
             @NotBlank(message = "content는 필수입니다")
+            @Size(max = 10_000, message = "content는 10,000자를 초과할 수 없습니다")
             String content,
 
-            String parentMessageId,
-            String forwardedFrom,
-            String fileUrl,
-            String fileName,
-            String fileContentType
+            @Size(max = 36) String parentMessageId,
+            @Size(max = 200) String forwardedFrom,
+            @Size(max = 512) String fileUrl,
+            @Size(max = 255) String fileName,
+            @Size(max = 100) String fileContentType
     ) {}
 }

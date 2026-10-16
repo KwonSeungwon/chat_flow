@@ -162,6 +162,20 @@ class RoomBanControllerTest {
         }
 
         @Test
+        void banUser_overlongReasonOrUserId_returns400() throws Exception {
+            for (String body : new String[]{
+                    "{\"userId\":\"" + TARGET_ID + "\",\"reason\":\"" + "r".repeat(256) + "\"}",
+                    "{\"userId\":\"" + "u".repeat(37) + "\",\"reason\":\"spam\"}"}) {
+                mockMvc.perform(post("/api/chat/rooms/{roomId}/bans", ROOM_ID)
+                                .header("X-User-Id", CALLER_ID)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andExpect(status().isBadRequest());
+            }
+            verify(roomBanService, never()).banUser(anyString(), anyString(), anyString(), any());
+        }
+
+        @Test
         void banUser_permissionDenied_returns403() throws Exception {
             doThrow(new PermissionDeniedException("Members cannot ban"))
                     .when(roomBanService).banUser(anyString(), anyString(), anyString(), any());

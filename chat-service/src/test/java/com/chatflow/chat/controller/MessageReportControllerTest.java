@@ -149,6 +149,16 @@ class MessageReportControllerTest {
         }
 
         @Test
+        void submitReport_overlongComment_returns400() throws Exception {
+            mockMvc.perform(post("/api/chat/messages/{messageId}/reports", MESSAGE_ID)
+                            .header("X-User-Id", CALLER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"SPAM\",\"comment\":\"" + "c".repeat(501) + "\"}"))
+                    .andExpect(status().isBadRequest());
+            verifyNoInteractions(messageReportService);
+        }
+
+        @Test
         void submitReport_invalidReason_returns400() throws Exception {
             mockMvc.perform(post("/api/chat/messages/{messageId}/reports", MESSAGE_ID)
                             .header("X-User-Id", CALLER_ID)

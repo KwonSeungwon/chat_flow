@@ -8,6 +8,7 @@ import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.room.RoomBanService;
 import com.chatflow.common.dto.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -57,7 +58,7 @@ public class RoomBanController {
     @PostMapping
     public ResponseEntity<ApiResponse<BanDto>> banUser(
             @PathVariable String roomId,
-            @RequestBody BanRequest request,
+            @Valid @RequestBody BanRequest request,
             @AuthenticatedUser String callerUserId) {
         if (request.userId() == null || request.userId().isBlank()) {
             throw new IllegalArgumentException("userId는 필수입니다.");

@@ -9,6 +9,7 @@ import com.chatflow.chat.entity.ReportReason;
 import com.chatflow.chat.entity.ReportStatus;
 import com.chatflow.chat.service.moderation.MessageReportService;
 import com.chatflow.common.dto.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -33,7 +34,7 @@ public class MessageReportController {
     @PostMapping("/api/chat/messages/{messageId}/reports")
     public ResponseEntity<ApiResponse<Map<String, Long>>> submitReport(
             @PathVariable String messageId,
-            @RequestBody ReportSubmitRequest request,
+            @Valid @RequestBody ReportSubmitRequest request,
             @AuthenticatedUser String callerUserId) {
         if (request.reason() == null || request.reason().isBlank()) {
             throw new IllegalArgumentException("reason은 필수입니다.");

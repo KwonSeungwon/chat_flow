@@ -20,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -92,6 +93,25 @@ class RoomMessageControllerTest {
                             .header("X-User-Id", "user-1"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+
+        @Test
+        void returns_400_when_fields_exceed_their_column_lengths() throws Exception {
+            for (Map<String, String> body : List.of(
+                    Map.of("content", "x".repeat(10_001)),
+                    Map.of("content", "hi", "forwardedFrom", "f".repeat(201)),
+                    Map.of("content", "hi", "parentMessageId", "p".repeat(37)),
+                    Map.of("content", "hi", "fileUrl", "/api/files/" + "u".repeat(502)),
+                    Map.of("content", "hi", "fileUrl", "/api/files/a", "fileName", "n".repeat(256)),
+                    Map.of("content", "hi", "fileUrl", "/api/files/a", "fileContentType", "t".repeat(101)))) {
+                mockMvc.perform(post("/api/chat/rooms/r1/messages")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(body))
+                                .header("X-User-Id", "user-1"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            }
+            verify(messageSenderService, never()).send(any());
         }
 
         @Test
