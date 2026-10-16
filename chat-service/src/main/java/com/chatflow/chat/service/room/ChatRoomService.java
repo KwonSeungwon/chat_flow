@@ -66,6 +66,15 @@ public class ChatRoomService {
         return rooms;
     }
 
+    /**
+     * Rooms the user may see in the room list: non-DM non-private rooms plus
+     * every room the user is a member of (RoomAccessPolicy#isVisible, as a
+     * single query). Uncached — the result is per-user.
+     */
+    public List<ChatRoom> getVisibleRooms(String userId) {
+        return chatRoomRepository.findVisibleOrderByLastActivity(userId);
+    }
+
     public Optional<ChatRoom> getRoom(String id) {
         if (!redisHealth.isCircuitOpen()) {
             try {
@@ -117,29 +126,13 @@ public class ChatRoomService {
         return saved;
     }
 
-    public ChatRoom getOrCreateByExternalId(String externalId, String name, String description) {
-        return chatRoomRepository.findByExternalId(externalId)
-                .orElseGet(() -> {
-                    ChatRoom newRoom = ChatRoom.builder()
-                            .id("ext_" + UUID.randomUUID().toString())
-                            .externalId(externalId)
-                            .name(name != null ? name : externalId)
-                            .description(description)
-                            .color("#10b981")
-                            .participantCount(0)
-                            .maxParticipants(MAX_PARTICIPANTS)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                    log.info("Auto-created room for external ID: {}", externalId);
-                    return chatRoomRepository.save(newRoom);
-                });
-    }
-
     public boolean verifyRoomPassword(String roomId, String password) {
         return chatRoomRepository.findById(roomId)
                 .map(room -> {
                     String stored = room.getPassword();
-                    if (stored == null || stored.isEmpty()) return true;
+                    // A room without a password cannot be "verified" — returning true
+                    // here used to hand out membership to private rooms and DMs (S-2).
+                    if (stored == null || stored.isEmpty() || password == null) return false;
                     // BCrypt 해시 감지 ($2a$, $2b$, $2y$)
                     if (stored.startsWith("$2")) {
                         return passwordEncoder.matches(password, stored);

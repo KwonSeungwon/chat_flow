@@ -4,6 +4,7 @@ import com.chatflow.chat.service.RoomPermissionService;
 
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.*;
+import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.MessageNotFoundException;
 import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.exception.ReportRateLimitException;
@@ -107,6 +108,26 @@ class MessageReportServiceTest {
 
     @Nested
     class SubmitReportTests {
+
+        @BeforeEach
+        void reporterIsRoomMember() {
+            // Default: every reporter in these tests is a member of ROOM_ID.
+            lenient().when(roomMemberRepository.existsByRoomIdAndUserId(eq(ROOM_ID), anyString()))
+                    .thenReturn(true);
+        }
+
+        @Test
+        void submitReport_nonMember_throwsForbidden_andPersistsNothing() {
+            ChatMessageEntity msg = message(MESSAGE_ID, ROOM_ID, AUTHOR_USER_ID, "author", "bad content");
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, "outsider")).thenReturn(false);
+
+            assertThrows(ForbiddenException.class,
+                    () -> messageReportService.submitReport(
+                            MESSAGE_ID, "outsider", ReportReason.SPAM, null));
+
+            verify(messageReportRepository, never()).save(any());
+        }
 
         @Test
         void submitReport_happyPath_returnsIdAndPersists() {

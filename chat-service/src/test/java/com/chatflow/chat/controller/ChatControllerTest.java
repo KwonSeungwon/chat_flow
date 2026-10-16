@@ -197,6 +197,47 @@ class ChatControllerTest {
     }
 
     @Test
+    @DisplayName("addUser records chatRoomId on the session only when the join is accepted")
+    void addUser_records_session_room_only_on_accepted_join() {
+        ChatMessage message = buildChatMessage();
+        when(chatService.addUser(message, "session-1")).thenReturn(true);
+
+        chatController.addUser(message, headerAccessor);
+
+        org.assertj.core.api.Assertions.assertThat(
+                headerAccessor.getSessionAttributes().get("chatRoomId")).isEqualTo(ROOM_ID);
+    }
+
+    @Test
+    @DisplayName("addUser refused by the access policy leaves no chatRoomId on the session")
+    void addUser_refused_does_not_record_session_room() {
+        ChatMessage message = buildChatMessage();
+        when(chatService.addUser(message, "session-1")).thenReturn(false);
+
+        chatController.addUser(message, headerAccessor);
+
+        // Without a session room, disconnect cleanup cannot emit LEAVE for a room
+        // the user never entered.
+        org.assertj.core.api.Assertions.assertThat(
+                headerAccessor.getSessionAttributes()).doesNotContainKey("chatRoomId");
+    }
+
+    @Test
+    @DisplayName("addUser without a session identity drops the payload userId (no spoofed join)")
+    void addUser_withoutSessionIdentity_clearsPayloadUserId() {
+        SimpMessageHeaderAccessor anonymous = SimpMessageHeaderAccessor.create();
+        anonymous.setSessionId("session-anon");
+        anonymous.setSessionAttributes(new HashMap<>());
+        ChatMessage message = buildChatMessage();
+        message.setUserId("victim-id");
+
+        chatController.addUser(message, anonymous);
+
+        org.assertj.core.api.Assertions.assertThat(message.getUserId()).isNull();
+        verify(chatService).addUser(message, "session-anon");
+    }
+
+    @Test
     @DisplayName("addUser overwrites message userId/username from session attributes")
     void addUser_overwrites_userId_username_from_session() {
         ChatMessage message = new ChatMessage();
@@ -325,7 +366,7 @@ class ChatControllerTest {
                 .roomId(ROOM_ID).userId(USER_ID).username(USERNAME)
                 .role(RoomRole.MEMBER).joinedAt(LocalDateTime.now()).build();
         when(membershipChecker.findMember(ROOM_ID, USER_ID))
-                .thenReturn(Optional.of(new MembershipResult(memberEntity, false)));
+                .thenReturn(Optional.of(new MembershipResult(memberEntity)));
         when(validator.validate(any(ChatMessage.class))).thenReturn(Set.of());
         return memberEntity;
     }

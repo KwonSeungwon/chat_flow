@@ -11,6 +11,7 @@ import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.RoomPermissionService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.chat.service.room.DmRoomService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
 import com.chatflow.chat.result.ChatErrorCode;
@@ -53,14 +54,20 @@ public class ChatRoomController {
     private final StringRedisTemplate redisTemplate;
     private final RoomVisibilityService roomVisibilityService;
     private final ChatRoomMapper chatRoomMapper;
+    private final RoomAccessPolicy roomAccessPolicy;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getAllRooms(
             @AuthenticatedUser(required = false) String userId) {
-        List<ChatRoom> rooms = chatRoomService.getAllRooms();
         if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(rooms)));
+            // Anonymous: the shared cached list, minus DMs and private rooms.
+            List<ChatRoom> publicRooms = chatRoomService.getAllRooms().stream()
+                    .filter(r -> roomAccessPolicy.isVisible(r, null))
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(publicRooms)));
         }
+        // DMs of others and private rooms the caller is not in are never listed.
+        List<ChatRoom> rooms = chatRoomService.getVisibleRooms(userId);
         Map<String, Instant> hiddenMap = roomVisibilityService.getHiddenMap(userId);
         if (hiddenMap.isEmpty()) {
             return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(rooms)));
@@ -104,33 +111,38 @@ public class ChatRoomController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(chatRoomMapper.toResponse(saved), "채팅방이 생성되었습니다."));
     }
 
-    @PostMapping("/get-or-create")
-    public ResponseEntity<ApiResponse<ChatRoomResponse>> getOrCreateRoom(@RequestBody GetOrCreateRequest request) {
-        if (request.externalId == null || request.externalId.isBlank()) {
-            return ResponseEntity.badRequest().body(ApiResponse.error("externalId는 필수입니다."));
-        }
-        ChatRoom room = chatRoomService.getOrCreateByExternalId(request.externalId, request.name, request.description);
-        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(room)));
-    }
-
+    @RequireAuth
     @PostMapping("/{roomId}/verify")
     public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
             @PathVariable String roomId,
             @RequestBody VerifyPasswordRequest request,
-            @AuthenticatedUser(required = false) String userId,
+            @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        boolean valid = chatRoomService.verifyRoomPassword(roomId, request.password());
-        if (valid) {
-            // Seed membership so subsequent member-gated endpoints work.
-            if (userId != null && !userId.isBlank()) {
-                roomMembershipService.addMemberIfAbsent(roomId, userId, username);
-            }
-            return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
+        if (room.getRoomType() == RoomType.DIRECT) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("DM 방은 비밀번호로 입장할 수 없습니다."));
+        }
+        if (!chatRoomService.verifyRoomPassword(roomId, request.password())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
+        }
+        // Seed membership so subsequent member-gated endpoints work — via the
+        // policy, which still refuses banned users and private rooms.
+        RoomAccessPolicy.JoinDecision decision = roomMembershipService.grantMembership(
+                roomId, userId, username, RoomAccessPolicy.GrantPath.PASSWORD);
+        if (!decision.allowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(denialMessage(decision.reason())));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
     }
 
+    @RequireMember
     @GetMapping("/{roomId}/participants")
     public ResponseEntity<ApiResponse<List<Map<String, String>>>> getParticipants(
             @PathVariable String roomId) {
@@ -169,9 +181,8 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        // 방장만 삭제 가능 — role-based. createRoom이 생성자를 OWNER로 seed하므로 정상 생성 방은
-        // OWNER 행이 존재. (이 엔드포인트는 @RequireAuth라 RoomMembershipGuard의 레거시 backfill은
-        // 걸리지 않음 — room_members 행이 없는 pre-seed 레거시 방은 데이터 backfill 필요.)
+        // 방장만 삭제 가능 — role-based. createRoom이 생성자를 OWNER로 seed하고,
+        // pre-seed 레거시 방은 Flyway V10/V16이 OWNER 행을 backfill한다.
         roomPermissionService.requireRole(id, userId, RoomRole.OWNER);
         chatRoomService.deleteRoom(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
@@ -226,9 +237,16 @@ public class ChatRoomController {
             @RequestHeader(value = "X-Username", required = false) String username) {
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), body.targetUsername());
         // Seed both DM participants — they may both want to call member-gated
-        // endpoints without sending a STOMP message first.
-        roomMembershipService.addMemberIfAbsent(dm.getId(), userId, username);
-        roomMembershipService.addMemberIfAbsent(dm.getId(), body.targetUserId(), body.targetUsername());
+        // endpoints without sending a STOMP message first. room_members is the
+        // DM participant list RoomAccessPolicy checks.
+        RoomAccessPolicy.JoinDecision self = roomMembershipService.grantMembership(
+                dm.getId(), userId, username, RoomAccessPolicy.GrantPath.DM_CREATE);
+        if (!self.allowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(denialMessage(self.reason())));
+        }
+        roomMembershipService.grantMembership(
+                dm.getId(), body.targetUserId(), body.targetUsername(), RoomAccessPolicy.GrantPath.DM_CREATE);
         return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
     }
 
@@ -242,15 +260,24 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
         }
-        // 방장만 설정 변경 가능 — role-based. createRoom이 생성자를 OWNER로 seed하므로 정상 생성 방은
-        // OWNER 행이 존재. (이 엔드포인트는 @RequireAuth라 RoomMembershipGuard의 레거시 backfill은
-        // 걸리지 않음 — room_members 행이 없는 pre-seed 레거시 방은 데이터 backfill 필요.)
+        // 방장만 설정 변경 가능 — role-based. createRoom이 생성자를 OWNER로 seed하고,
+        // pre-seed 레거시 방은 Flyway V10/V16이 OWNER 행을 backfill한다.
         roomPermissionService.requireRole(roomId, userId, RoomRole.OWNER);
         return ResponseEntity.ok(ApiResponse.ok(
                 chatRoomService.updateRoomSettings(roomId, body.name(), body.description())));
     }
 
-    public record GetOrCreateRequest(String externalId, String name, String description) {}
+    static String denialMessage(RoomAccessPolicy.Denial reason) {
+        if (reason == null) return "채팅방에 입장할 수 없습니다.";
+        return switch (reason) {
+            case ROOM_NOT_FOUND -> "채팅방을 찾을 수 없습니다.";
+            case BANNED -> "이 채팅방에서 차단되었습니다.";
+            case DM_NOT_PARTICIPANT -> "DM 참여자만 입장할 수 있습니다.";
+            case PRIVATE_REQUIRES_INVITE -> "비공개 채팅방은 초대 링크로만 입장할 수 있습니다.";
+            case PASSWORD_REQUIRED -> "비밀번호 인증이 필요한 채팅방입니다.";
+            case ROOM_FULL -> "채팅방이 만석입니다 (최대 10명).";
+        };
+    }
 
     // ── Request records ─────────────────────────────────────────
 

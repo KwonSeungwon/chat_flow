@@ -1,9 +1,7 @@
 package com.chatflow.chat.service.room;
 
-import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
-import com.chatflow.chat.repository.ChatRoomRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.room.RoomMembershipChecker.MembershipResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +24,6 @@ import static org.mockito.Mockito.when;
 class RoomMembershipCheckerTest {
 
     @Mock private RoomMemberRepository roomMemberRepository;
-    @Mock private ChatRoomRepository chatRoomRepository;
 
     private RoomMembershipChecker checker;
 
@@ -35,7 +32,7 @@ class RoomMembershipCheckerTest {
 
     @BeforeEach
     void setUp() {
-        checker = new RoomMembershipChecker(roomMemberRepository, chatRoomRepository);
+        checker = new RoomMembershipChecker(roomMemberRepository);
     }
 
     @Nested
@@ -51,30 +48,9 @@ class RoomMembershipCheckerTest {
         }
 
         @Test
-        @DisplayName("returns true when user is the room creator (legacy bridge)")
-        void roomCreator_returnsTrue() {
+        @DisplayName("room creator without a room_members row is NOT a member (no createdBy bridge)")
+        void roomCreatorWithoutRow_returnsFalse() {
             when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
-            ChatRoom room = ChatRoom.builder().createdBy(USER_ID).build();
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
-
-            assertThat(checker.isMember(ROOM_ID, USER_ID)).isTrue();
-        }
-
-        @Test
-        @DisplayName("returns false when user is neither member nor creator")
-        void notMemberNorCreator_returnsFalse() {
-            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
-            ChatRoom room = ChatRoom.builder().createdBy("someone-else").build();
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
-
-            assertThat(checker.isMember(ROOM_ID, USER_ID)).isFalse();
-        }
-
-        @Test
-        @DisplayName("returns false when room does not exist")
-        void roomNotFound_returnsFalse() {
-            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.empty());
 
             assertThat(checker.isMember(ROOM_ID, USER_ID)).isFalse();
         }
@@ -103,7 +79,7 @@ class RoomMembershipCheckerTest {
     class FindMemberTests {
 
         @Test
-        @DisplayName("returns entity with creatorOnly=false when user has a room_members row")
+        @DisplayName("returns the entity when user has a room_members row")
         void memberRow_returnsEntity() {
             RoomMemberEntity entity = RoomMemberEntity.builder()
                     .roomId(ROOM_ID).userId(USER_ID).username("alice")
@@ -115,41 +91,13 @@ class RoomMembershipCheckerTest {
 
             assertThat(result).isPresent();
             assertThat(result.get().entity()).isSameAs(entity);
-            assertThat(result.get().creatorOnly()).isFalse();
         }
 
         @Test
-        @DisplayName("returns creatorOnly=true with null entity when user is the room creator without a member row")
-        void roomCreator_returnsCreatorOnly() {
+        @DisplayName("returns empty when user has no room_members row (creator or not)")
+        void noRow_returnsEmpty() {
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                     .thenReturn(Optional.empty());
-            ChatRoom room = ChatRoom.builder().createdBy(USER_ID).build();
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
-
-            Optional<MembershipResult> result = checker.findMember(ROOM_ID, USER_ID);
-
-            assertThat(result).isPresent();
-            assertThat(result.get().creatorOnly()).isTrue();
-            assertThat(result.get().entity()).isNull();
-        }
-
-        @Test
-        @DisplayName("returns empty when user is neither member nor creator")
-        void notMemberNorCreator_returnsEmpty() {
-            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
-                    .thenReturn(Optional.empty());
-            ChatRoom room = ChatRoom.builder().createdBy("someone-else").build();
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
-
-            assertThat(checker.findMember(ROOM_ID, USER_ID)).isEmpty();
-        }
-
-        @Test
-        @DisplayName("returns empty when room does not exist")
-        void roomNotFound_returnsEmpty() {
-            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
-                    .thenReturn(Optional.empty());
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.empty());
 
             assertThat(checker.findMember(ROOM_ID, USER_ID)).isEmpty();
         }
@@ -177,7 +125,6 @@ class RoomMembershipCheckerTest {
         void findMember_does_not_call_existsBy() {
             when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                     .thenReturn(Optional.empty());
-            when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.empty());
 
             checker.findMember(ROOM_ID, USER_ID);
 

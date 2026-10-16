@@ -25,19 +25,20 @@ public class ChatService {
      * Processes a message with a pre-resolved room member entity, avoiding a
      * duplicate room_members lookup in the mute gate.
      *
-     * @param resolvedMember the member entity fetched during the membership check,
-     *                       or {@code null} for legacy creator-only membership.
+     * @param resolvedMember the member entity fetched during the membership check;
+     *                       {@code null} skips the mute gate (no member row resolved).
      */
     public void processMessage(ChatMessage message, RoomMemberEntity resolvedMember) {
         messageSenderService.send(message, resolvedMember);
     }
 
-    public void addUser(ChatMessage message) {
-        userPresenceService.join(message);
+    public boolean addUser(ChatMessage message) {
+        return userPresenceService.join(message);
     }
 
-    public void addUser(ChatMessage message, String sessionId) {
-        userPresenceService.join(message, sessionId);
+    /** @return true if the join was accepted (see {@link UserPresenceService#join}). */
+    public boolean addUser(ChatMessage message, String sessionId) {
+        return userPresenceService.join(message, sessionId);
     }
 
     public void removeUser(String roomId, String username) {

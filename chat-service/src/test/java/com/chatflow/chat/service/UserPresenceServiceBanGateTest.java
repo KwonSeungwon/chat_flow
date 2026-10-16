@@ -4,6 +4,7 @@ import com.chatflow.chat.service.presence.BanCheckService;
 import com.chatflow.chat.service.presence.ParticipantRegistryService;
 import com.chatflow.chat.service.presence.PresenceBroadcastService;
 import com.chatflow.chat.service.presence.RoomFullnessService;
+import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class UserPresenceServiceBanGateTest {
     @Mock private RoomFullnessService roomFullnessService;
     @Mock private ParticipantRegistryService participantRegistry;
     @Mock private PresenceBroadcastService presenceBroadcast;
+    @Mock private RoomAccessPolicy roomAccessPolicy;
 
     private UserPresenceService userPresenceService;
 
@@ -39,7 +41,13 @@ class UserPresenceServiceBanGateTest {
     @BeforeEach
     void setUp() {
         userPresenceService = new UserPresenceService(
-                banCheckService, roomFullnessService, participantRegistry, presenceBroadcast);
+                banCheckService, roomFullnessService, participantRegistry, presenceBroadcast,
+                roomAccessPolicy);
+        // Default: the access policy (pre-fullness gate and inside register) accepts the join.
+        lenient().when(roomAccessPolicy.canAutoJoin(any(), any()))
+                .thenReturn(new RoomAccessPolicy.JoinDecision(null));
+        lenient().when(participantRegistry.register(any(), any()))
+                .thenReturn(new RoomAccessPolicy.JoinDecision(null));
     }
 
     private ChatMessage createJoinMessage(String userId, String username) {
@@ -93,6 +101,25 @@ class UserPresenceServiceBanGateTest {
 
         verify(participantRegistry).register(message, SESSION_ID);
         verify(presenceBroadcast).broadcastJoin(message, 1);
+    }
+
+    // -- Access policy refusal --
+
+    @Test
+    void policyRefusal_noJoinBroadcast_userGetsRefusalFrame() {
+        when(banCheckService.checkBanGate(USER_ID, ROOM_ID, USERNAME)).thenReturn(false);
+        when(participantRegistry.getRoomParticipantUserIds(ROOM_ID)).thenReturn(Set.of());
+        when(roomFullnessService.handleIfFull(any(ChatMessage.class), eq(USER_ID), eq(false)))
+                .thenReturn(false);
+        when(participantRegistry.register(any(), any())).thenReturn(
+                new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.DM_NOT_PARTICIPANT));
+
+        ChatMessage message = createJoinMessage(USER_ID, USERNAME);
+        boolean joined = userPresenceService.join(message, SESSION_ID);
+
+        org.junit.jupiter.api.Assertions.assertFalse(joined);
+        verify(presenceBroadcast).sendJoinRefused(USER_ID, ROOM_ID, RoomAccessPolicy.Denial.DM_NOT_PARTICIPANT);
+        verify(presenceBroadcast, never()).broadcastJoin(any(), anyInt());
     }
 
     // -- Anonymous user (null/empty userId) --

@@ -123,18 +123,23 @@ public class ChatController {
     public void addUser(@Payload ChatMessage chatMessage,
                        SimpMessageHeaderAccessor headerAccessor) {
         Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
-        // 핸드셰이크 시 Gateway가 주입한 인증 정보를 우선 사용 (클라이언트 위조 방지)
-        if (sessionAttrs != null) {
-            String verifiedUserId = (String) sessionAttrs.get("userId");
-            String verifiedUsername = (String) sessionAttrs.get("username");
-            if (verifiedUserId != null) {
-                chatMessage.setUserId(verifiedUserId);
-                chatMessage.setUsername(verifiedUsername);
-            }
-            sessionAttrs.put("chatRoomId", chatMessage.getChatRoomId());
+        // Identity comes only from the session (gateway handshake or CONNECT Bearer).
+        // A payload userId is never trusted: the join gate decides DM/private access
+        // by userId, so a spoofed one would let anyone enter someone else's room.
+        String verifiedUserId = sessionUserId(headerAccessor);
+        chatMessage.setUserId(verifiedUserId);
+        if (verifiedUserId != null) {
+            chatMessage.setUsername(sessionUsername(headerAccessor, verifiedUserId));
         }
         String sessionId = headerAccessor.getSessionId();
-        chatService.addUser(chatMessage, sessionId);
+        // Join gate (RoomAccessPolicy) runs inside the presence pipeline; a refused
+        // join has already been answered on /user/queue/errors. Record the room on
+        // the session only on success, and only after any full-room redirect, so
+        // disconnect cleanup never emits LEAVE for a room the user never entered.
+        boolean joined = chatService.addUser(chatMessage, sessionId);
+        if (joined && sessionAttrs != null) {
+            sessionAttrs.put("chatRoomId", chatMessage.getChatRoomId());
+        }
     }
 
     @MessageMapping("/chat.typing")
