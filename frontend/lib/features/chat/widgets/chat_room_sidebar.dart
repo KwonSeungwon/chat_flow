@@ -229,10 +229,12 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     try {
       if (policy == NotificationPolicy.all) {
         await dio.post('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+        FcmService.noteRoomSubscription(roomId, subscribed: true);
       } else {
         // MENTIONS_ONLY and MUTED both unsubscribe room topic
         // (mention-{username} topic remains subscribed so mentions still arrive)
         await dio.delete('/api/fcm/subscribe', data: {'token': token, 'roomId': roomId});
+        FcmService.noteRoomSubscription(roomId, subscribed: false);
       }
     } catch (_) {/* best-effort */}
   }

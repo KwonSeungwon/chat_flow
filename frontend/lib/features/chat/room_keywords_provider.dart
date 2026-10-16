@@ -12,7 +12,7 @@ class RoomKeywordsNotifier extends StateNotifier<Map<String, List<String>>> {
   final String? _userId;
 
   /// 사용자별 저장 키. userId가 없으면 읽지도 쓰지도 않는다.
-  /// (fcm_service.dart는 아직 전역 키를 읽는다 — Task 12에서 이 함수로 전환.)
+  /// fcm_service.dart의 포그라운드 키워드 매칭도 이 키를 읽는다.
   static String storageKeyFor(String userId) => '$_storageKeyBase.$userId';
 
   RoomKeywordsNotifier(this._userId) : super({}) {

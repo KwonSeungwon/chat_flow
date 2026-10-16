@@ -27,6 +27,9 @@ class ChatMessage {
   final Map<String, List<String>> reactions;
   final String? forwardedFrom;
   final String? localId;
+  /// Server echo of the sender's localId (`clientMessageId` on the wire).
+  /// Lets the sender's optimistic bubble be matched exactly.
+  final String? clientMessageId;
   final MessageDeliveryStatus deliveryStatus;
 
   ChatMessage({
@@ -52,6 +55,7 @@ class ChatMessage {
     this.reactions = const {},
     this.forwardedFrom,
     this.localId,
+    this.clientMessageId,
     this.deliveryStatus = MessageDeliveryStatus.sent,
   });
 
@@ -88,6 +92,7 @@ class ChatMessage {
       reactions: parseReactions(json['reactions']),
       forwardedFrom: json['forwardedFrom']?.toString(),
       localId: json['localId']?.toString(),
+      clientMessageId: json['clientMessageId']?.toString(),
       deliveryStatus: MessageDeliveryStatus.sent,
     );
   }

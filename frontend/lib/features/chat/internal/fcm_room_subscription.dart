@@ -7,6 +7,7 @@ import '../notification_policy_provider.dart';
 /// (Stage 2.5).
 class FcmRoomSubscription {
   final DioClient dioClient;
+
   /// Closure over Riverpod's NotificationPolicy lookup — keeps the helper
   /// agnostic of Ref while preserving the policy gate ('NotificationPolicy.all'
   /// only).
@@ -27,6 +28,7 @@ class FcmRoomSubscription {
         'token': token,
         'roomId': roomId,
       });
+      FcmService.noteRoomSubscription(roomId, subscribed: true);
     } catch (_) {
       // Best-effort — FCM failure must not interrupt room join
     }
@@ -40,6 +42,7 @@ class FcmRoomSubscription {
         'token': token,
         'roomId': roomId,
       });
+      FcmService.noteRoomSubscription(roomId, subscribed: false);
     } catch (_) {
       // Best-effort — FCM failure must not interrupt room leave
     }
