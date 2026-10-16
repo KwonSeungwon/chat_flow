@@ -22,7 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V20) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V21) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -104,8 +104,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 20 versioned migrations (V1..V20) should have been executed")
-                .isEqualTo(20);
+                .as("All 21 versioned migrations (V1..V21) should have been executed")
+                .isEqualTo(21);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -483,6 +483,7 @@ class FlywayMigrationTest {
         MigrateResult v20 = Flyway.configure()
                 .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .locations("classpath:db/migration")
+                .target("20")
                 .load()
                 .migrate();
         assertThat(v20.success).isTrue();
@@ -530,6 +531,95 @@ class FlywayMigrationTest {
                 assertThat(rs.next()).isFalse();
             }
         }
+    }
+
+    // ── Test 16: V21 — medical columns dropped, normalization re-run ─────
+
+    /**
+     * Migrates to V20 with the legacy columns, seeds rows an old client could have written
+     * after V20 (HANDOFF room, PATIENT_CARD), then applies V21.
+     */
+    @Test
+    void v21_dropsMedicalColumnsAndRenormalizes() throws SQLException {
+        final String db = "chatflow_v21";
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE DATABASE " + db);
+        }
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE users (user_id VARCHAR(50) PRIMARY KEY, username VARCHAR(100) NOT NULL, "
+                    + "role VARCHAR(20) NOT NULL DEFAULT 'NURSE')");
+        }
+        Flyway.configure()
+                .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .target("20")
+                .load()
+                .migrate();
+
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("INSERT INTO chat_rooms (id, name, color, room_type, allowed_roles, created_at) VALUES "
+                    + "('r-late', 'Late', '#00796B', 'HANDOFF', 'NURSE', now())");
+            stmt.executeUpdate("INSERT INTO chat_messages (message_id, chat_room_id, username, content, timestamp, type) VALUES "
+                    + "('m-card', 'r-late', 'a', '{\"name\":\"x\"}', now(), 'PATIENT_CARD'), "
+                    + "('m-text', 'r-late', 'a', 'hello', now(), 'CHAT')");
+        }
+
+        MigrateResult v21 = Flyway.configure()
+                .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+        assertThat(v21.success).isTrue();
+
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT room_type, color FROM chat_rooms WHERE id = 'r-late'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isEqualTo("GENERAL");
+                assertThat(rs.getString(2)).isEqualTo("#6366f1");
+            }
+            Set<String> remaining = new HashSet<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id FROM chat_messages")) {
+                while (rs.next()) remaining.add(rs.getString(1));
+            }
+            assertThat(remaining).containsExactly("m-text");
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT table_name, column_name FROM information_schema.columns WHERE "
+                            + "(table_name = 'users' AND column_name = 'role') OR "
+                            + "(table_name = 'chat_rooms' AND column_name = 'allowed_roles') OR "
+                            + "(table_name = 'chat_messages' AND column_name = 'priority')")) {
+                assertThat(rs.next()).as("medical columns should be dropped").isFalse();
+            }
+        }
+    }
+
+    // ── Test 17: V21 — succeeds when users has no role column ────────────
+
+    @Test
+    void v21_succeedsWhenUsersHasNoRoleColumn() throws SQLException {
+        final String db = "chatflow_v21_norole";
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE DATABASE " + db);
+        }
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE users (user_id VARCHAR(50) PRIMARY KEY, username VARCHAR(100) NOT NULL)");
+        }
+        MigrateResult r = Flyway.configure()
+                .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .load()
+                .migrate();
+        assertThat(r.success).isTrue();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
