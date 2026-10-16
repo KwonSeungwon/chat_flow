@@ -278,7 +278,7 @@ print_status() {
     echo -e "${WHITE}=== 📝 로그 확인 ===${NC}"
     echo -e "${CYAN}tail -f logs/gateway-service.log${NC}"
     echo -e "${CYAN}tail -f logs/chat-service.log${NC}"
-        echo ""
+    echo ""
     echo -e "${WHITE}=== ⚡ 종료 방법 ===${NC}"
     echo -e "${RED}./stop-chatflow.sh${NC}      - 모든 서비스 종료"
     echo -e "${RED}Ctrl+C${NC}                  - 이 스크립트만 종료 (서비스는 계속 실행)"
@@ -309,13 +309,6 @@ main() {
     start_frontend
     
     print_status
-    
-    # 브라우저 자동 열기 (macOS)
-    if command -v open &> /dev/null; then
-        log_info "브라우저에서 애플리케이션을 여는 중..."
-        sleep 3
-        true
-    fi
     
     follow_logs
 }
