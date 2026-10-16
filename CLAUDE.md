@@ -31,8 +31,6 @@ chat_flow/
 │   ├── repository/          # ChatRoomRepository, ChatMessageRepository
 │   ├── controller/          # ChatController (WS), ChatRoomController (REST)
 │   └── service/             # ChatService
-│   ├── controller/          # AiSummaryController
-│   └── service/             # AiSummaryService
 ├── gateway-service/         # API Gateway (라우팅, CORS, Circuit Breaker)
 ├── frontend/                # Flutter Web + Android 프론트엔드
 │   ├── lib/core/            # 네트워크(Dio, STOMP), 라우터, 테마

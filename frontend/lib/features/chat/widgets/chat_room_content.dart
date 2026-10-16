@@ -145,7 +145,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         // Pin banner
         Builder(builder: (context) {
           final roomData = ref.watch(chatRoomsProvider).whenOrNull(
-              data: (rooms) => rooms.where((r) => r.id == widget.roomId).firstOrNull,
+            data: (rooms) => rooms.where((r) => r.id == widget.roomId).firstOrNull,
           );
           if (roomData?.pinnedMessageId == null) return const SizedBox.shrink();
           final pinnedMsg = chatState.messages.where((m) => m.effectiveId == roomData!.pinnedMessageId).firstOrNull;
