@@ -77,4 +77,11 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("DELETE FROM OutboxEvent e WHERE e.status = 'PROCESSED' AND e.processedAt < :before")
     int deleteProcessedBefore(@Param("before") LocalDateTime before);
+
+    /**
+     * Retention for poison-pill rows. {@code processedAt} is stamped by {@link #markFailed}.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM OutboxEvent e WHERE e.status = 'FAILED' AND e.processedAt < :before")
+    int deleteFailedBefore(@Param("before") LocalDateTime before);
 }

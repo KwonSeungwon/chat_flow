@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
@@ -47,6 +48,7 @@ class MemberManagementServiceStompPayloadTest {
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private MemberListBroadcaster memberListBroadcaster;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private RoomPermissionService roomPermissionService;
     private MemberManagementService memberManagementService;
@@ -60,10 +62,11 @@ class MemberManagementServiceStompPayloadTest {
     void setUp() {
         roomPermissionService = new RoomPermissionService(roomMemberRepository, chatRoomRepository);
         memberManagementService = new MemberManagementService(
-                roomMemberRepository, roomPermissionService, messagingTemplate, memberListBroadcaster);
+                roomMemberRepository, roomPermissionService, messagingTemplate, memberListBroadcaster,
+                eventPublisher);
         roomBanService = new RoomBanService(
                 roomBanRepository, roomMemberRepository, roomPermissionService,
-                messagingTemplate, memberListBroadcaster);
+                messagingTemplate, memberListBroadcaster, eventPublisher);
     }
 
     private RoomMemberEntity member(String userId, String username, RoomRole role) {

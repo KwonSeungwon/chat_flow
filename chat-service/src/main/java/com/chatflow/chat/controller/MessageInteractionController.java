@@ -93,9 +93,11 @@ public class MessageInteractionController {
             @AuthenticatedUser String userId) {
         // Verify the message exists AND belongs to the authorized room.
         // Without this, a member of room A could read edit history of room B's
-        // messages by supplying B's messageId in the URL.
+        // messages by supplying B's messageId in the URL. A deleted message has
+        // no history to show — it reads as not found.
         boolean messageInRoom = chatMessageRepository.findById(messageId)
                 .filter(m -> roomId.equals(m.getChatRoomId()))
+                .filter(m -> !m.isDeleted())
                 .isPresent();
         if (!messageInRoom) {
             return ErrorResponses.from(

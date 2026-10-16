@@ -30,6 +30,7 @@ public class ScheduledMessageEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    /** Delivery time as UTC wall-clock time (the column has no zone; UTC by convention). */
     @Column(nullable = false)
     private LocalDateTime scheduledAt;
 
@@ -66,5 +67,9 @@ public class ScheduledMessageEntity {
         updatedAt = LocalDateTime.now();
     }
 
-    public enum ScheduledMessageStatus { PENDING, SENT, CANCELED, FAILED }
+    /**
+     * PROCESSING is transient: a delivery transaction claims PENDING → PROCESSING and
+     * ends in SENT or FAILED before it commits (a rollback restores PENDING).
+     */
+    public enum ScheduledMessageStatus { PENDING, PROCESSING, SENT, CANCELED, FAILED }
 }

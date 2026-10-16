@@ -125,6 +125,29 @@ class MessageEditServiceOutboxTest {
         }
 
         @Test
+        @DisplayName("purges the message's edit history so pre-delete text cannot be recovered")
+        void deleteMessage_purgesEditHistory() {
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));
+            when(chatMessageMapper.toDto(entity)).thenReturn(ChatMessage.builder()
+                    .messageId(MESSAGE_ID).chatRoomId(ROOM_ID).build());
+
+            Result<Void, ChatErrorCode> result = service.deleteMessage(MESSAGE_ID, USER_ID);
+
+            assertThat(result.isSuccess()).isTrue();
+            verify(editHistoryRepository).deleteByMessageId(MESSAGE_ID);
+        }
+
+        @Test
+        @DisplayName("forbidden delete leaves edit history untouched")
+        void deleteMessage_forbidden_keepsEditHistory() {
+            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));
+
+            service.deleteMessage(MESSAGE_ID, "someone-else");
+
+            verify(editHistoryRepository, never()).deleteByMessageId(anyString());
+        }
+
+        @Test
         @DisplayName("does NOT publish outbox event when delete is forbidden")
         void deleteMessage_forbidden_noOutboxEvent() {
             when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(entity));

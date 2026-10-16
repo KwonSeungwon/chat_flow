@@ -1,42 +1,46 @@
 package com.chatflow.chat.service.notification;
 
 import com.chatflow.chat.exception.QuotaExceededException;
-import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.RoomPermissionService;
 
 import com.chatflow.chat.entity.ScheduledMessageEntity;
 import com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus;
 import com.chatflow.chat.repository.ScheduledMessageRepository;
-import com.chatflow.common.dto.ChatMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ScheduledMessageServiceTest {
 
     @Mock private ScheduledMessageRepository repository;
-    @Mock private MessageSenderService messageSenderService;
+    @Mock private ScheduledMessageDeliverer deliverer;
     @Mock private RoomPermissionService roomPermissionService;
 
     private ScheduledMessageService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScheduledMessageService(repository, messageSenderService, roomPermissionService);
+        service = new ScheduledMessageService(repository, deliverer, roomPermissionService);
     }
 
     private ScheduledMessageEntity sample(Long id, ScheduledMessageStatus status, LocalDateTime when) {
@@ -61,7 +65,7 @@ class ScheduledMessageServiceTest {
 
         ScheduledMessageEntity saved = service.schedule(
                 "room-1", "user-1", "alice", "hi later",
-                LocalDateTime.now().plusMinutes(30));
+                Instant.now().plus(30, ChronoUnit.MINUTES));
 
         assertThat(saved.getId()).isEqualTo(42L);
         assertThat(saved.getStatus()).isEqualTo(ScheduledMessageStatus.PENDING);
@@ -72,10 +76,25 @@ class ScheduledMessageServiceTest {
     }
 
     @Test
+    void schedule_offsetInput_storedAsUtc() {
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // A KST user picks 09:00 local, one day out. The column holds UTC wall time.
+        OffsetDateTime kst = OffsetDateTime.now(ZoneOffset.ofHours(9))
+                .plusDays(1).withHour(9).withMinute(0).withSecond(0).withNano(0);
+
+        ScheduledMessageEntity saved = service.schedule(
+                "room-1", "user-1", "alice", "morning", kst.toInstant());
+
+        assertThat(saved.getScheduledAt())
+                .isEqualTo(kst.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        assertThat(saved.getScheduledAt().getHour()).isZero();
+    }
+
+    @Test
     void schedule_rejectsPastTimes() {
         assertThatThrownBy(() -> service.schedule(
                 "room-1", "user-1", "alice", "x",
-                LocalDateTime.now().minusMinutes(1)))
+                Instant.now().minus(1, ChronoUnit.MINUTES)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must be in the future");
         verifyNoInteractions(repository);
@@ -88,7 +107,7 @@ class ScheduledMessageServiceTest {
 
         assertThatThrownBy(() -> service.schedule(
                 "room-1", "user-1", "alice", "one more",
-                LocalDateTime.now().plusMinutes(30)))
+                Instant.now().plus(30, ChronoUnit.MINUTES)))
                 .isInstanceOf(QuotaExceededException.class)
                 .hasMessageContaining("scheduled message limit reached");
         verify(repository, never()).save(any());
@@ -144,86 +163,54 @@ class ScheduledMessageServiceTest {
     void deliverDue_skipsEmptyBatch() {
         when(repository.findDueForSending(any())).thenReturn(List.of());
         service.deliverDue();
-        verify(messageSenderService, never()).send(any());
-        verify(repository, never()).save(any());
+        verifyNoInteractions(deliverer);
     }
 
     @Test
-    void deliverDue_sendsAndMarksSent() {
-        ScheduledMessageEntity row = sample(11L, ScheduledMessageStatus.PENDING,
-                LocalDateTime.now().minusMinutes(1));
-        when(repository.findDueForSending(any())).thenReturn(List.of(row));
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        // Mirror MessageSenderService.send()'s real contract: it assigns
-        // messageId + timestamp on the ChatMessage it receives. The service
-        // under test relies on this — capturing messageId AFTER send() returns.
-        doAnswer(inv -> {
-            ChatMessage m = inv.getArgument(0);
-            m.setMessageId("fake-server-uuid");
-            m.setTimestamp(java.time.LocalDateTime.now());
-            return null;
-        }).when(messageSenderService).send(any());
-
-        service.deliverDue();
-
-        ArgumentCaptor<ChatMessage> sent = ArgumentCaptor.forClass(ChatMessage.class);
-        verify(messageSenderService).send(sent.capture());
-        ChatMessage actual = sent.getValue();
-        assertThat(actual.getContent()).isEqualTo("hello future");
-        assertThat(actual.getChatRoomId()).isEqualTo("room-1");
-        assertThat(actual.getUserId()).isEqualTo("user-1");
-        assertThat(actual.getUsername()).isEqualTo("alice");
-        assertThat(actual.getMessageId()).isNotNull();
-        assertThat(actual.getType()).isEqualTo(ChatMessage.MessageType.CHAT);
-
-        assertThat(row.getStatus()).isEqualTo(ScheduledMessageStatus.SENT);
-        assertThat(row.getSentMessageId()).isEqualTo(actual.getMessageId());
-    }
-
-    @Test
-    void deliverDue_marksFailedOnSendError_andContinuesNextRow() {
+    void deliverDue_oneRowFails_othersStillDelivered() {
         ScheduledMessageEntity bad = sample(1L, ScheduledMessageStatus.PENDING,
                 LocalDateTime.now().minusMinutes(2));
         ScheduledMessageEntity good = sample(2L, ScheduledMessageStatus.PENDING,
                 LocalDateTime.now().minusMinutes(1));
         when(repository.findDueForSending(any())).thenReturn(List.of(bad, good));
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        // First send throws, second succeeds.
-        doThrow(new RuntimeException("kafka down"))
-                .doNothing()
-                .when(messageSenderService).send(any());
+        // Row 1's REQUIRES_NEW transaction blows up (e.g. ChatPersistenceService
+        // marked it rollback-only). Row 2 runs in its own transaction regardless.
+        when(deliverer.deliver(1L)).thenThrow(new RuntimeException("kafka down"));
+        when(deliverer.deliver(2L)).thenReturn(ScheduledMessageDeliverer.Outcome.SENT);
 
         service.deliverDue();
 
-        assertThat(bad.getStatus()).isEqualTo(ScheduledMessageStatus.FAILED);
-        assertThat(bad.getErrorMessage()).contains("kafka down");
-        assertThat(good.getStatus()).isEqualTo(ScheduledMessageStatus.SENT);
+        verify(deliverer).deliver(2L);
+        // The failed row is terminally marked in a separate transaction, so it is
+        // not picked up again every 30s.
+        verify(deliverer).markFailed(eq(1L), contains("kafka down"));
+        verify(deliverer, never()).markFailed(eq(2L), anyString());
     }
 
     @Test
-    void deliverDue_optimisticLockLost_isBenign_noFailedMark() {
-        // Race condition: another replica already updated this row.
-        // Our save() throws ObjectOptimisticLockingFailureException.
-        // Expected: the row is NOT marked FAILED; we just log and move on.
-        ScheduledMessageEntity row = sample(1L, ScheduledMessageStatus.PENDING,
+    void deliverDue_markFailedItselfThrowing_doesNotAbortBatch() {
+        ScheduledMessageEntity bad = sample(1L, ScheduledMessageStatus.PENDING,
+                LocalDateTime.now().minusMinutes(2));
+        ScheduledMessageEntity good = sample(2L, ScheduledMessageStatus.PENDING,
                 LocalDateTime.now().minusMinutes(1));
-        when(repository.findDueForSending(any())).thenReturn(List.of(row));
-        when(repository.save(any()))
-                .thenThrow(new ObjectOptimisticLockingFailureException(
-                        ScheduledMessageEntity.class, 1L));
+        when(repository.findDueForSending(any())).thenReturn(List.of(bad, good));
+        when(deliverer.deliver(1L)).thenThrow(new RuntimeException("boom"));
+        doThrow(new RuntimeException("db down")).when(deliverer).markFailed(eq(1L), anyString());
 
         service.deliverDue();
 
-        // send() WAS called (we tried to deliver before save failed)
-        verify(messageSenderService).send(any());
-        // The row's status was set to SENT in memory before save threw —
-        // but the row's persisted state is unchanged because save threw.
-        // The key invariant: we do NOT explicitly flip to FAILED.
-        // Verify by checking the count of save() invocations: exactly 1
-        // (the SENT save that threw). No second save() call (which would
-        // be the FAILED mark).
-        verify(repository, times(1)).save(any());
+        verify(deliverer).deliver(2L);
+    }
+
+    @Test
+    void deliverDue_queriesDueRowsAgainstUtcClock() {
+        when(repository.findDueForSending(any())).thenReturn(List.of());
+        LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+
+        service.deliverDue();
+
+        ArgumentCaptor<LocalDateTime> now = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(repository).findDueForSending(now.capture());
+        assertThat(now.getValue()).isBetween(before, LocalDateTime.now(ZoneOffset.UTC));
     }
 }

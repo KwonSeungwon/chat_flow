@@ -53,6 +53,28 @@ class OutboxPollerTest {
                 objectMapper, new SimpleMeterRegistry());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void cleanup_purgesProcessedAfterADay_andFailedAfterRetentionWindow() {
+        doAnswer(inv -> {
+            ((java.util.function.Consumer<org.springframework.transaction.TransactionStatus>) inv.getArgument(0))
+                    .accept(null);
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+        LocalDateTime before = LocalDateTime.now();
+
+        outboxPoller.cleanupProcessedEvents();
+
+        org.mockito.ArgumentCaptor<LocalDateTime> processedCutoff = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        org.mockito.ArgumentCaptor<LocalDateTime> failedCutoff = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(outboxEventRepository).deleteProcessedBefore(processedCutoff.capture());
+        verify(outboxEventRepository).deleteFailedBefore(failedCutoff.capture());
+        assertThat(processedCutoff.getValue()).isBefore(before.minusHours(23));
+        assertThat(failedCutoff.getValue())
+                .isBefore(before.minusDays(OutboxPoller.FAILED_RETENTION_DAYS).plusMinutes(1))
+                .isAfter(before.minusDays(OutboxPoller.FAILED_RETENTION_DAYS).minusMinutes(1));
+    }
+
     // ── helpers ──────────────────────────────────────────────────
 
     private static OutboxEvent pendingEvent(Long id, String topic, String key, String payload) {

@@ -3,6 +3,7 @@ package com.chatflow.chat.service.room;
 import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.exception.PermissionDeniedException;
 import com.chatflow.chat.repository.RoomBanRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
@@ -10,6 +11,7 @@ import com.chatflow.chat.service.MemberListBroadcaster;
 import com.chatflow.chat.service.RoomPermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,7 @@ public class RoomBanService {
     private final RoomPermissionService roomPermissionService;
     private final SimpMessagingTemplate messagingTemplate;
     private final MemberListBroadcaster memberListBroadcaster;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Ban a user from the room: kick + insert ban row (single transaction).
@@ -71,6 +74,10 @@ public class RoomBanService {
         roomBanRepository.save(ban);
         log.info("User banned: roomId={}, target={}, by={}, reason={}",
                 roomId, targetUserId, actorUserId, reason);
+        // Published even when the target was not a member: stale push subscriptions
+        // must not outlive a ban.
+        eventPublisher.publishEvent(new RoomMemberRemovedEvent(
+                roomId, targetUserId, RoomMemberRemovedEvent.Reason.BANNED));
 
         // STOMP: notify the banned user
         Map<String, Object> kickedPayload = new LinkedHashMap<>();

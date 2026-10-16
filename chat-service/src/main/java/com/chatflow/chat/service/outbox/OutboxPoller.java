@@ -26,6 +26,12 @@ public class OutboxPoller {
 
     private static final int MAX_RETRIES = 10;
 
+    /**
+     * FAILED rows are kept this long for inspection/manual replay, then purged —
+     * otherwise poison pills accumulate forever.
+     */
+    static final int FAILED_RETENTION_DAYS = 7;
+
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -183,6 +189,12 @@ public class OutboxPoller {
                     LocalDateTime.now().minusHours(24));
             if (deleted > 0) {
                 log.info("Cleaned up {} processed outbox events", deleted);
+            }
+            int failedDeleted = outboxEventRepository.deleteFailedBefore(
+                    LocalDateTime.now().minusDays(FAILED_RETENTION_DAYS));
+            if (failedDeleted > 0) {
+                log.info("Purged {} FAILED outbox events older than {} days",
+                        failedDeleted, FAILED_RETENTION_DAYS);
             }
         });
     }

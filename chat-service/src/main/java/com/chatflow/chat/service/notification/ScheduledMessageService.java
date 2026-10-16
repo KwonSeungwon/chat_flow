@@ -1,23 +1,21 @@
 package com.chatflow.chat.service.notification;
 
 import com.chatflow.chat.exception.QuotaExceededException;
-import com.chatflow.chat.service.message.MessageSenderService;
 import com.chatflow.chat.service.RoomPermissionService;
 
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.ScheduledMessageEntity;
 import com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus;
 import com.chatflow.chat.repository.ScheduledMessageRepository;
-import com.chatflow.common.dto.ChatMessage;
-import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Slf4j
@@ -26,7 +24,7 @@ import java.util.List;
 public class ScheduledMessageService {
 
     private final ScheduledMessageRepository repository;
-    private final MessageSenderService messageSenderService;
+    private final ScheduledMessageDeliverer deliverer;
     private final RoomPermissionService roomPermissionService;
 
     /**
@@ -41,15 +39,20 @@ public class ScheduledMessageService {
      */
     private static final int MAX_CONTENT_LENGTH = 4000;
 
+    /**
+     * @param scheduledAt the absolute delivery instant; stored as UTC wall-clock time
+     *                    so the poller can compare it with a UTC clock regardless of
+     *                    the JVM's or the client's time zone.
+     */
     @Transactional
     public ScheduledMessageEntity schedule(
             String chatRoomId, String userId, String username,
-            String content, LocalDateTime scheduledAt) {
+            String content, Instant scheduledAt) {
         if (content.length() > MAX_CONTENT_LENGTH) {
             throw new IllegalArgumentException(
                     "content too long (max " + MAX_CONTENT_LENGTH + " chars)");
         }
-        if (scheduledAt.isBefore(LocalDateTime.now())) {
+        if (scheduledAt.isBefore(Instant.now())) {
             throw new IllegalArgumentException("scheduledAt must be in the future");
         }
         // Membership check — non-members must NOT be able to schedule into
@@ -67,7 +70,7 @@ public class ScheduledMessageService {
                 .userId(userId)
                 .username(username)
                 .content(content)
-                .scheduledAt(scheduledAt)
+                .scheduledAt(LocalDateTime.ofInstant(scheduledAt, ZoneOffset.UTC))
                 .status(ScheduledMessageStatus.PENDING)
                 .build();
         return repository.save(entity);
@@ -93,47 +96,34 @@ public class ScheduledMessageService {
     }
 
     /**
-     * Polled every 30s. Picks PENDING rows whose scheduledAt has arrived
-     * and delivers them via MessageSenderService. Per-row exceptions are
-     * isolated: a failure on one row does not abort the rest of the batch.
+     * Polled every 30s. Picks PENDING rows whose UTC scheduledAt has arrived and hands
+     * each one to {@link ScheduledMessageDeliverer#deliver} — its own REQUIRES_NEW
+     * transaction. Deliberately NOT transactional itself: one row's rollback (a version
+     * conflict, a rollback-only mark from the persistence layer) must not undo the rows
+     * already delivered or leave the whole batch PENDING to be re-sent every 30s.
      *
-     * Multi-replica safety: @Version on the entity (V7 column) makes
-     * concurrent updates from competing replicas throw
-     * ObjectOptimisticLockingFailureException — we treat that as a
-     * benign "lost race" (the winning replica is already handling it).
+     * <p>Multi-replica safety: the deliverer claims each row with a conditional
+     * {@code UPDATE ... WHERE status = 'PENDING'}; a replica that loses the race gets 0
+     * rows and skips it.
      */
     @Scheduled(fixedDelay = 30_000L)
-    @Transactional
     public void deliverDue() {
-        List<ScheduledMessageEntity> due = repository.findDueForSending(LocalDateTime.now());
+        List<ScheduledMessageEntity> due = repository.findDueForSending(LocalDateTime.now(ZoneOffset.UTC));
         if (due.isEmpty()) return;
         log.info("Delivering {} scheduled message(s)", due.size());
 
         for (ScheduledMessageEntity row : due) {
+            Long id = row.getId();
             try {
-                ChatMessage msg = new ChatMessage();
-                // NOTE: messageSenderService.send() owns messageId + timestamp — it
-                // assigns both on entry. Setting them here would be dead writes; relying
-                // on send()'s contract keeps that ownership in one place.
-                msg.setChatRoomId(row.getChatRoomId());
-                msg.setUserId(row.getUserId());
-                msg.setUsername(row.getUsername());
-                msg.setContent(row.getContent());
-                msg.setType(ChatMessage.MessageType.CHAT);
-
-                messageSenderService.send(msg);
-
-                row.setStatus(ScheduledMessageStatus.SENT);
-                row.setSentMessageId(msg.getMessageId());
-                repository.save(row);
-            } catch (ObjectOptimisticLockingFailureException | OptimisticLockException e) {
-                // Another replica's poller won the race. Benign — skip silently.
-                log.info("Lost race on scheduled message id={} to another replica", row.getId());
+                deliverer.deliver(id);
             } catch (Exception e) {
-                log.error("Scheduled delivery failed for id={}: {}", row.getId(), e.getMessage(), e);
-                row.setStatus(ScheduledMessageStatus.FAILED);
-                row.setErrorMessage(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
-                repository.save(row);
+                String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                log.error("Scheduled delivery failed for id={}: {}", id, reason, e);
+                try {
+                    deliverer.markFailed(id, reason);
+                } catch (Exception markError) {
+                    log.error("Could not mark scheduled message id={} FAILED: {}", id, markError.getMessage());
+                }
             }
         }
     }

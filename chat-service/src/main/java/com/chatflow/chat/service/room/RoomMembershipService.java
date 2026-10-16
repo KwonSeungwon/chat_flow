@@ -3,11 +3,13 @@ package com.chatflow.chat.service.room;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ public class RoomMembershipService {
     private final ParticipantService participantService;
     private final RoomCacheEvictor roomCacheEvictor;
     private final RoomAccessPolicy roomAccessPolicy;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * The only entry point for user-initiated membership grants (invite link,
@@ -102,6 +105,8 @@ public class RoomMembershipService {
         }
         // DB row 삭제 — source of truth; Redis/broadcast 전에 수행
         roomMemberRepository.deleteByRoomIdAndUserId(roomId, userId);
+        eventPublisher.publishEvent(new RoomMemberRemovedEvent(
+                roomId, userId, RoomMemberRemovedEvent.Reason.LEFT));
         // Redis SET에서 해당 유저의 모든 세션 제거 (userId prefix로 매칭 -- 스푸핑 방지)
         String participantKey = "chatflow:room:participants:" + roomId;
         if (!redisHealth.isCircuitOpen()) {
