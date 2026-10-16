@@ -19,7 +19,7 @@ public class CorsConfig {
 
     @Bean
     public CorsWebFilter corsWebFilter(
-            @Value("${chatflow.cors.allowed-origins:https://app.chatflow.ai.kr}") List<String> allowedOrigins) {
+            @Value("${chatflow.cors.allowed-origins:https://app.goosip.com}") List<String> allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

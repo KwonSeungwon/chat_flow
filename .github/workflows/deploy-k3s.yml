@@ -12,7 +12,7 @@ name: Deploy to K3s (manual)
 # and we `kubectl set image` to force a rollout against the pinned sha-* tag.
 #
 # Required secrets (Settings → Secrets and variables → Actions):
-#   K3S_HOST              — e.g. node.chatflow.ai.kr
+#   K3S_HOST              — e.g. node.goosip.com
 #   K3S_USER              — e.g. ksw
 #   K3S_SSH_KEY           — private key (PEM/OpenSSH), no passphrase
 #   CF_ACCESS_CLIENT_ID   — Cloudflare Access service token client id

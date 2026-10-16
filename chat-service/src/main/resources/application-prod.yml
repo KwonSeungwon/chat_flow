@@ -86,9 +86,9 @@ spring:
       concurrency: 3
 
 chatflow:
-  allowed-origins: "https://app.chatflow.ai.kr,https://chatflow.ai.kr"
+  allowed-origins: "https://app.goosip.com,https://goosip.com"
   frontend:
-    base-url: https://app.chatflow.ai.kr
+    base-url: https://app.goosip.com
   file-storage:
     upload-dir: /app/uploads
   kafka:

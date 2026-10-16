@@ -18,7 +18,7 @@ public class InviteLinkService {
     private static final Duration TTL = Duration.ofHours(24);
     private final StringRedisTemplate redisTemplate;
 
-    @Value("${chatflow.frontend.base-url:https://app.chatflow.ai.kr}")
+    @Value("${chatflow.frontend.base-url:https://app.goosip.com}")
     private String frontendBaseUrl;
 
     public String getInviteUrl(String token) {

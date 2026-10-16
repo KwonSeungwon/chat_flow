@@ -31,9 +31,9 @@ class LinkPreviewCardState extends State<LinkPreviewCard> {
     // flutter_dotenv may not be initialized here, so fall back to production URL.
     try {
       // ignore: undefined_prefixed_name
-      return const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://app.chatflow.ai.kr');
+      return const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://app.goosip.com');
     } catch (_) {
-      return 'https://app.chatflow.ai.kr';
+      return 'https://app.goosip.com';
     }
   }
 
