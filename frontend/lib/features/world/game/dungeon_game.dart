@@ -5,16 +5,19 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show KeyEventResult;
+import 'package:flutter/widgets.dart' show KeyEventResult, visibleForTesting;
 
 import 'encounter_counter.dart';
 import 'iso_grid.dart';
 import 'student_avatar.dart';
-import 'village_game.dart' show directionFromKeys;
+import 'village_game.dart' show directionFromKeys, movementKeys;
 import 'world_sprite.dart';
 
 /// 건물 안 던전 방. 걸음마다 [EncounterCounter]를 돌려 인카운터가 나면
 /// 그 자리에서 멈추고 [onEncounter]를 부른다. 이동은 [resume]까지 멈춘다.
+///
+/// 게임 하나는 GameWidget 하나의 수명 동안만 쓴다. 위젯이 dispose되면
+/// [onDispose]가 그림 캐시를 모두 놓는다.
 class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   DungeonGame(this.dungeonId, {this.onEncounter, Random? rng})
       : _counter = EncounterCounter(rng ?? Random()),
@@ -57,6 +60,11 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   bool _paused = false;
   bool _boss = false;
   (int, int)? _heldDir;
+
+  /// 지금 눌려 있는 키. 테스트에서만 바꾼다([VillageGame.pressedKeys]와 같다).
+  @visibleForTesting
+  Set<LogicalKeyboardKey> Function() pressedKeys =
+      () => HardwareKeyboard.instance.logicalKeysPressed;
 
   bool get isPaused => _paused;
   bool get bossPhase => _boss;
@@ -124,7 +132,28 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   }
 
   @override
+  void onDispose() {
+    _heldDir = null;
+    dispose();
+    // 컴포넌트 제거가 대기열에 남아 onRemove가 아직 안 불렸을 수 있어 직접 놓는다.
+    if (isLoaded) {
+      _floor.release();
+      avatar.releaseAssets();
+    }
+    super.onDispose();
+  }
+
+  @override
+  void onDetach() {
+    _heldDir = null;
+    super.onDetach();
+  }
+
+  @override
   void update(double dt) {
+    if (_heldDir != null && directionFromKeys(pressedKeys()) != _heldDir) {
+      _heldDir = null;
+    }
     final dir = _heldDir;
     if (!_paused && dir != null && !avatar.isMoving) {
       final (c, r) = avatar.tile;
@@ -138,7 +167,9 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   KeyEventResult onKeyEvent(
       KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
     _heldDir = _paused ? null : directionFromKeys(keysPressed);
-    return _heldDir != null ? KeyEventResult.handled : KeyEventResult.ignored;
+    return _heldDir != null || movementKeys.contains(event.logicalKey)
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored;
   }
 
   void _onTapWorld(Vector2 worldPos) {
@@ -295,9 +326,14 @@ class _DungeonFloor extends Component {
     if (p != null) canvas.drawPicture(p);
   }
 
+  void release() {
+    _picture?.dispose();
+    _picture = null;
+  }
+
   @override
   void onRemove() {
-    _picture?.dispose();
+    release();
     super.onRemove();
   }
 }
@@ -312,6 +348,9 @@ class _Pillar extends PositionComponent
           anchor: const Anchor(0.5, 0.86),
           priority: isoDepth((col + row).toDouble()),
         );
+
+  @override
+  bool get cullsStatically => true;
 
   static final _left = Paint()..color = const Color(0xFF4F5D94);
   static final _right = Paint()..color = const Color(0xFF3A4675);

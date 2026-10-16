@@ -67,15 +67,33 @@ class StudentAvatar extends PositionComponent
     ]);
     _body = loaded[0];
     _cap = loaded[1];
+    // 읽는 사이에 게임이 dispose됐으면 바로 놓는다.
+    if (_released) releaseAssets();
     _updatePriority();
   }
 
   @override
   void onRemove() {
-    _body?.dispose();
-    _cap?.dispose();
+    releaseAssets();
     super.onRemove();
   }
+
+  /// SVG 래스터 캐시와 Picture를 놓는다. 여러 번 불러도 된다. 게임이 dispose될
+  /// 때 컴포넌트 제거가 끝나지 않았어도 놓을 수 있게 따로 열어 둔다.
+  void releaseAssets() {
+    _released = true;
+    for (final svg in [_body, _cap]) {
+      svg?.dispose();
+      svg?.pictureInfo.picture.dispose();
+    }
+    _body = null;
+    _cap = null;
+  }
+
+  bool _released = false;
+
+  /// [releaseAssets]가 불렸고 들고 있는 SVG가 없다.
+  bool get assetsReleased => _released && _body == null && _cap == null;
 
   /// [path]를 따라 걷는다. 앞쪽에 지금 칸과 같은 타일이 있으면 건너뛴다.
   /// 걷는 중이면 지금 칸까지 마저 간 뒤 새 경로를 따른다.

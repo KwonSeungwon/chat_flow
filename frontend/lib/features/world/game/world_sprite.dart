@@ -8,9 +8,25 @@ import 'package:flame_svg/flame_svg.dart';
 /// 카메라 밖에 있는 컴포넌트는 그리지 않는다. 월드 직속 자식에 쓴다.
 mixin OffscreenCulling<T extends FlameGame>
     on PositionComponent, HasGameReference<T> {
+  /// true면 붙을 때 한 번 잰 영역을 계속 쓴다(움직이지 않는 컴포넌트).
+  /// 크기·위치가 바뀌면 [refreshCullBounds]를 부른다.
+  bool get cullsStatically => false;
+
+  Rect? _bounds;
+
+  void refreshCullBounds() => _bounds = toAbsoluteRect();
+
+  @override
+  void onMount() {
+    super.onMount();
+    if (cullsStatically) refreshCullBounds();
+  }
+
   @override
   void renderTree(Canvas canvas) {
-    if (!game.camera.visibleWorldRect.overlaps(toAbsoluteRect())) return;
+    final bounds =
+        cullsStatically ? (_bounds ?? toAbsoluteRect()) : toAbsoluteRect();
+    if (!game.camera.visibleWorldRect.overlaps(bounds)) return;
     super.renderTree(canvas);
   }
 }
@@ -34,6 +50,9 @@ class WorldSprite extends PositionComponent
   Paint? paint;
 
   @override
+  bool get cullsStatically => true;
+
+  @override
   void render(Canvas canvas) => svg.render(canvas, size, overridePaint: paint);
 }
 
@@ -52,6 +71,7 @@ class SvgBank {
   void dispose() {
     for (final s in _svgs.values) {
       s.dispose();
+      s.pictureInfo.picture.dispose();
     }
     _svgs.clear();
   }

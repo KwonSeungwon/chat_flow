@@ -7,7 +7,7 @@ import 'package:flame_svg/flame_svg.dart';
 import 'package:flutter/painting.dart' show TextPainter, TextSpan, TextStyle;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show Theme;
-import 'package:flutter/widgets.dart' show KeyEventResult;
+import 'package:flutter/widgets.dart' show KeyEventResult, visibleForTesting;
 
 import 'iso_grid.dart';
 import 'student_avatar.dart';
@@ -18,11 +18,28 @@ import 'world_sprite.dart';
 typedef DungeonState = ({bool open, bool cleared, int clearCount});
 
 /// 아이소메트릭 마을. 학생이 길을 걸어 건물 문에 닿으면 [onDoorReached]를 부른다.
+///
+/// 던전 화면을 위에 띄우는 동안에는 호출하는 쪽이 이 게임에 `pauseEngine()`을
+/// 부르고, 마을로 돌아오면 `resumeEngine()`을 부른다. 가려진 라우트에서도 게임
+/// 루프는 계속 돌기 때문이다.
+///
+/// 게임 하나는 GameWidget 하나의 수명 동안만 쓴다. 위젯이 dispose되면
+/// [onDispose]가 그림·SVG 캐시를 모두 놓는다.
 class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
-  VillageGame({this.onDoorReached}) : super(world: TapWorld());
+  VillageGame({this.onDoorReached, this.onFountainTapped})
+      : super(world: TapWorld());
 
   /// 열린 건물의 문 칸에 닿았을 때. 공사 중(open=false)인 건물은 부르지 않는다.
   void Function(String dungeonId)? onDoorReached;
+
+  /// 분수 칸이나 그 주변 8칸을 눌렀을 때(랭킹 게시판).
+  void Function()? onFountainTapped;
+
+  /// 지금 눌려 있는 키. 포커스를 잃어 KeyUp을 못 받아도 누름 상태를 바로잡는 데
+  /// 쓴다. 테스트에서만 바꾼다.
+  @visibleForTesting
+  Set<LogicalKeyboardKey> Function() pressedKeys =
+      () => HardwareKeyboard.instance.logicalKeysPressed;
 
   static const grid = IsoGrid(tileW: 64, tileH: 32);
 
@@ -42,6 +59,7 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   final _sky = SkyBackdrop(const Color(0xFFE9F1FF), const Color(0xFFFDF3E7));
   final _buildings = <String, _Building>{};
   late final _TargetMarker _marker;
+  final _tiles = _VillageTiles();
 
   Map<String, DungeonState> _state = const {};
   bool _graduated = false;
@@ -89,7 +107,7 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
     ]);
 
     world.onTap = _onTapWorld;
-    world.add(_VillageTiles());
+    world.add(_tiles);
     world.add(_marker = _TargetMarker(grid));
 
     for (var r = 0; r < VillageMap.size; r++) {
@@ -156,13 +174,28 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   }
 
   @override
-  void onRemove() {
+  void onDispose() {
+    _heldDir = null;
+    dispose();
+    // 컴포넌트 제거가 대기열에 남아 onRemove가 아직 안 불렸을 수 있어 직접 놓는다.
+    _tiles.release();
+    if (isLoaded) avatar.releaseAssets();
     _bank.dispose();
-    super.onRemove();
+    super.onDispose();
+  }
+
+  @override
+  void onDetach() {
+    _heldDir = null;
+    super.onDetach();
   }
 
   @override
   void update(double dt) {
+    // KeyUp을 못 받은 채 키가 떼어졌으면(포커스 이동) 누름 상태를 버린다.
+    if (_heldDir != null && directionFromKeys(pressedKeys()) != _heldDir) {
+      _heldDir = null;
+    }
     final dir = _heldDir;
     if (dir != null && !avatar.isMoving) {
       final (c, r) = avatar.tile;
@@ -179,18 +212,27 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   KeyEventResult onKeyEvent(
       KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
     _heldDir = directionFromKeys(keysPressed);
-    return _heldDir != null || event is KeyUpEvent
+    return _heldDir != null || movementKeys.contains(event.logicalKey)
         ? KeyEventResult.handled
         : KeyEventResult.ignored;
   }
 
   void _onTapWorld(Vector2 worldPos) {
     var goal = grid.toTile(worldPos);
+    final (fc, fr) = VillageMap.fountainTile;
+    if ((goal.$1 - fc).abs() <= 1 && (goal.$2 - fr).abs() <= 1) {
+      onFountainTapped?.call();
+      return;
+    }
     // 건물을 누르면 그 건물 문으로 간다.
     final building = VillageMap.buildingAt(goal.$1, goal.$2);
     if (building != null) goal = VillageMap.doors[building]!;
     if (!VillageMap.isWalkable(goal.$1, goal.$2)) return;
-    final path = grid.findPath(avatar.tile, goal, VillageMap.isWalkable);
+    // 목표가 아닌 문은 지나가지 않는다. 지나가면 엉뚱한 던전에 들어간다.
+    bool walkable(int c, int r) =>
+        VillageMap.isWalkable(c, r) &&
+        (VillageMap.doorAt(c, r) == null || (c, r) == goal);
+    final path = grid.findPath(avatar.tile, goal, walkable);
     if (path.isEmpty) return;
     _marker.goal = goal;
     avatar.moveAlong(path);
@@ -201,10 +243,23 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
     final id = VillageMap.doorAt(col, row);
     if (id == null) return;
     avatar.stop();
+    _heldDir = null;
     if (_state[id]?.open == false) return;
     onDoorReached?.call(id);
   }
 }
+
+/// 이동에 쓰는 키(방향키, WASD).
+final movementKeys = {
+  LogicalKeyboardKey.arrowUp,
+  LogicalKeyboardKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight,
+  LogicalKeyboardKey.keyW,
+  LogicalKeyboardKey.keyA,
+  LogicalKeyboardKey.keyS,
+  LogicalKeyboardKey.keyD,
+};
 
 /// 방향키·WASD → 격자 방향. 화면 위쪽 키가 row-1(오른쪽 위)로 간다.
 (int, int)? directionFromKeys(Set<LogicalKeyboardKey> keys) {
@@ -225,7 +280,7 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
 class _VillageTiles extends Component {
   _VillageTiles() : super(priority: -0x7ffffff);
 
-  late final Picture _picture;
+  Picture? _picture;
 
   static const _grassA = Color(0xFF9FD8A8);
   static const _grassB = Color(0xFFA7DCB0);
@@ -270,11 +325,19 @@ class _VillageTiles extends Component {
   }
 
   @override
-  void render(Canvas canvas) => canvas.drawPicture(_picture);
+  void render(Canvas canvas) {
+    final p = _picture;
+    if (p != null) canvas.drawPicture(p);
+  }
+
+  void release() {
+    _picture?.dispose();
+    _picture = null;
+  }
 
   @override
   void onRemove() {
-    _picture.dispose();
+    release();
     super.onRemove();
   }
 }
@@ -284,16 +347,11 @@ class _TargetMarker extends Component {
   _TargetMarker(this.grid) : super(priority: -0x7fffff0);
 
   final IsoGrid grid;
-  (int, int)? goal;
-  final _paint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 2.5
-    ..color = const Color(0xCC6C8CFF);
-  final _path = Path();
-
-  @override
-  void render(Canvas canvas) {
-    final g = goal;
+  (int, int)? _goal;
+  (int, int)? get goal => _goal;
+  set goal((int, int)? g) {
+    if (g == _goal) return;
+    _goal = g;
     if (g == null) return;
     final c = grid.toScreen(g.$1, g.$2);
     final hw = grid.halfW * 0.8, hh = grid.halfH * 0.8;
@@ -305,7 +363,17 @@ class _TargetMarker extends Component {
         Offset(c.x, c.y + hh),
         Offset(c.x - hw, c.y),
       ], true);
-    canvas.drawPath(_path, _paint);
+  }
+
+  final _paint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.5
+    ..color = const Color(0xCC6C8CFF);
+  final _path = Path();
+
+  @override
+  void render(Canvas canvas) {
+    if (_goal != null) canvas.drawPath(_path, _paint);
   }
 }
 
@@ -331,7 +399,11 @@ class _Building extends PositionComponent
     // 가운데 칸보다 살짝 뒤: 문 앞이나 옆에 선 학생이 건물 위에 그려진다.
     priority = isoDepth((c0 + 1 + r0 + 1) - 0.5);
     label = _BuildingLabel(this);
-    _doorScreen = grid.toScreen(door.$1, door.$2);
+    // 문 왼쪽 앞에 꽂힌 작은 표지판(건물 로컬 좌표).
+    final d = grid.toScreen(door.$1, door.$2);
+    final local = d - (position - Vector2(size.x / 2, size.y));
+    _signBase = Offset(local.x - 30, local.y + 4);
+    _signPost = Rect.fromLTWH(_signBase.dx - 1.5, _signBase.dy - 16, 3, 16);
   }
 
   final String id;
@@ -339,7 +411,13 @@ class _Building extends PositionComponent
   final Svg svg;
   final Svg flag;
   late final _BuildingLabel label;
-  late final Vector2 _doorScreen;
+  late final Offset _signBase;
+  late final Rect _signPost;
+  RRect? _signBoard;
+  Offset _signTextAt = Offset.zero;
+
+  @override
+  bool get cullsStatically => true;
 
   DungeonState? _state;
   DungeonState? get state => _state;
@@ -394,30 +472,26 @@ class _Building extends PositionComponent
   void _renderSign(Canvas canvas, int count) {
     if (_signCount != count || _signText == null) {
       _signCount = count;
-      _signText = TextPainter(
+      final tp = _signText = TextPainter(
         text: TextSpan(
           text: '$count명',
           style: game.labelStyle(10, const Color(0xFF3B4A6B)),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
+      final board = _signBoard = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+            center: _signBase.translate(0, -20),
+            width: tp.width + 12,
+            height: tp.height + 6),
+        const Radius.circular(4),
+      );
+      _signTextAt = board.center - Offset(tp.width / 2, tp.height / 2);
     }
-    // 문 왼쪽 앞에 꽂힌 작은 표지판(건물 로컬 좌표).
-    final local = _doorScreen - (position - Vector2(size.x / 2, size.y));
-    final base = Offset(local.x - 30, local.y + 4);
-    canvas.drawRect(
-        Rect.fromLTWH(base.dx - 1.5, base.dy - 16, 3, 16), _postPaint);
-    final tp = _signText!;
-    final board = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-          center: base.translate(0, -20),
-          width: tp.width + 12,
-          height: tp.height + 6),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(board, _boardPaint);
-    canvas.drawRRect(board, _boardEdge);
-    tp.paint(canvas, board.center - Offset(tp.width / 2, tp.height / 2));
+    canvas.drawRect(_signPost, _postPaint);
+    canvas.drawRRect(_signBoard!, _boardPaint);
+    canvas.drawRRect(_signBoard!, _boardEdge);
+    _signText!.paint(canvas, _signTextAt);
   }
 }
 
@@ -429,6 +503,9 @@ class _BuildingLabel extends PositionComponent
 
   final _Building building;
   TextPainter? _name;
+
+  @override
+  bool get cullsStatically => true;
   TextPainter? _closed;
 
   /// 건물 SVG(높이 224)에서 그림이 시작되는 y.
@@ -480,6 +557,7 @@ class _BuildingLabel extends PositionComponent
         : null;
     final w = _name!.width + 24;
     size = Vector2(w, _closed == null ? 24 : 48);
+    if (isMounted) refreshCullBounds();
   }
 
   @override

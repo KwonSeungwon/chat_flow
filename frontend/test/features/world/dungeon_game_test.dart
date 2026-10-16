@@ -1,7 +1,9 @@
 import 'dart:math';
 
 import 'package:chatflow/features/world/game/dungeon_game.dart';
+import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -103,5 +105,26 @@ void main() {
     expect(DungeonGame.isWalkable(sc, sr), isTrue);
     expect(DungeonGame.isWalkable(-1, 0), isFalse);
     expect(DungeonGame.isWalkable(0, DungeonGame.roomSize), isFalse);
+  });
+
+  testWidgets('attaching and disposing dungeons repeatedly releases them',
+      (tester) async {
+    for (final id in ['k8s', 'db', 'shell']) {
+      final game = DungeonGame(id);
+      await tester.pumpWidget(GameWidget(game: game));
+      bool ready() => game.isLoaded && game.avatar.isLoaded;
+      for (var f = 0; f < 40 && !ready(); f++) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(ready(), isTrue);
+      game.setBossPhase(true);
+      final avatar = game.avatar;
+      expect(avatar.assetsReleased, isFalse);
+      await tester.pumpWidget(const SizedBox());
+      expect(avatar.assetsReleased, isTrue);
+    }
   });
 }
