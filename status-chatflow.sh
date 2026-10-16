@@ -60,24 +60,18 @@ main() {
     check_service_status "Vue3 Frontend     " 3000
     check_service_status "Gateway Service   " 8000 "http://localhost:8000/actuator/health"
     check_service_status "Chat Service      " 8080 "http://localhost:8080/actuator/health"
-    check_service_status "AI Summary Service" 8081 "http://localhost:8081/actuator/health"
-    check_service_status "Search Service    " 8082 "http://localhost:8082/actuator/health"
     
     echo ""
     echo -e "${WHITE}=== 🐳 Infrastructure Services ===${NC}"
     check_docker_service "valkey"
-    check_docker_service "kafka"
-    check_docker_service "elasticsearch"
     check_docker_service "postgresql"
     check_docker_service "prometheus"
     check_docker_service "grafana"
-    check_docker_service "kibana"
     
     echo ""
     echo -e "${WHITE}=== 🌐 Quick Access ===${NC}"
     echo -e "${CYAN}웹 앱:${NC}      http://localhost:3000"
     echo -e "${CYAN}Grafana:${NC}    http://localhost:3001"
-    echo -e "${CYAN}Kibana:${NC}     http://localhost:5601"
     echo ""
 }
 

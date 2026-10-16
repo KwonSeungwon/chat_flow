@@ -9,7 +9,7 @@ set -euo pipefail
 # Helm 배포는 helm/chatflow + values-k3s.yaml 기준으로 수동 실행한다.
 #
 # 필수 환경 변수 (scripts/.env.deploy 또는 환경에서 주입):
-#   DEPLOY_DB_PASSWORD, DEPLOY_GEMINI_API_KEY, DEPLOY_JWT_SECRET, DEPLOY_GATEWAY_SECRET
+#   DEPLOY_DB_PASSWORD, DEPLOY_JWT_SECRET, DEPLOY_GATEWAY_SECRET
 # 이미 존재하는 Secret은 건드리지 않는다 (회전은 kubectl로 직접).
 
 K3S_HOST="node.gossiplog.com"
@@ -26,7 +26,6 @@ fi
 
 # 필수 시크릿 환경 변수 검증
 : "${DEPLOY_DB_PASSWORD:?DEPLOY_DB_PASSWORD 환경 변수를 설정하세요 (scripts/.env.deploy 참고)}"
-: "${DEPLOY_GEMINI_API_KEY:?DEPLOY_GEMINI_API_KEY 환경 변수를 설정하세요}"
 : "${DEPLOY_JWT_SECRET:?DEPLOY_JWT_SECRET 환경 변수를 설정하세요}"
 : "${DEPLOY_GATEWAY_SECRET:?DEPLOY_GATEWAY_SECRET 환경 변수를 설정하세요}"
 
@@ -69,15 +68,8 @@ step_secrets() {
     "--from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
      --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
      --from-literal=DB_PASSWORD='$DEPLOY_DB_PASSWORD'"
-  create_secret_if_absent chatflow-kafka-secret \
-    "--from-literal=KAFKA_BOOTSTRAP_SERVERS=kafka:9092"
   create_secret_if_absent chatflow-valkey-secret \
     "--from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 --from-literal=VALKEY_PASSWORD="
-  create_secret_if_absent chatflow-elasticsearch-secret \
-    "--from-literal=ELASTICSEARCH_URIS=http://elasticsearch:9200 \
-     --from-literal=ELASTICSEARCH_USERNAME= --from-literal=ELASTICSEARCH_PASSWORD="
-  create_secret_if_absent chatflow-gemini-secret \
-    "--from-literal=GEMINI_API_KEY='$DEPLOY_GEMINI_API_KEY'"
   create_secret_if_absent chatflow-jwt-secret \
     "--from-literal=JWT_SECRET='$DEPLOY_JWT_SECRET'"
   create_secret_if_absent chatflow-gateway-internal-secret \

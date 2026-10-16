@@ -12,18 +12,12 @@ global:
   externalSecrets:
     postgresql:
       secretName: chatflow-postgresql-secret
-    kafka:
-      secretName: chatflow-kafka-secret
     valkey:
       secretName: chatflow-valkey-secret
-    elasticsearch:
-      secretName: chatflow-elasticsearch-secret
-    gemini:
-      secretName: chatflow-gemini-secret
     jwt:
       secretName: chatflow-jwt-secret
 
-  springProfile: prod,langchain4j
+  springProfile: prod
 
 # --- 서비스별 기본값 ---
 gateway-service:
@@ -67,46 +61,6 @@ chat-service:
     enabled: true
     minReplicas: 2
     maxReplicas: 8
-    targetCPUUtilizationPercentage: 70
-
-ai-summary-service:
-  enabled: true
-  replicaCount: 1
-  image:
-    name: ai-summary-service
-  service:
-    port: 8081
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 500m
-      memory: 1Gi
-  hpa:
-    enabled: true
-    minReplicas: 1
-    maxReplicas: 3
-    targetCPUUtilizationPercentage: 75
-
-search-service:
-  enabled: true
-  replicaCount: 2
-  image:
-    name: search-service
-  service:
-    port: 8082
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: 500m
-      memory: 1Gi
-  hpa:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 5
     targetCPUUtilizationPercentage: 70
 
 frontend:

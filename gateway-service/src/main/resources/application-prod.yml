@@ -54,44 +54,6 @@ spring:
               args:
                 retries: 2
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
-        # ───────── AI Summary (Gemini 호출, 비용 높음·느림, 엄격) ─────────
-        - id: ai-summary-service
-          uri: ${AI_SUMMARY_SERVICE_URL}
-          predicates:
-            - Path=/api/ai-summary/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 2
-                redis-rate-limiter.burstCapacity: 5
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: aiSummaryCircuitBreaker
-                fallbackUri: forward:/api/fallback/ai-summary
-            - name: Retry
-              args:
-                retries: 1
-                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
-        # ───────── Search (Elasticsearch, 중간) ─────────
-        - id: search-service
-          uri: ${SEARCH_SERVICE_URL}
-          predicates:
-            - Path=/api/search/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: searchCircuitBreaker
-                fallbackUri: forward:/api/fallback/search
-            - name: Retry
-              args:
-                retries: 2
-                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
         # ───────── WebSocket (레이트 리밋 제외 — 지속 연결) ─────────
         - id: websocket
           uri: ${CHAT_SERVICE_WS_URL}
@@ -210,19 +172,6 @@ resilience4j:
         base-config: default
         failure-rate-threshold: 70
         wait-duration-in-open-state: 60s
-      # AI Summary — Gemini 호출, 매우 느림 허용
-      aiSummaryCircuitBreaker:
-        base-config: default
-        sliding-window-size: 20
-        minimum-number-of-calls: 10
-        failure-rate-threshold: 70
-        slow-call-rate-threshold: 90
-        slow-call-duration-threshold: 15s
-        wait-duration-in-open-state: 60s
-      # Search — Elasticsearch, 중간
-      searchCircuitBreaker:
-        base-config: default
-        slow-call-duration-threshold: 5s
       # File — 대용량 업로드 가능, 느림 허용
       fileCircuitBreaker:
         base-config: default
@@ -237,11 +186,6 @@ resilience4j:
       chatCircuitBreaker:
         base-config: default
       fcmCircuitBreaker:
-        base-config: default
-      aiSummaryCircuitBreaker:
-        base-config: default
-        timeout-duration: 30s
-      searchCircuitBreaker:
         base-config: default
       fileCircuitBreaker:
         base-config: default

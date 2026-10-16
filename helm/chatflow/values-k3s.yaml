@@ -26,18 +26,12 @@ global:
   externalSecrets:
     postgresql:
       secretName: chatflow-postgresql-secret
-    kafka:
-      secretName: chatflow-kafka-secret
     valkey:
       secretName: chatflow-valkey-secret
-    elasticsearch:
-      secretName: chatflow-elasticsearch-secret
-    gemini:
-      secretName: chatflow-gemini-secret
     jwt:
       secretName: chatflow-jwt-secret
 
-  springProfile: prod,langchain4j
+  springProfile: prod
 
 gateway-service:
   enabled: true
@@ -81,46 +75,6 @@ chat-service:
   fileStorage:
     size: 5Gi
     storageClass: local-path
-
-ai-summary-service:
-  enabled: true
-  replicaCount: 1
-  image:
-    name: ai-summary-service
-    # 2026-07-21 full-fleet 배포 이후 변경 없음
-    tag: "sha-7783f2ec364166cb94f5872c349ad11a1f749f54"
-  service:
-    port: 8081
-    type: ClusterIP
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 400m
-      memory: 512Mi
-  hpa:
-    enabled: false
-
-search-service:
-  enabled: true
-  replicaCount: 1
-  image:
-    name: search-service
-    # 2026-07-21 full-fleet 배포 이후 변경 없음
-    tag: "sha-7783f2ec364166cb94f5872c349ad11a1f749f54"
-  service:
-    port: 8082
-    type: ClusterIP
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 512Mi
-  hpa:
-    enabled: false
 
 frontend:
   enabled: true

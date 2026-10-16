@@ -49,7 +49,7 @@ fi
 
 backend_touched=0
 frontend_touched=0
-echo "$CHANGED_FILES" | grep -qE '^(chat-service|gateway-service|ai-summary-service|search-service|common)/' && backend_touched=1 || true
+echo "$CHANGED_FILES" | grep -qE '^(chat-service|gateway-service|common)/' && backend_touched=1 || true
 echo "$CHANGED_FILES" | grep -qE '^frontend/' && frontend_touched=1 || true
 
 if [ "$backend_touched" = "0" ] && [ "$frontend_touched" = "0" ]; then

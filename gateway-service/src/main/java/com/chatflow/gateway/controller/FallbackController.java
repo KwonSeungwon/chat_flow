@@ -27,16 +27,6 @@ public class FallbackController {
         return buildFallback("chat-service", "채팅 서비스가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요.", 30);
     }
 
-    @RequestMapping("/ai-summary")
-    public Mono<ResponseEntity<Map<String, Object>>> aiSummaryFallback() {
-        return buildFallback("ai-summary-service", "AI 요약 서비스가 혼잡합니다. 잠시 후 다시 시도해주세요.", 60);
-    }
-
-    @RequestMapping("/search")
-    public Mono<ResponseEntity<Map<String, Object>>> searchFallback() {
-        return buildFallback("search-service", "검색 서비스가 일시적으로 불안정합니다.", 15);
-    }
-
     @RequestMapping("/files")
     public Mono<ResponseEntity<Map<String, Object>>> filesFallback() {
         return buildFallback("file-service", "파일 서비스가 일시적으로 불안정합니다.", 30);
