@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 120 142" width="120" height="142">
+  <!-- 운영 슬라임: 경고등 -->
+  <ellipse cx="60" cy="112" rx="44" ry="7" fill="#000000" opacity="0.15"/>
+  <path d="M14 110 C10 60 32 30 60 30 C88 30 110 60 106 110 Z" fill="#ff9f6b"/>
+  <path d="M22 100 C22 68 38 46 60 46" stroke="#ffc9a8" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="46" cy="72" r="8" fill="#ffffff"/><circle cx="74" cy="72" r="8" fill="#ffffff"/>
+  <circle cx="48" cy="74" r="4" fill="#24304d"/><circle cx="76" cy="74" r="4" fill="#24304d"/>
+  <path d="M48 92 Q60 84 72 92" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="48" y="26" width="24" height="6" rx="2" fill="#3b4a6b"/>
+  <path d="M50 26 C50 8 70 8 70 26 Z" fill="#ff5f6d"/>
+  <ellipse cx="56" cy="16" rx="3" ry="5" fill="#ffffff" opacity="0.7"/>
+  <path d="M40 10 L32 4 M80 10 L88 4 M60 2 L60 -6" stroke="#ffd34d" stroke-width="3" stroke-linecap="round"/>
+</svg>

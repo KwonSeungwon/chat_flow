@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 머지 컨플릭트 키메라: 사자 머리와 염소 머리가 한 몸에, 충돌 표식 줄무늬 -->
+  <ellipse cx="100" cy="186" rx="70" ry="10" fill="#000000" opacity="0.18"/>
+  <!-- tail (snake) -->
+  <path d="M150 160 C182 156 186 120 168 108" stroke="#5bd18a" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <circle cx="168" cy="104" r="8" fill="#5bd18a"/><circle cx="170" cy="102" r="2" fill="#24304d"/>
+  <!-- legs -->
+  <rect x="58" y="150" width="20" height="34" rx="8" fill="#e8b830"/>
+  <rect x="122" y="150" width="20" height="34" rx="8" fill="#6c8cff"/>
+  <!-- body split in two colours -->
+  <path d="M40 160 C36 116 64 100 100 100 L100 166 C70 170 46 168 40 160 Z" fill="#ffcf5a"/>
+  <path d="M100 100 C136 100 164 116 160 160 C154 168 130 170 100 166 Z" fill="#8aa4ff"/>
+  <!-- conflict markers -->
+  <path d="M100 100 L100 166" stroke="#ffffff" stroke-width="3" stroke-dasharray="6 5"/>
+  <path d="M54 120 L62 126 L54 132 M64 120 L72 126 L64 132" stroke="#ff5f6d" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M146 120 L138 126 L146 132 M136 120 L128 126 L136 132" stroke="#2fb88a" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- lion head (left) -->
+  <circle cx="64" cy="72" r="36" fill="#e8822e"/>
+  <circle cx="64" cy="74" r="25" fill="#ffcf5a"/>
+  <circle cx="55" cy="70" r="4.5" fill="#24304d"/><circle cx="73" cy="70" r="4.5" fill="#24304d"/>
+  <path d="M58 84 Q64 90 70 84" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <polygon points="61,78 67,78 64,82" fill="#8a5a44"/>
+  <path d="M48 62 L60 66 M80 62 L68 66" stroke="#24304d" stroke-width="3" stroke-linecap="round"/>
+  <!-- goat head (right) -->
+  <ellipse cx="138" cy="74" rx="22" ry="27" fill="#c9d4ff"/>
+  <path d="M120 54 C108 40 112 22 126 26 C120 34 122 44 128 50 Z" fill="#8a6a4a"/>
+  <path d="M156 54 C168 40 164 22 150 26 C156 34 154 44 148 50 Z" fill="#8a6a4a"/>
+  <circle cx="130" cy="72" r="4" fill="#24304d"/><circle cx="146" cy="72" r="4" fill="#24304d"/>
+  <path d="M132 88 Q138 84 144 88" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M134 98 L138 112 L142 98 Z" fill="#e3e8f2"/>
+  <!-- lightning between heads -->
+  <polygon points="100,40 94,56 102,56 96,72 110,50 102,50 106,40" fill="#ffd34d"/>
+</svg>

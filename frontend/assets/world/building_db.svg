@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- DB 도서관: 파란 지붕, 흰 기둥, 책 간판 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <polygon points="32,178 96,210 96,146 32,114" fill="#e7eefc"/>
+  <polygon points="96,210 160,178 160,114 96,146" fill="#cfdaf3"/>
+  <!-- steps -->
+  <polygon points="44,186 92,210 96,214 40,186" fill="#ffffff"/>
+  <!-- columns on the front-left wall -->
+  <rect x="38" y="124" width="6" height="58" rx="3" fill="#ffffff"/>
+  <rect x="48" y="129" width="6" height="58" rx="3" fill="#ffffff"/>
+  <rect x="76" y="143" width="6" height="58" rx="3" fill="#ffffff"/>
+  <rect x="86" y="148" width="6" height="58" rx="3" fill="#ffffff"/>
+  <!-- pediment band -->
+  <polygon points="30,112 98,146 98,138 30,104" fill="#f7f9ff"/>
+  <polygon points="24,108 96,144 96,40" fill="#6c8cff"/>
+  <polygon points="96,144 168,108 96,40" fill="#4f6ee6"/>
+  <!-- door -->
+  <path d="M57,189 L71,196 L71,180 Q64,171 57,174 Z" fill="#5a4a7a"/>
+  <!-- open book sign on right wall -->
+  <polygon points="112,176 127,169 127,155 112,162" fill="#ffffff"/>
+  <polygon points="127,169 142,162 142,148 127,155" fill="#f4f7ff"/>
+  <line x1="127" y1="155" x2="127" y2="169" stroke="#6c8cff" stroke-width="1.5"/>
+  <line x1="115" y1="165" x2="124" y2="161" stroke="#9aa9d6" stroke-width="1.2"/>
+  <line x1="130" y1="160" x2="139" y2="156" stroke="#9aa9d6" stroke-width="1.2"/>
+  <!-- round window on roof -->
+  <circle cx="96" cy="96" r="8" fill="#e7eefc"/>
+  <circle cx="96" cy="96" r="5" fill="#9fd0ff"/>
+</svg>

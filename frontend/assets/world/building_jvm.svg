@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- JVM 대장간: 주황 지붕, 굴뚝과 연기, 화덕, 모루 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <polygon points="32,178 96,210 96,154 32,122" fill="#f3e3cf"/>
+  <polygon points="96,210 160,178 160,122 96,154" fill="#dfc7aa"/>
+  <rect x="122" y="46" width="18" height="70" rx="2" fill="#9a8478"/>
+  <rect x="122" y="46" width="9" height="70" fill="#ad978a"/>
+  <ellipse cx="131" cy="46" rx="9" ry="4" fill="#6f5d54"/>
+  <polygon points="26,122 96,158 96,62" fill="#f0a35b"/>
+  <polygon points="96,158 166,122 96,62" fill="#d98a3f"/>
+  <polygon points="96,62 104,66 104,150 96,154" fill="#c47a35" opacity="0.5"/>
+  <!-- smoke -->
+  <circle cx="136" cy="34" r="7" fill="#e3e8f2" opacity="0.9"/>
+  <circle cx="146" cy="22" r="9" fill="#e3e8f2" opacity="0.85"/>
+  <circle cx="159" cy="10" r="6" fill="#e3e8f2" opacity="0.75"/>
+  <!-- forge glow on right wall -->
+  <polygon points="108,192 136,178 136,160 108,174" fill="#5b4a42"/>
+  <polygon points="112,188 132,178 132,166 112,176" fill="#ff9b42"/>
+  <polygon points="116,184 128,178 128,172 116,178" fill="#ffe08a"/>
+  <!-- door -->
+  <path d="M55,188 L73,197 L73,182 Q64,172 55,176 Z" fill="#7a4e3a"/>
+  <!-- hammer sign -->
+  <rect x="38" y="148" width="4" height="18" fill="#6f5d54" transform="rotate(-30 40 157)"/>
+  <rect x="32" y="144" width="14" height="7" rx="1.5" fill="#7b8aa8" transform="rotate(-30 39 147)"/>
+  <!-- anvil -->
+  <polygon points="150,196 174,196 170,202 156,202" fill="#4a5168"/>
+  <rect x="158" y="202" width="8" height="8" fill="#3b4258"/>
+  <polygon points="152,210 172,210 168,214 156,214" fill="#4a5168"/>
+</svg>

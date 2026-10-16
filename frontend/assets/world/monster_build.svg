@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 120 142" width="120" height="142">
+  <!-- 빌드 슬라임: 안전모와 렌치 -->
+  <ellipse cx="60" cy="112" rx="44" ry="7" fill="#000000" opacity="0.15"/>
+  <path d="M14 110 C10 60 32 30 60 30 C88 30 110 60 106 110 Z" fill="#ffcf5a"/>
+  <path d="M22 100 C22 68 38 46 60 46" stroke="#ffe59c" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="46" cy="72" r="8" fill="#ffffff"/><circle cx="74" cy="72" r="8" fill="#ffffff"/>
+  <circle cx="48" cy="74" r="4" fill="#24304d"/><circle cx="76" cy="74" r="4" fill="#24304d"/>
+  <path d="M48 92 Q60 84 72 92" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M36 34 C36 14 84 14 84 34 Z" fill="#ff9b42"/>
+  <rect x="30" y="32" width="60" height="6" rx="3" fill="#e8822e"/>
+  <rect x="56" y="16" width="8" height="14" rx="2" fill="#ffb366"/>
+  <rect x="98" y="66" width="7" height="30" rx="3" fill="#5f6b85" transform="rotate(25 101 81)"/>
+  <circle cx="108" cy="64" r="7" fill="#5f6b85"/><circle cx="108" cy="64" r="3" fill="#ffcf5a"/>
+</svg>

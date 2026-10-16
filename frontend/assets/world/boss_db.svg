@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 데드락 리치: 보라 로브의 해골 마법사, 서로 엇갈린 사슬과 자물쇠 -->
+  <ellipse cx="100" cy="186" rx="70" ry="10" fill="#000000" opacity="0.18"/>
+  <!-- robe -->
+  <path d="M46 184 C52 120 70 86 100 86 C130 86 148 120 154 184 Z" fill="#5b3f99"/>
+  <path d="M100 86 C130 86 148 120 154 184 L100 184 Z" fill="#4a3282"/>
+  <path d="M86 92 L100 150 L114 92" fill="#b39bff"/>
+  <!-- crossed chains -->
+  <g stroke="#c9d1e3" stroke-width="5" fill="none">
+    <ellipse cx="56" cy="110" rx="9" ry="6" transform="rotate(35 56 110)"/>
+    <ellipse cx="72" cy="122" rx="9" ry="6" transform="rotate(35 72 122)"/>
+    <ellipse cx="88" cy="134" rx="9" ry="6" transform="rotate(35 88 134)"/>
+    <ellipse cx="144" cy="110" rx="9" ry="6" transform="rotate(-35 144 110)"/>
+    <ellipse cx="128" cy="122" rx="9" ry="6" transform="rotate(-35 128 122)"/>
+    <ellipse cx="112" cy="134" rx="9" ry="6" transform="rotate(-35 112 134)"/>
+  </g>
+  <!-- padlock -->
+  <path d="M90 142 L90 134 A10 10 0 0 1 110 134 L110 142" stroke="#ffd34d" stroke-width="5" fill="none"/>
+  <rect x="84" y="140" width="32" height="26" rx="5" fill="#ffd34d"/>
+  <circle cx="100" cy="151" r="4" fill="#5b3f99"/><rect x="98" y="152" width="4" height="8" fill="#5b3f99"/>
+  <!-- hood + skull -->
+  <path d="M60 80 C60 30 140 30 140 80 C140 96 124 104 100 104 C76 104 60 96 60 80 Z" fill="#4a3282"/>
+  <ellipse cx="100" cy="72" rx="26" ry="28" fill="#f4f1e8"/>
+  <ellipse cx="90" cy="70" rx="7" ry="8" fill="#2b2f45"/><ellipse cx="110" cy="70" rx="7" ry="8" fill="#2b2f45"/>
+  <circle cx="90" cy="70" r="2.5" fill="#b39bff"/><circle cx="110" cy="70" r="2.5" fill="#b39bff"/>
+  <polygon points="100,78 96,86 104,86" fill="#2b2f45"/>
+  <path d="M88 92 L112 92 M92 89 L92 96 M100 89 L100 96 M108 89 L108 96" stroke="#2b2f45" stroke-width="2"/>
+  <!-- crown -->
+  <polygon points="76,44 82,24 92,38 100,20 108,38 118,24 124,44" fill="#ffd34d"/>
+  <circle cx="100" cy="32" r="3" fill="#ff5f6d"/>
+  <!-- staff -->
+  <line x1="166" y1="60" x2="160" y2="182" stroke="#8a6a4a" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="166" cy="54" r="10" fill="#b39bff"/><circle cx="166" cy="54" r="16" fill="#b39bff" opacity="0.3"/>
+</svg>

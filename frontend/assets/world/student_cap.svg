@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="62 36 76 128" width="76" height="128">
+  <!-- mortarboard overlay: same viewBox as student.svg, sits on the A head -->
+  <rect x="86" y="54" width="28" height="9" rx="2" fill="#1f2a44"/>
+  <polygon points="100,38 134,51 100,64 66,51" fill="#1f2a44"/>
+  <polygon points="100,40 129,51 100,62 71,51" fill="#2c3a5c"/>
+  <circle cx="100" cy="51" r="2.2" fill="#ffd34d"/>
+  <line x1="100" y1="51" x2="129" y2="53" stroke="#ffd34d" stroke-width="1.6"/>
+  <line x1="129" y1="53" x2="131" y2="70" stroke="#ffd34d" stroke-width="2"/>
+  <circle cx="131" cy="72" r="3" fill="#ffd34d"/>
+</svg>

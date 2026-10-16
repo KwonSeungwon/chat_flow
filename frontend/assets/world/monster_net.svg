@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -18 120 142" width="120" height="142">
+  <!-- 네트워크 슬라임: 안테나와 전파 -->
+  <ellipse cx="60" cy="112" rx="44" ry="7" fill="#000000" opacity="0.15"/>
+  <path d="M14 110 C10 60 32 30 60 30 C88 30 110 60 106 110 Z" fill="#5fd3c4"/>
+  <path d="M22 100 C22 68 38 46 60 46" stroke="#a2ece2" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="46" cy="72" r="8" fill="#ffffff"/><circle cx="74" cy="72" r="8" fill="#ffffff"/>
+  <circle cx="48" cy="74" r="4" fill="#24304d"/><circle cx="76" cy="74" r="4" fill="#24304d"/>
+  <path d="M48 92 Q60 84 72 92" stroke="#24304d" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <line x1="60" y1="30" x2="60" y2="10" stroke="#3b4a6b" stroke-width="3"/>
+  <circle cx="60" cy="8" r="4" fill="#ff7a6b"/>
+  <path d="M48 6 Q60 -6 72 6" stroke="#22a497" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M40 4 Q60 -16 80 4" stroke="#22a497" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.6"/>
+</svg>
