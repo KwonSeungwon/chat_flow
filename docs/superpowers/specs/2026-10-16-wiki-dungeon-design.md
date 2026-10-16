@@ -136,8 +136,8 @@ gateway → chat-service game 패키지 → Postgres(game_*) / Valkey(판 상태
 bulk JSON 형식:
 
 ```json
-{ "topics": [ { "dungeonId": "jvm", "title": "...", "summary": "...", "sourceRef": "0. Wiki/2. JVM·Spring#...",
-    "monster": { "name": "OOM 슬라임", "spriteKey": "slime" },
+{ "topics": [ { "dungeonId": "jvm", "title": "...", "summary": "...", "sourceRef": "0. Wiki/2. JVM·Spring",
+    "monster": { "name": "OOM 슬라임", "spriteKey": "monster_jvm" },
     "questions": [ { "stem": "...", "choices": ["..","..","..",".."], "answerIndex": 1, "explanation": "..." } ] } ] }
 ```
 
