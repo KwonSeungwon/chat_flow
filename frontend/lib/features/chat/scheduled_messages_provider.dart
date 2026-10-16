@@ -1,3 +1,4 @@
+import '../auth/auth_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_response.dart';
@@ -66,6 +67,7 @@ class ScheduledMessagesNotifier
 
 final scheduledMessagesProvider = StateNotifierProvider<
     ScheduledMessagesNotifier, AsyncValue<List<ScheduledMessage>>>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   final dio = ref.read(dioClientProvider).dio;
   return ScheduledMessagesNotifier(dio);
 });
