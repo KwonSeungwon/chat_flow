@@ -27,6 +27,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -648,6 +649,59 @@ class ChatRoomControllerTest {
     class VerifyPassword {
 
         private final String body = "{\"password\":\"pw\"}";
+
+        @SuppressWarnings("unchecked")
+        private final ValueOperations<String, String> valueOps = org.mockito.Mockito.mock(ValueOperations.class);
+
+        @BeforeEach
+        void attemptCounter() {
+            org.mockito.Mockito.lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            org.mockito.Mockito.lenient().when(valueOps.increment(anyString())).thenReturn(1L);
+        }
+
+        @Test
+        void returns_429_on_the_sixth_attempt_within_a_minute_without_checking_the_password() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(valueOps.increment("chatflow:room:pw-attempts:r1:user-1")).thenReturn(6L);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isTooManyRequests());
+
+            verify(valueOps).setIfAbsent(eq("chatflow:room:pw-attempts:r1:user-1"), eq("0"),
+                    eq(java.time.Duration.ofMinutes(1)));
+            verify(chatRoomService, never()).verifyRoomPassword(anyString(), any());
+        }
+
+        @Test
+        void fifth_attempt_is_still_checked() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(valueOps.increment("chatflow:room:pw-attempts:r1:user-1")).thenReturn(5L);
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(false);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        void valkey_down_does_not_block_password_entry() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(valueOps.increment(anyString()))
+                    .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(false);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+            verify(chatRoomService).verifyRoomPassword("r1", "pw");
+        }
 
         @Test
         void returns_401_without_userId() throws Exception {

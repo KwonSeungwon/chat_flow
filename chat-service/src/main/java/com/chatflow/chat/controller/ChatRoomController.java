@@ -45,6 +45,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatRoomController {
 
+    private static final String PASSWORD_ATTEMPT_KEY_PREFIX = "chatflow:room:pw-attempts:";
+    private static final java.time.Duration PASSWORD_ATTEMPT_WINDOW = java.time.Duration.ofMinutes(1);
+    private static final int MAX_PASSWORD_ATTEMPTS = 5;
+
     private final ChatRoomService chatRoomService;
     private final RoomMembershipService roomMembershipService;
     private final RoomPermissionService roomPermissionService;
@@ -126,6 +130,10 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("DM 방은 비밀번호로 입장할 수 없습니다."));
         }
+        if (tooManyPasswordAttempts(roomId, userId)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error("비밀번호 시도가 너무 많습니다. 1분 뒤 다시 시도해 주세요."));
+        }
         if (!chatRoomService.verifyRoomPassword(roomId, request.password())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
@@ -139,6 +147,22 @@ public class ChatRoomController {
                     .body(ApiResponse.error(denialMessage(decision.reason())));
         }
         return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
+    }
+
+    /**
+     * Fixed one-minute window per (room, user). The TTL is set before the first
+     * INCR, so a counter never outlives its window. Valkey down → not limited.
+     */
+    private boolean tooManyPasswordAttempts(String roomId, String userId) {
+        String key = PASSWORD_ATTEMPT_KEY_PREFIX + roomId + ":" + userId;
+        try {
+            redisTemplate.opsForValue().setIfAbsent(key, "0", PASSWORD_ATTEMPT_WINDOW);
+            Long attempts = redisTemplate.opsForValue().increment(key);
+            return attempts != null && attempts > MAX_PASSWORD_ATTEMPTS;
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Password attempt limiter unavailable: {}", e.getMessage());
+            return false;
+        }
     }
 
     @RequireMember
