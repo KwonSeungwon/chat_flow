@@ -8,22 +8,20 @@ void main() {
       final p = UserProfile.fromJson({
         'userId': 'u1',
         'username': 'alice',
-        'role': 'NURSE',
         'profileImageUrl': 'https://cdn/avatar.png',
         'statusMessage': 'in a meeting',
-        'bio': 'Senior nurse',
+        'bio': 'Dungeon explorer',
       });
       expect(p.userId, 'u1');
       expect(p.profileImageUrl, 'https://cdn/avatar.png');
       expect(p.statusMessage, 'in a meeting');
-      expect(p.bio, 'Senior nurse');
+      expect(p.bio, 'Dungeon explorer');
     });
 
     test('fromJson treats empty string and missing fields as null', () {
       final p = UserProfile.fromJson({
         'userId': 'u2',
         'username': 'bob',
-        'role': 'NURSE',
         'profileImageUrl': '',
         'statusMessage': null,
       });
@@ -36,7 +34,6 @@ void main() {
       final p = UserProfile(
         userId: 'u1',
         username: 'a',
-        role: 'NURSE',
         profileImageUrl: 'https://x',
       );
       expect(p.copyWith(clearProfileImageUrl: true).profileImageUrl, isNull);
@@ -46,7 +43,6 @@ void main() {
       final p = UserProfile(
         userId: 'u1',
         username: 'a',
-        role: 'NURSE',
         statusMessage: 'old',
       );
       expect(p.copyWith(bio: 'new').statusMessage, 'old');

@@ -14,7 +14,7 @@ void main() {
       await tester.pumpWidget(_wrap(
         ChatInput(
           isConnected: true,
-          onSend: (_, {String priority = 'ROUTINE'}) {},
+          onSend: (_) {},
           onEditLastMessage: () => called = true,
         ),
       ));
@@ -36,7 +36,7 @@ void main() {
       await tester.pumpWidget(_wrap(
         ChatInput(
           isConnected: true,
-          onSend: (_, {String priority = 'ROUTINE'}) {},
+          onSend: (_) {},
           onEditLastMessage: () => called = true,
         ),
       ));
@@ -58,7 +58,7 @@ void main() {
       await tester.pumpWidget(_wrap(
         ChatInput(
           isConnected: true,
-          onSend: (_, {String priority = 'ROUTINE'}) {},
+          onSend: (_) {},
           onEditLastMessage: null,
         ),
       ));
@@ -80,7 +80,7 @@ void main() {
       await tester.pumpWidget(_wrap(
         ChatInput(
           isConnected: true,
-          onSend: (_, {String priority = 'ROUTINE'}) {},
+          onSend: (_) {},
           onEditLastMessage: () => called = true,
         ),
       ));

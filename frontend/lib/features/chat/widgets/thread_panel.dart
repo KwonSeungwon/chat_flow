@@ -196,7 +196,7 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                 // Cancel closes the panel — the parent banner is the panel
                 // itself; dismissing the reply means leaving the thread.
                 onCancelReply: () => Navigator.of(context).pop(),
-                onSend: (content, {String priority = 'ROUTINE'}) {
+                onSend: (content) {
                   // replyOverride pins parentMessageId without mutating
                   // state.replyTarget (owned by the main chat input).
                   ref
@@ -204,7 +204,6 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                       .sendMessage(
                         roomId: widget.roomId,
                         content: content,
-                        priority: priority,
                         replyOverride: widget.parent,
                       );
                 },

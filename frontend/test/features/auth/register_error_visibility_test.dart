@@ -54,7 +54,7 @@ class _RegisterSucceedsAdapter implements HttpClientAdapter {
     requestedPaths.add(options.path);
     sentBodies[options.path] = options.data;
     final body = switch (options.path) {
-      '/api/auth/register' => '{"token":"t","userId":"u1","role":"NURSE"}',
+      '/api/auth/register' => '{"token":"t","userId":"u1"}',
       '/api/files/upload' => '{"success":true,"data":{'
           '"fileUrl":"/api/files/93488eec-86c3-44ff-a7e6-b3b6b80d1aac",'
           '"fileName":"avatar.png","fileContentType":"image/png"}}',

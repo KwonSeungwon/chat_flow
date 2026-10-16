@@ -9,7 +9,6 @@ import '../../core/network/api_response.dart';
 import '../../core/network/stomp_service.dart';
 import '../../core/utils/server_time.dart';
 import '../../shared/models/chat_message.dart';
-import '../../shared/models/patient_card.dart';
 import 'state/chat_messages_state.dart';
 export 'state/chat_messages_state.dart';
 import '../../core/constants/storage_keys.dart';
@@ -491,20 +490,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   void sendMessage({
     required String roomId,
     required String content,
-    String priority = 'ROUTINE',
     ChatMessage? replyOverride,
   }) =>
       _send.sendMessage(
         roomId: roomId,
         content: content,
-        priority: priority,
         replyOverride: replyOverride,
       );
 
   void retryFailedMessage(ChatMessage msg) => _send.retryFailedMessage(msg);
-
-  void sendPatientCard(String roomId, PatientCard card) =>
-      _send.sendPatientCard(roomId, card);
 
   Future<void> uploadAndSendFile({
     required String roomId,

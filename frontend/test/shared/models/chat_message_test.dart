@@ -21,7 +21,6 @@ void main() {
           '\u{1F44D}': ['user-1', 'user-2'],
         },
         localId: 'local-1',
-        priority: 'URGENT',
         isAiGenerated: true,
       );
 
@@ -41,7 +40,6 @@ void main() {
       expect(restored.username, 'tester');
       expect(restored.content, 'hello');
       expect(restored.type, 'CHAT');
-      expect(restored.priority, 'URGENT');
       expect(restored.isAiGenerated, true);
     });
 

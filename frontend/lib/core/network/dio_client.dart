@@ -8,8 +8,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/storage_keys.dart';
 import 'api_response.dart';
 
-/// 저장된 세션 자격증명 5개 키를 모두 지운다. 로그아웃/만료/401 모두 이 경로를 쓴다.
-/// 하나라도 남으면 다음 계정이 이전 사용자의 role/아바타를 물려받는다.
+/// 저장된 세션 자격증명 키를 모두 지운다. 로그아웃/만료/401 모두 이 경로를 쓴다.
+/// 하나라도 남으면 다음 계정이 이전 사용자의 아바타를 물려받는다.
+/// 예전 버전이 남긴 직군 키(legacyRole)도 여기서 함께 지운다.
 Future<void> clearStoredCredentials([
   FlutterSecureStorage storage = const FlutterSecureStorage(),
 ]) async {
@@ -17,7 +18,7 @@ Future<void> clearStoredCredentials([
     StorageKeys.token,
     StorageKeys.userId,
     StorageKeys.username,
-    StorageKeys.role,
+    StorageKeys.legacyRole,
     StorageKeys.profileImage,
   ]) {
     await storage.delete(key: key);
