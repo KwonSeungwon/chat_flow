@@ -2,6 +2,7 @@ package com.chatflow.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -55,4 +56,12 @@ public class ChatMessage extends BaseMessage {
      */
     @JsonProperty("edited")
     private boolean edited;
+
+    /**
+     * Optional client-generated id (the sender's optimistic-bubble id), echoed
+     * back on the room broadcast so the sender can match its own echo. Never
+     * persisted; null for server-authored messages and older payloads.
+     */
+    @Size(max = 100, message = "clientMessageId는 100자를 초과할 수 없습니다")
+    private String clientMessageId;
 }

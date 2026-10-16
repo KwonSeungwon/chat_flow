@@ -100,8 +100,15 @@ chatflow:
   frontend:
     base-url: http://localhost:8000
 
+# Must equal the gateway's jwt.secret — chat-service validates the STOMP
+# CONNECT "Authorization: Bearer <jwt>" header with it.
 jwt:
-  secret: local-dev-secret-do-not-use-in-production-1234567890
+  secret: chatflow-local-jwt-secret-key-must-be-at-least-32-bytes-long
+
+# Must equal the gateway's GATEWAY_INTERNAL_SECRET. WS handshakes and
+# X-User-Id REST auth are rejected (fail-closed) without a matching value.
+# (an env var of the same name overrides this — env beats yml)
+GATEWAY_INTERNAL_SECRET: local-dev-gateway-internal-secret
 
 # Firebase FCM (optional — omit to disable push notifications)
 # Set FIREBASE_SERVICE_ACCOUNT_PATH to file:/absolute/path/to/firebase-service-account.json

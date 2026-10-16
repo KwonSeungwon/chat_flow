@@ -116,10 +116,28 @@ spring:
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
             - Path=/ws/**
+          filters:
+            # Every handshake through the gateway carries the internal secret —
+            # chat-service rejects WS handshakes without it. Identity is NOT
+            # implied: unauthenticated (browser) sockets authenticate on STOMP
+            # CONNECT with an Authorization: Bearer header.
+            - name: SetRequestHeader
+              args:
+                name: X-Gateway-Secret
+                value: ${GATEWAY_INTERNAL_SECRET:}
         - id: websocket-native
           uri: ${CHAT_SERVICE_WS_URL}
           predicates:
             - Path=/ws-native/**
+          filters:
+            # Every handshake through the gateway carries the internal secret —
+            # chat-service rejects WS handshakes without it. Identity is NOT
+            # implied: unauthenticated (browser) sockets authenticate on STOMP
+            # CONNECT with an Authorization: Bearer header.
+            - name: SetRequestHeader
+              args:
+                name: X-Gateway-Secret
+                value: ${GATEWAY_INTERNAL_SECRET:}
         # ───────── File (업로드·다운로드, 엄격) ─────────
         - id: file-service
           uri: ${CHAT_SERVICE_URL}

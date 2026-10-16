@@ -1,5 +1,6 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.dto.InboundChatCommand;
 import com.chatflow.chat.service.ChatService;
 import com.chatflow.chat.service.read.ReadReceiptService;
 import com.chatflow.chat.service.room.RoomMembershipChecker;
@@ -49,26 +50,39 @@ public class ChatController {
         }
     }
 
+    /**
+     * Identity is taken from the STOMP session only (handshake or CONNECT); the
+     * payload type has no identity fields at all. Rejections go to the sender's
+     * {@code /user/queue/errors} when there is a sender, otherwise they are
+     * dropped with a log line that carries no payload content.
+     */
     @MessageMapping("/chat.sendMessage")
-    public void sendMessage(@Payload ChatMessage chatMessage,
+    public void sendMessage(@Payload InboundChatCommand command,
                            SimpMessageHeaderAccessor headerAccessor) {
-        // 세션에서 인증된 사용자 정보로 덮어쓰기 (클라이언트 위조 방지)
-        Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
-        if (sessionAttrs != null) {
-            String sessionUsername = (String) sessionAttrs.get("username");
-            String sessionUserId = (String) sessionAttrs.get("userId");
-            if (sessionUsername != null) chatMessage.setUsername(sessionUsername);
-            if (sessionUserId != null) chatMessage.setUserId(sessionUserId);
+        String userId = sessionUserId(headerAccessor);
+        if (userId == null) {
+            log.warn("STOMP sendMessage rejected: no authenticated identity on session={}",
+                    headerAccessor.getSessionId());
+            return;
         }
+        if (!command.hasAllowedType()) {
+            log.warn("STOMP sendMessage rejected: type {} not user-sendable, user={} room={}",
+                    command.type(), userId, command.chatRoomId());
+            messagingTemplate.convertAndSendToUser(userId, "/queue/errors",
+                    Map.of("type", "INVALID_MESSAGE_TYPE", "operation", "sendMessage", "roomId",
+                            command.chatRoomId() != null ? command.chatRoomId() : ""));
+            return;
+        }
+        ChatMessage chatMessage = command.toChatMessage(userId, sessionUsername(headerAccessor, userId));
         // Membership gate — without this, an authenticated user could send
         // messages into ANY room id by spoofing the chatRoomId field.
         // Uses findMember (single DB fetch) so the resolved entity can be
         // forwarded to the mute-gate in MessageSenderService, avoiding a
         // duplicate room_members lookup.
         Optional<MembershipResult> membership = membershipChecker.findMember(
-                chatMessage.getChatRoomId(), chatMessage.getUserId());
+                chatMessage.getChatRoomId(), userId);
         if (membership.isEmpty()) {
-            rejectNonMember(chatMessage.getUserId(), chatMessage.getChatRoomId(), "sendMessage");
+            rejectNonMember(userId, chatMessage.getChatRoomId(), "sendMessage");
             return;
         }
         Set<ConstraintViolation<ChatMessage>> violations = validator.validate(chatMessage);
@@ -84,10 +98,25 @@ public class ChatController {
             }
             return;
         }
-        log.debug("Received message: {}", chatMessage);
-        // Pass the pre-fetched member entity (may be null for creator-only) to
-        // skip the duplicate findByRoomIdAndUserId in the mute gate.
+        log.debug("Received message: room={} user={} type={}",
+                chatMessage.getChatRoomId(), userId, chatMessage.getType());
         chatService.processMessage(chatMessage, membership.get().entity());
+    }
+
+    /** Session userId set at handshake (gateway) or CONNECT (Bearer); falls back to the Principal. */
+    private static String sessionUserId(SimpMessageHeaderAccessor headerAccessor) {
+        Map<String, Object> attrs = headerAccessor.getSessionAttributes();
+        String userId = attrs != null ? (String) attrs.get("userId") : null;
+        if ((userId == null || userId.isBlank()) && headerAccessor.getUser() != null) {
+            userId = headerAccessor.getUser().getName();
+        }
+        return userId == null || userId.isBlank() ? null : userId;
+    }
+
+    private static String sessionUsername(SimpMessageHeaderAccessor headerAccessor, String userId) {
+        Map<String, Object> attrs = headerAccessor.getSessionAttributes();
+        String username = attrs != null ? (String) attrs.get("username") : null;
+        return username == null || username.isBlank() ? userId : username;
     }
 
     @MessageMapping("/chat.addUser")
