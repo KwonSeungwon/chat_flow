@@ -11,7 +11,6 @@ import '../scheduled_messages_provider.dart';
 import '../admin/admin_event_state.dart';
 import '../dialogs/edit_message_dialog.dart';
 import '../dialogs/forward_dialog.dart';
-import '../dialogs/in_room_search.dart';
 import '../dialogs/readers_sheet.dart';
 import 'chat_input.dart';
 import 'chat_messages_list.dart';
@@ -43,7 +42,6 @@ class ChatRoomContent extends ConsumerStatefulWidget {
 
 class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   String? _replyScrollTarget;
-  final _keyboardFocusNode = FocusNode();
   /// Captured in initState: `ref` is unusable inside dispose().
   late final StateController<String?> _activeRoomId;
 
@@ -78,7 +76,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
         activeRoomId.state = null;
       }
     });
-    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -143,17 +140,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
             ? chatState.lastReadMessageId
             : null);
 
-    return KeyboardListener(
-      focusNode: _keyboardFocusNode,
-      autofocus: false,
-      onKeyEvent: (event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.keyF &&
-            HardwareKeyboard.instance.isControlPressed) {
-          showInRoomSearch(context, ref, widget.roomId);
-        }
-      },
-      child: Column(
+    return Column(
       children: [
         // Pin banner
         Builder(builder: (context) {
@@ -272,7 +259,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
             child: ChatMessagesList(
               messages: chatState.messages,
               currentUsername: widget.username,
-              isAiLoading: chatState.isAiLoading,
               isLoadingHistory: chatState.isLoadingHistory,
               hasMoreHistory: chatState.hasMoreHistory,
               onLoadMoreHistory: () => chatNotifier.loadMoreHistory(widget.roomId),
@@ -354,7 +340,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           ),
         ChatInput(
           isConnected: chatState.isConnected,
-          isAiLoading: chatState.isAiLoading,
           roomId: widget.roomId,
           mutedUntil: ref.watch(mutedEventProvider(widget.roomId))?.mutedUntil,
           onEditLastMessage: () {
@@ -389,7 +374,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
             chatNotifier.sendMessage(
                 roomId: widget.roomId, content: content, priority: priority);
           },
-          onAskAi: (question) => chatNotifier.askAi(widget.roomId, question),
           onSendPatientCard: (card) =>
               chatNotifier.sendPatientCard(widget.roomId, card),
           onFilePick: (fileName, bytes, mimeType, content) =>
@@ -409,7 +393,6 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
           },
         ),
       ],
-    ),
     );
   }
 }

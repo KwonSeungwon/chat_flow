@@ -12,7 +12,6 @@ import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.common.dto.BaseMessage.MessageType;
 import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -154,8 +153,7 @@ public class MessageSenderService {
                     .toList();
         }
 
-        chatPersistenceService.persistMessageAndPublish(
-                message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null, mentionEntities);
+        chatPersistenceService.persistMessageAndPublish(message, mentionEntities);
         messageCounter.increment();
         chatRoomService.updateLastMessageAt(message.getChatRoomId());
 

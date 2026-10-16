@@ -16,13 +16,11 @@ import 'room_tile.dart';
 class ChatRoomSidebar extends ConsumerStatefulWidget {
   final String currentRoomId;
   final VoidCallback? onRoomSelected;
-  final void Function(String roomId)? onSearchInRoom;
 
   const ChatRoomSidebar({
     super.key,
     required this.currentRoomId,
     this.onRoomSelected,
-    this.onSearchInRoom,
   });
 
   @override
@@ -207,9 +205,6 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                                 onKeywordsTap: () => _showKeywordsDialog(context, room.id),
                                 onDelete: isOwner ? () => _showDeleteRoomDialog(context, room) : null,
                                 onHide: () => _showHideRoomDialog(context, room),
-                                onSearchTap: widget.onSearchInRoom != null
-                                    ? () => widget.onSearchInRoom!(room.id)
-                                    : null,
                               );
                             },
                           ),

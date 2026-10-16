@@ -43,6 +43,10 @@ dependencies:
   uuid: ^4.5.3
   # Emoji picker for full emoji selection
   emoji_picker_flutter: ^4.2.0
+  # Game engine (위키 던전 월드)
+  flame: ^1.38.2
+  flame_svg: ^2.0.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -50,9 +54,11 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   # FilePicker.platform 을 테스트에서 갈아끼우려면 MockPlatformInterfaceMixin 이 필요하다.
   plugin_platform_interface: ^2.1.8
+  flame_test: ^2.3.1
 
 flutter:
   uses-material-design: true
   assets:
     - .env
     - assets/app_icon.png
+    - assets/world/

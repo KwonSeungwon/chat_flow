@@ -7,7 +7,9 @@ import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
 import '../../features/chat/screens/mentions_screen.dart';
 import '../../features/chat/screens/scheduled_messages_screen.dart';
-import '../../features/search/search_page.dart';
+import '../../features/world/admin/question_review_page.dart';
+import '../../features/world/dungeon_page.dart';
+import '../../features/world/world_page.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -82,8 +84,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
-        path: '/search',
-        builder: (context, state) => const SearchPage(),
+        path: '/world',
+        builder: (context, state) => const WorldPage(),
+        routes: [
+          GoRoute(
+            path: 'admin',
+            builder: (context, state) => const QuestionReviewPage(),
+          ),
+          GoRoute(
+            path: 'dungeon/:id',
+            builder: (context, state) =>
+                DungeonPage(dungeonId: state.pathParameters['id'] ?? ''),
+          ),
+        ],
       ),
       GoRoute(
         path: '/scheduled',

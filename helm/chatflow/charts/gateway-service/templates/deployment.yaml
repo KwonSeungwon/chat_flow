@@ -58,10 +58,6 @@ spec:
             # K8s 내부 서비스 디스커버리
             - name: CHAT_SERVICE_URL
               value: "http://{{ .Release.Name }}-chat-service:8080"
-            - name: AI_SUMMARY_SERVICE_URL
-              value: "http://{{ .Release.Name }}-ai-summary-service:8081"
-            - name: SEARCH_SERVICE_URL
-              value: "http://{{ .Release.Name }}-search-service:8082"
             - name: CHAT_SERVICE_WS_URL
               value: "ws://{{ .Release.Name }}-chat-service:8080"
             # Valkey (외부 Secret)

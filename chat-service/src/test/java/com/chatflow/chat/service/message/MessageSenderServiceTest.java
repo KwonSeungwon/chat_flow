@@ -54,7 +54,7 @@ class MessageSenderServiceTest {
     private ChatMessage persisted() {
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(persistence).persistMessageAndPublish(
-                captor.capture(), anyString(), anyString(), any(), anyList());
+                captor.capture(), anyList());
         return captor.getValue();
     }
 

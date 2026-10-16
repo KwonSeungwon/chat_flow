@@ -1,0 +1,29 @@
+package com.chatflow.chat.game.service;
+
+import com.chatflow.chat.game.exception.GameForbiddenException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/** Allow-list from env GAME_ADMIN_USER_IDS (comma separated). An empty list denies everyone. */
+@Component
+public class GameAdminGuard {
+
+    private final Set<String> adminUserIds;
+
+    public GameAdminGuard(@Value("${GAME_ADMIN_USER_IDS:}") String adminUserIds) {
+        this.adminUserIds = Arrays.stream(adminUserIds == null ? new String[0] : adminUserIds.split(","))
+                .map(String::trim)
+                .filter(id -> !id.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    public void requireAdmin(String userId) {
+        if (userId == null || !adminUserIds.contains(userId)) {
+            throw new GameForbiddenException();
+        }
+    }
+}

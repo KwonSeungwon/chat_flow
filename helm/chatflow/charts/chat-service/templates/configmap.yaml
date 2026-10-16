@@ -6,3 +6,4 @@ metadata:
     {{- include "chat-service.labels" . | nindent 4 }}
 data:
   JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m"
+  GAME_ADMIN_USER_IDS: {{ .Values.gameAdminUserIds | default "" | quote }}

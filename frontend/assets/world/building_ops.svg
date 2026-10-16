@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- 운영 관제탑: 높은 탑, 유리 관제실, 안테나와 경고등 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <!-- tower shaft -->
+  <polygon points="66,188 96,203 96,92 66,77" fill="#eee8ff"/>
+  <polygon points="96,203 126,188 126,77 96,92" fill="#d9d0f5"/>
+  <polygon points="74,134 88,141 88,129 74,122" fill="#b9a8f0"/>
+  <polygon points="104,141 118,134 118,122 104,129" fill="#a896e0"/>
+  <!-- control cab -->
+  <polygon points="52,70 96,92 96,72 52,50" fill="#9be0ff"/>
+  <polygon points="96,92 140,70 140,50 96,72" fill="#6cc4ef"/>
+  <line x1="66" y1="57" x2="66" y2="77" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+  <line x1="81" y1="64" x2="81" y2="84" stroke="#ffffff" stroke-width="1.5" opacity="0.7"/>
+  <line x1="111" y1="64" x2="111" y2="84" stroke="#ffffff" stroke-width="1.5" opacity="0.6"/>
+  <line x1="126" y1="57" x2="126" y2="77" stroke="#ffffff" stroke-width="1.5" opacity="0.6"/>
+  <polygon points="48,50 96,74 96,68 48,44" fill="#9b7bff"/>
+  <polygon points="96,74 144,50 144,44 96,68" fill="#7d5ce6"/>
+  <polygon points="96,20 144,44 96,68 48,44" fill="#b39bff"/>
+  <!-- antenna + light -->
+  <line x1="96" y1="44" x2="96" y2="8" stroke="#3b4a6b" stroke-width="2.5"/>
+  <line x1="88" y1="20" x2="104" y2="20" stroke="#3b4a6b" stroke-width="2"/>
+  <circle cx="96" cy="8" r="5" fill="#ff5f6d"/>
+  <circle cx="96" cy="8" r="9" fill="#ff5f6d" opacity="0.25"/>
+  <!-- annex with door -->
+  <polygon points="40,184 70,199 70,177 40,162" fill="#f4f0ff"/>
+  <polygon points="40,162 70,177 80,172 50,157" fill="#b39bff"/>
+  <path d="M50,186 L62,192 L62,180 Q56,173 50,175 Z" fill="#5a4a7a"/>
+  <!-- radar dish -->
+  <path d="M138,170 Q154,150 168,166 Z" fill="#e3e8f2"/>
+  <line x1="153" y1="162" x2="153" y2="186" stroke="#7b8aa8" stroke-width="2.5"/>
+  <circle cx="153" cy="160" r="2.5" fill="#ff5f6d"/>
+</svg>

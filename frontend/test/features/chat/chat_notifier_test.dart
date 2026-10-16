@@ -52,12 +52,10 @@ void main() {
   // that request is in flight, and joinRoom must stop before connecting.
   const stages = {
     'history': '/api/chat/rooms/room-1/messages',
-    'summaries': '/api/ai-summary/room/room-1',
     'lastRead': '/api/chat/rooms/room-1/last-read',
   };
   const okBodies = {
     '/api/chat/rooms/room-1/messages': {'success': true, 'data': []},
-    '/api/ai-summary/room/room-1': {'success': true, 'data': []},
     '/api/chat/rooms/room-1/last-read': {
       'success': true,
       'data': {'lastReadMessageId': ''},

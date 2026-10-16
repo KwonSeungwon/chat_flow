@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- 네트워크 요새: 돌 성벽, 총안, 청록 깃발과 방패 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <polygon points="32,178 96,210 96,150 32,118" fill="#dfe5f0"/>
+  <polygon points="96,210 160,178 160,118 96,150" fill="#c3ccdd"/>
+  <polygon points="96,86 160,118 96,150 32,118" fill="#eef2f8"/>
+  <!-- stone lines -->
+  <polyline points="32,138 96,170 160,138" stroke="#cbd3e2" stroke-width="1.5" fill="none"/>
+  <polyline points="32,158 96,190 160,158" stroke="#cbd3e2" stroke-width="1.5" fill="none"/>
+  <!-- keep -->
+  <polygon points="72,118 96,130 96,96 72,84" fill="#e6ebf4"/>
+  <polygon points="96,130 120,118 120,84 96,96" fill="#ccd5e4"/>
+  <polygon points="96,72 120,84 96,96 72,84" fill="#f4f6fa"/>
+  <polygon points="70,84 96,97 96,56" fill="#34c3b5"/>
+  <polygon points="96,97 122,84 96,56" fill="#22a497"/>
+  <!-- merlons left edge -->
+  <polygon points="32,118 40,122 40,110 32,106" fill="#dfe5f0"/>
+  <polygon points="48,126 56,130 56,118 48,114" fill="#dfe5f0"/>
+  <polygon points="64,134 72,138 72,126 64,122" fill="#dfe5f0"/>
+  <polygon points="80,142 88,146 88,134 80,130" fill="#dfe5f0"/>
+  <!-- merlons right edge -->
+  <polygon points="104,146 112,142 112,130 104,134" fill="#c3ccdd"/>
+  <polygon points="120,138 128,134 128,122 120,126" fill="#c3ccdd"/>
+  <polygon points="136,130 144,126 144,114 136,118" fill="#c3ccdd"/>
+  <polygon points="152,122 160,118 160,106 152,110" fill="#c3ccdd"/>
+  <!-- gate with portcullis -->
+  <path d="M52,188 L76,200 L76,180 Q64,166 52,170 Z" fill="#3b4a6b"/>
+  <line x1="58" y1="174" x2="58" y2="191" stroke="#8a97b8" stroke-width="1.5"/>
+  <line x1="64" y1="172" x2="64" y2="194" stroke="#8a97b8" stroke-width="1.5"/>
+  <line x1="70" y1="175" x2="70" y2="197" stroke="#8a97b8" stroke-width="1.5"/>
+  <!-- banner + shield on right wall -->
+  <polygon points="116,180 134,171 134,140 116,149" fill="#34c3b5"/>
+  <path d="M120,156 L130,151 L130,160 Q125,168 120,166 Z" fill="#ffffff"/>
+  <!-- small flag on keep -->
+  <line x1="96" y1="58" x2="96" y2="36" stroke="#3b4a6b" stroke-width="2"/>
+  <polygon points="96,36 110,40 96,44" fill="#34c3b5"/>
+</svg>

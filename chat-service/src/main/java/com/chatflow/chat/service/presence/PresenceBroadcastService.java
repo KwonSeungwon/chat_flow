@@ -3,7 +3,6 @@ package com.chatflow.chat.service.presence;
 import com.chatflow.chat.service.outbox.ChatPersistenceService;
 import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -15,7 +14,7 @@ import java.util.UUID;
 
 /**
  * STOMP presence broadcasts (JOIN / LEAVE topics) and the corresponding
- * outbox events for downstream consumers.
+ * MessagePersistedEvent for the room-topic broadcast.
  */
 @Slf4j
 @Service
@@ -54,7 +53,7 @@ public class PresenceBroadcastService {
                         "participantCount", participantCount,
                         "timestamp", LocalDateTime.now().toString()));
 
-        chatPersistenceService.saveOutboxEventAndPublish(message, KafkaTopics.CHAT_MESSAGES, "USER_JOINED");
+        chatPersistenceService.publishPresence(message);
     }
 
     public void broadcastLeave(String roomId, String username, int participantCount) {
@@ -75,7 +74,7 @@ public class PresenceBroadcastService {
         leaveMessage.setMessageId(UUID.randomUUID().toString());
         leaveMessage.setContent(username + "님이 퇴장하셨습니다.");
 
-        chatPersistenceService.saveOutboxEventAndPublish(leaveMessage, KafkaTopics.CHAT_MESSAGES, "USER_LEFT");
+        chatPersistenceService.publishPresence(leaveMessage);
         log.info("User {} left chat room {}", username, roomId);
     }
 }

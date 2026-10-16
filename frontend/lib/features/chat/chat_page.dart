@@ -11,10 +11,8 @@ import '../auth/auth_provider.dart';
 import 'chat_provider.dart';
 import 'dialogs/bookmarks_dialog.dart';
 import 'dialogs/change_password_dialog.dart';
-import 'dialogs/in_room_search.dart';
 import 'dialogs/profile_dialog.dart';
 import 'dialogs/room_settings_dialog.dart';
-import 'widgets/ai_summary_button.dart';
 import 'widgets/chat_room_content.dart';
 import 'widgets/chat_room_sidebar.dart';
 import 'widgets/connection_dot.dart';
@@ -149,6 +147,11 @@ class ChatPage extends ConsumerWidget {
           }),
           // Wide (>=768): show all action buttons individually
           if (isWide) ...[
+            IconButton(
+              icon: const Icon(Icons.public, size: 20),
+              tooltip: '월드',
+              onPressed: () => context.push('/world'),
+            ),
             if (effectiveRoomId != null && roomData != null)
               IconButton(
                 icon: const Icon(Icons.settings_outlined, size: 20),
@@ -161,19 +164,6 @@ class ChatPage extends ConsumerWidget {
                 tooltip: '초대 링크 복사',
                 onPressed: () => _copyInviteLink(context, ref, effectiveRoomId),
               ),
-            if (effectiveRoomId != null)
-              AiSummaryButton(roomId: effectiveRoomId),
-            if (effectiveRoomId != null)
-              IconButton(
-                icon: const Icon(Icons.manage_search, size: 22),
-                tooltip: '방 내 검색',
-                onPressed: () => showInRoomSearch(context, ref, effectiveRoomId),
-              ),
-            IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: '전체 검색',
-              onPressed: () => context.push('/search'),
-            ),
           ],
           // Mobile (<768): merge room actions + search into overflow menu
           if (!isWide) ...[
@@ -186,27 +176,10 @@ class ChatPage extends ConsumerWidget {
                     _copyInviteLink(context, ref, effectiveRoomId);
                   } else if (value == 'settings' && roomData != null) {
                     showRoomSettingsDialog(context, ref, effectiveRoomId, roomData);
-                  } else if (value == 'ai_summary') {
-                    ref.read(chatNotifierProvider(effectiveRoomId).notifier)
-                        .requestSummary(effectiveRoomId)
-                        .then((msg) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(msg.isNotEmpty ? msg : 'AI 요약을 요청했습니다. 잠시 후 채팅방에 표시됩니다.'),
-                        duration: const Duration(seconds: 3),
-                      ));
-                    }).catchError((_) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('요약 요청에 실패했습니다.')));
-                      }
-                    });
-                  } else if (value == 'room_search') {
-                    showInRoomSearch(context, ref, effectiveRoomId);
-                  } else if (value == 'global_search') {
-                    context.push('/search');
                   } else if (value == 'participants') {
                     showRoomMembersSheet(context, effectiveRoomId);
+                  } else if (value == 'world') {
+                    context.push('/world');
                   }
                 },
                 itemBuilder: (context) => [
@@ -243,43 +216,16 @@ class ChatPage extends ConsumerWidget {
                     ),
                   ),
                   const PopupMenuItem(
-                    value: 'ai_summary',
+                    value: 'world',
                     child: Row(
                       children: [
-                        Icon(Icons.auto_awesome, size: 20),
+                        Icon(Icons.public, size: 20),
                         SizedBox(width: 8),
-                        Text('AI 대화 요약'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'room_search',
-                    child: Row(
-                      children: [
-                        Icon(Icons.manage_search, size: 20),
-                        SizedBox(width: 8),
-                        Text('방 내 검색'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'global_search',
-                    child: Row(
-                      children: [
-                        Icon(Icons.search, size: 20),
-                        SizedBox(width: 8),
-                        Text('전체 검색'),
+                        Text('월드'),
                       ],
                     ),
                   ),
                 ],
-              ),
-            if (effectiveRoomId == null)
-              IconButton(
-                icon: const Icon(Icons.search),
-                tooltip: '전체 검색',
-                onPressed: () => context.push('/search'),
               ),
           ],
           PopupMenuButton<String>(
@@ -403,10 +349,6 @@ class ChatPage extends ConsumerWidget {
                 child: ChatRoomSidebar(
                   currentRoomId: effectiveRoomId ?? '',
                   onRoomSelected: () => Navigator.of(context).pop(),
-                  onSearchInRoom: (roomId) {
-                    Navigator.of(context).pop();
-                    if (context.mounted) showInRoomSearch(context, ref, roomId);
-                  },
                 ),
               ),
             ),
@@ -414,7 +356,6 @@ class ChatPage extends ConsumerWidget {
         children: [
           if (isWide) ChatRoomSidebar(
             currentRoomId: effectiveRoomId ?? '',
-            onSearchInRoom: (roomId) => showInRoomSearch(context, ref, roomId),
           ),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
           Expanded(

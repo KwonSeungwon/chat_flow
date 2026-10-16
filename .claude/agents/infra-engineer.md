@@ -81,8 +81,8 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 | 증상 | 원인 | 해결 |
 |------|------|------|
 | K3s 노드 디스크 부족 | 이전 이미지 누적 | `sudo k3s ctr images prune --all` |
-| 파드 CrashLoop | 환경 변수/Secret 누락 | `kubectl logs` 확인, GEMINI_API_KEY 등 Secret 존재 확인 |
-| Gateway 502 | 백엔드 파드 미기동 | `kubectl get pods -n chatflow`, Kafka → 서비스 기동 순서 확인 |
+| 파드 CrashLoop | 환경 변수/Secret 누락 | `kubectl logs` 확인, Secret(postgresql, valkey, jwt 등) 존재 확인 |
+| Gateway 502 | 백엔드 파드 미기동 | `kubectl get pods -n chatflow`, chat-service 기동 확인 |
 | 프론트 흰 화면/구버전 | Cloudflare 캐시 | 캐시 퍼지 (`.claude/CLAUDE.md` 명령) |
 | helm upgrade 후 이미지 회귀 | kubectl set image 드리프트 | values-k3s.yaml 태그를 실제 배포 태그로 갱신 후 upgrade |
 | STOMP 404 | Gateway `/ws-native` 라우트 누락 | `application-prod.yml` 라우트 + SecurityConfig permitAll 확인 |

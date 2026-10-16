@@ -5,7 +5,6 @@ import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.service.message.MessageSenderService;
-import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.read.MessageReadService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +39,6 @@ class RoomMessageControllerTest {
     @Mock private MessageReadService messageReadService;
     @Mock private ChatMessageResponseMapper chatMessageResponseMapper;
     @Mock private MessageSenderService messageSenderService;
-    @Mock private AuditService auditService;
     @Mock private RoomMembershipGuard membershipGuard;
 
     @InjectMocks

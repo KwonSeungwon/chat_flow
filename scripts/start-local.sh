@@ -38,16 +38,6 @@ nohup ./gradlew :chat-service:bootRun --args="--spring.profiles.active=local" > 
 echo $! > logs/chat-local.pid
 sleep 5
 
-echo -e "${YELLOW}🤖 Starting AI Summary Service (local)...${NC}"
-nohup ./gradlew :ai-summary-service:bootRun --args="--spring.profiles.active=local" > logs/ai-summary-local.log 2>&1 &
-echo $! > logs/ai-summary-local.pid
-sleep 5
-
-echo -e "${YELLOW}🔍 Starting Search Service (local)...${NC}"
-nohup ./gradlew :search-service:bootRun --args="--spring.profiles.active=local" > logs/search-local.log 2>&1 &
-echo $! > logs/search-local.pid
-sleep 5
-
 # 프론트엔드 시작
 echo -e "${YELLOW}🎨 Starting Frontend...${NC}"
 cd frontend
@@ -65,7 +55,6 @@ echo -e "${CYAN}🌐 Access URLs:${NC}"
 echo -e "  Frontend:  http://localhost:3000"
 echo -e "  API:       http://localhost:8000"
 echo -e "  H2 Console: http://localhost:8080/h2-console"
-echo -e "  Kibana:    http://localhost:5601"
 echo -e "  Grafana:   http://localhost:3001"
 echo ""
 echo -e "${CYAN}📝 Logs:${NC}"

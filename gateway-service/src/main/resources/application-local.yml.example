@@ -23,14 +23,6 @@ spring:
           uri: http://localhost:8080
           predicates:
             - Path=/api/chat/**
-        - id: ai-summary-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/ai-summary/**
-        - id: search-service
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/search/**
         - id: websocket
           uri: ws://localhost:8080
           predicates:
@@ -65,6 +57,10 @@ spring:
           uri: http://localhost:8080
           predicates:
             - Path=/api/files/**
+        - id: game-service
+          uri: http://localhost:8080
+          predicates:
+            - Path=/api/game/**
 
   # Valkey Configuration (using Spring Data Redis for compatibility)
   data:

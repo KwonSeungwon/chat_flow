@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- 쿠버네티스 성: 붉은 지붕, 모서리 망루, 깃대 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <polygon points="32,178 96,210 96,138 32,106" fill="#f1e2cf"/>
+  <polygon points="96,210 160,178 160,106 96,138" fill="#e2cdb4"/>
+  <polygon points="28,106 96,142 96,32" fill="#ff7a6b"/>
+  <polygon points="96,142 164,106 96,32" fill="#e85c50"/>
+  <!-- turrets -->
+  <rect x="20" y="112" width="22" height="72" rx="4" fill="#f6ead9"/>
+  <ellipse cx="31" cy="184" rx="11" ry="5" fill="#f6ead9"/>
+  <polygon points="16,116 31,78 46,116" fill="#ff7a6b"/>
+  <polygon points="31,78 46,116 31,118" fill="#e85c50"/>
+  <rect x="150" y="112" width="22" height="72" rx="4" fill="#e9d7c0"/>
+  <ellipse cx="161" cy="184" rx="11" ry="5" fill="#e9d7c0"/>
+  <polygon points="146,116 161,78 176,116" fill="#ff7a6b"/>
+  <polygon points="161,78 176,116 161,118" fill="#e85c50"/>
+  <!-- door + windows -->
+  <path d="M55,188 L73,197 L73,180 Q64,168 55,172 Z" fill="#8a5a44"/>
+  <polygon points="44,150 52,154 52,142 44,138" fill="#9fd0ff"/>
+  <polygon points="80,168 88,172 88,160 80,156" fill="#9fd0ff"/>
+  <polygon points="110,186 120,181 120,168 110,173" fill="#86bce8"/>
+  <polygon points="134,174 144,169 144,156 134,161" fill="#86bce8"/>
+  <!-- flagpole -->
+  <line x1="96" y1="34" x2="96" y2="6" stroke="#3b4a6b" stroke-width="2.5"/>
+  <polygon points="96,6 116,12 96,18" fill="#ffd34d"/>
+</svg>

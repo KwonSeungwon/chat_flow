@@ -104,7 +104,7 @@ class ViewProfileAction extends CommandAction {
 // Quick actions (static shortcuts)
 // ---------------------------------------------------------------------------
 
-enum QuickActionType { createRoom, goSearch, toggleTheme, logout }
+enum QuickActionType { createRoom, toggleTheme, logout }
 
 class QuickAction extends CommandAction {
   final QuickActionType type;
@@ -139,8 +139,6 @@ class QuickAction extends CommandAction {
             builder: (_) => const CreateRoomDialog(),
           );
         }
-      case QuickActionType.goSearch:
-        router.push('/search');
       case QuickActionType.toggleTheme:
         try {
           await ref.read(themeModeProvider.notifier).toggle();
@@ -168,12 +166,6 @@ class QuickAction extends CommandAction {
         icon: Icons.add_circle_outline,
       );
 
-  static QuickAction goSearch() => QuickAction._(
-        type: QuickActionType.goSearch,
-        title: '전체 검색',
-        icon: Icons.search,
-      );
-
   static QuickAction toggleTheme() => QuickAction._(
         type: QuickActionType.toggleTheme,
         title: '다크/라이트 모드 토글',
@@ -189,7 +181,6 @@ class QuickAction extends CommandAction {
   /// All static quick actions in display order.
   static List<QuickAction> all() => [
         createRoom(),
-        goSearch(),
         toggleTheme(),
         logout(),
       ];

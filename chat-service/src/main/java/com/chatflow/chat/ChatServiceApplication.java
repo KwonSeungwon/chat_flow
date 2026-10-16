@@ -11,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EnableAsync
 @ComponentScan(basePackages = {"com.chatflow.chat", "com.chatflow.common"})
-@EntityScan(basePackages = {"com.chatflow.chat.entity", "com.chatflow.common"})
+@EntityScan(basePackages = {"com.chatflow.chat.entity", "com.chatflow.chat.game.entity", "com.chatflow.common"})
 public class ChatServiceApplication {
 
     public static void main(String[] args) {

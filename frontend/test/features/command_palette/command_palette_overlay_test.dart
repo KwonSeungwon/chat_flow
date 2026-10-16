@@ -75,9 +75,8 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      // Should show all 4 quick actions
+      // Should show all 3 quick actions
       expect(find.text('새 방 만들기'), findsOneWidget);
-      expect(find.text('전체 검색'), findsOneWidget);
       expect(find.text('다크/라이트 모드 토글'), findsOneWidget);
       expect(find.text('로그아웃'), findsOneWidget);
     });

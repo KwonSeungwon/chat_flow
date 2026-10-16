@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- 셸 동굴: 바위 언덕, 어두운 동굴 입구, 초록 프롬프트 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <path d="M18,182 C14,140 34,100 66,86 C82,60 120,58 136,84 C164,96 180,140 174,182 C150,206 46,212 18,182 Z" fill="#b3a594"/>
+  <path d="M96,64 C116,62 130,72 136,84 C164,96 180,140 174,182 C156,198 120,206 96,207 Z" fill="#968877"/>
+  <path d="M40,124 C52,104 70,96 82,98" stroke="#c9bdae" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- moss -->
+  <ellipse cx="72" cy="88" rx="16" ry="6" fill="#7cc48a"/>
+  <ellipse cx="120" cy="80" rx="12" ry="5" fill="#68b077"/>
+  <ellipse cx="160" cy="132" rx="8" ry="4" fill="#68b077"/>
+  <!-- cave mouth -->
+  <path d="M42,194 C38,160 52,138 72,136 C92,138 100,162 96,204 Z" fill="#2b2f45"/>
+  <path d="M50,194 C48,166 58,148 72,146 C86,148 92,166 90,200 Z" fill="#1d2033"/>
+  <!-- prompt glyph -->
+  <polyline points="58,166 66,172 58,178" stroke="#5bd18a" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="70" y="176" width="12" height="3.5" rx="1.5" fill="#5bd18a"/>
+  <!-- rocks -->
+  <ellipse cx="140" cy="200" rx="12" ry="7" fill="#a39584"/>
+  <ellipse cx="28" cy="196" rx="9" ry="5" fill="#a39584"/>
+  <polygon points="150,194 156,170 162,196" fill="#8a7c6c"/>
+</svg>

@@ -67,9 +67,9 @@ void main() {
   });
 
   group('QuickAction', () {
-    test('all() returns 4 actions', () {
+    test('all() returns 3 actions', () {
       final actions = QuickAction.all();
-      expect(actions, hasLength(4));
+      expect(actions, hasLength(3));
     });
 
     test('createRoom has correct properties', () {
@@ -78,13 +78,6 @@ void main() {
       expect(action.subtitle, '빠른 실행');
       expect(action.icon, Icons.add_circle_outline);
       expect(action.type, QuickActionType.createRoom);
-    });
-
-    test('goSearch has correct properties', () {
-      final action = QuickAction.goSearch();
-      expect(action.title, '전체 검색');
-      expect(action.icon, Icons.search);
-      expect(action.type, QuickActionType.goSearch);
     });
 
     test('toggleTheme has correct properties', () {

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
+  <!-- AI 연구소: 흰 돔, 청록 띠, 접시 안테나 -->
+  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
+  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
+  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
+  <!-- drum -->
+  <path d="M30,140 L30,176 A66,33 0 0 0 162,176 L162,140 Z" fill="#f5f8ff"/>
+  <path d="M96,209 A66,33 0 0 0 162,176 L162,140 L96,140 Z" fill="#dde6f7"/>
+  <!-- dome -->
+  <path d="M30,140 C30,48 162,48 162,140 A66,33 0 0 1 30,140 Z" fill="#e7eefc"/>
+  <path d="M96,72 C140,72 162,100 162,140 A66,33 0 0 1 96,173 Z" fill="#d4def4"/>
+  <path d="M34,116 C60,132 132,132 158,116" stroke="#5bd1e8" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <ellipse cx="70" cy="92" rx="14" ry="8" fill="#ffffff" opacity="0.8"/>
+  <!-- windows -->
+  <circle cx="122" cy="186" r="5" fill="#5bd1e8"/>
+  <circle cx="142" cy="178" r="5" fill="#5bd1e8"/>
+  <circle cx="44" cy="174" r="4" fill="#5bd1e8"/>
+  <!-- door -->
+  <path d="M56,192 L74,199 L74,181 Q65,171 56,175 Z" fill="#3b4a6b"/>
+  <!-- dish antenna on top -->
+  <line x1="96" y1="70" x2="96" y2="46" stroke="#7b8aa8" stroke-width="3"/>
+  <path d="M80,40 Q96,58 116,36 Z" fill="#ffffff"/>
+  <path d="M80,40 Q96,58 116,36" stroke="#b9c6e3" stroke-width="2" fill="none"/>
+  <line x1="98" y1="44" x2="106" y2="30" stroke="#7b8aa8" stroke-width="1.5"/>
+  <circle cx="106" cy="29" r="3" fill="#5bd1e8"/>
+  <!-- sparkle -->
+  <path d="M150,60 L153,68 L161,71 L153,74 L150,82 L147,74 L139,71 L147,68 Z" fill="#5bd1e8"/>
+</svg>

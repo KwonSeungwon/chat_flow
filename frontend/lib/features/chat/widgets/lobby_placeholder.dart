@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import 'create_room_dialog.dart';
 
@@ -57,6 +58,12 @@ class LobbyPlaceholder extends StatelessWidget {
               ),
               icon: const Icon(Icons.add_rounded),
               label: const Text('새 채팅방 만들기'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/world'),
+              icon: const Icon(Icons.public),
+              label: const Text('위키 던전'),
             ),
           ],
         ),

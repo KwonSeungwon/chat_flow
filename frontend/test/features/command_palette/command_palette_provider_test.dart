@@ -73,7 +73,6 @@ void main() {
     test('sorting a heterogeneous list by score works correctly', () {
       final actions = <CommandAction>[
         GoToRoomAction(roomId: '1', roomName: '검색 테스트방'),
-        QuickAction.goSearch(), // title: '전체 검색'
         ViewProfileAction(userId: 'u1', username: '검색봇'),
       ];
 
@@ -88,7 +87,6 @@ void main() {
       // First result should be the one with earliest match position
       // '검색 테스트방' has '검색' at index 0
       // '검색봇' has '검색' at index 0 (title match)
-      // '전체 검색' has '검색' at index 3
       expect(scored.first.$2, greaterThanOrEqualTo(scored.last.$2));
     });
 

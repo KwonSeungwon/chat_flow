@@ -5,10 +5,8 @@ import com.chatflow.chat.auth.RequireMember;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.service.message.MessageSenderService;
-import com.chatflow.chat.service.moderation.AuditService;
 import com.chatflow.chat.service.read.MessageReadService;
 import com.chatflow.common.dto.ApiResponse;
-import com.chatflow.common.dto.AuditEvent;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.ChatMessageResponse;
 import jakarta.validation.Valid;
@@ -39,7 +37,6 @@ public class RoomMessageController {
     private final MessageReadService messageReadService;
     private final ChatMessageResponseMapper chatMessageResponseMapper;
     private final MessageSenderService messageSenderService;
-    private final AuditService auditService;
 
     @RequireMember
     @GetMapping("/{roomId}/messages")
@@ -47,12 +44,10 @@ public class RoomMessageController {
             @PathVariable String roomId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
-            @AuthenticatedUser String userId,
-            @RequestHeader(value = "X-Username", required = false) String username) {
+            @AuthenticatedUser String userId) {
         size = Math.min(size, 100);
         Page<ChatMessageResponse> messages = messageReadService.getMessages(roomId, PageRequest.of(page, size))
                 .map(chatMessageResponseMapper::toResponse);
-        auditService.logAccess(userId, username, roomId, AuditEvent.MESSAGE_READ);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 

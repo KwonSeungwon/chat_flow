@@ -45,7 +45,7 @@ print_header() {
     ║              ChatFlow 🚀                  ║
     ║         로컬 개발 환경 실행기              ║
     ║                                           ║
-    ║  실시간 채팅 + AI 요약 + 한국어 검색      ║
+    ║  실시간 채팅                              ║
     ╚═══════════════════════════════════════════╝
 EOF
     echo -e "${NC}"
@@ -104,7 +104,7 @@ check_prerequisites() {
 check_ports() {
     log_step "포트 사용 여부 확인 중..."
     
-    local ports=(3000 8000 8080 8081 8082 6379 9092 9200 5432 3001 9090 5601)
+    local ports=(3000 8000 8080 6379 5432 3001 9090)
     local used_ports=()
     
     for port in "${ports[@]}"; do
@@ -130,42 +130,16 @@ check_ports() {
     fi
 }
 
-# Gemini API 키 체크
-check_gemini_key() {
-    log_step "Gemini API 키 확인 중..."
-    
-    if [ -z "$GEMINI_API_KEY" ]; then
-        log_warning "GEMINI_API_KEY 환경변수가 설정되지 않았습니다."
-        echo -e "${YELLOW}기본 API 키를 사용하거나 AI 요약 기능이 제한될 수 있습니다.${NC}"
-        echo ""
-        log_info "AI 요약을 최적으로 사용하려면 다음과 같이 설정하세요:"
-        echo -e "${CYAN}export GEMINI_API_KEY=\"AIza-your-gemini-api-key\"${NC}"
-        echo ""
-        log_info "Google AI Studio에서 API 키 발급: https://aistudio.google.com/app/apikey"
-        echo ""
-        read -p "기본 설정으로 계속 진행하시겠습니까? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "실행을 중단합니다."
-            exit 0
-        fi
-    else
-        log_success "Gemini API 키가 설정되어 있습니다!"
-    fi
-}
-
 # Docker 서비스 시작
 start_infrastructure() {
     log_step "인프라 서비스 시작 중..."
     
     log_info "Docker 서비스들을 시작합니다..."
     log_info "  - 🔴 Valkey (Redis 호환)"
-    log_info "  - 🟣 Apache Kafka"  
-    log_info "  - 🟡 Elasticsearch + Nori"
     log_info "  - 🔵 PostgreSQL"
     log_info "  - 📊 Prometheus & Grafana"
     
-    if docker compose up -d valkey kafka elasticsearch postgresql prometheus grafana kibana; then
+    if docker compose up -d valkey postgresql prometheus grafana; then
         log_success "인프라 서비스가 시작되었습니다!"
     else
         log_error "인프라 서비스 시작에 실패했습니다."
@@ -178,8 +152,6 @@ start_infrastructure() {
     
     # 상태 체크
     check_service_health "Valkey" "localhost:6379"
-    check_service_health "Kafka" "localhost:9092" 
-    check_service_health "Elasticsearch" "http://localhost:9200"
 }
 
 # 서비스 상태 체크 함수
@@ -195,12 +167,6 @@ check_service_health() {
         case $service_name in
             "Valkey")
                 if docker exec valkey valkey-cli ping >/dev/null 2>&1; then
-                    log_success "$service_name 준비 완료! ✓"
-                    return 0
-                fi
-                ;;
-            "Elasticsearch")
-                if curl -s "$endpoint/_cluster/health" >/dev/null 2>&1; then
                     log_success "$service_name 준비 완료! ✓"
                     return 0
                 fi
@@ -250,20 +216,6 @@ start_backend() {
     nohup ./gradlew :chat-service:bootRun > logs/chat-service.log 2>&1 &
     echo $! > logs/chat-service.pid
     
-    sleep 5
-    
-    # AI Summary Service
-    log_info "🤖 AI Summary Service 시작 중..."
-    nohup ./gradlew :ai-summary-service:bootRun > logs/ai-summary-service.log 2>&1 &
-    echo $! > logs/ai-summary-service.pid
-    
-    sleep 5
-    
-    # Search Service
-    log_info "🔍 Search Service 시작 중..."
-    nohup ./gradlew :search-service:bootRun > logs/search-service.log 2>&1 &
-    echo $! > logs/search-service.pid
-    
     log_success "모든 백엔드 서비스가 시작되었습니다!"
     
     # 서비스 상태 체크
@@ -272,8 +224,6 @@ start_backend() {
     
     check_backend_health "Gateway" "http://localhost:8000/actuator/health"
     check_backend_health "Chat" "http://localhost:8080/actuator/health" 
-    check_backend_health "AI Summary" "http://localhost:8081/actuator/health"
-    check_backend_health "Search" "http://localhost:8082/actuator/health"
 }
 
 # 백엔드 서비스 상태 체크
@@ -341,19 +291,14 @@ print_status() {
     echo -e "${WHITE}=== 🔧 개발 도구 ===${NC}"
     echo -e "${YELLOW}📈 Grafana${NC}             http://localhost:3001 (admin/admin)"
     echo -e "${YELLOW}📊 Prometheus${NC}          http://localhost:9090"
-    echo -e "${YELLOW}🔍 Kibana${NC}              http://localhost:5601"
     echo ""
     echo -e "${WHITE}=== 🛠️ 인프라 서비스 ===${NC}"
     echo -e "${RED}🔴 Valkey${NC}               localhost:6379"
-    echo -e "${PURPLE}🟣 Kafka${NC}                localhost:9092"
-    echo -e "${BLUE}🔵 Elasticsearch${NC}        localhost:9200"
     echo -e "${GREEN}🟢 PostgreSQL${NC}           localhost:5432"
     echo ""
     echo -e "${WHITE}=== 📝 로그 확인 ===${NC}"
     echo -e "${CYAN}tail -f logs/gateway-service.log${NC}"
     echo -e "${CYAN}tail -f logs/chat-service.log${NC}"
-    echo -e "${CYAN}tail -f logs/ai-summary-service.log${NC}"
-    echo -e "${CYAN}tail -f logs/search-service.log${NC}"
     echo -e "${CYAN}tail -f logs/frontend.log${NC}"
     echo ""
     echo -e "${WHITE}=== ⚡ 종료 방법 ===${NC}"
@@ -380,7 +325,6 @@ main() {
     create_log_dir
     check_prerequisites
     check_ports
-    check_gemini_key
     
     start_infrastructure
     start_backend

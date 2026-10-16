@@ -30,7 +30,7 @@ git clone https://github.com/your-username/chatflow.git
 cd chatflow
 
 # Start infrastructure services
-docker-compose up -d kafka redis elasticsearch postgresql
+docker-compose up -d valkey postgresql
 
 # Backend setup
 ./gradlew build
@@ -65,7 +65,6 @@ We use Git Flow branching strategy with the following branch types:
 - `feature/backend-microservices`
 - `feature/frontend-vue3-ui`
 - `feature/ai-chat-summarization`
-- `feature/elasticsearch-search`
 - `feature/websocket-realtime-chat`
 - `feature/docker-containerization`
 - `feature/kubernetes-deployment`
@@ -202,12 +201,6 @@ npm test
 
 # Chat Service
 ./gradlew :chat-service:bootRun
-
-# AI Summary Service
-./gradlew :ai-summary-service:bootRun
-
-# Search Service
-./gradlew :search-service:bootRun
 ```
 
 ### Frontend Development
