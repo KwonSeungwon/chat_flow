@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/chat_message.dart';
 
 // ─────────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ class BubbleHeaderDecorations extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.secondaryContainer.withAlpha(160),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.secondary.withAlpha(120),
                   width: 0.5,
@@ -60,18 +61,20 @@ class BubbleHeaderDecorations extends StatelessWidget {
         // Username label (other user's bubble)
         if (!isMine && showAvatar)
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 3),
+            padding: const EdgeInsets.only(left: 2, bottom: 4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  msg.username,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    msg.username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: ChatPalette.of(context).name,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

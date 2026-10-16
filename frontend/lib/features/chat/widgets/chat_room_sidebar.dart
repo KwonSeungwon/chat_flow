@@ -106,7 +106,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
             onSortSelected: (v) => ref.read(roomSortProvider.notifier).state = v,
             currentSort: ref.watch(roomSortProvider),
           ),
-          Divider(height: 1, color: cs.outline.withAlpha(60), thickness: 1),
+          Divider(height: 1, color: cs.outline, thickness: 1),
           Expanded(
             child: roomsAsync.when(
               loading: () => const Center(

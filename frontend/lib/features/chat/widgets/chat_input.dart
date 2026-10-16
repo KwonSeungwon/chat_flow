@@ -464,10 +464,11 @@ class _ChatInputState extends State<ChatInput> {
     return Container(
       constraints: const BoxConstraints(maxHeight: 150),
       margin: const EdgeInsets.only(bottom: 4),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: cs.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.outline.withAlpha(80)),
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outline),
       ),
       child: ListView.builder(
         shrinkWrap: true,
@@ -492,15 +493,15 @@ class _ChatInputState extends State<ChatInput> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: cs.primaryContainer.withAlpha(60),
-        borderRadius: BorderRadius.circular(12),
+        color: cs.primary.withAlpha(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border(
-          left: BorderSide(color: AppColors.primary, width: 3),
+          left: BorderSide(color: cs.primary, width: 3),
         ),
       ),
       child: Row(
         children: [
-          Icon(Icons.reply_rounded, size: 16, color: AppColors.primary),
+          Icon(Icons.reply_rounded, size: 16, color: cs.primary),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -509,7 +510,7 @@ class _ChatInputState extends State<ChatInput> {
               children: [
                 Text(
                   widget.replyTarget!.username,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary),
                 ),
                 Text(
                   widget.replyTarget!.content,
@@ -609,14 +610,13 @@ class _ChatInputState extends State<ChatInput> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: cs.surfaceContainer,
-          border: Border.all(color: cs.outline),
         ),
         child: Center(
           child: SizedBox(
             width: 18, height: 18,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AppColors.primary,
+              color: cs.primary,
             ),
           ),
         ),
@@ -637,8 +637,7 @@ class _ChatInputState extends State<ChatInput> {
         constraints: const BoxConstraints(maxHeight: 120),
         decoration: BoxDecoration(
           color: cs.surfaceContainer,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: cs.outline.withAlpha(80)),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: KeyboardListener(
           focusNode: _keyboardFocusNode,
@@ -708,8 +707,9 @@ class _ChatInputState extends State<ChatInput> {
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
+                filled: false,
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                    horizontal: 18, vertical: 11),
                 isDense: true,
               ),
             );
@@ -736,20 +736,15 @@ class _ChatInputState extends State<ChatInput> {
           height: btnSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: canSend
-                ? AppColors.primary
-                : cs.surfaceContainer,
-            border: Border.all(
-              color: canSend
-                  ? AppColors.primary
-                  : cs.outline,
-            ),
+            // 보낼 수 있을 때만 로그인 버튼과 같은 파랑→보라 그라데이션.
+            color: canSend ? null : cs.surfaceContainerHighest,
+            gradient: canSend ? AppColors.accentGradient : null,
             boxShadow: canSend
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withAlpha(70),
+                      color: AppColors.blue.withAlpha(80),
                       blurRadius: 10,
-                      offset: const Offset(0, 2),
+                      offset: const Offset(0, 3),
                     )
                   ]
                 : null,
@@ -761,13 +756,13 @@ class _ChatInputState extends State<ChatInput> {
               onLongPress: canSend && widget.onScheduleSend != null
                   ? _handleScheduleSend
                   : null,
-              borderRadius: BorderRadius.circular(20),
+              customBorder: const CircleBorder(),
               child: Icon(
                 Icons.send_rounded,
                 size: 18,
                 color: canSend
                     ? Colors.white
-                    : cs.onSurfaceVariant.withAlpha(130),
+                    : cs.onSurfaceVariant.withAlpha(150),
               ),
             ),
           ),
@@ -829,11 +824,11 @@ class _ChatInputState extends State<ChatInput> {
     final bottomInset = kIsWeb ? MediaQuery.of(context).viewInsets.bottom : 0.0;
 
     final inputContent = Container(
-      padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 8, isNarrow ? 8 : 12, 8 + bottomInset),
+      padding: EdgeInsets.fromLTRB(isNarrow ? 8 : 12, 10, isNarrow ? 8 : 12, 10 + bottomInset),
       decoration: BoxDecoration(
         color: cs.surface,
         border: Border(
-          top: BorderSide(color: cs.outline.withAlpha(60)),
+          top: BorderSide(color: cs.outline),
         ),
       ),
       child: SafeArea(
@@ -904,13 +899,12 @@ class _CircleIconBtn extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: cs.surfaceContainer,
-            border: Border.all(color: cs.outline),
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: enabled ? onTap : null,
-              borderRadius: BorderRadius.circular(size / 2),
+              customBorder: const CircleBorder(),
               child: Icon(
                 icon,
                 size: iconSize,

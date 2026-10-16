@@ -11,6 +11,19 @@ import 'bubble_header_decorations.dart';
 import 'chat_bubble_menu.dart';
 import 'hover_reaction_bar.dart';
 
+/// 말풍선 모서리. 전부 20으로 둥글게, 그룹 첫 말풍선만 꼬리 쪽 위 모서리를 6으로
+/// 눌러 카카오톡 꼬리처럼 보이게 한다(내 것은 오른쪽 위, 상대는 왼쪽 위).
+BorderRadius bubbleRadius({required bool isMine, required bool isFirstInGroup}) {
+  const round = Radius.circular(20);
+  const tail = Radius.circular(6);
+  return BorderRadius.only(
+    topLeft: !isMine && isFirstInGroup ? tail : round,
+    topRight: isMine && isFirstInGroup ? tail : round,
+    bottomLeft: round,
+    bottomRight: round,
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Chat bubble
 // ─────────────────────────────────────────────────────────────────
@@ -24,7 +37,6 @@ class ChatBubble extends StatefulWidget {
   final String? me;
 
   final String time;
-  final bool isAiQuestion;
   final int readCount;
   final VoidCallback? onReply;
   final VoidCallback? onScrollToParent;
@@ -49,7 +61,6 @@ class ChatBubble extends StatefulWidget {
     required this.isMine,
     required this.time,
     this.me,
-    this.isAiQuestion = false,
     this.readCount = 0,
     this.onReply,
     this.onScrollToParent,
@@ -104,13 +115,13 @@ class ChatBubbleState extends State<ChatBubble> {
   }
 
   /// 메시지 content의 @username 패턴을 하이라이트해 RichText로 반환.
-  /// invertColors=true면 어두운 배경 위(본인 버블)에 맞게 대비를 조정.
+  /// onMyBubble=true면 노란 내 말풍선 위에 맞춘 색을 쓴다.
   ///
   /// 본인이 호명됐는지는 [findMentionSpans]가 내 사용자명과 직접 대조해 판정한다.
   /// 예전에는 `@([A-Za-z0-9_.가-힣]{1,30})`로 이름 모양을 추측했는데, 가입 시
   /// 사용자명 검증이 없어서 공백·하이픈·악센트·30자 초과 이름이 잘려 나갔다.
   Widget _buildContentRichText(BuildContext context, String content, TextStyle baseStyle,
-      {required bool invertColors}) {
+      {required bool onMyBubble}) {
     // 전달된 글은 남이 쓴 문장을 "[전달] <보낸이>: <원문>" 으로 다시 조립한 것이라
     // 서버가 멘션 행을 만들지 않는다(MentionTargets.shouldResolveMentions).
     // 여기서 하이라이트하면 오지 않을 알림을 약속하는 셈이다.
@@ -120,6 +131,8 @@ class ChatBubbleState extends State<ChatBubble> {
     if (widget.msg.forwardedFrom?.trim().isNotEmpty ?? false) {
       return Text(content, style: baseStyle);
     }
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final me = widget.me;
     final mentions =
         findMentionSpans(content, me: (me == null || me.isEmpty) ? null : me);
@@ -132,12 +145,13 @@ class ChatBubbleState extends State<ChatBubble> {
       if (m.start > cursor) {
         spans.add(TextSpan(text: content.substring(cursor, m.start), style: baseStyle));
       }
-      final fg = invertColors
-          ? (m.isMe ? const Color(0xFFFFE082) : Colors.white)
-          : (m.isMe ? const Color(0xFFB71C1C) : AppColors.primary);
+      // 나를 부른 멘션은 버터 노랑 형광펜, 남을 부른 멘션은 파랑 글자.
+      final fg = m.isMe
+          ? (onMyBubble ? AppColors.mentionMe : AppColors.ink)
+          : (onMyBubble || !isDark ? AppColors.blueDeep : cs.primary);
       final bg = m.isMe
-          ? (invertColors ? Colors.white.withAlpha(40) : const Color(0xFFFFF59D))
-          : (invertColors ? Colors.white.withAlpha(30) : AppColors.primary.withAlpha(25));
+          ? (onMyBubble ? Colors.white.withAlpha(170) : AppColors.myBubble)
+          : (onMyBubble ? Colors.white.withAlpha(130) : cs.primary.withAlpha(28));
       spans.add(TextSpan(
         text: content.substring(m.start, m.end),
         style: baseStyle.copyWith(
@@ -189,17 +203,15 @@ class ChatBubbleState extends State<ChatBubble> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final cp = ChatPalette.of(context);
     // Responsive max width: 70% of screen on mobile, capped at 320 on desktop
     final screenWidth = MediaQuery.of(context).size.width;
     final bubbleMaxWidth = screenWidth < 600
         ? (screenWidth * 0.70).clamp(180.0, 320.0)
         : 320.0;
-    final radius = BorderRadius.only(
-      topLeft: const Radius.circular(20),
-      topRight: const Radius.circular(20),
-      bottomLeft: Radius.circular(widget.isMine ? 20 : 5),
-      bottomRight: Radius.circular(widget.isMine ? 5 : 20),
-    );
+    final radius = bubbleRadius(isMine: widget.isMine, isFirstInGroup: widget.showAvatar);
+    final metaStyle = TextStyle(fontSize: 10, color: cp.meta);
 
     // Deleted message — compact tombstone bubble
     if (widget.msg.deleted) {
@@ -213,24 +225,22 @@ class ChatBubbleState extends State<ChatBubble> {
               const SizedBox(width: 8),
             ],
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainer,
+                color: cp.otherBubble.withAlpha(170),
                 borderRadius: radius,
-                border: Border.all(color: Theme.of(context).colorScheme.outline.withAlpha(60)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.not_interested, size: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
+                  Icon(Icons.not_interested, size: 13, color: cp.meta),
                   const SizedBox(width: 6),
                   Text(
                     '삭제된 메시지입니다.',
                     style: TextStyle(
                       fontSize: 13,
                       fontStyle: FontStyle.italic,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
+                      color: cp.meta,
                     ),
                   ),
                 ],
@@ -245,23 +255,104 @@ class ChatBubbleState extends State<ChatBubble> {
     final canReport = !widget.isMine && !widget.msg.deleted;
     final hasActions = canReport || widget.onDelete != null || widget.onEdit != null || widget.onViewEditHistory != null || widget.onReply != null || widget.onReaction != null || widget.onForward != null || widget.onPin != null || widget.onBookmark != null;
 
+    final mine = widget.isMine;
+    final bubbleColor = mine ? cp.myBubble : cp.otherBubble;
+    final onBubble = mine ? cp.onMyBubble : cp.onOtherBubble;
+
+    final bubbleBody = Container(
+      constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bubbleColor,
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: cp.bubbleShadow,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.msg.forwardedFrom != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: onBubble.withAlpha(16),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.forward, size: 12, color: onBubble.withAlpha(150)),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text(
+                    widget.msg.forwardedFrom!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: onBubble.withAlpha(150)),
+                  )),
+                ],
+              ),
+            ),
+          if (widget.msg.isReply) ...[
+            GestureDetector(
+              onTap: widget.onScrollToParent,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: mine ? Colors.white.withAlpha(120) : cs.primary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left: BorderSide(
+                        color: mine ? onBubble.withAlpha(90) : cs.primary, width: 3),
+                  ),
+                ),
+                child: Text(
+                  widget.msg.parentMessagePreview ?? '원본 메시지',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: onBubble.withAlpha(170),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          _buildContentRichText(
+            context,
+            widget.msg.content,
+            TextStyle(color: onBubble, fontSize: 14, height: 1.4),
+            onMyBubble: mine,
+          ),
+        ],
+      ),
+    );
+
     final bubble = GestureDetector(
       onLongPress: hasActions ? () => _showDeleteSheet(context) : null,
       onSecondaryTapUp: hasActions
           ? (details) => _showContextMenu(context, details.globalPosition)
           : null,
       child: Padding(
-      padding: EdgeInsets.only(top: widget.showAvatar ? 3 : 1, bottom: widget.showAvatar ? 3 : 1),
+      padding: EdgeInsets.only(top: widget.showAvatar ? 4 : 1, bottom: widget.showAvatar ? 2 : 1),
       child: Row(
         mainAxisAlignment:
             widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        // 카카오톡처럼 아바타는 그룹 첫 줄의 위쪽(이름 옆)에 붙는다.
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!widget.isMine) ...[
             if (widget.showAvatar)
               Avatar(name: widget.msg.username, color: avatarColor(widget.msg.username))
             else
-              const SizedBox(width: 32), // placeholder for alignment
+              const SizedBox(width: Avatar.size), // placeholder for alignment
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -280,7 +371,7 @@ class ChatBubbleState extends State<ChatBubble> {
                   children: [
                     if (widget.isMine)
                       Padding(
-                        padding: const EdgeInsets.only(right: 5, bottom: 3),
+                        padding: const EdgeInsets.only(right: 6, bottom: 2),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           mainAxisSize: MainAxisSize.min,
@@ -292,234 +383,45 @@ class ChatBubbleState extends State<ChatBubble> {
                                   '읽음 ${widget.readCount}',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Theme.of(context).colorScheme.primary.withAlpha(180),
-                                    fontWeight: FontWeight.w500,
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
                             if (widget.msg.edited && widget.showTime)
-                              Text(
-                                '수정됨',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
-                                ),
-                              ),
+                              Text('수정됨', style: metaStyle),
                             if (widget.showTime)
-                              Text(
-                                widget.time,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140),
-                                ),
-                              ),
+                              Text(widget.time, style: metaStyle),
                             if (widget.msg.deliveryStatus == MessageDeliveryStatus.sending)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: Icon(Icons.schedule, size: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120)),
+                                child: Icon(Icons.schedule, size: 11, color: cp.meta),
                               ),
                             if (widget.msg.deliveryStatus == MessageDeliveryStatus.failed)
                               GestureDetector(
                                 onTap: widget.onRetry,
-                                child: const Padding(
-                                  padding: EdgeInsets.only(top: 2),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 2),
                                   child: Tooltip(
                                     message: '재전송',
-                                    child: Icon(Icons.refresh, size: 13, color: Colors.red),
+                                    child: Icon(Icons.refresh, size: 13, color: cs.error),
                                   ),
                                 ),
                               ),
                           ],
                         ),
                       ),
-                    Flexible(
-                      child: widget.isMine
-                          ? Container(
-                              constraints:
-                                  BoxConstraints(maxWidth: bubbleMaxWidth),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                gradient: widget.isAiQuestion
-                                    ? const LinearGradient(
-                                        colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-                                      )
-                                    : AppColors.myBubbleGradient,
-                                borderRadius: radius,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (widget.isAiQuestion ? const Color(0xFF7C3AED) : AppColors.primary).withAlpha(50),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (widget.msg.forwardedFrom != null)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 4),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withAlpha(20),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.forward, size: 12, color: Colors.white.withAlpha(160)),
-                                          const SizedBox(width: 4),
-                                          Flexible(child: Text(
-                                            widget.msg.forwardedFrom!,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(fontSize: 11, color: Colors.white.withAlpha(160)),
-                                          )),
-                                        ],
-                                      ),
-                                    ),
-                                  if (widget.msg.isReply) ...[
-                                    GestureDetector(
-                                      onTap: widget.onScrollToParent,
-                                      child: Container(
-                                        margin: const EdgeInsets.only(bottom: 6),
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withAlpha(25),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border(
-                                            left: BorderSide(color: Colors.white.withAlpha(120), width: 3),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          widget.msg.parentMessagePreview ?? '원본 메시지',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.white.withAlpha(180),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  if (widget.isAiQuestion)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.auto_awesome, size: 12, color: Colors.white.withAlpha(200)),
-                                          const SizedBox(width: 4),
-                                          Text('To AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white.withAlpha(200))),
-                                        ],
-                                      ),
-                                    ),
-                                  _buildContentRichText(
-                                    context,
-                                    widget.isAiQuestion ? widget.msg.content.replaceFirst('[AI에게] ', '') : widget.msg.content,
-                                    const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
-                                    invertColors: true,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : Container(
-                              constraints:
-                                  BoxConstraints(maxWidth: bubbleMaxWidth),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainer,
-                                borderRadius: radius,
-                                border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withAlpha(80),
-                                    width: 1),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (widget.msg.forwardedFrom != null)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 4),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.onSurface.withAlpha(12),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.forward, size: 12, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
-                                          const SizedBox(width: 4),
-                                          Flexible(child: Text(
-                                            widget.msg.forwardedFrom!,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)),
-                                          )),
-                                        ],
-                                      ),
-                                    ),
-                                  if (widget.msg.isReply) ...[
-                                    GestureDetector(
-                                      onTap: widget.onScrollToParent,
-                                      child: Container(
-                                        margin: const EdgeInsets.only(bottom: 6),
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.primary.withAlpha(15),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border(
-                                            left: BorderSide(color: AppColors.primary, width: 3),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          widget.msg.parentMessagePreview ?? '원본 메시지',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: FontStyle.italic,
-                                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  _buildContentRichText(
-                                    context,
-                                    widget.msg.content,
-                                    TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurface,
-                                        fontSize: 14,
-                                        height: 1.4),
-                                    invertColors: false,
-                                  ),
-                                ],
-                              ),
-                            ),
-                    ),
+                    Flexible(child: bubbleBody),
                     if (!widget.isMine && widget.showTime)
                       Padding(
-                        padding: const EdgeInsets.only(left: 5, bottom: 3),
+                        padding: const EdgeInsets.only(left: 6, bottom: 2),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (widget.msg.edited)
-                              Text(
-                                '수정됨',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(120),
-                                ),
-                              ),
-                            Text(widget.time,
-                                style: TextStyle(
-                                    fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140))),
+                              Text('수정됨', style: metaStyle),
+                            Text(widget.time, style: metaStyle),
                           ],
                         ),
                       ),

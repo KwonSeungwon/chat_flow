@@ -46,9 +46,6 @@ class _RoomTileState extends State<RoomTile> {
   void _showRoomMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -167,11 +164,12 @@ class _RoomTileState extends State<RoomTile> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final cp = ChatPalette.of(context);
 
     final bg = widget.isSelected
-        ? AppColors.primary.withAlpha(22)
+        ? cp.selectedRoom
         : _hovered
-            ? cs.surfaceContainerHigh
+            ? cs.surfaceContainerLow
             : Colors.transparent;
 
     return MouseRegion(
@@ -183,29 +181,14 @@ class _RoomTileState extends State<RoomTile> {
         onSecondaryTapUp: (details) => _showRoomContextMenu(context, details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.only(bottom: 2),
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.only(left: 10),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(12),
-            border: widget.isSelected
-                ? Border.all(color: AppColors.primary.withAlpha(55), width: 1)
-                : null,
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: [
-              // Left accent bar
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                width: 3,
-                height: 44,
-                margin: const EdgeInsets.only(left: 4, right: 10),
-                decoration: BoxDecoration(
-                  color: widget.isSelected
-                      ? AppColors.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
 
               // Avatar + text (dimmed if full)
               Expanded(
@@ -215,21 +198,22 @@ class _RoomTileState extends State<RoomTile> {
                       : widget.policy == NotificationPolicy.muted ? 0.5
                       : 1.0,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
                     child: Row(
                       children: [
-                        // Gradient avatar
+                        // Squircle avatar (카카오톡형)
                         Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
+                          width: 44,
+                          height: 44,
+                          decoration: ShapeDecoration(
+                            shape: ContinuousRectangleBorder(
+                                borderRadius: BorderRadius.circular(36)),
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                widget.color.withAlpha(220),
-                                widget.color.withAlpha(130),
+                                Color.lerp(widget.color, Colors.white, 0.25)!,
+                                widget.color,
                               ],
                             ),
                           ),
@@ -248,7 +232,7 @@ class _RoomTileState extends State<RoomTile> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
 
                         // Name + participant count
                         Expanded(
@@ -269,19 +253,17 @@ class _RoomTileState extends State<RoomTile> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: widget.isSelected
-                                    ? cs.onSurface
-                                    : cs.onSurfaceVariant,
+                                color: cs.onSurface,
                                 fontWeight: widget.isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
                                 fontSize: 14,
                               ),
                                     ),
                                   ),
                                   ],
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 4),
                               Row(
                                 children: [
                                   Icon(
@@ -289,7 +271,7 @@ class _RoomTileState extends State<RoomTile> {
                                     size: 11,
                                     color: (widget.isFull && !_isDm)
                                         ? AppColors.error
-                                        : cs.onSurfaceVariant.withAlpha(150),
+                                        : cp.meta,
                                   ),
                                   const SizedBox(width: 3),
                                   Text(
@@ -298,7 +280,7 @@ class _RoomTileState extends State<RoomTile> {
                                       fontSize: 11,
                                       color: (widget.isFull && !_isDm)
                                           ? AppColors.error
-                                          : cs.onSurfaceVariant.withAlpha(150),
+                                          : cp.meta,
                                       fontWeight: (widget.isFull && !_isDm)
                                           ? FontWeight.w600
                                           : FontWeight.w400,
@@ -312,7 +294,7 @@ class _RoomTileState extends State<RoomTile> {
                                           horizontal: 5, vertical: 1),
                                       decoration: BoxDecoration(
                                         color: AppColors.error.withAlpha(22),
-                                        borderRadius: BorderRadius.circular(4),
+                                        borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
                                             color:
                                                 AppColors.error.withAlpha(80),
@@ -345,12 +327,12 @@ class _RoomTileState extends State<RoomTile> {
                         // keyword hit and should surface.
                         if (widget.unreadCount > 0) ...[
                           Container(
-                            constraints: const BoxConstraints(minWidth: 18),
-                            height: 18,
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            constraints: const BoxConstraints(minWidth: 20),
+                            height: 20,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(9),
+                              color: cp.unreadBadge,
+                              borderRadius: BorderRadius.circular(10),
                             ),
                             child: Center(
                               child: Text(
@@ -358,16 +340,16 @@ class _RoomTileState extends State<RoomTile> {
                                     ? '99+'
                                     : '${widget.unreadCount}',
                                 style: const TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 10),
                         ] else
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                       ],
                     ),
                   ),

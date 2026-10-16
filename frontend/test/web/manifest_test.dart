@@ -42,12 +42,13 @@ void main() {
       expect(manifest['scope'], equals('/'));
     });
 
-    test('theme_color matches app dark background', () {
-      expect(manifest['theme_color'], equals('#0D0F14'));
+    // 기본 테마가 라이트(파스텔)라 PWA 색도 라이트 배경과 맞춘다.
+    test('theme_color matches app light background', () {
+      expect(manifest['theme_color'], equals('#EEF4FF'));
     });
 
-    test('background_color matches app dark background', () {
-      expect(manifest['background_color'], equals('#0D0F14'));
+    test('background_color matches app light background', () {
+      expect(manifest['background_color'], equals('#EEF4FF'));
     });
 
     test('icons include 192x192 and 512x512', () {

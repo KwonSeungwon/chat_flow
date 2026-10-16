@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/models/chat_message.dart';
 
 // ─────────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ class SystemBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final cp = ChatPalette.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -26,11 +27,10 @@ class SystemBubble extends StatelessWidget {
             maxWidth: MediaQuery.of(context).size.width * 0.85,
           ),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: cs.surfaceContainer,
+              color: cp.pill,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outline.withAlpha(80)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -40,7 +40,7 @@ class SystemBubble extends StatelessWidget {
                     _text,
                     style: TextStyle(
                       fontSize: 12,
-                      color: cs.onSurfaceVariant.withAlpha(160),
+                      color: cp.onPill,
                     ),
                   ),
                 ),
