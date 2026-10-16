@@ -47,7 +47,7 @@ public class KoreanSearchService {
             applyRoomFilter(boolBuilder, chatRoomId);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, "content", null,
+        return executeAndMap(boolBuilder.build(), pageable, null,
                 "Error performing Korean search for query: " + query);
     }
 
@@ -59,7 +59,7 @@ public class KoreanSearchService {
             applyRoomFilter(boolBuilder, chatRoomId);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, "content.ngram", 0.5,
+        return executeAndMap(boolBuilder.build(), pageable, 0.5,
                 "Error performing N-gram search for query: " + query);
     }
 
@@ -103,7 +103,7 @@ public class KoreanSearchService {
             boolBuilder = excludeSystemMessages(boolBuilder);
         }
 
-        return executeAndMap(boolBuilder.build(), pageable, null, null,
+        return executeAndMap(boolBuilder.build(), pageable, null,
                 "Error in searchWithFilters for roomId: " + roomId);
     }
 
@@ -169,13 +169,12 @@ public class KoreanSearchService {
      *
      * @param boolQuery       the fully-built bool query
      * @param pageable        pagination (offset + size)
-     * @param highlightField  field to highlight, or {@code null} for no highlight
      * @param minScore        minimum score threshold, or {@code null} for none
      * @param errorLogContext message logged (at ERROR) if the search fails
      */
     private Page<ChatMessageDocument> executeAndMap(
             BoolQuery boolQuery, Pageable pageable,
-            String highlightField, Double minScore,
+            Double minScore,
             String errorLogContext) {
 
         int from = (int) pageable.getOffset();
@@ -214,15 +213,6 @@ public class KoreanSearchService {
 
                 if (minScore != null) {
                     s.minScore(minScore);
-                }
-
-                if (highlightField != null) {
-                    s.highlight(h -> h
-                            .fields(highlightField, hf -> hf
-                                    .preTags(SearchConstants.HIGHLIGHT_PRE_TAG)
-                                    .postTags(SearchConstants.HIGHLIGHT_POST_TAG)
-                            )
-                    );
                 }
 
                 return s;

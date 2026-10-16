@@ -6,7 +6,6 @@ import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.chatflow.search.util.SearchConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
 import org.junit.jupiter.api.AfterAll;
@@ -15,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,7 +44,7 @@ class SearchIndexingIntegrationTest {
                         .properties("content", p -> p.text(t -> t))
                         .properties("messageType", p -> p.keyword(k -> k))
                         .properties("timestamp", p -> p.date(d -> d))));
-        service = new SearchService(client, mapper, new SimpleMeterRegistry());
+        service = new SearchService(client, mapper);
     }
 
     @AfterAll
@@ -64,13 +65,15 @@ class SearchIndexingIntegrationTest {
     }
 
     @Test
-    void bufferFlush_indexesDocs_thenDeleteRemovesOne() throws Exception {
-        service.indexChatMessage(msg("it-1", false));
-        service.indexChatMessage(msg("it-2", false));
-        service.scheduledFlush();               // triggers bulk index
+    void batch_indexesDocs_thenDeleteRemovesOne_andSameBatchDeleteWins() throws Exception {
+        service.indexChatMessages(List.of(msg("it-1", false), msg("it-2", false)));
         assertThat(count()).isEqualTo(2L);
 
-        service.indexChatMessage(msg("it-1", true));  // delete path
+        service.indexChatMessages(List.of(msg("it-1", true)));  // delete in its own batch
+        assertThat(count()).isEqualTo(1L);
+
+        // index + delete of the same id in one batch must not resurrect the document
+        service.indexChatMessages(List.of(msg("it-3", false), msg("it-3", true)));
         assertThat(count()).isEqualTo(1L);
     }
 }

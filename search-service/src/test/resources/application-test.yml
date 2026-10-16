@@ -7,13 +7,7 @@ spring:
     consumer:
       group-id: search-service-test-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
-
-rss:
-  feed-url: https://example.com/rss
-  crawl-interval: 3600000
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 management:
   endpoints:

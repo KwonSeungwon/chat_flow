@@ -4,6 +4,7 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.IndexRequest;
 import co.elastic.clients.elasticsearch.core.IndexResponse;
 import com.chatflow.common.dto.AuditEvent;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +22,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -138,28 +139,25 @@ class AuditIndexServiceTest {
     class MalformedJsonTests {
 
         @Test
-        @DisplayName("malformed JSON does not call index and does not throw")
-        @SuppressWarnings("unchecked")
-        void malformedJsonSkipsIndexing() {
-            // when / then -- no exception propagated
-            assertThatCode(() -> service.handleAuditEvent("{not json"))
-                    .doesNotThrowAnyException();
+        @DisplayName("malformed JSON propagates (container dead-letters it) and never calls index")
+        void malformedJsonPropagates() {
+            assertThatThrownBy(() -> service.handleAuditEvent("{not json"))
+                    .isInstanceOf(JsonProcessingException.class);
 
-            // and -- ES client was never called
             verifyNoInteractions(elasticsearchClient);
         }
     }
 
-    // ── ES error swallowed ──────────────────────────────────────────────
+    // ── ES error propagation ────────────────────────────────────────────
 
     @Nested
     @DisplayName("ES error handling")
     class EsErrorHandlingTests {
 
         @Test
-        @DisplayName("IOException from ES index() is swallowed — listener must not break the consumer")
+        @DisplayName("IOException from ES index() propagates so the shared error handler retries/dead-letters")
         @SuppressWarnings("unchecked")
-        void esExceptionIsSwallowed() throws Exception {
+        void esFailure_propagates() throws Exception {
             // given
             AuditEvent event = AuditEvent.builder()
                     .eventId("evt-fail-001")
@@ -173,18 +171,18 @@ class AuditIndexServiceTest {
             when(elasticsearchClient.index(any(IndexRequest.class)))
                     .thenThrow(new IOException("ES cluster unavailable"));
 
-            // when / then -- exception is NOT propagated
-            assertThatCode(() -> service.handleAuditEvent(json))
-                    .doesNotThrowAnyException();
+            // when / then -- exception reaches the listener container
+            assertThatThrownBy(() -> service.handleAuditEvent(json))
+                    .isInstanceOf(IOException.class)
+                    .hasMessage("ES cluster unavailable");
 
-            // verify the call was attempted
             verify(elasticsearchClient).index(any(IndexRequest.class));
         }
 
         @Test
-        @DisplayName("RuntimeException from ES index() is also swallowed")
+        @DisplayName("RuntimeException from ES index() also propagates")
         @SuppressWarnings("unchecked")
-        void esRuntimeExceptionIsSwallowed() throws Exception {
+        void esRuntimeException_propagates() throws Exception {
             // given
             AuditEvent event = AuditEvent.builder()
                     .eventId("evt-fail-002")
@@ -199,8 +197,9 @@ class AuditIndexServiceTest {
                     .thenThrow(new RuntimeException("unexpected failure"));
 
             // when / then
-            assertThatCode(() -> service.handleAuditEvent(json))
-                    .doesNotThrowAnyException();
+            assertThatThrownBy(() -> service.handleAuditEvent(json))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("unexpected failure");
         }
     }
 

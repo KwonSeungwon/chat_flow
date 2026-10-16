@@ -26,8 +26,12 @@ public class KafkaErrorConfig {
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, createExponentialBackOff());
 
+        // Malformed/unmappable payloads never succeed on retry: send them to the DLT at once.
+        // JsonProcessingException covers JsonParseException and every JsonMappingException
+        // (unknown enum value, mismatched input, ...); causes are traversed, so a Jackson
+        // exception wrapped in BatchListenerFailedException is classified the same way.
         errorHandler.addNotRetryableExceptions(
-                com.fasterxml.jackson.core.JsonParseException.class,
+                com.fasterxml.jackson.core.JsonProcessingException.class,
                 org.apache.kafka.common.errors.SerializationException.class
         );
 
