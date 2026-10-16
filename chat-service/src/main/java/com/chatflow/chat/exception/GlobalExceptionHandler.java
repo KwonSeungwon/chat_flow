@@ -1,5 +1,6 @@
 package com.chatflow.chat.exception;
 
+import com.chatflow.chat.game.exception.GameException;
 import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.ErrorResponse;
 import com.chatflow.common.exception.BaseExceptionHandler;
@@ -111,5 +112,13 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
         log.warn("Quota exceeded: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(ErrorResponse.of(429, "QUOTA_EXCEEDED", e.getMessage()));
+    }
+
+    /** Wiki Dungeon game errors carry their own status and stable code. */
+    @ExceptionHandler(GameException.class)
+    public ResponseEntity<ErrorResponse> handleGame(GameException e) {
+        log.warn("Game error {}: {}", e.getCode(), e.getMessage());
+        return ResponseEntity.status(e.getStatus())
+                .body(ErrorResponse.of(e.getStatus(), e.getCode(), e.getMessage()));
     }
 }

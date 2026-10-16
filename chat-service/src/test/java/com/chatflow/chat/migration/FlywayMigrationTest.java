@@ -22,7 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V18) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V19) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -104,8 +104,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 18 versioned migrations (V1..V18) should have been executed")
-                .isEqualTo(18);
+                .as("All 19 versioned migrations (V1..V19) should have been executed")
+                .isEqualTo(19);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -329,6 +329,71 @@ class FlywayMigrationTest {
                     : com.chatflow.chat.entity.ScheduledMessageEntity.ScheduledMessageStatus.values()) {
                 assertThat(definition).contains("'" + status.name() + "'");
             }
+        }
+    }
+
+    // ── Test 11: V19 — game tables, constraints and seed ─────────────────
+
+    @Test
+    void v19_gameTablesExistWithExpectedColumns() throws SQLException {
+        assertThat(columnsOf("game_dungeon")).containsAll(Set.of("id", "name", "sort_order", "building_style"));
+        assertThat(columnsOf("game_topic")).containsAll(Set.of("id", "dungeon_id", "title", "summary", "source_ref"));
+        assertThat(columnsOf("game_monster"))
+                .containsAll(Set.of("id", "topic_id", "dungeon_id", "name", "sprite_key", "is_boss"));
+        assertThat(columnsOf("game_question")).containsAll(Set.of("id", "topic_id", "stem", "choices",
+                "answer_index", "explanation", "status", "content_hash", "created_at", "reviewed_at"));
+        assertThat(columnsOf("game_progress"))
+                .containsAll(Set.of("user_id", "dungeon_id", "username", "cleared_at", "best_streak"));
+        assertThat(columnsOf("game_answer"))
+                .containsAll(Set.of("id", "user_id", "question_id", "correct", "answered_at", "next_due_at"));
+
+        assertThat(columnDataType("game_question", "choices")).isEqualTo("text");
+        assertThat(uniqueConstraintExists("game_topic", "dungeon_id", "title")).isTrue();
+        assertThat(uniqueConstraintExists("game_question", "content_hash")).isTrue();
+        assertThat(indexExists("game_answer", "idx_game_answer_user_due")).isTrue();
+        assertThat(indexExists("game_monster", "uq_game_monster_boss")).isTrue();
+        assertThat(indexExists("game_monster", "uq_game_monster_topic")).isTrue();
+    }
+
+    @Test
+    void v19_seedsEightDungeonsEachWithOneBoss() throws SQLException {
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT COUNT(*) FROM game_dungeon WHERE building_style = id")) {
+                rs.next();
+                assertThat(rs.getInt(1)).isEqualTo(8);
+            }
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT COUNT(*) FROM game_monster m JOIN game_dungeon d ON d.id = m.dungeon_id "
+                            + "WHERE m.is_boss AND m.topic_id IS NULL AND m.sprite_key = 'boss_' || d.id")) {
+                rs.next();
+                assertThat(rs.getInt(1)).isEqualTo(8);
+            }
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT name FROM game_monster WHERE dungeon_id = 'k8s' AND is_boss")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("크래시루프 드래곤");
+            }
+        }
+    }
+
+    @Test
+    void v19_rejectsSecondBossAndOutOfRangeAnswerIndex() throws SQLException {
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> stmt.executeUpdate(
+                    "INSERT INTO game_monster (dungeon_id, name, sprite_key, is_boss) "
+                            + "VALUES ('k8s', 'second boss', 'boss_k8s', TRUE)"))
+                    .isInstanceOf(SQLException.class);
+
+            stmt.executeUpdate("INSERT INTO game_topic (dungeon_id, title) VALUES ('jvm', 'v19 check topic')");
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> stmt.executeUpdate(
+                    "INSERT INTO game_question (topic_id, stem, choices, answer_index, explanation, content_hash) "
+                            + "SELECT id, 's', '[]', 4, 'e', repeat('a', 64) FROM game_topic "
+                            + "WHERE title = 'v19 check topic'"))
+                    .isInstanceOf(SQLException.class);
+            stmt.executeUpdate("DELETE FROM game_topic WHERE title = 'v19 check topic'");
         }
     }
 
