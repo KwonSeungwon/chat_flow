@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-ChatFlow is a multi-service application. Backend services are Gradle subprojects in `settings.gradle`: `chat-service`, `ai-summary-service`, `search-service`, `gateway-service`, and shared code in `common`. Java source lives under each module's `src/main/java`; backend tests live under `src/test/java`.
+ChatFlow is a multi-service application. Backend services are Gradle subprojects in `settings.gradle`: `chat-service`, `gateway-service`, and shared code in `common`. Java source lives under each module's `src/main/java`; backend tests live under `src/test/java`.
 
-The client is a Flutter app in `frontend/`. App code is organized by `lib/core`, `lib/features`, and `lib/shared`; tests are in `frontend/test`. Infrastructure files live in `docker-compose.*.yml`, `elasticsearch/`, `helm/`, `k8s/`, `monitoring/`, and `scripts/`.
+The client is a Flutter app in `frontend/`. App code is organized by `lib/core`, `lib/features`, and `lib/shared`; tests are in `frontend/test`. Infrastructure files live in `docker-compose.*.yml`, `helm/`, `k8s/`, `monitoring/`, and `scripts/`.
 
 ## Build, Test, and Development Commands
 
@@ -38,4 +38,4 @@ Open PRs from `feature/*`, `refactor/*`, `hotfix/*`, or release branches into `d
 
 ## Security & Configuration Tips
 
-Do not commit real secrets. Use `.env.example` as the template, and keep local credentials in ignored environment files. Treat Firebase, JWT, database, Kafka, Elasticsearch, and AI provider settings as sensitive configuration.
+Do not commit real secrets. Use `.env.example` as the template, and keep local credentials in ignored environment files. Treat Firebase, JWT, database, and Valkey settings as sensitive configuration.
