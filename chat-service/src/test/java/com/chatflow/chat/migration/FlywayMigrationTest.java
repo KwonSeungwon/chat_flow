@@ -351,6 +351,7 @@ class FlywayMigrationTest {
         assertThat(uniqueConstraintExists("game_topic", "dungeon_id", "title")).isTrue();
         assertThat(uniqueConstraintExists("game_question", "content_hash")).isTrue();
         assertThat(indexExists("game_answer", "idx_game_answer_user_due")).isTrue();
+        assertThat(indexExists("game_answer", "idx_game_answer_user_question_id")).isTrue();
         assertThat(indexExists("game_monster", "uq_game_monster_boss")).isTrue();
         assertThat(indexExists("game_monster", "uq_game_monster_topic")).isTrue();
     }
