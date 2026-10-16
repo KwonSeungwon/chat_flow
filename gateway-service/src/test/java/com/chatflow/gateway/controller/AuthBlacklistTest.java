@@ -294,6 +294,15 @@ class AuthBlacklistTest {
                 .expectStatus().value(status -> org.junit.jupiter.api.Assertions.assertNotEquals(401, status));
     }
 
+    @Test
+    void queryParamToken_onFilePathWithDotSegments_isIgnored() {
+        for (String p : new String[] {"/api/files/%2e%2e/users/me", "/api/files/%2E%2E/users/me", "/api/files/./../users/me"}) {
+            webTestClient.get().uri(uriBuilder -> uriBuilder.path("/").build().resolve(p + "?token=" + validToken))
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
+    }
+
     // ── M3: register error body and duplicate handling ──
 
     @Test

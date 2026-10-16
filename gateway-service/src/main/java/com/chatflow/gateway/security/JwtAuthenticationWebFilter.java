@@ -107,7 +107,20 @@ public class JwtAuthenticationWebFilter implements WebFilter {
             return bearerToken.substring(7);
         }
         // 쿼리 파라미터 토큰은 헤더를 못 붙이는 경로만 허용: WebSocket 연결, <img>가 쓰는 파일 GET
-        String path = request.getPath().pathWithinApplication().value();
+        // 디코딩된 세그먼트로 판단한다. "." / ".." 세그먼트("%2e%2e" 포함)가 있으면 /api/files/ 접두를 믿을 수 없다.
+        StringBuilder sb = new StringBuilder();
+        for (org.springframework.http.server.PathContainer.Element e : request.getPath().pathWithinApplication().elements()) {
+            if (e instanceof org.springframework.http.server.PathContainer.PathSegment seg) {
+                String v = seg.valueToMatch();
+                if (v.equals(".") || v.equals("..")) {
+                    return null;
+                }
+                if (!v.isEmpty()) {
+                    sb.append('/').append(v);
+                }
+            }
+        }
+        String path = sb.toString();
         boolean ws = path.equals("/ws") || path.startsWith("/ws/")
                 || path.equals("/ws-native") || path.startsWith("/ws-native/");
         boolean file = HttpMethod.GET.equals(request.getMethod()) && path.startsWith("/api/files/");

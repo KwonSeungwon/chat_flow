@@ -214,7 +214,13 @@ public class AuthService {
                             })
                             .flatMap(saved -> currentJti == null
                                     ? Mono.<Void>empty()
-                                    : rotateActiveJti(entity.getUserId(), currentJti, cacheTtl))
+                                    : rotateActiveJti(entity.getUserId(), currentJti, cacheTtl)
+                                            // 비밀번호는 이미 저장됐다. 세션 고정 실패가 500으로 보이면 안 된다.
+                                            .onErrorResume(e -> {
+                                                log.warn("[auth] active jti rotation after password change failed: userId={} {}",
+                                                        entity.getUserId(), e.getMessage());
+                                                return Mono.empty();
+                                            }))
                 )
                 .then();
     }
@@ -241,6 +247,9 @@ public class AuthService {
             String jti = jwtUtil.getJti(token);
             String userId = jwtUtil.getUserId(token);
             long remainingMs = jwtUtil.getRemainingTtlMs(token);
+            if (jti == null) {
+                return Mono.<Void>empty(); // jti 없는 레거시 토큰: 블랙리스트할 키가 없다
+            }
             // 이미 블랙리스트된 토큰(다른 기기 로그인 등으로 무효화됨)은 아무것도 하지 않는다.
             return tokenBlacklistService.isBlacklisted(jti)
                     .flatMap(blacklisted -> blacklisted
@@ -272,7 +281,7 @@ public class AuthService {
     }
 
     private Mono<Void> clearActiveJti(String userId, String jti) {
-        if (userId == null) return Mono.empty();
+        if (userId == null || jti == null) return Mono.empty();
         return redisTemplate.execute(CLEAR_ACTIVE_JTI_IF_MATCH_SCRIPT,
                         List.of(SecurityKeys.ACTIVE_JTI_PREFIX + userId), List.of(jti))
                 .then();

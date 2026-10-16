@@ -356,6 +356,34 @@ class AuthServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void changePassword_rotateFailureAfterSave_stillSucceeds() {
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp5").username("cpuser5").encodedPassword("old-enc")
+                .createdAt(LocalDateTime.now()).build();
+        allowPasswordAttempt();
+        when(userRepository.findByUsername("cpuser5")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
+        when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp5",
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.error(new RuntimeException("redis down")));
+
+        StepVerifier.create(authService.changePassword("cpuser5", "currentpw", "newpasswd", "cur-jti"))
+                .verifyComplete();
+    }
+
+    @Test
+    void logout_tokenWithoutJti_completesWithoutError() {
+        when(jwtUtil.getJti("legacy")).thenReturn(null);
+        when(jwtUtil.getUserId("legacy")).thenReturn("user-7");
+        when(jwtUtil.getRemainingTtlMs("legacy")).thenReturn(1_000L);
+
+        StepVerifier.create(authService.logout("legacy")).verifyComplete();
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void changePassword_pinsActiveJtiToCurrentToken() {
         UserEntity entity = UserEntity.builder()
                 .userId("user-cp4").username("cpuser4").encodedPassword("old-enc")
