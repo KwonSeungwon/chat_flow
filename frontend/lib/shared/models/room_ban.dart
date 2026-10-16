@@ -1,3 +1,5 @@
+import '../../core/utils/server_time.dart';
+
 class RoomBan {
   final String userId;
   final String username;
@@ -19,8 +21,7 @@ class RoomBan {
       username: json['username']?.toString() ?? '',
       bannedBy: json['bannedBy']?.toString() ?? '',
       reason: json['reason']?.toString(),
-      bannedAt: DateTime.tryParse(json['bannedAt']?.toString() ?? '') ??
-          DateTime.now(),
+      bannedAt: parseServerDateTime(json['bannedAt']) ?? DateTime.now(),
     );
   }
 

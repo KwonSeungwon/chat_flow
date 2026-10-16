@@ -5,6 +5,5 @@ class StorageKeys {
   static const username = 'chatflow-username';
   static const role = 'chatflow-role';
   static const profileImage = 'chatflow-profileImage';
-  static const mutedRooms = 'chatflow-muted-rooms';
   static const roomNotificationPolicies = 'chatflow.roomNotificationPolicies';
 }

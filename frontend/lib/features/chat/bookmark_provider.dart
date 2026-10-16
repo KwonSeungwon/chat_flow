@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../auth/auth_provider.dart';
 
 /// Personal bookmark entry stored locally via SecureStorage.
 class BookmarkEntry {
@@ -37,19 +38,28 @@ class BookmarkEntry {
 
 final bookmarksProvider =
     StateNotifierProvider<BookmarksNotifier, List<BookmarkEntry>>((ref) {
-  return BookmarksNotifier();
+  final userId = ref.watch(authProvider.select((a) => a.userId));
+  return BookmarksNotifier(userId);
 });
 
 class BookmarksNotifier extends StateNotifier<List<BookmarkEntry>> {
-  static const _key = 'chatflow.bookmarks';
+  static const _keyBase = 'chatflow.bookmarks';
   static const _storage = FlutterSecureStorage();
 
-  BookmarksNotifier() : super([]) {
+  final String? _userId;
+
+  /// 사용자별 저장 키. userId가 없으면 읽지도 쓰지도 않는다.
+  static String storageKeyFor(String userId) => '$_keyBase.$userId';
+
+  BookmarksNotifier(this._userId) : super([]) {
     _load();
   }
 
   Future<void> _load() async {
-    final raw = await _storage.read(key: _key);
+    final userId = _userId;
+    if (userId == null) return;
+    final raw = await _storage.read(key: storageKeyFor(userId));
+    if (!mounted) return;
     if (raw == null || raw.isEmpty) return;
     try {
       final list = jsonDecode(raw) as List;
@@ -76,8 +86,10 @@ class BookmarksNotifier extends StateNotifier<List<BookmarkEntry>> {
       state.any((e) => e.messageId == messageId);
 
   Future<void> _persist() async {
+    final userId = _userId;
+    if (userId == null) return;
     await _storage.write(
-      key: _key,
+      key: storageKeyFor(userId),
       value: jsonEncode(state.map((e) => e.toJson()).toList()),
     );
   }

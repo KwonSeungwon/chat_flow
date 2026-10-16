@@ -1,3 +1,5 @@
+import '../../core/utils/server_time.dart';
+
 enum ReportReason { spam, harassment, inappropriate, other }
 
 extension ReportReasonX on ReportReason {
@@ -61,8 +63,7 @@ class MessageReport {
       comment: json['comment']?.toString(),
       status:
           ReportStatusX.fromString(json['status']?.toString() ?? 'PENDING'),
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
+      createdAt: parseServerDateTime(json['createdAt']) ?? DateTime.now(),
     );
   }
 

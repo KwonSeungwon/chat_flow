@@ -82,7 +82,7 @@ void main() {
         'id': 1,
         'scheduledAt': '2026-05-08T09:00:00',
       });
-      expect(m.scheduledAtDateTime, DateTime.parse('2026-05-08T09:00:00'));
+      expect(m.scheduledAtDateTime.toUtc(), DateTime.utc(2026, 5, 8, 9));
     });
 
     test('scheduledAtDateTime falls back to now() on bad input', () {
