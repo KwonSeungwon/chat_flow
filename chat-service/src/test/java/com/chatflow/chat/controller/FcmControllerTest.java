@@ -1,5 +1,6 @@
 package com.chatflow.chat.controller;
 
+import com.chatflow.chat.auth.AuthenticatedUserResolver;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,14 +29,31 @@ class FcmControllerTest {
     @Mock
     private FcmNotificationService service;
 
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
     @InjectMocks
     private FcmController controller;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void subscribe_records_token_against_authenticated_user() throws Exception {
+        String body = objectMapper.writeValueAsString(
+            Map.of("token", "t".repeat(120), "roomId", "room-1"));
+        mockMvc.perform(post("/api/fcm/subscribe")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", "user-1")
+                .content(body))
+            .andExpect(status().isOk());
+        verify(membershipGuard).requireMember("room-1", "user-1");
+        verify(service).subscribeToRoom("t".repeat(120), "room-1", "user-1");
     }
 
     @Test

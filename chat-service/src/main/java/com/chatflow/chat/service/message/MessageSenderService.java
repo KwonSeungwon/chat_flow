@@ -133,8 +133,8 @@ public class MessageSenderService {
 
         log.info("Processing chat message: {}", message.getMessageId());
 
-        // Resolve mentions once — the rows, the FCM pings and the persisted event all
-        // reuse this single room_members lookup.
+        // Resolve mentions once — the rows and the persisted event both reuse this single
+        // room_members lookup.
         List<RoomMemberEntity> mentionedMembers = List.of();
         List<MessageMentionEntity> mentionEntities = List.of();
         if (MentionTargets.shouldResolveMentions(message)) {
@@ -169,14 +169,6 @@ public class MessageSenderService {
                     : "파일을 보냈습니다";
             fcmNotificationService.sendMessageNotification(
                 message.getChatRoomId(), message.getUsername(), notifContent);
-        }
-
-        // Mention pings ride on the caption too, so this sits outside the type branch.
-        // mentionedMembers is empty for every type that cannot carry user text.
-        for (RoomMemberEntity mentioned : mentionedMembers) {
-            fcmNotificationService.sendMessageNotification(
-                "mention-" + mentioned.getUsername(), message.getUsername(),
-                message.getUsername() + "님이 회원님을 멘션했습니다: " + message.getContent());
         }
     }
 

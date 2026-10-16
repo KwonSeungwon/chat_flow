@@ -33,7 +33,7 @@ public class FcmController {
             @Valid @RequestBody SubscribeRequest req,
             @AuthenticatedUser String userId) {
         membershipGuard.requireMember(req.getRoomId(), userId);
-        fcmNotificationService.subscribeToRoom(req.getToken(), req.getRoomId());
+        fcmNotificationService.subscribeToRoom(req.getToken(), req.getRoomId(), userId);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 

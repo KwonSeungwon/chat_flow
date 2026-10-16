@@ -153,4 +153,23 @@ class MessageInteractionControllerThreadTest {
 
         verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
     }
+
+    @Test
+    void getEditHistory_returns_404_when_message_is_deleted() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        ChatMessageEntity deleted = ChatMessageEntity.builder()
+            .messageId("msg-d").chatRoomId("room-1").userId("u2").username("bob")
+            .content("삭제된 메시지입니다.").type(ChatMessage.MessageType.CHAT.name())
+            .timestamp(LocalDateTime.now())
+            .build();
+        deleted.setDeleted(true);
+        when(chatMessageRepository.findById("msg-d")).thenReturn(Optional.of(deleted));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/msg-d/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
+    }
 }

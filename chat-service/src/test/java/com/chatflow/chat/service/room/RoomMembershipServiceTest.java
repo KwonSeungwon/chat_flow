@@ -1,5 +1,6 @@
 package com.chatflow.chat.service.room;
 
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.config.RedisHealthTracker;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.Map;
@@ -40,6 +42,7 @@ class RoomMembershipServiceTest {
     @Mock private RoomCacheEvictor roomCacheEvictor;
     @Mock private RoomAccessPolicy roomAccessPolicy;
     @Mock private SetOperations<String, String> setOps;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private RoomMembershipService roomMembershipService;
 
@@ -54,7 +57,8 @@ class RoomMembershipServiceTest {
     void setUp() {
         roomMembershipService = new RoomMembershipService(
                 roomMemberRepository, redisTemplate, redisHealth,
-                messagingTemplate, participantService, roomCacheEvictor, roomAccessPolicy);
+                messagingTemplate, participantService, roomCacheEvictor, roomAccessPolicy,
+                eventPublisher);
     }
 
     // ── AddMemberIfAbsent ─────────────────────────────────────────
@@ -174,6 +178,26 @@ class RoomMembershipServiceTest {
 
             verify(participantService).syncParticipantCountFromRedis(ROOM_ID);
             verify(roomCacheEvictor).evict(ROOM_ID);
+        }
+
+        @Test
+        void leaveRoom_publishesRoomMemberRemovedEvent() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
+            when(redisHealth.isCircuitOpen()).thenReturn(true);
+
+            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            verify(eventPublisher).publishEvent(new RoomMemberRemovedEvent(
+                    ROOM_ID, USER_ID, RoomMemberRemovedEvent.Reason.LEFT));
+        }
+
+        @Test
+        void leaveRoom_nonMember_publishesNothing() {
+            when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
+
+            roomMembershipService.leaveRoom(ROOM_ID, USER_ID, USERNAME);
+
+            verifyNoInteractions(eventPublisher);
         }
 
         @SuppressWarnings("unchecked")

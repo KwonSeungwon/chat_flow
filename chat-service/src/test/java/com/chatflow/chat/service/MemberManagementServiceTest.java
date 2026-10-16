@@ -1,5 +1,6 @@
 package com.chatflow.chat.service;
 
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
@@ -35,6 +37,7 @@ class MemberManagementServiceTest {
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
     @Mock private MemberListBroadcaster memberListBroadcaster;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private RoomPermissionService roomPermissionService;
     private MemberManagementService memberManagementService;
@@ -49,7 +52,8 @@ class MemberManagementServiceTest {
     void setUp() {
         roomPermissionService = new RoomPermissionService(roomMemberRepository, chatRoomRepository);
         memberManagementService = new MemberManagementService(
-                roomMemberRepository, roomPermissionService, messagingTemplate, memberListBroadcaster);
+                roomMemberRepository, roomPermissionService, messagingTemplate, memberListBroadcaster,
+                eventPublisher);
     }
 
     private RoomMemberEntity member(String userId, String username, RoomRole role) {
@@ -98,6 +102,20 @@ class MemberManagementServiceTest {
                                 && OWNER_ID.equals(map.get("byUserId"));
                     }));
             verify(memberListBroadcaster).broadcast(ROOM_ID);
+        }
+
+        @Test
+        void kickMember_publishesRoomMemberRemovedEvent() {
+            stubGeneralRoom();
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, OWNER_ID))
+                    .thenReturn(Optional.of(member(OWNER_ID, "owner", RoomRole.OWNER)));
+            when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, TARGET_ID))
+                    .thenReturn(Optional.of(member(TARGET_ID, "target", RoomRole.MEMBER)));
+
+            memberManagementService.kickMember(ROOM_ID, OWNER_ID, TARGET_ID);
+
+            verify(eventPublisher).publishEvent(new RoomMemberRemovedEvent(
+                    ROOM_ID, TARGET_ID, RoomMemberRemovedEvent.Reason.KICKED));
         }
 
         @Test

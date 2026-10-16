@@ -58,6 +58,7 @@ public class MessageEditService {
             entity.setContent(DELETED_PLACEHOLDER);
             chatMessageRepository.save(entity);
             messageMentionRepository.deleteByMessageId(messageId);
+            editHistoryRepository.deleteByMessageId(messageId);
             Map<String, Object> broadcast = new LinkedHashMap<>();
             broadcast.put("type", "MESSAGE_DELETED");
             broadcast.put("messageId", messageId);

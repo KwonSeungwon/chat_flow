@@ -1,5 +1,7 @@
 package com.chatflow.chat.service.notification;
 
+import com.chatflow.chat.config.AsyncConfig;
+import com.chatflow.chat.event.RoomMemberRemovedEvent;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -14,8 +16,11 @@ import org.springframework.core.io.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -25,6 +30,16 @@ import java.util.Set;
  *
  * Topic convention: "room-{chatRoomId}"
  * Devices subscribe/unsubscribe per room; notifications are broadcast to the topic.
+ *
+ * Valkey bookkeeping:
+ * <ul>
+ *   <li>{@code chatflow:fcm:rooms:<token>} — rooms a device token is subscribed to (tab-close cleanup)</li>
+ *   <li>{@code chatflow:fcm:user-tokens:<userId>} — tokens a user subscribed with, so a kick/ban/leave
+ *       can unsubscribe that user's devices server-side</li>
+ *   <li>{@code chatflow:fcm:token-owner:<token>} — the user who last subscribed with a token; a token
+ *       that moved to another account (logout/login on one device) is never unsubscribed on behalf of
+ *       its previous owner</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -32,6 +47,8 @@ import java.util.Set;
 public class FcmNotificationService {
 
     static final String ROOMS_KEY_PREFIX = "chatflow:fcm:rooms:";
+    static final String USER_TOKENS_KEY_PREFIX = "chatflow:fcm:user-tokens:";
+    static final String TOKEN_OWNER_KEY_PREFIX = "chatflow:fcm:token-owner:";
 
     @Value("${firebase.service-account-path:classpath:firebase-service-account.json}")
     private Resource serviceAccountResource;
@@ -64,7 +81,7 @@ public class FcmNotificationService {
     // -------------------------------------------------------------------------
 
     /** Sends a chat message notification to the room topic (async, non-blocking). */
-    @Async("persistenceExecutor")
+    @Async(AsyncConfig.FCM_EXECUTOR)
     public void sendMessageNotification(String roomId, String sender, String content) {
         if (messaging == null) return;
         String preview = content.length() > 60 ? content.substring(0, 57) + "..." : content;
@@ -88,9 +105,10 @@ public class FcmNotificationService {
     // Topic subscription management
     // -------------------------------------------------------------------------
 
-    @Async("persistenceExecutor")
-    public void subscribeToRoom(String token, String roomId) {
+    @Async(AsyncConfig.FCM_EXECUTOR)
+    public void subscribeToRoom(String token, String roomId, String userId) {
         redisTemplate.opsForSet().add(ROOMS_KEY_PREFIX + token, roomId);
+        recordTokenOwner(token, userId);
         if (messaging == null) return;
         try {
             messaging.subscribeToTopicAsync(List.of(token), "room-" + roomId);
@@ -100,7 +118,7 @@ public class FcmNotificationService {
         }
     }
 
-    @Async("persistenceExecutor")
+    @Async(AsyncConfig.FCM_EXECUTOR)
     public void unsubscribeFromRoom(String token, String roomId) {
         redisTemplate.opsForSet().remove(ROOMS_KEY_PREFIX + token, roomId);
         if (messaging == null) return;
@@ -138,6 +156,51 @@ public class FcmNotificationService {
         }
         redisTemplate.delete(key);
         log.debug("FCM unsubscribed token from {} rooms", rooms.size());
+    }
+
+    /**
+     * Membership ended (kick / ban / leave): unsubscribe every device token the user
+     * subscribed with from the room topic, so the removed user stops getting previews.
+     * Runs after the removing transaction commits — a rolled-back kick changes nothing.
+     */
+    @Async(AsyncConfig.FCM_EXECUTOR)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onRoomMemberRemoved(RoomMemberRemovedEvent event) {
+        String roomId = event.roomId();
+        String userId = event.userId();
+        Set<String> tokens = redisTemplate.opsForSet().members(USER_TOKENS_KEY_PREFIX + userId);
+        if (tokens == null || tokens.isEmpty()) return;
+
+        List<String> owned = new ArrayList<>();
+        for (String token : tokens) {
+            if (userId.equals(redisTemplate.opsForValue().get(TOKEN_OWNER_KEY_PREFIX + token))) {
+                owned.add(token);
+            }
+        }
+        if (owned.isEmpty()) return;
+
+        for (String token : owned) {
+            redisTemplate.opsForSet().remove(ROOMS_KEY_PREFIX + token, roomId);
+        }
+        if (messaging != null) {
+            try {
+                messaging.unsubscribeFromTopicAsync(owned, "room-" + roomId);
+            } catch (Exception e) {
+                log.warn("FCM unsubscribe on removal failed (room {}, user {}): {}",
+                        roomId, userId, e.getMessage());
+            }
+        }
+        log.info("FCM unsubscribed {} token(s) of user {} from room-{} ({})",
+                owned.size(), userId, roomId, event.reason());
+    }
+
+    private void recordTokenOwner(String token, String userId) {
+        if (userId == null || userId.isBlank()) return;
+        redisTemplate.opsForSet().add(USER_TOKENS_KEY_PREFIX + userId, token);
+        String previousOwner = redisTemplate.opsForValue().getAndSet(TOKEN_OWNER_KEY_PREFIX + token, userId);
+        if (previousOwner != null && !previousOwner.equals(userId)) {
+            redisTemplate.opsForSet().remove(USER_TOKENS_KEY_PREFIX + previousOwner, token);
+        }
     }
 
     public boolean isEnabled() {
