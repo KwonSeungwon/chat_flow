@@ -268,25 +268,28 @@ class MentionDigestServiceTest {
     // ── unreadCount ──────────────────────────────────────────────────
 
     @Test
-    void unreadCount_delegatesToRepository() {
-        when(mentionRepository.countByMentionedUserIdAndReadFalseAndCreatedAtAfter(
-                eq("user-alice"), any())).thenReturn(5L);
+    void unreadCount_countsOnlyUnreadMentionsInMemberRooms() {
+        when(mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(
+                eq("user-alice"), any()))
+                .thenReturn(List.of(
+                        mentionRow("m1", "room-1", "bob", false, LocalDateTime.now()),
+                        mentionRow("m2", "room-1", "bob", true, LocalDateTime.now()),
+                        mentionRow("m3", "room-kicked", "carol", false, LocalDateTime.now())));
+        when(roomMemberRepository.existsByRoomIdAndUserId("room-kicked", "user-alice")).thenReturn(false);
 
-        long count = service.unreadCount("user-alice", "alice", 30);
-
-        assertThat(count).isEqualTo(5L);
+        assertThat(service.unreadCount("user-alice", "alice", 30)).isEqualTo(1L);
     }
 
     @Test
     void unreadCount_clampsDays() {
-        when(mentionRepository.countByMentionedUserIdAndReadFalseAndCreatedAtAfter(
-                eq("user-alice"), any())).thenReturn(0L);
+        when(mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(
+                eq("user-alice"), any())).thenReturn(List.of());
 
         service.unreadCount("user-alice", "alice", 0);
         service.unreadCount("user-alice", "alice", 9999);
 
         verify(mentionRepository, times(2))
-                .countByMentionedUserIdAndReadFalseAndCreatedAtAfter(eq("user-alice"), any());
+                .findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(eq("user-alice"), any());
     }
 
     // ── markRead ─────────────────────────────────────────────────────

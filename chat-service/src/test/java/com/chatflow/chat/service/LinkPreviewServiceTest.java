@@ -179,17 +179,36 @@ class LinkPreviewServiceTest {
     // ── SSRF ─────────────────────────────────────────────────────
 
     @Test
-    void preview_redirectToPrivateIp_blocked() {
-        AtomicInteger hits = new AtomicInteger();
-        redirect("/r", "http://10.0.0.1/secret", hits);
-        String url = baseUrl + "/r";
-        cacheMiss(url);
+    void preview_redirectToPrivateIp_blocked() throws Exception {
+        // 내부 대상 서버: 요청이 오면 hit 기록 + 실제 OG HTML 반환 (가드가 없으면 프리뷰가 채워진다)
+        AtomicInteger internalHits = new AtomicInteger();
+        HttpServer internal = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        internal.createContext("/secret", ex -> {
+            internalHits.incrementAndGet();
+            byte[] b = "<title>SECRET</title>".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
+        internal.start();
+        try {
+            AtomicInteger validations = new AtomicInteger();
+            // 첫 hop(공개 호스트 역할)만 허용하고 이후 hop의 주소는 내부 대역으로 간주해 차단
+            LinkPreviewService svc = new LinkPreviewService(redisTemplate, objectMapper,
+                    a -> validations.incrementAndGet() > 1);
+            redirect("/r", "http://localhost:" + internal.getAddress().getPort() + "/secret", null);
+            String url = baseUrl + "/r";
+            cacheMiss(url);
 
-        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
+            Result<Map<String, String>, ChatErrorCode> result = svc.fetch(url);
 
-        assertTrue(result.value().isEmpty());
-        assertEquals(1, hits.get());
-        verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+            assertTrue(result.value().isEmpty());
+            assertEquals(0, internalHits.get(), "blocked redirect target must never be requested");
+            assertTrue(validations.get() >= 2, "redirect hop must be re-validated");
+            verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+        } finally {
+            internal.stop(0);
+        }
     }
 
     @Test
@@ -217,11 +236,47 @@ class LinkPreviewServiceTest {
 
     @Test
     void preview_privateLiteralUrl_blockedWithDefaultPolicy() {
+        AtomicInteger hits = new AtomicInteger();
+        server.createContext("/x", ex -> {
+            hits.incrementAndGet();
+            byte[] b = "<title>REACHED</title>".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
         LinkPreviewService strict = new LinkPreviewService(redisTemplate, objectMapper);
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get(anyString())).thenReturn(null);
 
         assertTrue(strict.fetch("http://127.0.0.1:" + server.getAddress().getPort() + "/x").value().isEmpty());
+        assertEquals(0, hits.get());
+    }
+
+    @Test
+    void preview_slowTrickleBody_isCutOffByReadDeadline() {
+        server.createContext("/slow", ex -> {
+            ex.sendResponseHeaders(200, 0);
+            try {
+                var out = ex.getResponseBody();
+                for (int i = 0; i < 40; i++) {
+                    out.write('x');
+                    out.flush();
+                    Thread.sleep(500);
+                }
+            } catch (Exception ignored) {
+                // client closed the connection
+            } finally {
+                ex.close();
+            }
+        });
+        String url = baseUrl + "/slow";
+        cacheMiss(url);
+
+        long start = System.nanoTime();
+        assertTrue(linkPreviewService.fetch(url).value().isEmpty());
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertTrue(elapsedMs < 12_000, "read must be bounded, took " + elapsedMs + "ms");
     }
 
     @Test

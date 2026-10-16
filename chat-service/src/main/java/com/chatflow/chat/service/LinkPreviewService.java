@@ -23,6 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -45,6 +49,13 @@ public class LinkPreviewService {
             "og:image", ogPatterns("og:image"));
     private static final String CACHE_PREFIX = "chatflow:link-preview:";
     private static final Duration CACHE_TTL = Duration.ofHours(1);
+
+    private static final long READ_TIMEOUT_MS = 8000;
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "link-preview-watchdog");
+        t.setDaemon(true);
+        return t;
+    });
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NEVER)
@@ -134,7 +145,16 @@ public class LinkPreviewService {
                     .GET()
                     .build();
             HttpResponse<InputStream> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            try (InputStream body = resp.body()) {
+            InputStream body = resp.body();
+            // HttpRequest.timeout은 헤더 수신까지만 제한 — 본문 읽기 전체에 데드라인을 걸고 만료 시 스트림을 닫는다
+            ScheduledFuture<?> watchdog = WATCHDOG.schedule(() -> {
+                try {
+                    body.close();
+                } catch (IOException ignored) {
+                    // 이미 닫힘
+                }
+            }, READ_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            try (body) {
                 int status = resp.statusCode();
                 if (status >= 300 && status < 400) {
                     String location = resp.headers().firstValue("Location")
@@ -154,6 +174,8 @@ public class LinkPreviewService {
                     throw new IOException("Response body exceeds 1MB limit");
                 }
                 return new String(buf, StandardCharsets.UTF_8);
+            } finally {
+                watchdog.cancel(false);
             }
         }
         throw new IOException("Too many redirects");

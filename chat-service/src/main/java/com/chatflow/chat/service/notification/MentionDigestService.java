@@ -44,6 +44,20 @@ public class MentionDigestService {
                 : content;
     }
 
+    /** 사용자가 현재 멤버인 방의 멘션만 (강퇴/탈퇴한 방의 멘션은 노출하지 않는다). */
+    private List<MessageMentionEntity> memberRoomMentions(String userId, LocalDateTime since) {
+        List<MessageMentionEntity> rows =
+                mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, since);
+        if (rows.isEmpty()) return List.of();
+        Set<String> memberRooms = rows.stream()
+                .map(MessageMentionEntity::getRoomId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .filter(roomId -> roomMemberRepository.existsByRoomIdAndUserId(roomId, userId))
+                .collect(Collectors.toSet());
+        return rows.stream().filter(r -> memberRooms.contains(r.getRoomId())).toList();
+    }
+
     /**
      * List mention digest items for a user.
      *
@@ -53,18 +67,7 @@ public class MentionDigestService {
      */
     public List<MentionItemDto> list(String userId, String username, int days) {
         LocalDateTime since = LocalDateTime.now().minusDays(clamp(days));
-        List<MessageMentionEntity> rows =
-                mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, since);
-        if (rows.isEmpty()) return List.of();
-
-        // 강퇴/탈퇴한 방의 멘션은 노출하지 않는다 (메시지 내용 유출 방지)
-        Set<String> memberRooms = rows.stream()
-                .map(MessageMentionEntity::getRoomId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .filter(roomId -> roomMemberRepository.existsByRoomIdAndUserId(roomId, userId))
-                .collect(Collectors.toSet());
-        rows = rows.stream().filter(r -> memberRooms.contains(r.getRoomId())).toList();
+        List<MessageMentionEntity> rows = memberRoomMentions(userId, since);
         if (rows.isEmpty()) return List.of();
 
         Map<String, ChatMessageEntity> messages = chatMessageRepository
@@ -90,7 +93,7 @@ public class MentionDigestService {
      */
     public long unreadCount(String userId, String username, int days) {
         LocalDateTime since = LocalDateTime.now().minusDays(clamp(days));
-        return mentionRepository.countByMentionedUserIdAndReadFalseAndCreatedAtAfter(userId, since);
+        return memberRoomMentions(userId, since).stream().filter(r -> !r.isRead()).count();
     }
 
     @Transactional
