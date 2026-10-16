@@ -67,7 +67,7 @@ public class ChatController {
         }
         if (!command.hasAllowedType()) {
             log.warn("STOMP sendMessage rejected: type {} not user-sendable, user={} room={}",
-                    command.type(), userId, command.chatRoomId());
+                    loggableType(command.type()), userId, command.chatRoomId());
             messagingTemplate.convertAndSendToUser(userId, "/queue/errors",
                     Map.of("type", "INVALID_MESSAGE_TYPE", "operation", "sendMessage", "roomId",
                             command.chatRoomId() != null ? command.chatRoomId() : ""));
@@ -101,6 +101,14 @@ public class ChatController {
         log.debug("Received message: room={} user={} type={}",
                 chatMessage.getChatRoomId(), userId, chatMessage.getType());
         chatService.processMessage(chatMessage, membership.get().entity());
+    }
+
+    /** Client-supplied type for a log line: control chars stripped, at most 32 chars. */
+    static String loggableType(String type) {
+        if (type == null) return "UNKNOWN";
+        String clean = type.replaceAll("\\p{Cntrl}", "");
+        if (clean.length() > 32) clean = clean.substring(0, 32);
+        return clean.isBlank() ? "UNKNOWN" : clean;
     }
 
     /** Session userId set at handshake (gateway) or CONNECT (Bearer); falls back to the Principal. */

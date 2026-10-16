@@ -40,7 +40,7 @@ public class ChatRoom {
     private String externalId;
 
     @Builder.Default
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = RoomTypeConverter.class)
     @Column(name = "room_type", length = 20)
     private RoomType roomType = RoomType.GENERAL;
 

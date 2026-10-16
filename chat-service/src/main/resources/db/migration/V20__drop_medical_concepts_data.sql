@@ -35,6 +35,10 @@ WHERE message_id IN (
     SELECT message_id FROM chat_messages
     WHERE type = 'PATIENT_CARD' OR (type = 'CHAT' AND content LIKE '{"type":"SBAR"%'));
 
+-- SBAR로 보냈다가 일반 텍스트로 고친 메시지는 남지만, 편집 이력에 카드 원문이 있다.
+-- 그 이력 행만 지운다. 같은 메시지의 일반 텍스트 이력은 남긴다.
+DELETE FROM message_edit_history WHERE previous_content LIKE '{"type":"SBAR"%';
+
 UPDATE chat_rooms SET pinned_message_id = NULL
 WHERE pinned_message_id IN (
     SELECT message_id FROM chat_messages

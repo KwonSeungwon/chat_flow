@@ -474,6 +474,10 @@ class FlywayMigrationTest {
                     + "from_username) VALUES ('m-card', 'r-handoff', 'u-b', 'b', 'a'), ('m-text', 'r-handoff', 'u-b', 'b', 'a')");
             stmt.executeUpdate("INSERT INTO message_reports (message_id, room_id, reported_by, reason) "
                     + "VALUES ('m-sbar', 'r-handoff', 'u-b', 'SPAM')");
+            stmt.executeUpdate("INSERT INTO message_edit_history (message_id, previous_content, edited_at, edited_by) VALUES "
+                    + "('m-card', 'old card', now(), 'a'), "
+                    + "('m-text', '{\"type\":\"SBAR\",\"s\":\"y\"}', now(), 'a'), "
+                    + "('m-text', 'helo', now(), 'a')");
         }
 
         MigrateResult v20 = Flyway.configure()
@@ -518,6 +522,12 @@ class FlywayMigrationTest {
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM message_reports")) {
                 rs.next();
                 assertThat(rs.getInt(1)).isZero();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id, previous_content FROM message_edit_history")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("m-text");
+                assertThat(rs.getString(2)).isEqualTo("helo");
+                assertThat(rs.next()).isFalse();
             }
         }
     }

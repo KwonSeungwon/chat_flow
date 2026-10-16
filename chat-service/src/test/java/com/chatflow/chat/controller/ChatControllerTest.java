@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -154,6 +156,32 @@ class ChatControllerTest {
         verifyNoInteractions(chatService);
         verify(messagingTemplate).convertAndSendToUser(
                 eq(USER_ID), eq("/queue/errors"), any(Map.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CHAT", "FILE"})
+    @DisplayName("user-sendable types arriving as JSON strings are accepted")
+    void sendMessage_userTypeFromJson_accepted(String type) throws Exception {
+        InboundChatCommand command = objectMapper.readValue(
+                "{\"chatRoomId\":\"room-1\",\"content\":\"hi\",\"type\":\"" + type + "\"}",
+                InboundChatCommand.class);
+        givenMember();
+
+        chatController.sendMessage(command, headerAccessor);
+
+        ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(chatService).processMessage(captor.capture(), any());
+        assertThat(captor.getValue().getType()).isEqualTo(ChatMessage.MessageType.valueOf(type));
+    }
+
+    @Test
+    @DisplayName("rejected type is logged sanitized: control chars stripped, 32-char cap, UNKNOWN fallback")
+    void loggableType_sanitizes() {
+        assertThat(ChatController.loggableType("PATIENT_CARD")).isEqualTo("PATIENT_CARD");
+        assertThat(ChatController.loggableType("FOO\nforged log line")).isEqualTo("FOOforged log line");
+        assertThat(ChatController.loggableType("x".repeat(100))).hasSize(32);
+        assertThat(ChatController.loggableType("\r\n")).isEqualTo("UNKNOWN");
+        assertThat(ChatController.loggableType(null)).isEqualTo("UNKNOWN");
     }
 
     @Test
