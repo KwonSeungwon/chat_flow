@@ -168,6 +168,22 @@ class MessageInteractionControllerValidationTest {
         }
 
         @Test
+        @DisplayName("emoji longer than 32 chars -> 400 VALIDATION_ERROR")
+        void returns_400_when_emoji_too_long() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages/msg-1/reactions")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"emoji\":\"" + "x".repeat(33) + "\"}")
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.fieldErrors.emoji").exists());
+
+            verify(messageReactionService, never())
+                    .toggleReaction(anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
         @DisplayName("valid emoji -> delegates to service")
         void delegates_to_service_on_valid_emoji() throws Exception {
             doNothing().when(membershipGuard).requireMember("r1", "user-1");

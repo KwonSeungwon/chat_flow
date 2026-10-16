@@ -3,7 +3,9 @@ package com.chatflow.chat.repository;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,10 +14,17 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.List;
 
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, String> {
+
+    /** Row-locked read for read-modify-write of the reactions JSON (concurrent toggles). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM ChatMessageEntity m WHERE m.messageId = :messageId")
+    Optional<ChatMessageEntity> findByIdForUpdate(@Param("messageId") String messageId);
+
 
     @Modifying
     @Transactional
