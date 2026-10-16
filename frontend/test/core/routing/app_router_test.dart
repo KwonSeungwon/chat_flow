@@ -5,6 +5,7 @@ import 'package:chatflow/core/constants/storage_keys.dart';
 import 'package:chatflow/core/network/dio_client.dart';
 import 'package:chatflow/core/network/stomp_service.dart';
 import 'package:chatflow/core/routing/app_router.dart';
+import 'package:chatflow/features/auth/auth_provider.dart';
 import 'package:chatflow/features/auth/login_page.dart';
 import 'package:chatflow/features/chat/chat_notifier.dart';
 import 'package:chatflow/features/chat/chat_page.dart';
@@ -134,4 +135,41 @@ void main() {
     expect(uri.path, '/login');
     expect(uri.queryParameters['redirect'], '/chat/room-1?messageId=m9');
   });
+
+  for (final explicit in [true, false]) {
+    testWidgets(
+        explicit
+            ? 'explicit logout goes to plain /login'
+            : '401 logout keeps the room in redirect', (tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        StorageKeys.token: _token(),
+        StorageKeys.userId: 'u1',
+        StorageKeys.username: 'alice',
+      });
+      final original = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('overflowed')) return;
+        original?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = original);
+
+      final router = await pumpApp(tester, '/chat/room-1');
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(ChatPage)));
+      if (explicit) {
+        // Not awaited: the test zone's fake clock drives it in the pumps below.
+        container.read(authProvider.notifier).logout().ignore();
+      } else {
+        client.onUnauthorized!(); // session died server-side
+      }
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final uri = router.routerDelegate.currentConfiguration.uri;
+      expect(uri.path, '/login');
+      expect(uri.queryParameters['redirect'],
+          explicit ? isNull : '/chat/room-1');
+    });
+  }
 }

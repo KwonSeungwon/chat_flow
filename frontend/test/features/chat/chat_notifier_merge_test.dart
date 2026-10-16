@@ -292,4 +292,53 @@ void main() {
 
     expect(container.read(roomUnreadCountsProvider)['room-1'], 1);
   });
+
+  test('reconnect_refetchSettlesOwnPendingBubble_andMarksRead', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    container.read(activeRoomIdProvider.notifier).state = 'room-1';
+    final stomp = _FakeStompService();
+    var page = <Map<String, dynamic>>[_msg('m1', '2026-10-16T10:00:01')];
+    final bodies = <String, Object>{
+      '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': ''}),
+    };
+    final puts = <Object?>[];
+    final notifier = _notifier(container, bodies, stomp: stomp, onRequest: (o) {
+      if (o.path == '/api/chat/rooms/room-1/messages') bodies[o.path] = _ok(page);
+      if (o.method == 'PUT' && o.path.endsWith('/last-read')) {
+        puts.add((o.data as Map)['lastReadMessageId']);
+      }
+    });
+    final state = _stateOf(notifier);
+    await notifier.joinRoom('room-1');
+    stomp.onConnectionChanged!(true);
+    stomp.onConnectionChanged!(false);
+
+    // Sent while the socket is down: an optimistic bubble.
+    notifier.sendMessage(roomId: 'room-1', content: 'hi');
+    final localId = state().messages.last.localId!;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    puts.clear();
+
+    // The server got it (e.g. flushed just before the drop); its copy comes
+    // back in the refetch, the echo never arrived.
+    page = [
+      _msg('m1', '2026-10-16T10:00:01'),
+      {
+        ..._msg('m2', '2026-10-16T10:00:02'),
+        'userId': 'u1',
+        'username': 'alice',
+        'content': 'hi',
+        'clientMessageId': localId,
+      },
+    ];
+    stomp.onConnectionChanged!(true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final msgs = state().messages;
+    expect(msgs.map((m) => m.messageId), ['m1', 'm2']);
+    expect(msgs.last.deliveryStatus, MessageDeliveryStatus.sent);
+    expect(puts, ['m2']);
+  });
 }

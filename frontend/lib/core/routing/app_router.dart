@@ -31,7 +31,9 @@ class _RouterNotifier extends ChangeNotifier {
     final loc = state.matchedLocation;
     final isLoginPage = loc == '/login';
     if (!auth.isAuthenticated && !isLoginPage) {
+      if (auth.loggedOut) return '/login';
       // Preserve the requested location (path + query) as the post-login target
+      // (deep link while logged out, or a session that died with a 401)
       return '/login?redirect=${Uri.encodeComponent(state.uri.toString())}';
     }
     if (auth.isAuthenticated && isLoginPage) {

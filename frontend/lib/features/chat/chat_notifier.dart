@@ -311,7 +311,15 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           debugPrint('[ChatNotifier] refetch parse error: $parseErr');
         }
       }
-      _mergeMessages(latest);
+      // Our own sends whose echo was lost settle their bubbles instead of
+      // showing up twice.
+      _mergeMessages([
+        for (final m in latest)
+          if (!_dispatcher.reconcileOwnMessage(m, contentFallback: false)) m,
+      ]);
+      if (_ref.read(activeRoomIdProvider) == roomId) {
+        _readState.markRoomRead(roomId);
+      }
     } catch (e) {
       debugPrint('[ChatNotifier] refetch after reconnect failed: $e');
     }

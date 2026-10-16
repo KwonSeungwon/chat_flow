@@ -20,6 +20,10 @@ class AuthState {
   final String? error;
   final bool isHydrated;
 
+  /// The user logged out on purpose (not a 401/expiry). The router then
+  /// goes to a plain /login instead of offering to return to the old page.
+  final bool loggedOut;
+
   const AuthState({
     this.token,
     this.userId,
@@ -28,6 +32,7 @@ class AuthState {
     this.isLoading = false,
     this.error,
     this.isHydrated = false,
+    this.loggedOut = false,
   });
 
   bool get isAuthenticated => token != null;
@@ -260,7 +265,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     WebUnloadHandler.unregister();
     await _clearCredentials();
     _onSessionEnded?.call();
-    state = const AuthState(isHydrated: true);
+    state = const AuthState(isHydrated: true, loggedOut: true);
   }
 
   Future<void> changePassword(String currentPassword, String newPassword) async {
