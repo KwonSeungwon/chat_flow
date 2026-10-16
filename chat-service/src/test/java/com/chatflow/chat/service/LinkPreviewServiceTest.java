@@ -4,6 +4,8 @@ import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,44 +14,74 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpRequest;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClient.RequestHeadersUriSpec;
-import org.springframework.web.client.RestClient.RequestHeadersSpec;
-import org.springframework.web.client.RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse;
-import org.springframework.web.client.RestClient.RequestHeadersSpec.ExchangeFunction;
 
-import java.io.ByteArrayInputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for LinkPreviewService covering Redis cache hits/misses,
- * HTTP fetch + OG-tag parsing, error handling, and max content-size guard.
+ * LinkPreviewService: Redis 캐시, OG 파싱, 크기 제한, SSRF(리다이렉트 포함) 방어.
+ * HTTP 경로는 JDK HttpServer(loopback)로 검증하며, 테스트에서는 loopback만 허용하고
+ * 나머지 내부 대역은 실제 isBlocked 정책을 그대로 적용한다.
  */
 @ExtendWith(MockitoExtension.class)
 class LinkPreviewServiceTest {
 
-    @Mock private RestClient restClient;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private LinkPreviewService linkPreviewService;
+    private HttpServer server;
+    private String baseUrl;
 
     private static final String TEST_URL = "https://example.com/page";
     private static final String CACHE_KEY = "chatflow:link-preview:" + TEST_URL;
 
     @BeforeEach
-    void setUp() {
-        linkPreviewService = new LinkPreviewService(restClient, redisTemplate, objectMapper);
+    void setUp() throws Exception {
+        linkPreviewService = new LinkPreviewService(redisTemplate, objectMapper,
+                a -> !a.isLoopbackAddress() && LinkPreviewService.isBlocked(a));
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.start();
+        baseUrl = "http://localhost:" + server.getAddress().getPort();
+    }
+
+    @AfterEach
+    void tearDown() {
+        server.stop(0);
+    }
+
+    private void respond(String path, int status, String body) {
+        server.createContext(path, ex -> {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
+            if (bytes.length > 0) ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+    }
+
+    private void redirect(String path, String location, AtomicInteger hits) {
+        server.createContext(path, ex -> {
+            if (hits != null) hits.incrementAndGet();
+            ex.getResponseHeaders().add("Location", location);
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+    }
+
+    private void cacheMiss(String url) {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(CACHE_KEY.replace(TEST_URL, url))).thenReturn(null);
     }
 
     // ── Cache hit ────────────────────────────────────────────────
@@ -61,10 +93,8 @@ class LinkPreviewServiceTest {
                 "title", "Cached Title",
                 "description", "Cached Desc",
                 "image", "https://example.com/img.png");
-        String json = objectMapper.writeValueAsString(cached);
-
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY)).thenReturn(json);
+        when(valueOps.get(CACHE_KEY)).thenReturn(objectMapper.writeValueAsString(cached));
 
         Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
 
@@ -72,21 +102,12 @@ class LinkPreviewServiceTest {
         assertEquals("Cached Title", result.value().get("title"));
         assertEquals("Cached Desc", result.value().get("description"));
         assertEquals("https://example.com/img.png", result.value().get("image"));
-
-        // RestClient must never be called when cache hits
-        verifyNoInteractions(restClient);
     }
 
     // ── Cache miss → HTTP fetch + cache write ────────────────────
 
-    @SuppressWarnings("unchecked")
     @Test
     void fetches_and_caches_when_redis_miss() throws Exception {
-        // Cache miss
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY)).thenReturn(null);
-
-        // Build canned HTML with OG tags
         String html = """
                 <html><head>
                 <title>Fallback Title</title>
@@ -95,144 +116,135 @@ class LinkPreviewServiceTest {
                 <meta property="og:image" content="https://example.com/og.png" />
                 </head><body></body></html>
                 """;
+        respond("/page", 200, html);
+        String url = baseUrl + "/page";
+        cacheMiss(url);
 
-        // Stub the RestClient chain: get() -> uri() -> header() -> exchange()
-        RequestHeadersUriSpec uriSpec = mock(RequestHeadersUriSpec.class);
-        RequestHeadersSpec headersSpec = mock(RequestHeadersSpec.class);
-        when(restClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(anyString())).thenReturn(headersSpec);
-        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
-
-        // Capture the ExchangeFunction and invoke it with a mock response
-        when(headersSpec.exchange(any(ExchangeFunction.class))).thenAnswer(invocation -> {
-            ExchangeFunction<String> fn = invocation.getArgument(0);
-            HttpRequest mockReq = mock(HttpRequest.class);
-            ConvertibleClientHttpResponse mockResp = mock(ConvertibleClientHttpResponse.class);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentLength(html.length());
-            when(mockResp.getHeaders()).thenReturn(headers);
-            when(mockResp.getBody()).thenReturn(
-                    new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8)));
-            return fn.exchange(mockReq, mockResp);
-        });
-
-        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
 
         assertTrue(result.isSuccess());
-        // OG tags take precedence over <title>
         assertEquals("OG Title", result.value().get("title"));
         assertEquals("OG Description", result.value().get("description"));
         assertEquals("https://example.com/og.png", result.value().get("image"));
-        assertEquals(TEST_URL, result.value().get("url"));
+        assertEquals(url, result.value().get("url"));
 
-        // Verify cache write with correct key, JSON content, and 1-hour TTL
-        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
-        verify(valueOps).set(keyCaptor.capture(), jsonCaptor.capture(), ttlCaptor.capture());
-
-        assertEquals(CACHE_KEY, keyCaptor.getValue());
+        verify(valueOps).set(eq(CACHE_KEY.replace(TEST_URL, url)), jsonCaptor.capture(), ttlCaptor.capture());
         assertEquals(Duration.ofHours(1), ttlCaptor.getValue());
-
-        Map<String, String> written = objectMapper.readValue(
-                jsonCaptor.getValue(), new TypeReference<>() {});
+        Map<String, String> written = objectMapper.readValue(jsonCaptor.getValue(), new TypeReference<>() {});
         assertEquals("OG Title", written.get("title"));
     }
 
-    // ── HTTP failure → empty map, no cache write ─────────────────
+    @Test
+    void falls_back_to_title_tag_and_content_before_property_order() {
+        respond("/page", 200, "<title>Plain</title><meta content=\"Desc\" property=\"og:description\">");
+        String url = baseUrl + "/page";
+        cacheMiss(url);
 
-    @SuppressWarnings("unchecked")
+        Map<String, String> value = linkPreviewService.fetch(url).value();
+
+        assertEquals("Plain", value.get("title"));
+        assertEquals("Desc", value.get("description"));
+    }
+
+    // ── Failure modes → empty, no cache write ────────────────────
+
     @Test
     void returns_empty_map_when_http_fails() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY)).thenReturn(null);
+        respond("/page", 500, "boom");
+        String url = baseUrl + "/page";
+        cacheMiss(url);
 
-        // Stub RestClient chain to throw on exchange()
-        RequestHeadersUriSpec uriSpec = mock(RequestHeadersUriSpec.class);
-        RequestHeadersSpec headersSpec = mock(RequestHeadersSpec.class);
-        when(restClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(anyString())).thenReturn(headersSpec);
-        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
-        when(headersSpec.exchange(any(ExchangeFunction.class)))
-                .thenThrow(new RuntimeException("Connection refused"));
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
 
-        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
-
-        // Network failure → ok(empty), not INTERNAL_ERROR (ops noise)
-        assertTrue(result.isSuccess());
-        assertTrue(result.value().isEmpty());
-
-        // No cache write should occur
-        verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
-    }
-
-    // ── Max content size: Content-Length exceeds 1 MB ─────────────
-
-    @SuppressWarnings("unchecked")
-    @Test
-    void respects_max_content_size_via_content_length_header() throws Exception {
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY)).thenReturn(null);
-
-        RequestHeadersUriSpec uriSpec = mock(RequestHeadersUriSpec.class);
-        RequestHeadersSpec headersSpec = mock(RequestHeadersSpec.class);
-        when(restClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(anyString())).thenReturn(headersSpec);
-        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
-
-        // Exchange invokes the lambda which checks Content-Length > 1MB
-        when(headersSpec.exchange(any(ExchangeFunction.class))).thenAnswer(invocation -> {
-            ExchangeFunction<String> fn = invocation.getArgument(0);
-            HttpRequest mockReq = mock(HttpRequest.class);
-            ConvertibleClientHttpResponse mockResp = mock(ConvertibleClientHttpResponse.class);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentLength(2_000_000L); // 2 MB — exceeds 1 MB limit
-            when(mockResp.getHeaders()).thenReturn(headers);
-            return fn.exchange(mockReq, mockResp);
-        });
-
-        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
-
-        // IOException inside exchange → caught by outer catch → ok(empty)
         assertTrue(result.isSuccess());
         assertTrue(result.value().isEmpty());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
-    // ── Max content size: body stream exceeds 1 MB ───────────────
-
-    @SuppressWarnings("unchecked")
     @Test
-    void respects_max_content_size_via_body_stream() throws Exception {
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY)).thenReturn(null);
+    void respects_max_content_size() {
+        respond("/big", 200, "x".repeat(1_048_576 + 100));
+        String url = baseUrl + "/big";
+        cacheMiss(url);
 
-        RequestHeadersUriSpec uriSpec = mock(RequestHeadersUriSpec.class);
-        RequestHeadersSpec headersSpec = mock(RequestHeadersSpec.class);
-        when(restClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(anyString())).thenReturn(headersSpec);
-        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
 
-        // Content-Length header not set (or lies), but body stream is > 1MB
-        when(headersSpec.exchange(any(ExchangeFunction.class))).thenAnswer(invocation -> {
-            ExchangeFunction<String> fn = invocation.getArgument(0);
-            HttpRequest mockReq = mock(HttpRequest.class);
-            ConvertibleClientHttpResponse mockResp = mock(ConvertibleClientHttpResponse.class);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentLength(-1); // unknown length
-            when(mockResp.getHeaders()).thenReturn(headers);
-            // Body larger than 1 MB + 1
-            byte[] oversized = new byte[1_048_576 + 100];
-            when(mockResp.getBody()).thenReturn(new ByteArrayInputStream(oversized));
-            return fn.exchange(mockReq, mockResp);
-        });
-
-        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(TEST_URL);
-
-        // Body stream exceeds 1MB → caught by outer catch → ok(empty)
         assertTrue(result.isSuccess());
         assertTrue(result.value().isEmpty());
         verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    // ── SSRF ─────────────────────────────────────────────────────
+
+    @Test
+    void preview_redirectToPrivateIp_blocked() {
+        AtomicInteger hits = new AtomicInteger();
+        redirect("/r", "http://10.0.0.1/secret", hits);
+        String url = baseUrl + "/r";
+        cacheMiss(url);
+
+        Result<Map<String, String>, ChatErrorCode> result = linkPreviewService.fetch(url);
+
+        assertTrue(result.value().isEmpty());
+        assertEquals(1, hits.get());
+        verify(valueOps, never()).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void preview_followsSafeRedirect() {
+        redirect("/r", "/final", null);
+        respond("/final", 200, "<title>Landed</title>");
+        String url = baseUrl + "/r";
+        cacheMiss(url);
+
+        assertEquals("Landed", linkPreviewService.fetch(url).value().get("title"));
+    }
+
+    @Test
+    void preview_tooManyRedirects_givesUp() {
+        redirect("/a", "/b", null);
+        redirect("/b", "/c", null);
+        redirect("/c", "/d", null);
+        redirect("/d", "/e", null);
+        respond("/e", 200, "<title>Too far</title>");
+        String url = baseUrl + "/a";
+        cacheMiss(url);
+
+        assertTrue(linkPreviewService.fetch(url).value().isEmpty());
+    }
+
+    @Test
+    void preview_privateLiteralUrl_blockedWithDefaultPolicy() {
+        LinkPreviewService strict = new LinkPreviewService(redisTemplate, objectMapper);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(anyString())).thenReturn(null);
+
+        assertTrue(strict.fetch("http://127.0.0.1:" + server.getAddress().getPort() + "/x").value().isEmpty());
+    }
+
+    @Test
+    void isBlocked_cgnat_100_64() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("100.64.0.1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("100.127.255.254")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("100.128.0.1")));
+    }
+
+    @Test
+    void isBlocked_ipv6Ula_fc00() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fc00::1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fd12:3456::1")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("2606:4700::1111")));
+    }
+
+    @Test
+    void isBlocked_commonInternalAndPublic() throws Exception {
+        for (String ip : new String[] {"10.0.0.1", "172.16.0.1", "192.168.1.1", "127.0.0.1",
+                "169.254.169.254", "0.0.0.0", "::1", "::ffff:10.0.0.1"}) {
+            assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName(ip)), ip);
+        }
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("93.184.216.34")));
     }
 
     // ── Null/blank URL → INVALID_INPUT ──────────────────────────
@@ -243,7 +255,6 @@ class LinkPreviewServiceTest {
 
         assertTrue(result.isFailure());
         assertEquals(ChatErrorCode.INVALID_INPUT, result.error());
-        verifyNoInteractions(restClient);
         verifyNoInteractions(redisTemplate);
     }
 
@@ -253,7 +264,6 @@ class LinkPreviewServiceTest {
 
         assertTrue(result.isFailure());
         assertEquals(ChatErrorCode.INVALID_INPUT, result.error());
-        verifyNoInteractions(restClient);
         verifyNoInteractions(redisTemplate);
     }
 }

@@ -5,6 +5,7 @@ import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageMentionEntity;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageMentionRepository;
+import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.common.util.MessageEncryptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,12 +27,15 @@ class MentionDigestServiceTest {
     @Mock private MessageMentionRepository mentionRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private MessageEncryptor messageEncryptor;
+    @Mock private RoomMemberRepository roomMemberRepository;
 
     private MentionDigestService service;
 
     @BeforeEach
     void setUp() {
-        service = new MentionDigestService(mentionRepository, chatMessageRepository, messageEncryptor);
+        service = new MentionDigestService(
+                mentionRepository, chatMessageRepository, messageEncryptor, roomMemberRepository);
+        lenient().when(roomMemberRepository.existsByRoomIdAndUserId("room-1", "user-alice")).thenReturn(true);
     }
 
     // ── helpers ──────────────────────────────────────────────────────
@@ -118,6 +122,23 @@ class MentionDigestServiceTest {
 
         assertThat(result).extracting(MentionItemDto::messageId)
                 .containsExactly("m3", "m2", "m1");
+    }
+
+    @Test
+    void digest_excludesRoomsUserNoLongerMemberOf() {
+        when(mentionRepository.findByMentionedUserIdAndCreatedAtAfterOrderByCreatedAtDesc(
+                eq("user-alice"), any()))
+                .thenReturn(List.of(
+                        mentionRow("m1", "room-1", "bob", false, LocalDateTime.now()),
+                        mentionRow("m2", "room-kicked", "carol", false, LocalDateTime.now())));
+        when(roomMemberRepository.existsByRoomIdAndUserId("room-kicked", "user-alice")).thenReturn(false);
+        when(chatMessageRepository.findAllById(List.of("m1")))
+                .thenReturn(List.of(msg("m1", "@alice hey", false)));
+        when(messageEncryptor.isEnabled()).thenReturn(false);
+
+        List<MentionItemDto> result = service.list("user-alice", "alice", 30);
+
+        assertThat(result).extracting(MentionItemDto::messageId).containsExactly("m1");
     }
 
     @Test
