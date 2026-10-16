@@ -39,9 +39,6 @@ global:
 
   springProfile: prod,langchain4j
 
-ingress:
-  enabled: false
-
 gateway-service:
   enabled: true
   replicaCount: 1

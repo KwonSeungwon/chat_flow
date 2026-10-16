@@ -1,9 +1,5 @@
 🚀 ChatFlow가 배포되었습니다!
 
-{{- if .Values.ingress.enabled }}
-접속 URL: {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
-{{- end }}
-
 서비스 상태 확인:
   kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=chatflow
   kubectl -n {{ .Release.Namespace }} get svc

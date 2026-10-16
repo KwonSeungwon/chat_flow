@@ -51,11 +51,27 @@ jobs:
     runs-on: ubuntu-latest
     environment: k3s-prod
     steps:
-      - name: Install cloudflared
+      - name: Validate inputs
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          TAG: ${{ github.event.inputs.tag }}
         run: |
-          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-            -o /usr/local/bin/cloudflared
-          chmod +x /usr/local/bin/cloudflared
+          for v in "$SERVICE" "$TAG"; do
+            if ! printf '%s' "$v" | grep -Eq '^[A-Za-z0-9._-]+$'; then
+              echo "Invalid input: $v" >&2
+              exit 1
+            fi
+          done
+
+      - name: Install cloudflared
+        env:
+          CLOUDFLARED_VERSION: '2026.9.3'
+          CLOUDFLARED_SHA256: '77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2'
+        run: |
+          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64" \
+            -o /tmp/cloudflared
+          echo "${CLOUDFLARED_SHA256}  /tmp/cloudflared" | sha256sum -c -
+          sudo install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
           cloudflared --version
 
       - name: Configure SSH (via Cloudflare Access)
@@ -73,8 +89,11 @@ jobs:
           chmod 600 ~/.ssh/config
 
       - name: Pull image into K3s containerd
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          TAG: ${{ github.event.inputs.tag }}
         run: |
-          IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
+          IMAGE="${{ env.IMAGE_PREFIX }}/${SERVICE}:${TAG}"
           if [ -n "${{ secrets.K3S_GHCR_TOKEN }}" ]; then
             ssh "${{ secrets.K3S_HOST }}" \
               "sudo k3s ctr image pull --user '${{ secrets.K3S_GHCR_USERNAME }}:${{ secrets.K3S_GHCR_TOKEN }}' '${IMAGE}'"
@@ -84,11 +103,14 @@ jobs:
           echo "Pulled ${IMAGE} into k3s containerd"
 
       - name: Rollout Deployment
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          TAG: ${{ github.event.inputs.tag }}
         run: |
-          DEPLOY="chatflow-${{ github.event.inputs.service }}"
-          IMAGE="${{ env.IMAGE_PREFIX }}/${{ github.event.inputs.service }}:${{ github.event.inputs.tag }}"
+          DEPLOY="chatflow-${SERVICE}"
+          IMAGE="${{ env.IMAGE_PREFIX }}/${SERVICE}:${TAG}"
           # container name inside the pod matches the service name (Helm convention)
-          CONTAINER="${{ github.event.inputs.service }}"
+          CONTAINER="${SERVICE}"
           ssh "${{ secrets.K3S_HOST }}" \
             "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
               -n ${{ env.NAMESPACE }} set image deployment/${DEPLOY} \
@@ -98,8 +120,10 @@ jobs:
               -n ${{ env.NAMESPACE }} rollout status deployment/${DEPLOY} --timeout=6m"
 
       - name: Verify pod
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
         run: |
           ssh "${{ secrets.K3S_HOST }}" \
             "sudo kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
-              -n ${{ env.NAMESPACE }} get pods -l app.kubernetes.io/name=${{ github.event.inputs.service }} \
+              -n ${{ env.NAMESPACE }} get pods -l app.kubernetes.io/name=${SERVICE} \
               -o wide"

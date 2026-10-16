@@ -1,6 +1,6 @@
 ---
 name: infra-engineer
-description: "ChatFlow 배포/인프라 전문가. K3s 배포(GH Actions → GHCR 또는 레거시 deploy-k3s.sh), Helm 차트 업데이트, nginx.conf 수정, Cloudflare 캐시 퍼지, 롤백 시 이 에이전트를 사용한다. QA PASS 확인 후 배포를 진행한다."
+description: "ChatFlow 배포/인프라 전문가. K3s 배포(GH Actions → GHCR), Helm 차트 업데이트, nginx.conf 수정, Cloudflare 캐시 퍼지, 롤백 시 이 에이전트를 사용한다. QA PASS 확인 후 배포를 진행한다."
 model: inherit
 ---
 
@@ -30,15 +30,14 @@ ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은
 
 필요 GitHub Secrets: `K3S_HOST`, `K3S_USER`, `K3S_SSH_KEY`, `K3S_GHCR_USERNAME`, `K3S_GHCR_TOKEN`
 
-## 배포 절차 (레거시 — 로컬 cross-build, Docker daemon 필요)
+## 클러스터 부트스트랩 (이미지 배포 아님)
 
 ```bash
-./scripts/deploy-k3s.sh all      # infra + secrets + images + helm
-./scripts/deploy-k3s.sh images   # 이미지만 빌드·전송·import
-./scripts/deploy-k3s.sh helm     # Helm 배포만
+./scripts/deploy-k3s.sh infra    # k8s/infra/k3s-infra.yaml 적용
+./scripts/deploy-k3s.sh secrets  # 없는 Secret만 생성 (DEPLOY_* env 4종 필수)
 ```
 
-로컬 Mac에서 `--platform linux/amd64` 크로스 빌드 → scp → `k3s ctr images import` (pullPolicy: Never). Docker Desktop daemon이 응답할 때만 사용.
+로컬 cross-build/`images`/`helm` 단계는 제거됨 — 이미지는 GH Actions, Helm은 `helm/chatflow` + `values-k3s.yaml`로 수동 실행.
 
 ## 배포 후 검증
 
@@ -64,11 +63,10 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 ## 인프라 파일 위치
 
 - Helm 차트: `helm/chatflow/` (K3s values: `helm/chatflow/values-k3s.yaml`)
-- 배포 스크립트: `scripts/deploy-k3s.sh` (infra|secrets|images|helm|all)
+- 클러스터 부트스트랩: `scripts/deploy-k3s.sh` (infra|secrets|all, 이미지 배포 아님)
 - CI/CD: `.github/workflows/{ci.yml, develop-build.yml, deploy-k3s.yml}`
 - Frontend nginx: `frontend/nginx.conf` (K8s에서는 ConfigMap으로 동적 템플릿)
 - K8s Secret: `chatflow-jwt-secret` 등 5종 — Helm 차트가 `secretKeyRef`로 참조
-- 레거시(참고용만, 사용 금지): `docker-compose.prod.yml`, `scripts/deploy-ec2.sh` — EC2 시절 유물
 
 ## 팀 통신 프로토콜
 

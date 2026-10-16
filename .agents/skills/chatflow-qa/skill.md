@@ -49,7 +49,6 @@ grep -rn "json\['" frontend/lib/shared/models/ --include="*.dart"
 | 토픽 | Producer 위치 | Consumer 위치 |
 |------|-------------|-------------|
 | `chat-messages` | `chat-service/**/event/` | `search-service/**/consumer/` |
-| `ai-summary-requests` | `chat-service/**` | `ai-summary-service/**/client/` |
 | `ai-summaries` | `ai-summary-service/**` | `search-service/**/consumer/` |
 
 각 토픽의 Producer가 직렬화하는 DTO 클래스와 Consumer가 역직렬화하는 타입 파라미터가 동일한지 확인한다.

@@ -15,7 +15,7 @@ ChatFlow 마이크로서비스의 실시간 채팅 아키텍처를 설계한다.
 3. **기존 패턴 준수**: 아래 기존 ChatFlow 패턴을 유지한다
    - STOMP 전송: `/app/chat.sendMessage`, `/app/chat.addUser`, `/app/chat.typing`, `/app/chat.markRead`
    - STOMP 구독: `/topic/chat/{roomId}`
-   - Kafka 토픽: `chat-messages`, `ai-summary-requests`, `ai-summaries` — 이름은 common의 `KafkaTopics` 상수로 참조
+   - Kafka 토픽: `chat-messages`, `ai-summaries` — 이름은 common의 `KafkaTopics` 상수로 참조
    - Gateway 라우팅: `/api/**` → 백엔드 서비스, `/ws/**` 및 `/ws-native/**` → chat-service (STOMP 핸드셰이크는 `/ws-native`, SecurityConfig `permitAll()` 필수)
 4. **동시성 설계 포함**: WebSocket 세션 관리, Kafka 파티션 키(chatRoomId), Valkey 캐시 전략을 설계에 반드시 포함한다
 
