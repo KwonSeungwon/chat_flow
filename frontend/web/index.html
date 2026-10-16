@@ -149,7 +149,24 @@
       0%, 100% { transform: translate(0, 0) scale(1); }
       50% { transform: translate(-20px, -30px) scale(1.05); }
     }
+
+    /* 저장된 테마가 다크일 때(아래 head 스크립트가 html.dark를 붙인다) */
+    html.dark body { background: #161A26; }
+    html.dark #chatflow-loader { background: #161A26; }
+    html.dark .app-name { color: #F0F2F5; }
+    html.dark .app-sub { color: #9AA3B8; }
+    html.dark .progress-wrap { background: #2A2F45; }
   </style>
+  <script>
+    // 첫 페인트 전에 동기 실행. shared_preferences_web은 값을 JSON 인코딩해
+    // localStorage['flutter.<key>']에 저장하므로 문자열 "dark"는 "\"dark\""로 들어 있다.
+    try {
+      var raw = localStorage.getItem('flutter.chatflow-theme-mode');
+      if (raw !== null && JSON.parse(raw) === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <div id="chatflow-loader">
