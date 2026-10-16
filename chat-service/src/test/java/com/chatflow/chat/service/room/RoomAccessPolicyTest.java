@@ -205,6 +205,24 @@ class RoomAccessPolicyTest {
                 policy.canGrant(ROOM_ID, USER_ID, GrantPath.DM_CREATE).reason());
     }
 
+    @Test
+    void grant_dmCreate_deniedForAThirdUser_whenTheDmAlreadyHasTwoMembers() {
+        givenRoom(room(RoomType.DIRECT, false, null));
+        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
+        when(roomMemberRepository.countByRoomId(ROOM_ID)).thenReturn(2L);
+
+        assertEquals(Denial.DM_NOT_PARTICIPANT,
+                policy.canGrant(ROOM_ID, USER_ID, GrantPath.DM_CREATE).reason());
+    }
+
+    @Test
+    void grant_dmCreate_allowedForAnExistingParticipant() {
+        givenRoom(room(RoomType.DIRECT, false, null));
+        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
+
+        assertTrue(policy.canGrant(ROOM_ID, USER_ID, GrantPath.DM_CREATE).allowed());
+    }
+
     // ── isVisible ────────────────────────────────────────────────
 
     @Test

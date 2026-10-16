@@ -13,6 +13,7 @@ import com.chatflow.chat.service.room.DmRoomService;
 import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
+import com.chatflow.chat.service.room.UserDirectory;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
@@ -52,6 +53,7 @@ public class ChatRoomController {
     private final RoomVisibilityService roomVisibilityService;
     private final ChatRoomMapper chatRoomMapper;
     private final RoomAccessPolicy roomAccessPolicy;
+    private final UserDirectory userDirectory;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getAllRooms(
@@ -228,7 +230,13 @@ public class ChatRoomController {
             @Valid @RequestBody CreateDmRequest body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), body.targetUsername());
+        // The target's name comes from the users table, never from the client.
+        String targetUsername = userDirectory.resolveUsername(body.targetUserId(), body.targetUsername());
+        if (targetUsername == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("대상 사용자를 찾을 수 없습니다."));
+        }
+        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), targetUsername);
         // Seed both DM participants — they may both want to call member-gated
         // endpoints without sending a STOMP message first. room_members is the
         // DM participant list RoomAccessPolicy checks.
@@ -239,7 +247,7 @@ public class ChatRoomController {
                     .body(ApiResponse.error(denialMessage(self.reason())));
         }
         roomMembershipService.grantMembership(
-                dm.getId(), body.targetUserId(), body.targetUsername(), RoomAccessPolicy.GrantPath.DM_CREATE);
+                dm.getId(), body.targetUserId(), targetUsername, RoomAccessPolicy.GrantPath.DM_CREATE);
         return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
     }
 

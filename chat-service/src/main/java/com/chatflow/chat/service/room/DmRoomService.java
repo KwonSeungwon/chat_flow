@@ -22,6 +22,10 @@ public class DmRoomService {
 
     @Transactional
     public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
+        // Identity is the userId pair in room_members (covers existing name-keyed rooms,
+        // whose members V5 and DM creation seeded). Names below are server-resolved.
+        List<ChatRoom> byMembers = chatRoomRepository.findDmRoomByMembers(userId1, userId2);
+        if (!byMembers.isEmpty()) return byMembers.get(0);
         // Canonicalize by sorting usernames so any argument order produces the
         // same name. Prevents duplicate DM rooms under concurrent swapped-order requests.
         String canonicalName = buildCanonicalDmName(username1, username2);

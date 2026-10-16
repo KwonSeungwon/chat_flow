@@ -67,6 +67,7 @@ class ChatRoomControllerTest {
     @Mock private RoomMembershipGuard membershipGuard;
     @Mock private RoomPermissionService roomPermissionService;
     @Mock private RoomAccessPolicy roomAccessPolicy;
+    @Mock private com.chatflow.chat.service.room.UserDirectory userDirectory;
 
     @InjectMocks
     private ChatRoomController controller;
@@ -552,8 +553,67 @@ class ChatRoomControllerTest {
         }
 
         @Test
+        void uses_the_server_side_username_of_targetUserId_not_the_client_one() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "spoofed")).thenReturn("bob");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
+                    eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
+            when(chatRoomMapper.toResponse(dm))
+                    .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "spoofed")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk());
+
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "u2", "bob", RoomAccessPolicy.GrantPath.DM_CREATE);
+        }
+
+        @Test
+        void returns_404_when_targetUserId_is_not_a_user() throws Exception {
+            when(userDirectory.resolveUsername("ghost", "bob")).thenReturn(null);
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "ghost", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isNotFound());
+
+            verify(dmRoomService, never()).createOrFindDmRoom(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_403_and_seeds_no_target_when_policy_refuses_the_caller() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership("r-dm", "user-1", "alice",
+                    RoomAccessPolicy.GrantPath.DM_CREATE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.DM_NOT_PARTICIPANT));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isForbidden());
+
+            verify(roomMembershipService, never()).grantMembership(
+                    eq("r-dm"), eq("u2"), any(), any());
+        }
+
+        @Test
         void returns_200_when_valid() throws Exception {
             ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
             when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
             when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
                     eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));

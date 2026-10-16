@@ -37,6 +37,13 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
     @Query("SELECT r FROM ChatRoom r WHERE r.name = :baseName OR r.name LIKE CONCAT(:escapedPattern, '-%') ORDER BY r.createdAt ASC")
     List<ChatRoom> findByBaseName(@Param("baseName") String baseName, @Param("escapedPattern") String escapedPattern);
 
+    /** DM room both users hold a room_members row in — identity by userId, not by name. */
+    @Query("SELECT r FROM ChatRoom r WHERE r.roomType = com.chatflow.chat.entity.RoomType.DIRECT "
+            + "AND r.id IN (SELECT m1.roomId FROM RoomMemberEntity m1 WHERE m1.userId = :userId1) "
+            + "AND r.id IN (SELECT m2.roomId FROM RoomMemberEntity m2 WHERE m2.userId = :userId2) "
+            + "ORDER BY r.createdAt ASC")
+    List<ChatRoom> findDmRoomByMembers(@Param("userId1") String userId1, @Param("userId2") String userId2);
+
     @Query("SELECT r FROM ChatRoom r WHERE (r.name = :baseName OR r.name LIKE CONCAT(:escapedPattern, '-%')) AND r.participantCount < r.maxParticipants ORDER BY r.createdAt ASC")
     List<ChatRoom> findAvailableByBaseName(@Param("baseName") String baseName, @Param("escapedPattern") String escapedPattern);
 }
