@@ -7,7 +7,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,7 +32,6 @@ class SecurityConfigHealthProbeTest {
 
     @MockBean private RoomMemberRepository roomMemberRepository;
     @MockBean private StringRedisTemplate stringRedisTemplate;
-    @MockBean @SuppressWarnings("rawtypes") private KafkaTemplate kafkaTemplate;
 
     @Test
     void livenessProbe_unauthenticated_isOpen() throws Exception {
@@ -43,7 +41,7 @@ class SecurityConfigHealthProbeTest {
 
     @Test
     void readinessProbe_unauthenticated_isNotBlocked() throws Exception {
-        // Readiness aggregates dependency health (DB/Redis/Kafka mocks), so the status
+        // Readiness aggregates dependency health (DB/Redis mocks), so the status
         // may be 200 or 503 — what matters is that security does not reject the request.
         int code = mockMvc.perform(get("/actuator/health/readiness"))
                 .andReturn().getResponse().getStatus();

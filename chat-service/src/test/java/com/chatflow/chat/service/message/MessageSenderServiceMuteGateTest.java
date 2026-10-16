@@ -9,7 +9,6 @@ import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.service.notification.FcmNotificationService;
 import com.chatflow.chat.service.room.ChatRoomService;
 import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -111,7 +110,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Verify persistence was NOT called
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(), anyString(), anyString(), any(), anyList());
+                    any(), anyList());
         }
 
         @Test
@@ -145,7 +144,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Verify persistence WAS called
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+                    any(), anyList());
 
             // Verify no error sent to user
             verify(messagingTemplate, never()).convertAndSendToUser(
@@ -168,7 +167,7 @@ class MessageSenderServiceMuteGateTest {
             messageSenderService.send(message);
 
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+                    any(), anyList());
         }
 
         @Test
@@ -182,7 +181,7 @@ class MessageSenderServiceMuteGateTest {
 
             // Message should proceed (let existing handlers decide about non-members)
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+                    any(), anyList());
             verify(messagingTemplate, never()).convertAndSendToUser(
                     anyString(), eq("/queue/errors"), any());
         }
@@ -203,7 +202,7 @@ class MessageSenderServiceMuteGateTest {
             // before any room_members query or persistence.
             verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(), anyString(), anyString(), any(), anyList());
+                    any(), anyList());
             verify(messagingTemplate).convertAndSendToUser(
                     eq(USER_ID), eq("/queue/errors"), any());
         }
@@ -219,7 +218,7 @@ class MessageSenderServiceMuteGateTest {
         messageSenderService.send(createMessage(ChatMessage.MessageType.PATIENT_CARD));
 
         verify(chatPersistenceService, never()).persistMessageAndPublish(
-                any(), anyString(), anyString(), any(), anyList());
+                any(), anyList());
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
         verify(messagingTemplate).convertAndSendToUser(
@@ -233,7 +232,7 @@ class MessageSenderServiceMuteGateTest {
                 member(LocalDateTime.now().plusMinutes(30)));
 
         verify(chatPersistenceService, never()).persistMessageAndPublish(
-                any(), anyString(), anyString(), any(), anyList());
+                any(), anyList());
     }
 
     // ── FILE is user-authored, so the mute gate covers it ──────
@@ -259,7 +258,7 @@ class MessageSenderServiceMuteGateTest {
             verify(messagingTemplate).convertAndSendToUser(
                     eq(USER_ID), eq("/queue/errors"), any());
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(), anyString(), anyString(), any(), anyList());
+                    any(), anyList());
             verifyNoInteractions(fcmNotificationService);
             assertNull(message.getMessageId());
         }
@@ -276,7 +275,7 @@ class MessageSenderServiceMuteGateTest {
             // The single-arg overload has to go looking for the mute state itself.
             verify(roomMemberRepository).findByRoomIdAndUserId(ROOM_ID, USER_ID);
             verify(chatPersistenceService).persistMessageAndPublish(
-                    any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+                    any(), anyList());
             verify(messagingTemplate, never()).convertAndSendToUser(
                     anyString(), eq("/queue/errors"), any());
         }
@@ -296,7 +295,7 @@ class MessageSenderServiceMuteGateTest {
             verify(messagingTemplate).convertAndSendToUser(
                     eq(USER_ID), eq("/queue/errors"), any());
             verify(chatPersistenceService, never()).persistMessageAndPublish(
-                    any(), anyString(), anyString(), any(), anyList());
+                    any(), anyList());
             // Already resolved by the caller — no second trip to the DB.
             verifyNoInteractions(roomMemberRepository);
             assertNull(message.getMessageId());
@@ -315,6 +314,6 @@ class MessageSenderServiceMuteGateTest {
 
         verify(roomMemberRepository, never()).findByRoomIdAndUserId(anyString(), anyString());
         verify(chatPersistenceService).persistMessageAndPublish(
-                any(), eq(KafkaTopics.CHAT_MESSAGES), eq("MESSAGE_SENT"), any(), anyList());
+                any(), anyList());
     }
 }

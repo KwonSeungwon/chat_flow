@@ -1,6 +1,5 @@
 package com.chatflow.chat.migration;
 
-import com.chatflow.chat.entity.OutboxEvent;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.MigrationState;
@@ -206,12 +205,16 @@ class FlywayMigrationTest {
                 .isTrue();
     }
 
-    // ── Test 7: V15 — outbox status CHECK accepts every OutboxStatus value ─
+    // ── Test 7: V15 — outbox status CHECK accepts every outbox status value ─
 
     /**
-     * The migrated schema must accept <strong>every</strong> value of
-     * {@link OutboxEvent.OutboxStatus}. Driven off the enum itself, so adding a new
-     * status in Java without a matching migration fails here instead of in prod.
+     * The table stays after the outbox writer was removed, so these are the four
+     * statuses V15 must accept (the former entity enum).
+     */
+    private static final String[] OUTBOX_STATUSES = {"PENDING", "PROCESSING", "PROCESSED", "FAILED"};
+
+    /**
+     * The migrated schema must accept <strong>every</strong> outbox status value.
      *
      * <p>History: V13 introduced the PENDING → PROCESSING claim step, but prod carried a
      * pre-Flyway Hibernate-generated CHECK constraint listing only the three older values.
@@ -222,7 +225,7 @@ class FlywayMigrationTest {
     void v15_outboxStatusCheckAcceptsEveryEnumValue() throws SQLException {
         try (Connection conn = connect(POSTGRES.getDatabaseName());
              Statement stmt = conn.createStatement()) {
-            for (OutboxEvent.OutboxStatus status : OutboxEvent.OutboxStatus.values()) {
+            for (String status : OUTBOX_STATUSES) {
                 stmt.executeUpdate(insertOutboxRowSql(status));
             }
         }
@@ -290,9 +293,9 @@ class FlywayMigrationTest {
 
         try (Connection conn = connect(driftedDb);
              Statement stmt = conn.createStatement()) {
-            stmt.executeUpdate(insertOutboxRowSql(OutboxEvent.OutboxStatus.PENDING));
+            stmt.executeUpdate(insertOutboxRowSql("PENDING"));
 
-            // This is the statement OutboxPoller.claimBatch() issues — it threw 23514 in prod.
+            // This is the claim statement the former outbox poller issued — it threw 23514 in prod.
             int claimed = stmt.executeUpdate(
                     "UPDATE outbox_events SET status = 'PROCESSING' WHERE status = 'PENDING'");
 
@@ -349,13 +352,13 @@ class FlywayMigrationTest {
 
     /**
      * A minimal valid {@code outbox_events} INSERT for the given status.
-     * Status is interpolated from an enum constant, so there is no injection surface.
+     * Status is interpolated from a test constant, so there is no injection surface.
      */
-    private static String insertOutboxRowSql(OutboxEvent.OutboxStatus status) {
+    private static String insertOutboxRowSql(String status) {
         return "INSERT INTO outbox_events "
                 + "(aggregate_type, aggregate_id, event_type, topic, partition_key, payload, status, created_at) "
                 + "VALUES ('ChatMessage', 'room_test', 'MESSAGE_SENT', 'chat-messages', 'room_test', '{}', "
-                + "'" + status.name() + "', now())";
+                + "'" + status + "', now())";
     }
 
 

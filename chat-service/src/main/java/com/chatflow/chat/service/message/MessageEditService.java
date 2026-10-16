@@ -3,16 +3,12 @@ package com.chatflow.chat.service.message;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageEditHistoryEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
-import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
 import com.chatflow.chat.repository.MessageMentionRepository;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.Result;
-import com.chatflow.chat.service.outbox.ChatPersistenceService;
-import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.common.util.MessageEncryptor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +41,6 @@ public class MessageEditService {
     private final MessageEncryptor messageEncryptor;
     private final SimpMessagingTemplate messagingTemplate;
     private final MessageEditHistoryRepository editHistoryRepository;
-    private final ChatPersistenceService chatPersistenceService;
-    private final ChatMessageMapper chatMessageMapper;
 
     @Transactional
     public Result<Void, ChatErrorCode> deleteMessage(String messageId, String requestingUserId) {
@@ -67,12 +61,6 @@ public class MessageEditService {
             broadcast.put("username", entity.getUsername());
             broadcast.put("timestamp", entity.getTimestamp().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
-
-            // Publish to Kafka via outbox so search-service removes the ES document
-            ChatMessage outboxDto = chatMessageMapper.toDto(entity);
-            outboxDto.setDeleted(true);
-            outboxDto.setContent(DELETED_PLACEHOLDER);
-            chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_DELETED");
 
             log.info("Message deleted: {} by user {}", messageId, requestingUserId);
             return Result.<ChatErrorCode>ok();
@@ -125,11 +113,6 @@ public class MessageEditService {
             broadcast.put("timestamp", entity.getTimestamp().toString());
             broadcast.put("editedAt", entity.getEditedAt().toString());
             messagingTemplate.convertAndSend("/topic/chat/" + entity.getChatRoomId(), broadcast);
-
-            // Publish to Kafka via outbox so search-service upserts the ES document
-            ChatMessage outboxDto = chatMessageMapper.toDto(entity);
-            outboxDto.setContent(newContent);  // plaintext, NOT the encrypted entity content
-            chatPersistenceService.saveOutboxEvent(outboxDto, KafkaTopics.CHAT_MESSAGES, "MESSAGE_EDITED");
 
             // Re-sync mention rows (digest consistency, no re-notify). Same type rule as
             // the send path — otherwise editing "@bob" out of a FILE caption leaves the

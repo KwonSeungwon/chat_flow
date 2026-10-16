@@ -2,17 +2,13 @@ package com.chatflow.chat.service.outbox;
 
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.entity.MessageMentionEntity;
-import com.chatflow.chat.entity.OutboxEvent;
 import com.chatflow.chat.event.MessagePersistedEvent;
 import com.chatflow.chat.mapper.ChatMessageMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageMentionRepository;
-import com.chatflow.chat.repository.OutboxEventRepository;
 import com.chatflow.common.dto.BaseMessage;
 import com.chatflow.common.dto.ChatMessage;
-import com.chatflow.common.dto.KafkaTopics;
 import com.chatflow.common.util.MessageEncryptor;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -31,15 +27,13 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for ChatPersistenceService covering encryption gating
- * and outbox event writes.
+ * and the published MessagePersistedEvent.
  */
 @ExtendWith(MockitoExtension.class)
 class ChatPersistenceServiceTest {
 
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private MessageMentionRepository messageMentionRepository;
-    @Mock private OutboxEventRepository outboxEventRepository;
-    @Mock private ObjectMapper objectMapper;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private MessageEncryptor messageEncryptor;
     @Mock private ChatMessageMapper chatMessageMapper;
@@ -54,9 +48,8 @@ class ChatPersistenceServiceTest {
     @BeforeEach
     void setUp() {
         chatPersistenceService = new ChatPersistenceService(
-                chatMessageRepository, messageMentionRepository, outboxEventRepository,
-                objectMapper, eventPublisher, messageEncryptor,
-                chatMessageMapper);
+                chatMessageRepository, messageMentionRepository, eventPublisher,
+                messageEncryptor, chatMessageMapper);
     }
 
     private ChatMessage sampleMessage() {
@@ -89,14 +82,13 @@ class ChatPersistenceServiceTest {
     class Encryption {
 
         @Test
-        void encrypts_content_before_save_when_encryptor_enabled() throws Exception {
+        void encrypts_content_before_save_when_encryptor_enabled() {
             when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(true);
             when(messageEncryptor.encrypt(RAW_CONTENT)).thenReturn(ENCRYPTED_CONTENT);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
             chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null);
+                    sampleMessage(), List.of());
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
@@ -106,44 +98,17 @@ class ChatPersistenceServiceTest {
         }
 
         @Test
-        void passes_content_through_when_encryptor_disabled() throws Exception {
+        void passes_content_through_when_encryptor_disabled() {
             when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
             chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null);
+                    sampleMessage(), List.of());
 
             ArgumentCaptor<ChatMessageEntity> captor = ArgumentCaptor.forClass(ChatMessageEntity.class);
             verify(chatMessageRepository).save(captor.capture());
 
             assertEquals(RAW_CONTENT, captor.getValue().getContent());
-        }
-    }
-
-    // ── Outbox ──────────────────────────────────────────────────
-
-    @Nested
-    class Outbox {
-
-        @Test
-        void writes_outbox_event_with_chat_messages_topic_key() throws Exception {
-            when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
-            when(messageEncryptor.isEnabled()).thenReturn(false);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
-
-            chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null);
-
-            ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-            verify(outboxEventRepository).save(captor.capture());
-
-            OutboxEvent saved = captor.getValue();
-            assertEquals(KafkaTopics.CHAT_MESSAGES, saved.getTopic());
-            assertEquals(ROOM_ID, saved.getPartitionKey());
-            assertEquals("ChatMessage", saved.getAggregateType());
-            assertEquals(MESSAGE_ID, saved.getAggregateId());
-            assertEquals("MESSAGE_SENT", saved.getEventType());
         }
     }
 
@@ -175,15 +140,14 @@ class ChatPersistenceServiceTest {
         }
 
         @Test
-        void carries_the_saved_mention_rows_usernames() throws Exception {
+        void carries_the_saved_mention_rows_usernames() {
             when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
             // "Phill Park"는 공백이 있어 어떤 문자셋 정규식도 살아남지 못한다 —
             // 리스너가 다시 파싱하지 않는다는 사실을 이 이름이 증명한다.
             chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null,
+                    sampleMessage(),
                     List.of(mentionRow("u2", "Phill Park"), mentionRow("u3", "bob")));
 
             assertEquals(List.of("Phill Park", "bob"),
@@ -191,13 +155,12 @@ class ChatPersistenceServiceTest {
         }
 
         @Test
-        void deduplicates_and_drops_null_usernames() throws Exception {
+        void deduplicates_and_drops_null_usernames() {
             when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
             chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null,
+                    sampleMessage(),
                     List.of(mentionRow("u2", "bob"), mentionRow("u2b", "bob"),
                             mentionRow("u4", null)));
 
@@ -205,13 +168,12 @@ class ChatPersistenceServiceTest {
         }
 
         @Test
-        void is_empty_when_no_mentions_were_saved() throws Exception {
+        void is_empty_when_no_mentions_were_saved() {
             when(chatMessageMapper.toEntity(any(ChatMessage.class))).thenReturn(sampleEntity());
             when(messageEncryptor.isEnabled()).thenReturn(false);
-            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
 
             chatPersistenceService.persistMessageAndPublish(
-                    sampleMessage(), KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null);
+                    sampleMessage(), List.of());
 
             assertTrue(capturePublished().getMentionedUsernames().isEmpty());
             verify(messageMentionRepository, never()).saveAll(any());

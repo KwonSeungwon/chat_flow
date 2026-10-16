@@ -10,7 +10,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -53,10 +52,6 @@ class FileControllerTest {
 
     @MockBean
     private StringRedisTemplate stringRedisTemplate;
-
-    @MockBean
-    @SuppressWarnings("rawtypes")
-    private KafkaTemplate kafkaTemplate;
 
     // ── 업로드 인증 테스트 ────────────────────────────────────
 
