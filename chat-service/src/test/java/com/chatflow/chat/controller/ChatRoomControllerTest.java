@@ -579,6 +579,58 @@ class ChatRoomControllerTest {
         }
 
         @Test
+        void returns_400_for_a_dm_with_oneself() throws Exception {
+            when(userDirectory.resolveUsername("user-1", "alice")).thenReturn("alice");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "user-1", "alice"))
+                    .thenThrow(new IllegalArgumentException("자기 자신과는 DM을 만들 수 없습니다."));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "user-1", "targetUsername", "alice")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void missing_X_Username_uses_the_callers_stored_username() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(userDirectory.resolveUsername("user-1", null)).thenReturn("alice");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
+                    eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
+            when(chatRoomMapper.toResponse(dm))
+                    .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isOk());
+
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "user-1", "alice", RoomAccessPolicy.GrantPath.DM_CREATE);
+        }
+
+        @Test
+        void missing_X_Username_and_no_stored_username_returns_400() throws Exception {
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(userDirectory.resolveUsername("user-1", null)).thenReturn(null);
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest());
+
+            verify(dmRoomService, never()).createOrFindDmRoom(any(), any(), any(), any());
+        }
+
+        @Test
         void returns_404_when_targetUserId_is_not_a_user() throws Exception {
             when(userDirectory.resolveUsername("ghost", "bob")).thenReturn(null);
 

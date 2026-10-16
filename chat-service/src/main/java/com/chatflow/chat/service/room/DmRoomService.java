@@ -22,6 +22,9 @@ public class DmRoomService {
     // Deliberately not @Transactional: save() commits in its own transaction, so
     // the loser of a concurrent create (V2 unique DM name) can re-read the winner.
     public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
+        if (userId1.equals(userId2)) {
+            throw new IllegalArgumentException("자기 자신과는 DM을 만들 수 없습니다.");
+        }
         // Identity is the userId pair in room_members (covers existing name-keyed rooms,
         // whose members V5 and DM creation seeded). Names below are server-resolved.
         List<ChatRoom> byMembers = chatRoomRepository.findDmRoomByMembers(userId1, userId2);

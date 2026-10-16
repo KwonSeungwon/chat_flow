@@ -265,6 +265,12 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("대상 사용자를 찾을 수 없습니다."));
         }
+        if (username == null || username.isBlank()) {
+            username = userDirectory.resolveUsername(userId, null);
+            if (username == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+            }
+        }
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), targetUsername);
         // Seed both DM participants — they may both want to call member-gated
         // endpoints without sending a STOMP message first. room_members is the

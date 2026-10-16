@@ -88,6 +88,13 @@ class DmRoomServiceTest {
         }
 
         @Test
+        void dm_with_oneself_is_rejected_without_lookup() {
+            assertThrows(IllegalArgumentException.class, () -> dmRoomService.createOrFindDmRoom(
+                    USER_ID_1, USERNAME_1, USER_ID_1, USERNAME_1));
+            verifyNoInteractions(chatRoomRepository);
+        }
+
+        @Test
         void pair_order_is_normalized() {
             // Canonical key uses lexicographic sort: alice < bob, so
             // buildCanonicalDmName always produces "DM:alice,bob"
