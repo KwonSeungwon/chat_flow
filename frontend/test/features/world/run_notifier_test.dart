@@ -86,7 +86,7 @@ void main() {
     expect(api.answerCalls, 1);
   });
 
-  test('RUN_EXPIRED on next or answer → expired', () async {
+  test('RUN_EXPIRED on next → expired, on answer → ended', () async {
     api.nexts.add(GameApiException(GameApiException.runExpired));
     expect(await n.encounter(), isFalse);
     expect(n.state.phase, RunPhase.expired);
@@ -96,7 +96,7 @@ void main() {
     api.answers.add(GameApiException(GameApiException.runExpired));
     await n.encounter();
     await n.answer(0);
-    expect(n.state.phase, RunPhase.expired);
+    expect(n.state.phase, RunPhase.ended);
   });
 
   test('offline encounter → notice, keep exploring', () async {

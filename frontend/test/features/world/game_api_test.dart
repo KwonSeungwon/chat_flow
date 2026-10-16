@@ -11,6 +11,7 @@ class _FakeAdapter implements HttpClientAdapter {
   final bodies = <String, Object?>{};
   final routes = <String, (int, Object?)>{};
   bool offline = false;
+  DioExceptionType? timeout;
 
   @override
   Future<ResponseBody> fetch(RequestOptions options,
@@ -20,6 +21,9 @@ class _FakeAdapter implements HttpClientAdapter {
       final bytes = await requestStream.expand((c) => c).toList();
       bodies['${options.method} ${options.path}'] =
           jsonDecode(utf8.decode(bytes));
+    }
+    if (timeout != null) {
+      throw DioException(requestOptions: options, type: timeout!);
     }
     if (offline) {
       throw DioException.connectionError(
@@ -164,5 +168,15 @@ void main() {
   test('connection error maps to OFFLINE', () async {
     adapter.offline = true;
     await expectCode(api.next('r1'), GameApiException.offline);
+  });
+
+  test('send/receive timeouts map to OFFLINE', () async {
+    for (final t in [
+      DioExceptionType.sendTimeout,
+      DioExceptionType.receiveTimeout,
+    ]) {
+      adapter.timeout = t;
+      await expectCode(api.answer('r1', 1, 0), GameApiException.offline);
+    }
   });
 }

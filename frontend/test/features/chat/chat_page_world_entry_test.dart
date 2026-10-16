@@ -63,10 +63,13 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    // 사이드바 헤더(기존 코드)가 테스트 글꼴에서 넘친다. 넘침 경고만 무시한다.
+    // 사이드바 헤더(기존 코드)가 테스트 글꼴에서 넘친다. 그 넘침만 무시한다.
     final original = FlutterError.onError;
     FlutterError.onError = (details) {
-      if (details.exceptionAsString().contains('overflowed')) return;
+      if (details.exceptionAsString().contains('overflowed') &&
+          details.toString().contains('sidebar_header.dart')) {
+        return;
+      }
       original?.call(details);
     };
     addTearDown(() => FlutterError.onError = original);

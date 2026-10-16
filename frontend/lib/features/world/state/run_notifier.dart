@@ -24,6 +24,10 @@ enum RunPhase {
   /// 서버에 판이 없다(`RUN_EXPIRED`): "던전이 무너졌다".
   expired,
 
+  /// 답을 보낸 뒤 `RUN_EXPIRED`: 재시도 전에 판이 이미 끝나(클리어/실패) 지워졌다.
+  /// 화면은 진행도를 다시 읽어 클리어인지 가린다.
+  ended,
+
   /// 공사 중인 건물(`DUNGEON_CLOSED`).
   closed,
 
@@ -190,7 +194,7 @@ class RunNotifier extends StateNotifier<RunState> {
     } on GameApiException catch (e) {
       if (!mounted) return;
       if (e.code == GameApiException.runExpired) {
-        state = state.copyWith(phase: RunPhase.expired);
+        state = state.copyWith(phase: RunPhase.ended);
       } else if (e.code == GameApiException.answerInProgress && !retried) {
         await Future<void>.delayed(retryDelay);
         if (!mounted) return;

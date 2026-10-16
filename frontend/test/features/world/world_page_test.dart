@@ -15,10 +15,11 @@ import 'fake_game_api.dart';
 
 late VillageGame _village;
 
-Widget _app(FakeGameApi api, {required bool admin}) {
+Widget _app(FakeGameApi api,
+    {required bool admin, String initial = '/world'}) {
   _village = VillageGame();
   final router = GoRouter(
-    initialLocation: '/world',
+    initialLocation: initial,
     routes: [
       GoRoute(
         path: '/world',
@@ -65,11 +66,18 @@ FakeGameApi _api() => FakeGameApi()
   ];
 
 Future<void> _pump(WidgetTester tester, FakeGameApi api,
-    {bool admin = false}) async {
+    {bool admin = false,
+    String initial = '/world',
+    bool waitForGame = true}) async {
   tester.view.physicalSize = const Size(1280, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_app(api, admin: admin));
+  await tester.pumpWidget(_app(api, admin: admin, initial: initial));
+  if (!waitForGame) {
+    // 엔진이 멈춰 있으면 게임 로드가 진행되지 않는다.
+    await tester.pump(const Duration(milliseconds: 400));
+    return;
+  }
   bool ready() => _village.isLoaded && _village.avatar.isLoaded;
   for (var f = 0; f < 60 && !ready(); f++) {
     await tester.runAsync(
@@ -127,5 +135,20 @@ void main() {
     expect(find.text('광장 랭킹'), findsOneWidget);
     expect(find.text('alice'), findsOneWidget);
     expect(find.text('던전 3곳'), findsOneWidget);
+  });
+
+  testWidgets('deep-linked dungeon keeps the village paused until popped',
+      (tester) async {
+    await _pump(tester, _api(),
+        initial: '/world/dungeon/k8s', waitForGame: false);
+    expect(find.text('DUNGEON k8s'), findsOneWidget);
+    expect(_village.paused, isTrue);
+
+    await tester.tap(find.text('DUNGEON k8s'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('DUNGEON k8s'), findsNothing);
+    expect(_village.paused, isFalse);
   });
 }

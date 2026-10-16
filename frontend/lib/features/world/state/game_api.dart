@@ -88,7 +88,9 @@ class GameApi {
 
   static GameApiException _mapError(DioException e) {
     if (e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.connectionTimeout) {
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
       return GameApiException(GameApiException.offline,
           message: '서버에 연결할 수 없습니다.');
     }

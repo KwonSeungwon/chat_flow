@@ -7,6 +7,7 @@ import 'battle/battle_overlay.dart';
 import 'game/dungeon_game.dart';
 import 'game/village_game.dart';
 import 'state/game_api.dart';
+import 'state/game_models.dart';
 import 'state/run_notifier.dart';
 import 'state/world_provider.dart';
 
@@ -15,12 +16,9 @@ const battleOverlayKey = 'battle';
 /// `/world/dungeon/:id`. 던전 게임 하나를 이 페이지 수명 동안 소유하고
 /// 판 상태([runNotifierProvider])에 맞춰 배틀 오버레이를 띄우고 닫는다.
 class DungeonPage extends ConsumerStatefulWidget {
-  const DungeonPage({super.key, required this.dungeonId, this.game});
+  const DungeonPage({super.key, required this.dungeonId});
 
   final String dungeonId;
-
-  /// 테스트에서 게임을 갈아끼울 때만 쓴다.
-  final DungeonGame? game;
 
   @override
   ConsumerState<DungeonPage> createState() => _DungeonPageState();
@@ -40,12 +38,15 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
   @override
   void initState() {
     super.initState();
-    _game = (widget.game ?? DungeonGame(widget.dungeonId))
+    _game = DungeonGame(widget.dungeonId)
       ..onEncounter = _onEncounter
       // 판이 열릴 때까지 걷지 않는다.
       ..pause();
-    _graduatedBefore =
-        ref.read(worldProvider).valueOrNull?.me.graduated;
+    // 마을 데이터를 이 페이지 동안 붙잡아 둔다(딥링크로 들어와도 판 시작 전
+    // 졸업 여부를 알 수 있게). 졸업 여부는 첫 값만 기억한다.
+    ref.listenManual<AsyncValue<WorldData>>(worldProvider, (_, next) {
+      _graduatedBefore ??= next.valueOrNull?.me.graduated;
+    }, fireImmediately: true);
     ref.listenManual<RunState>(
         runNotifierProvider(widget.dungeonId), _onRunChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,6 +95,9 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
       case RunPhase.failed:
         _game.overlays.remove(battleOverlayKey);
         _endWith('기절했다…', '하트를 모두 잃었다. 마을로 돌아간다.');
+      case RunPhase.ended:
+        _game.overlays.remove(battleOverlayKey);
+        _onEnded();
       case RunPhase.expired:
         _game.overlays.remove(battleOverlayKey);
         _endWith('던전이 무너졌다', '시간이 너무 지나 던전이 사라졌다. 마을로 돌아간다.');
@@ -108,7 +112,28 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
     }
   }
 
+  /// 답한 뒤 판이 이미 없다: 진행도를 다시 읽어 클리어였는지 가린다.
+  Future<void> _onEnded() async {
+    _graduatedBefore ??= ref.read(worldProvider).valueOrNull?.me.graduated;
+    ref.invalidate(worldProvider);
+    bool cleared = false;
+    try {
+      final world = await ref.read(worldProvider.future);
+      cleared = world.dungeons
+          .any((d) => d.id == widget.dungeonId && d.clearedByMe);
+    } catch (_) {
+      // 진행도를 못 읽으면 중립 안내로 끝낸다.
+    }
+    if (!mounted) return;
+    if (cleared) {
+      await _onCleared();
+    } else {
+      await _endWith('판이 끝났다', '이번 판은 이미 끝났다. 마을로 돌아간다.');
+    }
+  }
+
   Future<void> _onCleared() async {
+    _graduatedBefore ??= ref.read(worldProvider).valueOrNull?.me.graduated;
     ref.invalidate(worldProvider);
     await _dialog('클리어!', '$_name의 보스를 물리치고 깃발을 꽂았다.');
     if (!mounted) return;

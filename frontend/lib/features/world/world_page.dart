@@ -39,6 +39,19 @@ class _WorldPageState extends ConsumerState<WorldPage> {
     });
   }
 
+  /// 이 라우트가 맨 위가 아니면(던전 딥링크, 관리자 페이지, 시트) 엔진을 멈추고
+  /// 다시 맨 위가 되면 이어 간다.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final current = ModalRoute.of(context)?.isCurrent ?? true;
+    if (current && _village.paused && !_covered) {
+      _village.resumeEngine();
+    } else if (!current && !_village.paused) {
+      _village.pauseEngine();
+    }
+  }
+
   @override
   void dispose() {
     _focus.dispose();
