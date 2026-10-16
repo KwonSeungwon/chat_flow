@@ -21,7 +21,7 @@ global:
     gemini:
       secretName: chatflow-gemini-secret
 
-  springProfile: prod
+  springProfile: prod,langchain4j
 
 # --- Ingress (단일 진입점) ---
 ingress:

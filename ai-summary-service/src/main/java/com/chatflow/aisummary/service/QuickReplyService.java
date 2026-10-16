@@ -23,7 +23,6 @@ public class QuickReplyService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final String BUFFER_KEY_PREFIX = "chatflow:summary:buffer:";
     private static final String CACHE_KEY_PREFIX = "chatflow:smart-reply:";
     private static final long CACHE_TTL_MINUTES = 30L;
     private static final int MAX_CONTEXT_MESSAGES = 10;
@@ -55,7 +54,7 @@ public class QuickReplyService {
         }
 
         // 2. Read recent messages from the existing summary buffer (peek, no pop)
-        String bufferKey = BUFFER_KEY_PREFIX + roomId;
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
         List<String> raw = redisTemplate.opsForList().range(bufferKey, 0, -1);
         if (raw == null || raw.isEmpty()) {
             return new QuickReplyResponse(List.of());

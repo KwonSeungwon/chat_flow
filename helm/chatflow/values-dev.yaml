@@ -3,7 +3,7 @@ global:
   image:
     tag: "latest"
     pullPolicy: Always
-  springProfile: prod
+  springProfile: prod,langchain4j
 
 ingress:
   host: dev.chatflow.example.com

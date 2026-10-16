@@ -5,10 +5,10 @@ import com.chatflow.aisummary.exception.AiRateLimitException;
 import com.chatflow.common.dto.ChatMessage;
 import com.chatflow.common.dto.KafkaTopics;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.errors.SerializationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -41,12 +41,8 @@ public class AiSummaryService {
     private static final int MIN_MESSAGES_FOR_TIME_TRIGGER = 3;
     private static final Duration TIME_TRIGGER_DELAY = Duration.ofMinutes(5);
 
-    // Redis 키 프리픽스
-    private static final String REDIS_SUMMARY_PREFIX = "chatflow:summary:";
-    private static final String REDIS_HASH_PREFIX = "chatflow:summary-hash:";
-    private static final String REDIS_BUFFER_PREFIX = "chatflow:buffer:";
-    private static final String REDIS_BUFFER_TIME_PREFIX = "chatflow:buffer-time:";
-    private static final String REDIS_ACTIVE_ROOMS_KEY = "chatflow:active-rooms";
+    private static final int MAX_CACHED_SUMMARIES = 50;
+
     private static final Duration REDIS_SUMMARY_TTL = Duration.ofHours(24);
     private static final Duration REDIS_BUFFER_TTL = Duration.ofHours(1);
 
@@ -80,7 +76,9 @@ public class AiSummaryService {
             log.debug("Storing message for potential summary: {}", message.getMessageId());
             addMessageAndCheckTrigger(message);
         } catch (JsonProcessingException e) {
-            log.error("채팅 메시지 역직렬화 실패", e);
+            // Rethrow so the shared CommonErrorHandler routes the record to the DLT
+            // instead of silently dropping it (SerializationException is non-retryable).
+            throw new SerializationException("채팅 메시지 역직렬화 실패", e);
         }
     }
 
@@ -103,10 +101,22 @@ public class AiSummaryService {
         }
 
         String roomId = message.getChatRoomId();
-        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
-        String timeKey = REDIS_BUFFER_TIME_PREFIX + roomId;
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
+        String timeKey = RedisKeys.BUFFER_TIME_PREFIX + roomId;
 
         try {
+            // At-least-once delivery: a redelivered message must not be buffered twice
+            // (it would inflate the 10-message trigger and duplicate the prompt text).
+            if (message.getMessageId() != null) {
+                String idsKey = RedisKeys.BUFFER_IDS_PREFIX + roomId;
+                Long added = redisTemplate.opsForSet().add(idsKey, message.getMessageId());
+                redisTemplate.expire(idsKey, REDIS_BUFFER_TTL);
+                if (added != null && added == 0L) {
+                    log.debug("중복 메시지 스킵: room={}, messageId={}", roomId, message.getMessageId());
+                    return;
+                }
+            }
+
             String messageJson = objectMapper.writeValueAsString(message);
             redisTemplate.opsForList().rightPush(bufferKey, messageJson);
             redisTemplate.expire(bufferKey, REDIS_BUFFER_TTL);
@@ -114,7 +124,7 @@ public class AiSummaryService {
             redisTemplate.opsForValue().set(timeKey, LocalDateTime.now().toString(), REDIS_BUFFER_TTL);
 
             // 활성 방 Set에 등록 (SCAN 대체)
-            redisTemplate.opsForSet().add(REDIS_ACTIVE_ROOMS_KEY, roomId);
+            redisTemplate.opsForSet().add(RedisKeys.ACTIVE_ROOMS_KEY, roomId);
 
             // 버퍼 최대 크기 유지
             Long bufferSize = redisTemplate.opsForList().size(bufferKey);
@@ -127,7 +137,7 @@ public class AiSummaryService {
                 List<ChatMessage> snapshot = consumeBuffer(bufferKey);
                 if (!snapshot.isEmpty()) {
                     redisTemplate.delete(timeKey);
-                    redisTemplate.opsForSet().remove(REDIS_ACTIVE_ROOMS_KEY, roomId);
+                    redisTemplate.opsForSet().remove(RedisKeys.ACTIVE_ROOMS_KEY, roomId);
                     final String rid = roomId;
                     final List<ChatMessage> msgs = snapshot;
                     geminiExecutor.execute(() -> {
@@ -151,25 +161,25 @@ public class AiSummaryService {
     @Scheduled(fixedRate = 60000)
     public void checkTimeBasedTrigger() {
         LocalDateTime now = LocalDateTime.now();
-        Set<String> activeRooms = redisTemplate.opsForSet().members(REDIS_ACTIVE_ROOMS_KEY);
+        Set<String> activeRooms = redisTemplate.opsForSet().members(RedisKeys.ACTIVE_ROOMS_KEY);
 
         if (activeRooms == null || activeRooms.isEmpty()) return;
 
         for (String roomId : activeRooms) {
-            String timeKey = REDIS_BUFFER_TIME_PREFIX + roomId;
+            String timeKey = RedisKeys.BUFFER_TIME_PREFIX + roomId;
             String lastTimeStr = redisTemplate.opsForValue().get(timeKey);
             if (lastTimeStr == null) continue;
 
             try {
                 LocalDateTime lastTime = LocalDateTime.parse(lastTimeStr);
                 if (Duration.between(lastTime, now).compareTo(TIME_TRIGGER_DELAY) >= 0) {
-                    String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+                    String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
                     Long size = redisTemplate.opsForList().size(bufferKey);
 
                     if (size != null && size >= MIN_MESSAGES_FOR_TIME_TRIGGER) {
                         List<ChatMessage> snapshot = consumeBuffer(bufferKey);
                         redisTemplate.delete(timeKey);
-                        redisTemplate.opsForSet().remove(REDIS_ACTIVE_ROOMS_KEY, roomId);
+                        redisTemplate.opsForSet().remove(RedisKeys.ACTIVE_ROOMS_KEY, roomId);
 
                         if (!snapshot.isEmpty()) {
                             log.info("시간 기반 트리거 발동: room={}, messages={}", roomId, snapshot.size());
@@ -224,7 +234,7 @@ public class AiSummaryService {
 
     private void generateSummaryIfNeeded(String roomId, List<ChatMessage> messages) {
         String hash = computeMessageHash(messages);
-        String hashKey = REDIS_HASH_PREFIX + roomId;
+        String hashKey = RedisKeys.SUMMARY_HASH_PREFIX + roomId;
 
         String previousHash = redisTemplate.opsForValue().get(hashKey);
         if (hash.equals(previousHash)) {
@@ -235,21 +245,14 @@ public class AiSummaryService {
         generateSummary(roomId, messages, hash);
     }
 
-    private void generateSummary(String roomId, List<ChatMessage> messages, String hash) {
+    /** Result of a summary attempt; lets callers report an honest outcome. */
+    public enum SummaryOutcome { GENERATED, NO_MESSAGES, RATE_LIMITED, FAILED }
+
+    private SummaryOutcome generateSummary(String roomId, List<ChatMessage> messages, String hash) {
         if (!rateLimiter.tryConsume(1)) {
             log.warn("Rate limit 초과, 요약 생성 보류: room={}", roomId);
-            // 메시지를 다시 Redis 버퍼로 재큐잉
-            String bufferKey = REDIS_BUFFER_PREFIX + roomId;
-            for (ChatMessage msg : messages) {
-                try {
-                    String json = objectMapper.writeValueAsString(msg);
-                    redisTemplate.opsForList().rightPush(bufferKey, json);
-                } catch (JsonProcessingException e) {
-                    log.error("메시지 재큐잉 직렬화 실패", e);
-                }
-            }
-            redisTemplate.expire(bufferKey, REDIS_BUFFER_TTL);
-            return;
+            requeueForRetry(roomId, messages);
+            return SummaryOutcome.RATE_LIMITED;
         }
 
         try {
@@ -276,7 +279,7 @@ public class AiSummaryService {
                     .build();
 
             cacheSummary(roomId, summaryMessage);
-            redisTemplate.opsForValue().set(REDIS_HASH_PREFIX + roomId, hash, REDIS_SUMMARY_TTL);
+            redisTemplate.opsForValue().set(RedisKeys.SUMMARY_HASH_PREFIX + roomId, hash, REDIS_SUMMARY_TTL);
 
             kafkaTemplate.send(KafkaTopics.AI_SUMMARIES, roomId, summaryMessage)
                     .whenComplete((result, ex) -> {
@@ -286,40 +289,66 @@ public class AiSummaryService {
                     });
 
             log.info("AI summary generated and sent for room: {}", roomId);
+            return SummaryOutcome.GENERATED;
 
         } catch (Exception e) {
             log.error("Error generating AI summary for room: {}", roomId, e);
+            requeueForRetry(roomId, messages);
+            return SummaryOutcome.FAILED;
         }
+    }
+
+    /**
+     * Puts consumed messages back at the FRONT of the room buffer (preserving order
+     * relative to messages that arrived meanwhile) and re-registers the time trigger,
+     * which consumption had already cleared.
+     */
+    private void requeueForRetry(String roomId, List<ChatMessage> messages) {
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            try {
+                redisTemplate.opsForList().leftPush(bufferKey, objectMapper.writeValueAsString(messages.get(i)));
+            } catch (JsonProcessingException e) {
+                log.error("메시지 재큐잉 직렬화 실패", e);
+            }
+        }
+        redisTemplate.expire(bufferKey, REDIS_BUFFER_TTL);
+        redisTemplate.opsForValue().set(RedisKeys.BUFFER_TIME_PREFIX + roomId,
+                LocalDateTime.now().toString(), REDIS_BUFFER_TTL);
+        redisTemplate.opsForSet().add(RedisKeys.ACTIVE_ROOMS_KEY, roomId);
     }
 
     public List<ChatMessage> getSummaries(String roomId) {
-        String key = REDIS_SUMMARY_PREFIX + roomId;
-        String json = redisTemplate.opsForValue().get(key);
-        if (json == null) {
+        List<String> raw = redisTemplate.opsForList().range(RedisKeys.SUMMARY_LIST_PREFIX + roomId, 0, -1);
+        if (raw == null || raw.isEmpty()) {
             return List.of();
         }
-        try {
-            return objectMapper.readValue(json, new TypeReference<>() {});
-        } catch (JsonProcessingException e) {
-            log.error("Failed to deserialize summaries for room: {}", roomId, e);
-            return List.of();
+        List<ChatMessage> summaries = new ArrayList<>(raw.size());
+        for (String json : raw) {
+            try {
+                summaries.add(objectMapper.readValue(json, ChatMessage.class));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to deserialize summary for room: {}", roomId, e);
+            }
         }
+        return summaries;
     }
 
     public boolean requestSummary(String roomId) {
-        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+        return requestSummaryOutcome(roomId) == SummaryOutcome.GENERATED;
+    }
+
+    public SummaryOutcome requestSummaryOutcome(String roomId) {
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
         List<ChatMessage> snapshot = consumeBuffer(bufferKey);
 
-        if (!snapshot.isEmpty()) {
-            redisTemplate.delete(REDIS_BUFFER_TIME_PREFIX + roomId);
-            redisTemplate.opsForSet().remove(REDIS_ACTIVE_ROOMS_KEY, roomId);
-            String hash = computeMessageHash(snapshot);
-            generateSummary(roomId, snapshot, hash);
-            return true;
-        } else {
+        if (snapshot.isEmpty()) {
             log.info("No messages to summarize for room: {}", roomId);
-            return false;
+            return SummaryOutcome.NO_MESSAGES;
         }
+        redisTemplate.delete(RedisKeys.BUFFER_TIME_PREFIX + roomId);
+        redisTemplate.opsForSet().remove(RedisKeys.ACTIVE_ROOMS_KEY, roomId);
+        return generateSummary(roomId, snapshot, computeMessageHash(snapshot));
     }
 
     /**
@@ -331,7 +360,7 @@ public class AiSummaryService {
             throw new AiRateLimitException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
         }
 
-        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
         List<String> rawMessages = redisTemplate.opsForList().range(bufferKey, 0, -1);
         List<ChatMessage> recentMessages = new ArrayList<>();
         if (rawMessages != null) {
@@ -382,14 +411,16 @@ public class AiSummaryService {
         return response;
     }
 
+    /**
+     * Atomic per-entry append (RPUSH) + bounded tail (LTRIM) + TTL refresh, so concurrent
+     * writers from executor/HTTP threads cannot overwrite each other's entries.
+     */
     private void cacheSummary(String roomId, ChatMessage summaryMessage) {
-        String key = REDIS_SUMMARY_PREFIX + roomId;
+        String key = RedisKeys.SUMMARY_LIST_PREFIX + roomId;
         try {
-            List<ChatMessage> existing = getSummaries(roomId);
-            List<ChatMessage> updated = new ArrayList<>(existing);
-            updated.add(summaryMessage);
-            String json = objectMapper.writeValueAsString(updated);
-            redisTemplate.opsForValue().set(key, json, REDIS_SUMMARY_TTL);
+            redisTemplate.opsForList().rightPush(key, objectMapper.writeValueAsString(summaryMessage));
+            redisTemplate.opsForList().trim(key, -MAX_CACHED_SUMMARIES, -1);
+            redisTemplate.expire(key, REDIS_SUMMARY_TTL);
         } catch (JsonProcessingException e) {
             log.error("Failed to cache summary for room: {}", roomId, e);
         }
@@ -443,7 +474,7 @@ public class AiSummaryService {
             throw new AiRateLimitException("AI 호출 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.");
         }
 
-        String bufferKey = REDIS_BUFFER_PREFIX + roomId;
+        String bufferKey = RedisKeys.BUFFER_PREFIX + roomId;
         List<String> rawMessages = redisTemplate.opsForList().range(bufferKey, 0, -1);
         List<ChatMessage> recentMessages = new ArrayList<>();
         if (rawMessages != null) {
