@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chatflow/core/network/dio_client.dart';
 import 'package:chatflow/core/network/stomp_service.dart';
 import 'package:chatflow/core/utils/server_time.dart';
 import 'package:chatflow/features/chat/chat_notifier.dart';
+import 'package:chatflow/features/chat/chat_rooms_provider.dart';
 import 'package:chatflow/shared/models/chat_message.dart';
 
 class _FakeDioClient implements DioClient {
@@ -242,5 +245,51 @@ void main() {
     final notifier = _notifier(container, const {}, stomp: stomp);
     notifier.reconnectIfNeeded();
     expect(stomp.reconnectNowCalls, 1);
+  });
+
+  test('activeRoom_noUnreadBadge_andMarksLastHistoryMessageRead', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    container.read(activeRoomIdProvider.notifier).state = 'room-1';
+    final puts = <Object?>[];
+    final notifier = _notifier(
+      container,
+      {
+        '/api/chat/rooms/room-1/messages': _ok([
+          _msg('m1', '2026-10-16T10:00:01'),
+          _msg('m2', '2026-10-16T10:00:02'),
+        ]),
+        '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': 'm1'}),
+      },
+      onRequest: (o) {
+        if (o.method == 'PUT' && o.path.endsWith('/last-read')) {
+          puts.add((o.data as Map)['lastReadMessageId']);
+        }
+      },
+    );
+
+    await notifier.joinRoom('room-1');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(container.read(roomUnreadCountsProvider)['room-1'] ?? 0, 0);
+    expect(puts, ['m2']);
+  });
+
+  test('inactiveRoom_keepsUnreadCount', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    final notifier = _notifier(container, {
+      '/api/chat/rooms/room-1/messages': _ok([
+        _msg('m1', '2026-10-16T10:00:01'),
+        _msg('m2', '2026-10-16T10:00:02'),
+      ]),
+      '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': 'm1'}),
+    });
+
+    await notifier.joinRoom('room-1');
+
+    expect(container.read(roomUnreadCountsProvider)['room-1'], 1);
   });
 }

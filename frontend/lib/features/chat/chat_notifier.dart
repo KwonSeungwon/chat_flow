@@ -97,6 +97,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           _ref.read(roomUnreadCountsProvider.notifier).reset(roomId),
       setUnreadCount: (roomId, count) =>
           _ref.read(roomUnreadCountsProvider.notifier).setCount(roomId, count),
+      isActiveRoom: (roomId) => _ref.read(activeRoomIdProvider) == roomId,
     );
     _dispatcher = StompMessageDispatcher(
       getCurrentState: () => state,
@@ -183,6 +184,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Fetch last-read position and compute unread count for this session
     await _readState.fetchLastReadAndUpdateUnread(roomId);
     if (!mounted) return;
+    // The entry-time markRoomRead ran before history arrived (empty id); now
+    // persist the real last message so the server's lastRead moves.
+    if (_ref.read(activeRoomIdProvider) == roomId) _readState.markRoomRead(roomId);
 
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
