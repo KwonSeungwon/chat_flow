@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../auth/auth_provider.dart';
 
 /// Personal bookmark entry stored locally via SecureStorage.
 class BookmarkEntry {
@@ -37,6 +38,7 @@ class BookmarkEntry {
 
 final bookmarksProvider =
     StateNotifierProvider<BookmarksNotifier, List<BookmarkEntry>>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   return BookmarksNotifier();
 });
 

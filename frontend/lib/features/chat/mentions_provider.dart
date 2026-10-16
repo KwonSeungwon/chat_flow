@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/mention_item.dart';
+import '../auth/auth_provider.dart';
 
 class MentionsState {
   final AsyncValue<List<MentionItem>> items;
@@ -82,6 +83,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
 
 final mentionsProvider =
     StateNotifierProvider<MentionsNotifier, MentionsState>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   final dio = ref.read(dioClientProvider).dio;
   return MentionsNotifier(dio);
 });

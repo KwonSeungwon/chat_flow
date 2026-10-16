@@ -1,4 +1,5 @@
 import 'room_role.dart';
+import '../../core/utils/server_time.dart';
 
 class RoomMember {
   final String userId;
@@ -17,11 +18,7 @@ class RoomMember {
       mutedUntil != null && mutedUntil!.isAfter(DateTime.now());
 
   factory RoomMember.fromJson(Map<String, dynamic> json) {
-    DateTime? muted;
-    final raw = json['mutedUntil'];
-    if (raw != null && raw.toString().isNotEmpty) {
-      muted = DateTime.tryParse(raw.toString());
-    }
+    final muted = parseServerDateTime(json['mutedUntil']);
     return RoomMember(
       userId: json['userId']?.toString() ?? '',
       username: json['username']?.toString() ?? '',

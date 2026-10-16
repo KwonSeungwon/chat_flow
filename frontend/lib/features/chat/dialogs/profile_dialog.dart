@@ -6,7 +6,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/theme/font_scale_provider.dart';
 import '../../../core/utils/url_helper.dart';
 import '../../auth/auth_provider.dart';
-import '../widgets/profile_avatar.dart';
+import '../../../shared/widgets/user_avatar.dart';
 import 'change_password_dialog.dart';
 import 'bookmarks_dialog.dart';
 
@@ -53,8 +53,9 @@ void showProfileDialog(BuildContext context, WidgetRef ref) {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ProfileAvatar(
-            url: auth.profileImageUrl != null ? buildFullUrl(auth.profileImageUrl!) : null,
+          UserAvatar(
+            fallbackName: auth.username,
+            imageUrl: auth.profileImageUrl != null ? buildFullUrl(auth.profileImageUrl!) : null,
             radius: 40,
           ),
           const SizedBox(height: 12),

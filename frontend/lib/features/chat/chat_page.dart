@@ -20,7 +20,7 @@ import 'widgets/chat_room_sidebar.dart';
 import 'widgets/connection_dot.dart';
 import 'widgets/lobby_placeholder.dart';
 import 'widgets/participant_badge.dart';
-import 'widgets/profile_avatar.dart';
+import '../../shared/widgets/user_avatar.dart';
 import 'admin/widgets/room_members_sheet.dart';
 import 'admin/widgets/moderator_queue_sheet.dart';
 import 'admin/admin_event_listener.dart';
@@ -283,8 +283,9 @@ class ChatPage extends ConsumerWidget {
               ),
           ],
           PopupMenuButton<String>(
-            icon: ProfileAvatar(
-              url: auth.profileImageUrl != null
+            icon: UserAvatar(
+              fallbackName: auth.username,
+              imageUrl: auth.profileImageUrl != null
                   ? buildFullUrl(auth.profileImageUrl!)
                   : null,
               radius: 16,
@@ -317,8 +318,9 @@ class ChatPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    ProfileAvatar(
-                      url: auth.profileImageUrl != null
+                    UserAvatar(
+                      fallbackName: auth.username,
+                      imageUrl: auth.profileImageUrl != null
                           ? buildFullUrl(auth.profileImageUrl!)
                           : null,
                       radius: 30,

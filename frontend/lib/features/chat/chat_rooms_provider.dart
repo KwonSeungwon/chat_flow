@@ -4,6 +4,7 @@ import '../../core/network/api_response.dart';
 import '../../core/network/app_stomp_service.dart';
 import '../../core/network/dio_client.dart';
 import '../../shared/models/chat_room.dart';
+import '../auth/auth_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Room Sort
@@ -32,6 +33,7 @@ final roomSortProvider = StateProvider<RoomSortOption>((ref) => RoomSortOption.r
 
 final chatRoomsProvider =
     StateNotifierProvider<ChatRoomsNotifier, AsyncValue<List<ChatRoom>>>((ref) {
+  ref.watch(authProvider.select((a) => a.userId));
   return ChatRoomsNotifier(ref.watch(dioClientProvider));
 });
 
@@ -174,7 +176,10 @@ class RoomUnreadCountsNotifier extends StateNotifier<Map<String, int>> {
 
 final roomUnreadCountsProvider =
     StateNotifierProvider<RoomUnreadCountsNotifier, Map<String, int>>(
-        (ref) => RoomUnreadCountsNotifier());
+        (ref) {
+  ref.watch(authProvider.select((a) => a.userId));
+  return RoomUnreadCountsNotifier();
+});
 
 // ---------------------------------------------------------------------------
 // App-level STOMP service (single connection, survives room changes)

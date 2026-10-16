@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../auth/auth_provider.dart';
 
 /// 방별 키워드 알림 설정. 사용자가 음소거한 방이라도 키워드 매칭 시 알림.
 /// FlutterSecureStorage(JSON)에 영속화. Frontend-only — 백엔드 인지 안 함.
@@ -67,4 +68,7 @@ class RoomKeywordsNotifier extends StateNotifier<Map<String, List<String>>> {
 
 final roomKeywordsProvider =
     StateNotifierProvider<RoomKeywordsNotifier, Map<String, List<String>>>(
-        (ref) => RoomKeywordsNotifier());
+        (ref) {
+  ref.watch(authProvider.select((a) => a.userId));
+  return RoomKeywordsNotifier();
+});

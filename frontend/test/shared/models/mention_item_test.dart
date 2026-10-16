@@ -44,7 +44,7 @@ void main() {
         'messageId': 'm1',
         'timestamp': '2026-05-07T14:30:00',
       });
-      expect(m.when, DateTime.parse('2026-05-07T14:30:00'));
+      expect(m.when.toUtc(), DateTime.utc(2026, 5, 7, 14, 30));
     });
 
     test('when falls back to now() on bad input', () {

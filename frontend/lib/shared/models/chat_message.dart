@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../core/utils/server_time.dart';
 
 enum MessageDeliveryStatus { sending, sent, failed }
 
@@ -54,26 +55,10 @@ class ChatMessage {
     this.deliveryStatus = MessageDeliveryStatus.sent,
   });
 
-  /// Server uses LocalDateTime (no timezone). K3s runs in UTC, so treat
-  /// timezone-less timestamps as UTC so .toLocal() converts to KST correctly.
-  static String _normalizeTimestamp(String? raw) {
-    if (raw == null || raw.isEmpty) return DateTime.now().toUtc().toIso8601String();
-    // Jackson array format: [2026, 4, 13, 12, 30, 45, 123456789]
-    if (raw.startsWith('[')) {
-      try {
-        final parts = raw.replaceAll(RegExp(r'[\[\]\s]'), '').split(',').map(int.parse).toList();
-        if (parts.length >= 6) {
-          final ms = parts.length >= 7 ? parts[6] ~/ 1000000 : 0;
-          return DateTime.utc(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], ms).toIso8601String();
-        }
-      } catch (_) {}
-      return DateTime.now().toUtc().toIso8601String();
-    }
-    if (raw.endsWith('Z') || RegExp(r'[+-]\d{2}(:\d{2})?$').hasMatch(raw)) {
-      return raw;
-    }
-    return '${raw}Z';
-  }
+  /// 서버 시각(타임존 없으면 UTC 간주)을 UTC ISO 문자열로 정규화. 파싱 불가면 현재 시각.
+  static String _normalizeTimestamp(String? raw) =>
+      (parseServerDateTime(raw)?.toUtc() ?? DateTime.now().toUtc())
+          .toIso8601String();
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(

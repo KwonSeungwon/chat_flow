@@ -37,7 +37,7 @@ class ScheduledMessagesNotifier
       data: {
         'chatRoomId': chatRoomId,
         'content': content,
-        'scheduledAt': scheduledAt.toIso8601String(),
+        'scheduledAt': scheduledAt.toUtc().toIso8601String(),
       },
     );
     final inner = apiResponseMap(resp.data);
