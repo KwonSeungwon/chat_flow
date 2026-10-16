@@ -104,7 +104,7 @@ check_prerequisites() {
 check_ports() {
     log_step "포트 사용 여부 확인 중..."
     
-    local ports=(3000 8000 8080 6379 5432 3001 9090)
+    local ports=(8000 8080 6379 5432 3001 9090)
     local used_ports=()
     
     for port in "${ports[@]}"; do
@@ -246,31 +246,10 @@ check_backend_health() {
     log_warning "$service_name Service 응답이 없지만 계속 진행합니다..."
 }
 
-# 프론트엔드 시작
+# 프론트엔드 안내 (Flutter는 대화형 flutter run이라 백그라운드로 띄우지 않는다)
 start_frontend() {
-    log_step "프론트엔드 시작 중..."
-    
-    cd frontend
-    
-    # 의존성 설치
-    if [ ! -d "node_modules" ]; then
-        log_info "프론트엔드 의존성 설치 중..."
-        if npm install; then
-            log_success "의존성 설치 완료!"
-        else
-            log_error "의존성 설치 실패!"
-            exit 1
-        fi
-    fi
-    
-    # 개발 서버 시작
-    log_info "🎨 Vue3 프론트엔드 시작 중..."
-    nohup npm run dev > ../logs/frontend.log 2>&1 &
-    echo $! > ../logs/frontend.pid
-    
-    cd ..
-    
-    log_success "프론트엔드가 시작되었습니다!"
+    log_step "프론트엔드는 별도 터미널에서 실행하세요"
+    log_info "  cd frontend && flutter pub get && flutter run -d chrome"
 }
 
 # 로그 디렉토리 생성
@@ -284,7 +263,7 @@ print_status() {
     echo -e "${GREEN}🎉 ChatFlow가 성공적으로 시작되었습니다! 🎉${NC}"
     echo ""
     echo -e "${WHITE}=== 📊 서비스 접속 정보 ===${NC}"
-    echo -e "${CYAN}🌐 웹 애플리케이션${NC}      http://localhost:3000"
+    echo -e "${CYAN}🌐 웹 애플리케이션${NC}      cd frontend && flutter run -d chrome"
     echo -e "${CYAN}🚪 API Gateway${NC}         http://localhost:8000"  
     echo -e "${CYAN}📡 WebSocket${NC}           ws://localhost:8000/ws"
     echo ""
@@ -299,8 +278,7 @@ print_status() {
     echo -e "${WHITE}=== 📝 로그 확인 ===${NC}"
     echo -e "${CYAN}tail -f logs/gateway-service.log${NC}"
     echo -e "${CYAN}tail -f logs/chat-service.log${NC}"
-    echo -e "${CYAN}tail -f logs/frontend.log${NC}"
-    echo ""
+        echo ""
     echo -e "${WHITE}=== ⚡ 종료 방법 ===${NC}"
     echo -e "${RED}./stop-chatflow.sh${NC}      - 모든 서비스 종료"
     echo -e "${RED}Ctrl+C${NC}                  - 이 스크립트만 종료 (서비스는 계속 실행)"
@@ -336,7 +314,7 @@ main() {
     if command -v open &> /dev/null; then
         log_info "브라우저에서 애플리케이션을 여는 중..."
         sleep 3
-        open "http://localhost:3000"
+        true
     fi
     
     follow_logs

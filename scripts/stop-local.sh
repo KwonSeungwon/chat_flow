@@ -17,7 +17,7 @@ echo ""
 # 백엔드 서비스들 종료
 echo -e "${YELLOW}🔧 Stopping backend services...${NC}"
 
-services=("frontend-local" "chat-local" "gateway-local")
+services=("chat-local" "gateway-local")
 for service in "${services[@]}"; do
     if [ -f "logs/${service}.pid" ]; then
         pid=$(cat "logs/${service}.pid")
