@@ -110,6 +110,15 @@ void main() {
       expect(called, isFalse);
     });
 
+    test('방 비밀번호 /verify 의 401은 세션을 건드리지 않는다', () async {
+      final called = await fireUnauthorized(
+        path: '/api/chat/rooms/42/verify',
+        storage: {StorageKeys.token: 'some-token'},
+      );
+
+      expect(called, isFalse);
+    });
+
     test('그 외 /api/auth/* (logout, password)의 401은 세션 만료로 처리한다', () async {
       for (final path in ['/api/auth/logout', '/api/auth/password']) {
         final called = await fireUnauthorized(

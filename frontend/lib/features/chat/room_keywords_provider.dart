@@ -33,6 +33,7 @@ class RoomKeywordsNotifier extends StateNotifier<Map<String, List<String>>> {
     if (userId == null) return;
     try {
       final raw = await _storage.read(key: storageKeyFor(userId));
+      if (!mounted) return;
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         state = decoded.map((k, v) => MapEntry(

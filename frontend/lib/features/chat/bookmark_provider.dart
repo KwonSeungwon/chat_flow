@@ -59,6 +59,7 @@ class BookmarksNotifier extends StateNotifier<List<BookmarkEntry>> {
     final userId = _userId;
     if (userId == null) return;
     final raw = await _storage.read(key: storageKeyFor(userId));
+    if (!mounted) return;
     if (raw == null || raw.isEmpty) return;
     try {
       final list = jsonDecode(raw) as List;

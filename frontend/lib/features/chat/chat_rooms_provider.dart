@@ -47,6 +47,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
   Future<void> fetchRooms() async {
     try {
       final resp = await _dioClient.dio.get('/api/chat/rooms');
+      if (!mounted) return;
       final list = apiResponseList(resp.data);
       final rooms =
           list
@@ -54,6 +55,7 @@ class ChatRoomsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
               .toList();
       state = AsyncValue.data(rooms);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncValue.error(e, st);
     }
   }

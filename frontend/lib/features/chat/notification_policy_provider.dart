@@ -50,6 +50,7 @@ class RoomNotificationPolicyNotifier extends StateNotifier<Map<String, Notificat
     if (userId == null) return;
     try {
       final raw = await _policyStorage.read(key: storageKeyFor(userId));
+      if (!mounted) return;
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         state = decoded.map((k, v) => MapEntry(

@@ -35,6 +35,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
     try {
       final resp =
           await _dio.get('/api/chat/mentions', queryParameters: {'days': days});
+      if (!mounted) return;
       final raw = apiResponseList(resp.data);
       final items = raw
           .map((e) => MentionItem.fromJson(e as Map<String, dynamic>))
@@ -44,6 +45,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
         unreadCount: items.where((m) => !m.read).length,
       );
     } catch (e, st) {
+      if (!mounted) return;
       state = state.copyWith(items: AsyncValue.error(e, st));
     }
   }
@@ -52,6 +54,7 @@ class MentionsNotifier extends StateNotifier<MentionsState> {
     try {
       final resp = await _dio.get('/api/chat/mentions/unread-count',
           queryParameters: {'days': days});
+      if (!mounted) return;
       final inner = apiResponseMap(resp.data) ?? const {};
       final count = (inner['count'] as num?)?.toInt() ?? 0;
       state = state.copyWith(unreadCount: count);
