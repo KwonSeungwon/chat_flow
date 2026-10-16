@@ -82,7 +82,7 @@ class ChatPage extends ConsumerWidget {
               },
             )
         : null;
-    final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'ChatFlow';
+    final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'Gossiplog';
 
     return PopScope(
       canPop: effectiveRoomId == null || isWide,

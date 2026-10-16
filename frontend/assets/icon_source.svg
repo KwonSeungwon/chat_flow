@@ -1,89 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Gossiplog app icon (C: floating island + speech bubble). Full-bleed; platforms apply their own mask. -->
   <defs>
-    <!-- Background gradient: teal to blue (medical + tech) -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0D9488"/>
-      <stop offset="50%" stop-color="#0E7490"/>
-      <stop offset="100%" stop-color="#1D4ED8"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C3D7FF"/>
+      <stop offset="0.62" stop-color="#E4E6FA"/>
+      <stop offset="1" stop-color="#FFE7D2"/>
     </linearGradient>
-    <!-- Cross gradient -->
-    <linearGradient id="crossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0D9488"/>
-      <stop offset="100%" stop-color="#1D4ED8"/>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B2E3B5"/>
+      <stop offset="1" stop-color="#93D29E"/>
     </linearGradient>
-    <!-- Subtle shadow for depth -->
-    <filter id="shadow" x="-5%" y="-5%" width="115%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.15"/>
-    </filter>
-    <filter id="shadowSm" x="-5%" y="-5%" width="115%" height="120%">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.12"/>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#3B4A6B" flood-opacity="0.16"/>
     </filter>
   </defs>
-
-  <!-- Background rounded square -->
-  <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="url(#bgGrad)"/>
-
-  <!-- Subtle inner glow -->
-  <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="white" opacity="0.06"/>
-
-  <!-- Main chat bubble (white, upper area) -->
-  <g filter="url(#shadow)">
-    <path d="
-      M 120,100
-      H 355
-      Q 390,100 390,135
-      V 285
-      Q 390,320 355,320
-      H 195
-      L 140,370
-      L 155,320
-      H 155
-      Q 120,320 120,285
-      V 135
-      Q 120,100 155,100
-      Z
-    " fill="white" opacity="0.95"/>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <!-- clouds -->
+  <g fill="#FFFFFF" opacity="0.75">
+    <ellipse cx="140" cy="560" rx="78" ry="30"/><ellipse cx="190" cy="540" rx="52" ry="34"/>
+    <ellipse cx="884" cy="470" rx="70" ry="26"/><ellipse cx="846" cy="452" rx="44" ry="30"/>
   </g>
-
-  <!-- Medical cross inside the main bubble -->
-  <g>
-    <!-- Horizontal bar -->
-    <rect x="200" y="190" width="110" height="36" rx="8" fill="url(#crossGrad)"/>
-    <!-- Vertical bar -->
-    <rect x="237" y="153" width="36" height="110" rx="8" fill="url(#crossGrad)"/>
+  <g id="island" transform="translate(0 -36)">
+    <!-- rock underside -->
+    <polygon points="190,690 512,851 470,912 380,900 300,800" fill="#C9A27E"/>
+    <polygon points="512,851 834,690 724,800 616,880 512,968 470,912" fill="#AE8460"/>
+    <polygon points="380,900 470,912 512,968 450,950" fill="#9C7656"/>
+    <!-- island slab -->
+    <polygon points="190,640 512,801 512,851 190,690" fill="#6FB487"/>
+    <polygon points="512,801 834,640 834,690 512,851" fill="#5A9D74"/>
+    <polygon points="512,479 834,640 512,801 190,640" fill="url(#grass)"/>
+    <!-- path -->
+    <polygon points="470,690 512,669 640,733 598,754" fill="#F3E7D3"/>
+    <!-- tree -->
+    <ellipse cx="292" cy="664" rx="36" ry="14" fill="#5A9D74" opacity="0.45"/>
+    <rect x="284" y="618" width="16" height="46" rx="6" fill="#B08764"/>
+    <circle cx="292" cy="596" r="44" fill="#6FB487"/><circle cx="278" cy="584" r="22" fill="#8DCB98"/>
+    <!-- blue tower -->
+    <g>
+      <polygon points="616,664 680,632 744,664 680,696" fill="#E7EEFC"/>
+      <polygon points="616,664 680,696 680,772 616,740" fill="#E7EEFC"/>
+      <polygon points="680,696 744,664 744,740 680,772" fill="#CFDAF3"/>
+      <polygon points="604,668 680,560 680,700" fill="#6C8CFF"/>
+      <polygon points="680,560 756,668 680,700" fill="#4F6EE6"/>
+      <rect x="700" y="704" width="22" height="30" rx="11" fill="#9FB3E8"/>
+    </g>
+    <!-- castle -->
+    <g>
+      <polygon points="372,600 470,551 568,600 470,649" fill="#FFF8EE"/>
+      <polygon points="372,600 470,649 470,756 372,707" fill="#F1E2CF"/>
+      <polygon points="470,649 568,600 568,707 470,756" fill="#E2CDB4"/>
+      <polygon points="356,606 470,438 470,660" fill="#FF7A6B"/>
+      <polygon points="470,438 584,606 470,660" fill="#E85C50"/>
+      <path d="M402 708 v-36 a20 20 0 0 1 40 0 v52 z" fill="#8A6A55"/>
+      <rect x="506" y="652" width="26" height="34" rx="13" fill="#CDB394"/>
+    </g>
   </g>
-
-  <!-- Small secondary chat bubble (lower-right, semi-transparent) -->
-  <g filter="url(#shadowSm)">
-    <path d="
-      M 290,340
-      H 395
-      Q 420,340 420,365
-      V 405
-      Q 420,430 395,430
-      H 365
-      L 380,455
-      L 345,430
-      H 325
-      Q 290,430 290,405
-      V 365
-      Q 290,340 325,340
-      Z
-    " fill="white" opacity="0.45"/>
+  <!-- speech bubble -->
+  <g filter="url(#soft)">
+    <path d="M292 122 H732 a76 76 0 0 1 76 76 V318 a76 76 0 0 1 -76 76 H468 L372 466 L384 394 H292 a76 76 0 0 1 -76 -76 V198 a76 76 0 0 1 76 -76 z" fill="#FFFFFF"/>
   </g>
-
-  <!-- Three dots in the small bubble -->
-  <circle cx="330" cy="385" r="8" fill="white" opacity="0.8"/>
-  <circle cx="355" cy="385" r="8" fill="white" opacity="0.8"/>
-  <circle cx="380" cy="385" r="8" fill="white" opacity="0.8"/>
-
-  <!-- ECG/Heartbeat line accent (subtle, bottom area) -->
-  <polyline points="60,460 120,460 145,460 160,440 175,480 190,430 205,470 220,460 280,460"
-    stroke="white" stroke-width="3.5" fill="none" opacity="0.35"
-    stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- Accent dots (warm, like vital signs indicators) -->
-  <circle cx="155" cy="130" r="6" fill="#F59E0B" opacity="0.9"/>
-  <circle cx="365" cy="145" r="5" fill="#34D399" opacity="0.8"/>
-  <circle cx="405" cy="355" r="4.5" fill="#F59E0B" opacity="0.7"/>
+  <g fill="#7D9BFF">
+    <circle cx="392" cy="258" r="34"/><circle cx="512" cy="258" r="34"/><circle cx="632" cy="258" r="34"/>
+  </g>
 </svg>

@@ -14,7 +14,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title ?? 'ChatFlow';
+  const title = payload.notification?.title ?? 'Gossiplog';
   const body  = payload.notification?.body  ?? '';
   return self.registration.showNotification(title, {
     body,

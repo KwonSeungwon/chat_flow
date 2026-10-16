@@ -1,12 +1,12 @@
 {
-  "name": "ChatFlow",
-  "short_name": "ChatFlow",
+  "name": "Gossiplog",
+  "short_name": "Gossiplog",
   "start_url": ".",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0D0F14",
   "theme_color": "#0D0F14",
-  "description": "실시간 채팅 플랫폼",
+  "description": "채팅하고 같이 던전 깨는 Gossiplog",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
