@@ -41,7 +41,7 @@ import static org.mockito.Mockito.when;
  * Characterization tests for {@link KoreanSearchService}.
  *
  * <p>Each test captures the emitted {@link SearchRequest} and asserts that the
- * Elasticsearch query DSL (index, from/size, sort, minScore, highlight, bool
+ * Elasticsearch query DSL (index, from/size, sort, minScore, no highlight, bool
  * query structure) is identical to the pre-refactor version.</p>
  */
 @ExtendWith(MockitoExtension.class)
@@ -72,12 +72,6 @@ class KoreanSearchServiceTest {
     @Test
     void chatMessagesIndex_shouldEqualChatMessages() {
         assertThat(SearchConstants.CHAT_MESSAGES_INDEX).isEqualTo("chat_messages");
-    }
-
-    @Test
-    void highlightTags_shouldBeMarkTags() {
-        assertThat(SearchConstants.HIGHLIGHT_PRE_TAG).isEqualTo("<mark>");
-        assertThat(SearchConstants.HIGHLIGHT_POST_TAG).isEqualTo("</mark>");
     }
 
     @Test
@@ -122,21 +116,14 @@ class KoreanSearchServiceTest {
         }
 
         @Test
-        @DisplayName("highlights the 'content' field")
-        void highlightContent() throws IOException {
+        @DisplayName("requests no highlight (results never used it)")
+        void noHighlight() throws IOException {
             stubEmptyResponse();
 
             service.searchKoreanContent("테스트", "room-1", PageRequest.of(0, 10));
 
             verify(elasticsearchClient).search(requestCaptor.capture(), eq(ChatMessageDocument.class));
-            SearchRequest req = requestCaptor.getValue();
-
-            assertThat(req.highlight()).isNotNull();
-            assertThat(req.highlight().fields()).containsKey("content");
-            assertThat(req.highlight().fields().get("content").preTags())
-                    .containsExactly(SearchConstants.HIGHLIGHT_PRE_TAG);
-            assertThat(req.highlight().fields().get("content").postTags())
-                    .containsExactly(SearchConstants.HIGHLIGHT_POST_TAG);
+            assertThat(requestCaptor.getValue().highlight()).isNull();
         }
 
         @Test
@@ -253,21 +240,14 @@ class KoreanSearchServiceTest {
         }
 
         @Test
-        @DisplayName("highlights the 'content.ngram' field")
-        void highlightNgram() throws IOException {
+        @DisplayName("requests no highlight (results never used it)")
+        void noHighlight() throws IOException {
             stubEmptyResponse();
 
             service.searchWithNgram("검색", "room-1", PageRequest.of(0, 10));
 
             verify(elasticsearchClient).search(requestCaptor.capture(), eq(ChatMessageDocument.class));
-            SearchRequest req = requestCaptor.getValue();
-
-            assertThat(req.highlight()).isNotNull();
-            assertThat(req.highlight().fields()).containsKey("content.ngram");
-            assertThat(req.highlight().fields().get("content.ngram").preTags())
-                    .containsExactly(SearchConstants.HIGHLIGHT_PRE_TAG);
-            assertThat(req.highlight().fields().get("content.ngram").postTags())
-                    .containsExactly(SearchConstants.HIGHLIGHT_POST_TAG);
+            assertThat(requestCaptor.getValue().highlight()).isNull();
         }
 
         @Test

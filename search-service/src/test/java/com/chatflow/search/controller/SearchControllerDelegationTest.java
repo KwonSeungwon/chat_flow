@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class SearchControllerLegacyDelegationTest {
+class SearchControllerDelegationTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private KoreanSearchService koreanSearchService;

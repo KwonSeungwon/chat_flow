@@ -3,6 +3,7 @@ package com.chatflow.search.config;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import com.chatflow.search.util.SearchConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,8 +11,6 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
-
-import com.chatflow.search.util.SearchConstants;
 
 import java.io.InputStream;
 import java.io.StringReader;
@@ -27,118 +26,43 @@ public class IndexInitializer {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeIndices() {
-        createChatMessagesIndex();
-        createBlogPostsIndex();
-        createAuditLogsIndex();
+        createIfMissing(SearchConstants.CHAT_MESSAGES_INDEX, "elasticsearch/korean-analyzer-config.json");
+        createIfMissing("audit_logs", "elasticsearch/audit-logs-config.json");
     }
 
-    private void createChatMessagesIndex() {
+    /**
+     * Creates {@code indexName} from the settings/mappings in the classpath JSON
+     * {@code resource} unless it already exists. Failures are logged, not thrown,
+     * so the service still starts when ES is temporarily unavailable.
+     */
+    void createIfMissing(String indexName, String resource) {
         try {
-            String indexName = SearchConstants.CHAT_MESSAGES_INDEX;
-
-            // Check if index already exists
             boolean exists = elasticsearchClient.indices()
                     .exists(ExistsRequest.of(e -> e.index(indexName)))
                     .value();
+            if (exists) {
+                log.info("{} index already exists", indexName);
+                return;
+            }
 
-            if (!exists) {
-                log.info("Creating chat_messages index with Korean analyzer settings...");
+            log.info("Creating {} index from {}", indexName, resource);
+            try (InputStream inputStream = new ClassPathResource(resource).getInputStream()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> indexConfig = objectMapper.readValue(inputStream, Map.class);
 
-                // Load index configuration from resources
-                ClassPathResource resource = new ClassPathResource("elasticsearch/korean-analyzer-config.json");
-                try (InputStream inputStream = resource.getInputStream()) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> indexConfig = objectMapper.readValue(inputStream, Map.class);
+                String settingsJson = objectMapper.writeValueAsString(indexConfig.get("settings"));
+                String mappingsJson = objectMapper.writeValueAsString(indexConfig.get("mappings"));
 
-                    String settingsJson = objectMapper.writeValueAsString(indexConfig.get("settings"));
-                    String mappingsJson = objectMapper.writeValueAsString(indexConfig.get("mappings"));
-
-                    CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
-                            .index(indexName)
-                            .settings(s -> s.withJson(new StringReader(settingsJson)))
-                            .mappings(m -> m.withJson(new StringReader(mappingsJson)))
-                    );
-
-                    elasticsearchClient.indices().create(createRequest);
-                    log.info("Successfully created chat_messages index with Korean analyzer");
-                }
-            } else {
-                log.info("chat_messages index already exists");
+                CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
+                        .index(indexName)
+                        .settings(s -> s.withJson(new StringReader(settingsJson)))
+                        .mappings(m -> m.withJson(new StringReader(mappingsJson)))
+                );
+                elasticsearchClient.indices().create(createRequest);
+                log.info("Successfully created {} index", indexName);
             }
         } catch (Exception e) {
-            log.error("Failed to create chat_messages index", e);
-        }
-    }
-
-    private void createBlogPostsIndex() {
-        try {
-            String indexName = "blog_posts";
-
-            boolean exists = elasticsearchClient.indices()
-                    .exists(ExistsRequest.of(e -> e.index(indexName)))
-                    .value();
-
-            if (!exists) {
-                log.info("Creating blog_posts index with Korean analyzer settings...");
-
-                ClassPathResource resource = new ClassPathResource("elasticsearch/blog-posts-config.json");
-                try (InputStream inputStream = resource.getInputStream()) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> indexConfig = objectMapper.readValue(inputStream, Map.class);
-
-                    String settingsJson = objectMapper.writeValueAsString(indexConfig.get("settings"));
-                    String mappingsJson = objectMapper.writeValueAsString(indexConfig.get("mappings"));
-
-                    CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
-                            .index(indexName)
-                            .settings(s -> s.withJson(new StringReader(settingsJson)))
-                            .mappings(m -> m.withJson(new StringReader(mappingsJson)))
-                    );
-
-                    elasticsearchClient.indices().create(createRequest);
-                    log.info("Successfully created blog_posts index with Korean analyzer");
-                }
-            } else {
-                log.info("blog_posts index already exists");
-            }
-        } catch (Exception e) {
-            log.error("Failed to create blog_posts index", e);
-        }
-    }
-
-    private void createAuditLogsIndex() {
-        try {
-            String indexName = "audit_logs";
-
-            boolean exists = elasticsearchClient.indices()
-                    .exists(ExistsRequest.of(e -> e.index(indexName)))
-                    .value();
-
-            if (!exists) {
-                log.info("Creating audit_logs index...");
-
-                ClassPathResource resource = new ClassPathResource("elasticsearch/audit-logs-config.json");
-                try (InputStream inputStream = resource.getInputStream()) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> indexConfig = objectMapper.readValue(inputStream, Map.class);
-
-                    String settingsJson = objectMapper.writeValueAsString(indexConfig.get("settings"));
-                    String mappingsJson = objectMapper.writeValueAsString(indexConfig.get("mappings"));
-
-                    CreateIndexRequest createRequest = CreateIndexRequest.of(c -> c
-                            .index(indexName)
-                            .settings(s -> s.withJson(new StringReader(settingsJson)))
-                            .mappings(m -> m.withJson(new StringReader(mappingsJson)))
-                    );
-
-                    elasticsearchClient.indices().create(createRequest);
-                    log.info("Successfully created audit_logs index");
-                }
-            } else {
-                log.info("audit_logs index already exists");
-            }
-        } catch (Exception e) {
-            log.error("Failed to create audit_logs index", e);
+            log.error("Failed to create {} index", indexName, e);
         }
     }
 }
