@@ -120,23 +120,6 @@ spring:
               args:
                 retries: 1
                 statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
-      globalcors:
-        corsConfigurations:
-          '[/**]':
-            allowedOriginPatterns:
-              - "https://*.chatflow.com"
-              - "https://chatflow.com"
-              - "https://app.chatflow.ai.kr"
-              - "https://chatflow.ai.kr"
-            allowedMethods: 
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-            allowedHeaders: "*"
-            allowCredentials: true
-            maxAge: 3600
       # default-filters는 제거 — 각 라우트가 자체 RateLimiter + CircuitBreaker를 가짐
       # 전역 필터는 세밀한 제어를 방해하고 fallback URI 라우팅도 못 막기 때문
   
@@ -171,6 +154,8 @@ management:
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
   prometheus:
     metrics:
       export:

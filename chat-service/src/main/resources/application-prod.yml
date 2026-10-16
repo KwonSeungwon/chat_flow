@@ -110,6 +110,8 @@ management:
   endpoint:
     health:
       show-details: never  # Hide sensitive info in production
+      probes:
+        enabled: true
   prometheus:
     metrics:
       export:

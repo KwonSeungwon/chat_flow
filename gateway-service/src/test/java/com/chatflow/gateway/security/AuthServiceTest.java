@@ -42,6 +42,31 @@ class AuthServiceTest {
                 redisTemplate, userRepository, EXPIRATION_MS);
     }
 
+    // ── register ─────────────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void register_clientSuppliedAdminRole_ignored() {
+        when(userRepository.existsByUsername("evil")).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenReturn("enc");
+        when(userRepository.save(any(UserEntity.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(jwtUtil.generateToken(anyString(), eq("evil"), eq("NURSE"))).thenReturn("tok");
+        when(jwtUtil.getJti("tok")).thenReturn("jti");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.empty());
+
+        var req = new AuthService.AuthRequest("evil", "password123", "ADMIN");
+
+        StepVerifier.create(authService.register(req))
+                .assertNext(resp -> assertEquals("NURSE", resp.role()))
+                .verifyComplete();
+
+        var captor = org.mockito.ArgumentCaptor.forClass(UserEntity.class);
+        verify(userRepository).save(captor.capture());
+        assertEquals("NURSE", captor.getValue().getRole());
+    }
+
     // ── login ────────────────────────────────────────────────────
 
     @Test
