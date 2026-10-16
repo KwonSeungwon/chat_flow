@@ -12,6 +12,8 @@ import org.springframework.messaging.simp.user.SimpUser;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -36,6 +38,9 @@ public class RoomSubscriptionRevoker {
         this.participantRegistry = participantRegistry;
     }
 
+    // REQUIRES_NEW: after commit the removing transaction is finished, so the
+    // participant_count write needs its own transaction to be flushed.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onRoomMemberRemoved(RoomMemberRemovedEvent event) {
         if (event.reason() == RoomMemberRemovedEvent.Reason.LEFT) return;
