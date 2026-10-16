@@ -1,5 +1,7 @@
 package com.chatflow.aisummary.controller;
 
+import com.chatflow.aisummary.client.MembershipCheckUnavailableException;
+import com.chatflow.aisummary.client.RoomMembershipClient;
 import com.chatflow.aisummary.exception.AiRateLimitException;
 import com.chatflow.aisummary.exception.GlobalExceptionHandler;
 import com.chatflow.aisummary.service.AiSummaryService;
@@ -19,7 +21,10 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -37,15 +42,20 @@ class AiSummaryControllerTest {
 
     @Mock private AiSummaryService aiSummaryService;
     @Mock private QuickReplyService quickReplyService;
+    @Mock private RoomMembershipClient roomMembershipClient;
 
+    private AiSummaryController controller;
     private MockMvc mockMvc;
 
+    /** Default: requests carry the gateway-injected identity of a room member. */
     @BeforeEach
     void setUp() {
-        AiSummaryController controller = new AiSummaryController(aiSummaryService, quickReplyService);
+        controller = new AiSummaryController(aiSummaryService, quickReplyService, roomMembershipClient);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .defaultRequest(get("/").header("X-User-Id", "u1"))
                 .build();
+        lenient().when(roomMembershipClient.isMember(anyString(), anyString())).thenReturn(true);
     }
 
     private ChatMessage dummyResponse(String roomId) {
@@ -173,6 +183,81 @@ class AiSummaryControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.success").value(false))
                     .andExpect(jsonPath("$.message").value("chatRoomId는 필수입니다."));
+        }
+    }
+
+    // ── room authorization ─────────────────────────────────────────
+
+    @Nested
+    class RoomAuthorization {
+
+        @BeforeEach
+        void nonMember() {
+            when(roomMembershipClient.isMember("room-9", "u1")).thenReturn(false);
+        }
+
+        @Test
+        void summary_nonMember_403() throws Exception {
+            mockMvc.perform(get("/api/ai-summary/room/room-9"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.success").value(false));
+            verifyNoInteractions(aiSummaryService);
+        }
+
+        @Test
+        void ask_nonMember_403() throws Exception {
+            mockMvc.perform(post("/api/ai-summary/ask")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"chatRoomId\":\"room-9\",\"question\":\"hello?\"}"))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(aiSummaryService);
+        }
+
+        @Test
+        void otherRoomRoutes_nonMember_403() throws Exception {
+            mockMvc.perform(post("/api/ai-summary/shift-report")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"chatRoomId\":\"room-9\"}"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(post("/api/ai-summary/request")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"chatRoomId\":\"room-9\"}"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(post("/api/ai-summary/quick-replies")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"chatRoomId\":\"room-9\",\"latestMessageId\":\"m1\"}"))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(aiSummaryService, quickReplyService);
+        }
+    }
+
+    @Nested
+    class Identity {
+
+        @Test
+        void missingUserId_401() throws Exception {
+            MockMvc anonymous = MockMvcBuilders.standaloneSetup(controller)
+                    .setControllerAdvice(new GlobalExceptionHandler())
+                    .build();
+
+            anonymous.perform(get("/api/ai-summary/room/room-1"))
+                    .andExpect(status().isUnauthorized());
+            anonymous.perform(post("/api/ai-summary/ask")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"chatRoomId\":\"room-1\",\"question\":\"hello?\"}"))
+                    .andExpect(status().isUnauthorized());
+            verifyNoInteractions(aiSummaryService);
+        }
+
+        @Test
+        void membershipServiceDown_503_neverFailOpen() throws Exception {
+            when(roomMembershipClient.isMember(anyString(), anyString()))
+                    .thenThrow(new MembershipCheckUnavailableException("down", null));
+
+            mockMvc.perform(get("/api/ai-summary/room/room-1"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.success").value(false));
+            verifyNoInteractions(aiSummaryService);
         }
     }
 }

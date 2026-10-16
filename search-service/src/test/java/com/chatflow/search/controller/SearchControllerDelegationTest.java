@@ -1,9 +1,11 @@
 package com.chatflow.search.controller;
 
+import com.chatflow.search.client.RoomMembershipClient;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.service.KoreanSearchService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -18,6 +20,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,9 +47,22 @@ class SearchControllerDelegationTest {
     @MockBean private KoreanSearchService koreanSearchService;
     @MockBean @SuppressWarnings("rawtypes") private KafkaTemplate kafkaTemplate;
 
+    @MockBean private RoomMembershipClient roomMembershipClient;
+
     @TestConfiguration
     static class TestConfig {
         @Bean MeterRegistry meterRegistry() { return new SimpleMeterRegistry(); }
+    }
+
+    @Autowired private WebApplicationContext context;
+
+    /** Every request carries the gateway-injected caller identity; membership is granted. */
+    @BeforeEach
+    void allowMembership() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .defaultRequest(get("/").header("X-User-Id", "u1")).build();
+        when(roomMembershipClient.isMember(anyString(), anyString())).thenReturn(true);
+        when(roomMembershipClient.memberRoomIds("u1")).thenReturn(List.of("room1"));
     }
 
     private static Page<ChatMessageDocument> emptyPage() {
@@ -53,10 +70,10 @@ class SearchControllerDelegationTest {
     }
 
     @Test
-    void messages_delegatesToKoreanContentWithNullRoom() throws Exception {
-        when(koreanSearchService.searchKoreanContent(eq("hi"), isNull(), any(Pageable.class))).thenReturn(emptyPage());
+    void messages_delegatesToKoreanContentInMemberRooms() throws Exception {
+        when(koreanSearchService.searchKoreanContentInRooms(eq("hi"), eq(List.of("room1")), any(Pageable.class))).thenReturn(emptyPage());
         mockMvc.perform(get("/api/search/messages").param("query", "hi")).andExpect(status().isOk());
-        verify(koreanSearchService).searchKoreanContent(eq("hi"), isNull(), any(Pageable.class));
+        verify(koreanSearchService).searchKoreanContentInRooms(eq("hi"), eq(List.of("room1")), any(Pageable.class));
     }
 
     @Test

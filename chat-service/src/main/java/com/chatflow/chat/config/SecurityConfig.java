@@ -33,6 +33,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/ws/**", "/ws-native/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        // Service-to-service membership lookups — gated by the shared internal
+                        // secret in InternalMembershipController, not by user auth.
+                        .requestMatchers(HttpMethod.GET, "/internal/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/files/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/files/upload").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/chat/rooms/**").authenticated()

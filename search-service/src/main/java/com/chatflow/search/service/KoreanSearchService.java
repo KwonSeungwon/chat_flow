@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -60,6 +61,32 @@ public class KoreanSearchService {
         }
 
         return executeAndMap(boolBuilder.build(), pageable, 0.5,
+                "Error performing N-gram search for query: " + query);
+    }
+
+    /**
+     * Korean search across several rooms (the caller's member rooms).
+     * {@code chatRoomIds} must be non-empty; the controller short-circuits
+     * the no-rooms case.
+     */
+    public Page<ChatMessageDocument> searchKoreanContentInRooms(
+            String query, Collection<String> chatRoomIds, Pageable pageable) {
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(standardMultiMatch(query)));
+        applyRoomsFilter(boolBuilder, chatRoomIds);
+
+        return executeAndMap(boolBuilder.build(), pageable, "content", null,
+                "Error performing Korean search for query: " + query);
+    }
+
+    /** N-gram search across several rooms (the caller's member rooms). */
+    public Page<ChatMessageDocument> searchWithNgramInRooms(
+            String query, Collection<String> chatRoomIds, Pageable pageable) {
+        BoolQuery.Builder boolBuilder = excludeSystemMessages(
+                new BoolQuery.Builder().must(ngramMultiMatch(query)));
+        applyRoomsFilter(boolBuilder, chatRoomIds);
+
+        return executeAndMap(boolBuilder.build(), pageable, "content.ngram", 0.5,
                 "Error performing N-gram search for query: " + query);
     }
 
@@ -149,6 +176,21 @@ public class KoreanSearchService {
                 .match(t -> t
                         .field("chatRoomId")
                         .query(chatRoomId)
+                )
+        );
+    }
+
+    /**
+     * Restricts the bool query to the given rooms with an exact {@code terms}
+     * filter on {@code chatRoomId} (keyword in the index mapping). Exact
+     * matching is required here: this filter is an authorization boundary.
+     */
+    static void applyRoomsFilter(BoolQuery.Builder builder, Collection<String> chatRoomIds) {
+        List<FieldValue> values = chatRoomIds.stream().map(FieldValue::of).toList();
+        builder.filter(f -> f
+                .terms(t -> t
+                        .field("chatRoomId")
+                        .terms(v -> v.value(values))
                 )
         );
     }

@@ -1,7 +1,9 @@
 package com.chatflow.search.controller;
 
+import com.chatflow.search.client.RoomMembershipClient;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.service.KoreanSearchService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -50,12 +54,26 @@ class FilterEndpointTest {
     @SuppressWarnings("rawtypes")
     private KafkaTemplate kafkaTemplate;
 
+    @MockBean
+    private RoomMembershipClient roomMembershipClient;
+
     @TestConfiguration
     static class TestConfig {
         @Bean
         MeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
         }
+    }
+
+    @Autowired
+    private WebApplicationContext context;
+
+    /** Every request carries the gateway-injected caller identity; membership is granted. */
+    @BeforeEach
+    void allowMembership() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .defaultRequest(get("/").header("X-User-Id", "u1")).build();
+        when(roomMembershipClient.isMember(anyString(), anyString())).thenReturn(true);
     }
 
     @Test
