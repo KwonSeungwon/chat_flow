@@ -252,10 +252,10 @@ class AuthBlacklistTest {
         putProfile("/etc/passwd").expectStatus().isBadRequest();
     }
 
-    // ── L6: expired / malformed token logout → 401, never 500 ──
+    // ── L6: expired / malformed token logout is an idempotent no-op (200), never 500 ──
 
     @Test
-    void logout_expiredToken_returns401() {
+    void logout_expiredToken_isIdempotentOk() {
         String expired = io.jsonwebtoken.Jwts.builder()
                 .id("exp-jti").subject("user-1").claim("username", "testuser")
                 .issuedAt(new java.util.Date(System.currentTimeMillis() - 7_200_000))
@@ -267,15 +267,15 @@ class AuthBlacklistTest {
         webTestClient.post().uri("/api/auth/logout")
                 .header("Authorization", "Bearer " + expired)
                 .exchange()
-                .expectStatus().isUnauthorized();
+                .expectStatus().isOk();
     }
 
     @Test
-    void logout_malformedToken_returns401() {
+    void logout_malformedToken_isIdempotentOk() {
         webTestClient.post().uri("/api/auth/logout")
                 .header("Authorization", "Bearer garbage")
                 .exchange()
-                .expectStatus().isUnauthorized();
+                .expectStatus().isOk();
     }
 
     // ── L10: ?token= only for websocket and file GETs ──

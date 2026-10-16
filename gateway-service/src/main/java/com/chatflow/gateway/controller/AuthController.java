@@ -108,7 +108,7 @@ public class AuthController {
         return authService.logout(token)
                 .then(Mono.just(ResponseEntity.ok().<Void>build()))
                 .onErrorResume(e -> e instanceof JwtException || e instanceof IllegalArgumentException,
-                        e -> Mono.just(ResponseEntity.status(401).<Void>build()))
+                        e -> Mono.just(ResponseEntity.ok().<Void>build())) // 만료·위조 토큰: 멱등 no-op
                 .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
     }
 }
