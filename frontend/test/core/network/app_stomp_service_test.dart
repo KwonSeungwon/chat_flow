@@ -143,4 +143,65 @@ void main() {
     service.reconnectNow();
     expect(clients, hasLength(1));
   });
+
+  group('token re-read and auth stop', () {
+    String? storedToken;
+    void connectWithStorage() => service.connect(
+        userId: 'u1',
+        token: 'tok',
+        tokenProvider: () async => storedToken,
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+    StompFrame unauthorized() =>
+        StompFrame(command: 'ERROR', headers: {'message': 'Unauthorized'});
+
+    testWidgets('reconnect_usesCurrentStoredToken', (tester) async {
+      storedToken = 'rotated';
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(clients, hasLength(2));
+      expect(clients.last.config.stompConnectHeaders?['Authorization'],
+          'Bearer rotated');
+    });
+
+    testWidgets('reconnect_noStoredToken_stopsRetrying', (tester) async {
+      storedToken = null;
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+    });
+
+    testWidgets('unauthorizedConnect_stopsRetrying', (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+    });
+
+    testWidgets('afterUnauthorized_resumeRetriesOnlyWithNewToken',
+        (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone();
+
+      service.reconnectNow();
+      await tester.pump();
+      expect(clients, hasLength(1));
+
+      storedToken = 'fresh';
+      service.reconnectNow();
+      await tester.pump();
+      expect(clients, hasLength(2));
+    });
+  });
 }

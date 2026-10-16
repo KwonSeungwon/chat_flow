@@ -1,9 +1,19 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 /// Resolves the STOMP WebSocket URL. On web, derives it from the current
 /// origin ([Uri.base]); otherwise uses `WS_URL` from `.env` with a prod
 /// fallback.
+/// True when a STOMP ERROR frame is the server refusing CONNECT for auth
+/// (chat-service throws `MessageDeliveryException("Unauthorized")`).
+/// Retrying with the same token cannot succeed.
+bool isUnauthorizedStompError(StompFrame frame) {
+  final text = '${frame.headers['message'] ?? ''} ${frame.body ?? ''}'
+      .toLowerCase();
+  return text.contains('unauthorized');
+}
+
 String resolveStompWsUrl() {
   if (kIsWeb) return deriveWebStompUrl(Uri.base);
   return dotenv.env['WS_URL'] ?? 'wss://app.gossiplog.com/ws-native';
