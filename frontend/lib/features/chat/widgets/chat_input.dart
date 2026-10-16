@@ -638,6 +638,10 @@ class _ChatInputState extends State<ChatInput> {
         decoration: BoxDecoration(
           color: cs.surfaceContainer,
           borderRadius: BorderRadius.circular(24),
+          // 라이트에서는 흰 바와 알약 색 차이가 작아 1px 테두리로 가장자리를 잡는다.
+          border: cs.brightness == Brightness.light
+              ? Border.all(color: cs.outline)
+              : null,
         ),
         child: KeyboardListener(
           focusNode: _keyboardFocusNode,

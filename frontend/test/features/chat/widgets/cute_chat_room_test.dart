@@ -92,6 +92,25 @@ void main() {
     expect(find.text('bob'), findsOneWidget);
   });
 
+  testWidgets('삭제된 메시지도 그룹 연속 줄이면 아바타 없이 자리만 비운다', (tester) async {
+    final now = DateTime(2026, 10, 16, 10);
+    final deleted = ChatMessage(
+      messageId: 'd', chatRoomId: 'r1', userId: 'bob-id', username: 'bob',
+      content: 'x', timestamp: now.toUtc().toIso8601String(), type: 'CHAT',
+      deleted: true,
+    );
+    await tester.pumpWidget(host(Column(children: [
+      ChatBubble(msg: deleted, isMine: false, time: '10:00', showAvatar: false),
+    ])));
+    expect(find.text('삭제된 메시지입니다.'), findsOneWidget);
+    expect(find.byType(Avatar), findsNothing);
+
+    await tester.pumpWidget(host(Column(children: [
+      ChatBubble(msg: deleted, isMine: false, time: '10:00'),
+    ])));
+    expect(find.byType(Avatar), findsOneWidget);
+  });
+
   testWidgets('400px 폭에서 메시지 영역과 입력창이 넘치지 않는다', (tester) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(400, 800);

@@ -86,6 +86,8 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
   /// 상대 이름 라벨.
   final Color name;
   final Color unreadBadge;
+  /// 내 말풍선 옆 "읽음 N" 글자. 방 배경 위 4.5:1 이상.
+  final Color readCount;
   /// 사이드바에서 선택된 방 배경.
   final Color selectedRoom;
 
@@ -101,6 +103,7 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
     required this.meta,
     required this.name,
     required this.unreadBadge,
+    required this.readCount,
     required this.selectedRoom,
   });
 
@@ -120,6 +123,8 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
     meta: AppColors.muted,
     name: AppColors.inkSoft,
     unreadBadge: AppColors.unreadBadge,
+    // #EEF4FF 위 약 5.2:1 (blueDeep은 4.0:1이라 한 단계 진하게).
+    readCount: Color(0xFF3F5BD0),
     selectedRoom: Color(0xFFEEF3FF),
   );
 
@@ -137,6 +142,7 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
     meta: Color(0xFF8A93AE),
     name: Color(0xFFB7BFD6),
     unreadBadge: AppColors.unreadBadge,
+    readCount: AppColors.darkPrimary,
     selectedRoom: Color(0xFF262D47),
   );
 
@@ -159,6 +165,7 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
     Color? meta,
     Color? name,
     Color? unreadBadge,
+    Color? readCount,
     Color? selectedRoom,
   }) =>
       ChatPalette(
@@ -173,6 +180,7 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
         meta: meta ?? this.meta,
         name: name ?? this.name,
         unreadBadge: unreadBadge ?? this.unreadBadge,
+        readCount: readCount ?? this.readCount,
         selectedRoom: selectedRoom ?? this.selectedRoom,
       );
 
@@ -191,6 +199,7 @@ class ChatPalette extends ThemeExtension<ChatPalette> {
       meta: Color.lerp(meta, other.meta, t)!,
       name: Color.lerp(name, other.name, t)!,
       unreadBadge: Color.lerp(unreadBadge, other.unreadBadge, t)!,
+      readCount: Color.lerp(readCount, other.readCount, t)!,
       selectedRoom: Color.lerp(selectedRoom, other.selectedRoom, t)!,
     );
   }

@@ -221,7 +221,11 @@ class ChatBubbleState extends State<ChatBubble> {
           mainAxisAlignment: widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
           children: [
             if (!widget.isMine) ...[
-              Avatar(name: widget.msg.username, color: avatarColor(widget.msg.username)),
+              // 일반 말풍선과 같은 규칙: 그룹 첫 줄만 아바타(와 꼬리), 나머지는 자리만.
+              if (widget.showAvatar)
+                Avatar(name: widget.msg.username, color: avatarColor(widget.msg.username))
+              else
+                const SizedBox(width: Avatar.size),
               const SizedBox(width: 8),
             ],
             Container(
@@ -383,7 +387,7 @@ class ChatBubbleState extends State<ChatBubble> {
                                   '읽음 ${widget.readCount}',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: cs.primary,
+                                    color: cp.readCount,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),

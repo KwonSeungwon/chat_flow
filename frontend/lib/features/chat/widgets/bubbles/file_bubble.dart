@@ -322,7 +322,7 @@ class FileBubble extends StatelessWidget {
                                 '읽음 $readCount',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: cs.primary,
+                                  color: cp.readCount,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),

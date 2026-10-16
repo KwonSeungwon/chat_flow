@@ -32,7 +32,7 @@ class SidebarHeader extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: Image.asset('assets/app_icon.png', width: 32, height: 32,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble, size: 20, color: Colors.white)),
+                    errorBuilder: (_, __, ___) => Icon(Icons.chat_bubble, size: 20, color: cs.primary)),
                 ),
                 const SizedBox(width: 10),
                 Text(
