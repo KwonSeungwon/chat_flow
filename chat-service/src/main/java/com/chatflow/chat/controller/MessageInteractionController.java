@@ -156,6 +156,7 @@ public class MessageInteractionController {
 
     public record ReactionRequest(
             @NotBlank(message = "emoji가 필요합니다")
+            @Size(max = 32, message = "emoji는 32자를 초과할 수 없습니다")
             String emoji
     ) {}
 

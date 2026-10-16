@@ -48,6 +48,10 @@ public class MessageEditService {
             if (entity.getUserId() == null || !entity.getUserId().equals(requestingUserId)) {
                 return Result.err(ChatErrorCode.FORBIDDEN, "삭제 권한이 없습니다.");
             }
+            // Kicked, banned (a ban removes the member row) or departed authors lose the message.
+            if (!roomMemberRepository.existsByRoomIdAndUserId(entity.getChatRoomId(), requestingUserId)) {
+                return Result.err(ChatErrorCode.FORBIDDEN, "방 멤버만 메시지를 삭제할 수 있습니다.");
+            }
             entity.setDeleted(true);
             entity.setContent(DELETED_PLACEHOLDER);
             chatMessageRepository.save(entity);
@@ -79,7 +83,11 @@ public class MessageEditService {
             RoomMemberEntity member = roomMemberRepository
                     .findByRoomIdAndUserId(entity.getChatRoomId(), requestingUserId)
                     .orElse(null);
-            if (member != null && member.getMutedUntil() != null
+            // Kicked, banned (a ban removes the member row) or departed authors lose the message.
+            if (member == null) {
+                return Result.<Void, ChatErrorCode>err(ChatErrorCode.FORBIDDEN, "방 멤버만 메시지를 수정할 수 있습니다.");
+            }
+            if (member.getMutedUntil() != null
                     && member.getMutedUntil().isAfter(LocalDateTime.now())) {
                 log.warn("Muted user {} tried to edit message {} in room {}",
                         requestingUserId, messageId, entity.getChatRoomId());

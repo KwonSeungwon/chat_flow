@@ -57,6 +57,20 @@ class ParticipantRegistryServiceTest {
     }
 
     @Test
+    void removeUser_removes_every_session_entry_of_that_user_and_resyncs_count() {
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members("chatflow:room:participants:room-1"))
+                .thenReturn(Set.of("u1:s1:alice", "u1:s2:alice", "u10:s3:bob"));
+
+        registry.removeUser("room-1", "u1");
+
+        verify(setOperations).remove("chatflow:room:participants:room-1", "u1:s1:alice");
+        verify(setOperations).remove("chatflow:room:participants:room-1", "u1:s2:alice");
+        verify(setOperations, never()).remove("chatflow:room:participants:room-1", "u10:s3:bob");
+        verify(participantService).setParticipantCount(eq("room-1"), anyInt());
+    }
+
+    @Test
     void getRoomParticipantUserIds_returns_empty_when_no_members() {
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(setOperations.members("chatflow:room:participants:room-1")).thenReturn(null);

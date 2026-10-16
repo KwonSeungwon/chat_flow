@@ -2,6 +2,7 @@ package com.chatflow.chat.game.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.controller.RoomMembershipGuard;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.game.dto.AnswerRequest;
@@ -56,6 +57,7 @@ class GameControllerTest {
         GameController controller = new GameController(runService, dungeonQueryService, leaderboardService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -129,7 +131,7 @@ class GameControllerTest {
     void dungeonsMeAndLeaderboard() throws Exception {
         when(dungeonQueryService.dungeons(USER)).thenReturn(List.of(
                 new DungeonSummary("jvm", "JVM 대장간", "jvm", true, false, 4)));
-        when(dungeonQueryService.me(USER)).thenReturn(new GameMeResponse(1, 8, false));
+        when(dungeonQueryService.me(USER)).thenReturn(new GameMeResponse(1, 8, false, true));
         when(leaderboardService.top()).thenReturn(List.of(new LeaderboardEntry("앨리스", 2, 30)));
 
         mockMvc.perform(get("/api/game/dungeons").header("X-User-Id", USER))
@@ -138,7 +140,9 @@ class GameControllerTest {
                 .andExpect(jsonPath("$.data[0].clearCount").value(4));
         mockMvc.perform(get("/api/game/me").header("X-User-Id", USER))
                 .andExpect(jsonPath("$.data.total").value(8))
-                .andExpect(jsonPath("$.data.graduated").value(false));
+                .andExpect(jsonPath("$.data.graduated").value(false))
+                .andExpect(jsonPath("$.data.clearedCount").value(1))
+                .andExpect(jsonPath("$.data.admin").value(true));
         mockMvc.perform(get("/api/game/leaderboard").header("X-User-Id", USER))
                 .andExpect(jsonPath("$.data[0].username").value("앨리스"))
                 .andExpect(jsonPath("$.data[0].correctCount").value(30))

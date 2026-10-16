@@ -64,6 +64,23 @@ class ChatRoomRepositoryDmRoomTest {
     }
 
     @Test
+    void findDmRoomByMembers_findsTheDirectRoomBothUsersBelongTo_inEitherOrder() {
+        assertThat(chatRoomRepository.findDmRoomByMembers("u-alice", "u-bob"))
+                .extracting(ChatRoom::getId).containsExactly("dm-ab");
+        assertThat(chatRoomRepository.findDmRoomByMembers("u-bob", "u-alice"))
+                .extracting(ChatRoom::getId).containsExactly("dm-ab");
+    }
+
+    @Test
+    void findDmRoomByMembers_ignoresRoomsOnlyOneOfThemBelongsTo_andNonDirectRooms() {
+        member("general-ab", "u-alice", "alice");
+        member("general-ab", "u-carol", "carol");
+        entityManager.flush();
+
+        assertThat(chatRoomRepository.findDmRoomByMembers("u-alice", "u-carol")).isEmpty();
+    }
+
+    @Test
     void findDmRoom_returnsNothingForAnotherPair() {
         assertThat(chatRoomRepository.findDmRoom("DM:alice,carol", "DM:carol,alice")).isEmpty();
     }

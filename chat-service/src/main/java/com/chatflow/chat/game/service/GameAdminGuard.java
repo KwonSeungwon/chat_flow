@@ -21,8 +21,12 @@ public class GameAdminGuard {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
+    public boolean isAdmin(String userId) {
+        return userId != null && adminUserIds.contains(userId);
+    }
+
     public void requireAdmin(String userId) {
-        if (userId == null || !adminUserIds.contains(userId)) {
+        if (!isAdmin(userId)) {
             throw new GameForbiddenException();
         }
     }

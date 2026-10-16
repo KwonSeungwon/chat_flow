@@ -15,6 +15,8 @@ import java.util.Optional;
 @Repository
 public interface RoomMemberRepository extends JpaRepository<RoomMemberEntity, RoomMemberEntity.RoomMemberId> {
     boolean existsByRoomIdAndUserId(String roomId, String userId);
+
+    long countByRoomId(String roomId);
     long deleteByRoomIdAndUserId(String roomId, String userId);
     List<RoomMemberEntity> findByRoomId(String roomId);
     Optional<RoomMemberEntity> findByRoomIdAndUserId(String roomId, String userId);

@@ -111,6 +111,17 @@ public class LinkPreviewService {
         return false;
     }
 
+    /** Whole-URL digest: bounded key length without collapsing URLs that share a prefix. */
+    private static String sha256Hex(String url) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(url.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
     private URI validate(URI uri) {
         String scheme = uri.getScheme();
         if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
@@ -186,7 +197,7 @@ public class LinkPreviewService {
             return Result.err(ChatErrorCode.INVALID_INPUT, "url이 필요합니다.");
         }
         Map<String, String> result = new LinkedHashMap<>();
-        String cacheKey = CACHE_PREFIX + (url.length() > 200 ? url.substring(0, 200) : url);
+        String cacheKey = CACHE_PREFIX + sha256Hex(url);
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             try {

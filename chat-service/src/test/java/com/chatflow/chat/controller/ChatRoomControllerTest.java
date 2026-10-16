@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.entity.ChatRoom;
 import com.chatflow.chat.entity.RoomRole;
 import com.chatflow.chat.entity.RoomType;
@@ -26,6 +27,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -67,6 +70,7 @@ class ChatRoomControllerTest {
     @Mock private RoomMembershipGuard membershipGuard;
     @Mock private RoomPermissionService roomPermissionService;
     @Mock private RoomAccessPolicy roomAccessPolicy;
+    @Mock private com.chatflow.chat.service.room.UserDirectory userDirectory;
 
     @InjectMocks
     private ChatRoomController controller;
@@ -75,6 +79,7 @@ class ChatRoomControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -552,8 +557,119 @@ class ChatRoomControllerTest {
         }
 
         @Test
+        void uses_the_server_side_username_of_targetUserId_not_the_client_one() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "spoofed")).thenReturn("bob");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
+                    eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
+            when(chatRoomMapper.toResponse(dm))
+                    .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "spoofed")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk());
+
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "u2", "bob", RoomAccessPolicy.GrantPath.DM_CREATE);
+        }
+
+        @Test
+        void returns_400_for_a_dm_with_oneself() throws Exception {
+            when(userDirectory.resolveUsername("user-1", "alice")).thenReturn("alice");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "user-1", "alice"))
+                    .thenThrow(new IllegalArgumentException("자기 자신과는 DM을 만들 수 없습니다."));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "user-1", "targetUsername", "alice")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void missing_X_Username_uses_the_callers_stored_username() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(userDirectory.resolveUsername("user-1", null)).thenReturn("alice");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
+                    eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
+            when(chatRoomMapper.toResponse(dm))
+                    .thenReturn(roomResponse("r-dm", "DM", "DIRECT", "user-1"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isOk());
+
+            verify(roomMembershipService).grantMembership(
+                    "r-dm", "user-1", "alice", RoomAccessPolicy.GrantPath.DM_CREATE);
+        }
+
+        @Test
+        void missing_X_Username_and_no_stored_username_returns_400() throws Exception {
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(userDirectory.resolveUsername("user-1", null)).thenReturn(null);
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest());
+
+            verify(dmRoomService, never()).createOrFindDmRoom(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_404_when_targetUserId_is_not_a_user() throws Exception {
+            when(userDirectory.resolveUsername("ghost", "bob")).thenReturn(null);
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "ghost", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isNotFound());
+
+            verify(dmRoomService, never()).createOrFindDmRoom(any(), any(), any(), any());
+        }
+
+        @Test
+        void returns_403_and_seeds_no_target_when_policy_refuses_the_caller() throws Exception {
+            ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
+            when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
+            when(roomMembershipService.grantMembership("r-dm", "user-1", "alice",
+                    RoomAccessPolicy.GrantPath.DM_CREATE))
+                    .thenReturn(new RoomAccessPolicy.JoinDecision(RoomAccessPolicy.Denial.DM_NOT_PARTICIPANT));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isForbidden());
+
+            verify(roomMembershipService, never()).grantMembership(
+                    eq("r-dm"), eq("u2"), any(), any());
+        }
+
+        @Test
         void returns_200_when_valid() throws Exception {
             ChatRoom dm = room("r-dm", "DM", RoomType.DIRECT, "user-1");
+            when(userDirectory.resolveUsername("u2", "bob")).thenReturn("bob");
             when(dmRoomService.createOrFindDmRoom("user-1", "alice", "u2", "bob")).thenReturn(dm);
             when(roomMembershipService.grantMembership(eq("r-dm"), anyString(), anyString(),
                     eq(RoomAccessPolicy.GrantPath.DM_CREATE))).thenReturn(new RoomAccessPolicy.JoinDecision(null));
@@ -586,6 +702,69 @@ class ChatRoomControllerTest {
     class VerifyPassword {
 
         private final String body = "{\"password\":\"pw\"}";
+        private static final String KEY = "chatflow:room:pw-attempts:r1:user-1";
+
+        @SuppressWarnings("unchecked")
+        private void attempts(Long n) {
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY)), eq("60"))).thenReturn(n);
+        }
+
+        @BeforeEach
+        @SuppressWarnings("unchecked")
+        void attemptCounter() {
+            org.mockito.Mockito.lenient()
+                    .when(redisTemplate.execute(any(RedisScript.class), any(List.class), any()))
+                    .thenReturn(1L);
+        }
+
+        @Test
+        void limiter_is_one_atomic_INCR_with_EXPIRE_on_first_hit() {
+            assertThat(ChatRoomController.PASSWORD_ATTEMPT_SCRIPT.getScriptAsString())
+                    .contains("INCR").contains("EXPIRE").contains("== 1");
+        }
+
+        @Test
+        void returns_429_on_the_sixth_attempt_within_a_minute_without_checking_the_password() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            attempts(6L);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isTooManyRequests());
+
+            verify(chatRoomService, never()).verifyRoomPassword(anyString(), any());
+        }
+
+        @Test
+        void fifth_attempt_is_still_checked() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            attempts(5L);
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(false);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void valkey_down_does_not_block_password_entry() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Locked", RoomType.GENERAL, "u1")));
+            when(redisTemplate.execute(any(RedisScript.class), eq(List.of(KEY)), eq("60")))
+                    .thenThrow(new org.springframework.data.redis.RedisConnectionFailureException("down"));
+            when(chatRoomService.verifyRoomPassword("r1", "pw")).thenReturn(false);
+
+            mockMvc.perform(post("/api/chat/rooms/r1/verify")
+                            .contentType(MediaType.APPLICATION_JSON).content(body)
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isForbidden());
+            verify(chatRoomService).verifyRoomPassword("r1", "pw");
+        }
 
         @Test
         void returns_401_without_userId() throws Exception {

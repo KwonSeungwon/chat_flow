@@ -59,6 +59,25 @@ class MessageReactionServiceTest {
                 .build();
     }
 
+    @Test
+    void rejects_a_51st_distinct_emoji_but_still_allows_joining_an_existing_one() throws Exception {
+        Map<String, java.util.List<String>> fifty = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < 50; i++) fifty.put("e" + i, java.util.List.of("u0"));
+        String json = new ObjectMapper().writeValueAsString(fifty);
+        when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID))
+                .thenReturn(Optional.of(sampleMessage(MESSAGE_ID, ROOM_ID, json)));
+
+        Result<Boolean, ChatErrorCode> rejected =
+                messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "new", "u1");
+        assertThat(rejected.isFailure()).isTrue();
+        assertThat(rejected.error()).isEqualTo(ChatErrorCode.INVALID_INPUT);
+        verify(chatMessageRepository, never()).save(any());
+
+        Result<Boolean, ChatErrorCode> joined =
+                messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "e7", "u1");
+        assertThat(joined.isSuccess()).isTrue();
+    }
+
     // ── AddReaction (toggle-on) ─────────────────────────────────────
 
     @Nested
@@ -68,7 +87,7 @@ class MessageReactionServiceTest {
         @SuppressWarnings("unchecked")
         void adds_user_to_emoji_list_when_first_reactor() throws Exception {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, null);
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
@@ -92,7 +111,7 @@ class MessageReactionServiceTest {
         @Test
         void appends_user_when_others_already_reacted_with_same_emoji() {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u2");
 
@@ -117,7 +136,7 @@ class MessageReactionServiceTest {
         @Test
         void removes_user_when_already_in_list_toggling_off() {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\",\"u2\"]}");
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
@@ -136,7 +155,7 @@ class MessageReactionServiceTest {
         @Test
         void removes_emoji_key_when_last_user_unreacts() {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, "{\"\\uD83D\\uDC4D\":[\"u1\"]}");
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             Result<Boolean, ChatErrorCode> result = messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
@@ -159,7 +178,7 @@ class MessageReactionServiceTest {
         @SuppressWarnings("unchecked")
         void broadcasts_REACTION_UPDATED_with_full_map() {
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, ROOM_ID, null);
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");
 
@@ -185,7 +204,7 @@ class MessageReactionServiceTest {
 
         @Test
         void returns_NOT_FOUND_when_message_does_not_exist() {
-            when(chatMessageRepository.findById("nonexistent")).thenReturn(Optional.empty());
+            when(chatMessageRepository.findByIdForUpdate("nonexistent")).thenReturn(Optional.empty());
 
             Result<Boolean, ChatErrorCode> result =
                     messageReactionService.toggleReaction(ROOM_ID, "nonexistent", "👍", "u1");
@@ -200,7 +219,7 @@ class MessageReactionServiceTest {
         void returns_NOT_FOUND_when_message_belongs_to_different_room() {
             // Message exists in room-2 but caller is authorized for room-1
             ChatMessageEntity message = sampleMessage(MESSAGE_ID, "room-2", null);
-            when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(message));
+            when(chatMessageRepository.findByIdForUpdate(MESSAGE_ID)).thenReturn(Optional.of(message));
 
             Result<Boolean, ChatErrorCode> result =
                     messageReactionService.toggleReaction(ROOM_ID, MESSAGE_ID, "👍", "u1");

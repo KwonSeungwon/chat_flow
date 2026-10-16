@@ -25,7 +25,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
         if (member == null && auth == null) return true;
 
-        String userId = request.getHeader(AuthHeaders.X_USER_ID);
+        String userId = AuthHeaders.authenticatedUserId();
         if (userId == null || userId.isBlank()) {
             throw new UnauthorizedException("인증이 필요합니다.");
         }

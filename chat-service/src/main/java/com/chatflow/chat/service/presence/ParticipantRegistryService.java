@@ -102,6 +102,17 @@ public class ParticipantRegistryService {
         }
     }
 
+    /** Drops every session entry of {@code userId} in the room (kick / ban). */
+    public void removeUser(String roomId, String userId) {
+        String key = KEY_PREFIX + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(key);
+        if (members == null) return;
+        members.stream()
+                .filter(e -> e.startsWith(userId + ":"))
+                .forEach(e -> redisTemplate.opsForSet().remove(key, e));
+        syncParticipantCount(roomId);
+    }
+
     public boolean userStillPresent(String roomId, String username) {
         Set<String> remaining = redisTemplate.opsForSet().members(KEY_PREFIX + roomId);
         return remaining != null && remaining.stream().anyMatch(e -> e.endsWith(":" + username));

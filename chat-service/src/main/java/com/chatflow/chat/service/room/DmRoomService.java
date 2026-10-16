@@ -6,7 +6,6 @@ import com.chatflow.chat.repository.ChatRoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,8 +19,16 @@ public class DmRoomService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomCacheEvictor roomCacheEvictor;
 
-    @Transactional
+    // Deliberately not @Transactional: save() commits in its own transaction, so
+    // the loser of a concurrent create (V2 unique DM name) can re-read the winner.
     public ChatRoom createOrFindDmRoom(String userId1, String username1, String userId2, String username2) {
+        if (userId1.equals(userId2)) {
+            throw new IllegalArgumentException("자기 자신과는 DM을 만들 수 없습니다.");
+        }
+        // Identity is the userId pair in room_members (covers existing name-keyed rooms,
+        // whose members V5 and DM creation seeded). Names below are server-resolved.
+        List<ChatRoom> byMembers = chatRoomRepository.findDmRoomByMembers(userId1, userId2);
+        if (!byMembers.isEmpty()) return byMembers.get(0);
         // Canonicalize by sorting usernames so any argument order produces the
         // same name. Prevents duplicate DM rooms under concurrent swapped-order requests.
         String canonicalName = buildCanonicalDmName(username1, username2);

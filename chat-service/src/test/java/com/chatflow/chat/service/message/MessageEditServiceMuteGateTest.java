@@ -113,15 +113,42 @@ class MessageEditServiceMuteGateTest {
     }
 
     @Test
-    @DisplayName("멤버 레코드가 없으면 (방을 나간 사용자 등) mute 게이트 skip")
-    void editMessage_memberRecordMissing_proceeds() {
+    @DisplayName("멤버 레코드가 없으면 (강퇴·밴·나간 사용자) 편집 거부")
+    void editMessage_memberRecordMissing_isForbidden() {
         when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
         when(roomMemberRepository.findByRoomIdAndUserId(ROOM_ID, USER_ID))
                 .thenReturn(Optional.empty());
-        when(messageEncryptor.isEnabled()).thenReturn(false);
 
         Result<Void, ChatErrorCode> result = service.editMessage(MESSAGE_ID, USER_ID, "edited content");
 
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.error()).isEqualTo(ChatErrorCode.FORBIDDEN);
+        verify(chatMessageRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("멤버가 아니면 (강퇴·밴·나간 사용자) 자기 메시지도 삭제 거부")
+    void deleteMessage_nonMember_isForbidden() {
+        when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
+        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(false);
+
+        Result<Void, ChatErrorCode> result = service.deleteMessage(MESSAGE_ID, USER_ID);
+
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.error()).isEqualTo(ChatErrorCode.FORBIDDEN);
+        verify(chatMessageRepository, never()).save(any());
+        verify(messagingTemplate, never()).convertAndSend(anyString(), (Object) any());
+    }
+
+    @Test
+    @DisplayName("현재 멤버는 자기 메시지를 삭제할 수 있다")
+    void deleteMessage_member_proceeds() {
+        when(chatMessageRepository.findById(MESSAGE_ID)).thenReturn(Optional.of(msg));
+        when(roomMemberRepository.existsByRoomIdAndUserId(ROOM_ID, USER_ID)).thenReturn(true);
+
+        Result<Void, ChatErrorCode> result = service.deleteMessage(MESSAGE_ID, USER_ID);
+
         assertThat(result.isSuccess()).isTrue();
+        verify(chatMessageRepository).save(msg);
     }
 }

@@ -45,7 +45,18 @@ class LinkPreviewServiceTest {
     private String baseUrl;
 
     private static final String TEST_URL = "https://example.com/page";
-    private static final String CACHE_KEY = "chatflow:link-preview:" + TEST_URL;
+    private static final String CACHE_KEY = cacheKey(TEST_URL);
+
+    /** Cache key = prefix + SHA-256(hex) of the whole URL. */
+    private static String cacheKey(String url) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(url.getBytes(StandardCharsets.UTF_8));
+            return "chatflow:link-preview:" + java.util.HexFormat.of().formatHex(d);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -81,7 +92,7 @@ class LinkPreviewServiceTest {
 
     private void cacheMiss(String url) {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get(CACHE_KEY.replace(TEST_URL, url))).thenReturn(null);
+        when(valueOps.get(cacheKey(url))).thenReturn(null);
     }
 
     // ── Cache hit ────────────────────────────────────────────────
@@ -102,6 +113,18 @@ class LinkPreviewServiceTest {
         assertEquals("Cached Title", result.value().get("title"));
         assertEquals("Cached Desc", result.value().get("description"));
         assertEquals("https://example.com/img.png", result.value().get("image"));
+    }
+
+    @Test
+    void urls_sharing_a_long_prefix_do_not_share_a_cache_entry() throws Exception {
+        String prefix = "https://example.com/" + "a".repeat(250);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(cacheKey(prefix + "?x=1")))
+                .thenReturn(objectMapper.writeValueAsString(Map.of("title", "First")));
+
+        assertEquals("First", linkPreviewService.fetch(prefix + "?x=1").value().get("title"));
+        verify(valueOps).get(cacheKey(prefix + "?x=1"));
+        assertNotEquals(cacheKey(prefix + "?x=1"), cacheKey(prefix + "?x=2"));
     }
 
     // ── Cache miss → HTTP fetch + cache write ────────────────────
@@ -130,7 +153,7 @@ class LinkPreviewServiceTest {
 
         ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
-        verify(valueOps).set(eq(CACHE_KEY.replace(TEST_URL, url)), jsonCaptor.capture(), ttlCaptor.capture());
+        verify(valueOps).set(eq(cacheKey(url)), jsonCaptor.capture(), ttlCaptor.capture());
         assertEquals(Duration.ofHours(1), ttlCaptor.getValue());
         Map<String, String> written = objectMapper.readValue(jsonCaptor.getValue(), new TypeReference<>() {});
         assertEquals("OG Title", written.get("title"));

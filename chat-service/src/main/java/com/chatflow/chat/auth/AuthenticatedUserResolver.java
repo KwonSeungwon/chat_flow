@@ -21,7 +21,7 @@ public class AuthenticatedUserResolver implements HandlerMethodArgumentResolver 
                                    NativeWebRequest webRequest,
                                    WebDataBinderFactory binderFactory) {
         AuthenticatedUser anno = parameter.getParameterAnnotation(AuthenticatedUser.class);
-        String value = webRequest.getHeader(AuthHeaders.X_USER_ID);
+        String value = AuthHeaders.authenticatedUserId();
         boolean blank = value == null || value.isBlank();
         if (blank) {
             if (anno != null && !anno.required()) return null;

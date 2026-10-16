@@ -114,6 +114,23 @@ public class GlobalExceptionHandler extends BaseExceptionHandler {
                 .body(ErrorResponse.of(429, "QUOTA_EXCEEDED", e.getMessage()));
     }
 
+    /** A constraint the request should not have broken (length, uniqueness) — client error, not 500. */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(
+            org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("Data integrity violation: {}", e.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(409, "DATA_CONFLICT", "요청 값이 저장 규칙에 맞지 않습니다."));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        log.warn("Upload too large: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ErrorResponse.of(413, "PAYLOAD_TOO_LARGE", "파일이 허용 크기를 초과합니다."));
+    }
+
     /** Wiki Dungeon game errors carry their own status and stable code. */
     @ExceptionHandler(GameException.class)
     public ResponseEntity<ErrorResponse> handleGame(GameException e) {
