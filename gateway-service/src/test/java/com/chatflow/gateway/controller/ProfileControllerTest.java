@@ -46,7 +46,6 @@ class ProfileControllerTest {
                 .seq(1L)
                 .userId(USER_ID)
                 .username(USERNAME)
-                .role("NURSE")
                 .profileImageUrl("https://cdn/avatar.png")
                 .statusMessage(null)
                 .bio(null)

@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -143,6 +145,46 @@ class ChatControllerTest {
     }
 
     @Test
+    @DisplayName("retired type PATIENT_CARD from an old client is rejected with an error to the sender")
+    void sendMessage_typePatientCard_rejected() throws Exception {
+        InboundChatCommand command = objectMapper.readValue("""
+                {"chatRoomId":"room-1","content":"{}","type":"PATIENT_CARD"}
+                """, InboundChatCommand.class);
+
+        chatController.sendMessage(command, headerAccessor);
+
+        verifyNoInteractions(chatService);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq(USER_ID), eq("/queue/errors"), any(Map.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CHAT", "FILE"})
+    @DisplayName("user-sendable types arriving as JSON strings are accepted")
+    void sendMessage_userTypeFromJson_accepted(String type) throws Exception {
+        InboundChatCommand command = objectMapper.readValue(
+                "{\"chatRoomId\":\"room-1\",\"content\":\"hi\",\"type\":\"" + type + "\"}",
+                InboundChatCommand.class);
+        givenMember();
+
+        chatController.sendMessage(command, headerAccessor);
+
+        ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
+        verify(chatService).processMessage(captor.capture(), any());
+        assertThat(captor.getValue().getType()).isEqualTo(ChatMessage.MessageType.valueOf(type));
+    }
+
+    @Test
+    @DisplayName("rejected type is logged sanitized: control chars stripped, 32-char cap, UNKNOWN fallback")
+    void loggableType_sanitizes() {
+        assertThat(ChatController.loggableType("PATIENT_CARD")).isEqualTo("PATIENT_CARD");
+        assertThat(ChatController.loggableType("FOO\nforged log line")).isEqualTo("FOOforged log line");
+        assertThat(ChatController.loggableType("x".repeat(100))).hasSize(32);
+        assertThat(ChatController.loggableType("\r\n")).isEqualTo("UNKNOWN");
+        assertThat(ChatController.loggableType(null)).isEqualTo("UNKNOWN");
+    }
+
+    @Test
     @DisplayName("S-6: isAiGenerated in the payload never reaches the message")
     void sendMessage_aiGeneratedFlag_forcedFalse() throws Exception {
         InboundChatCommand command = objectMapper.readValue("""
@@ -158,7 +200,7 @@ class ChatControllerTest {
     }
 
     @Test
-    @DisplayName("null type defaults to CHAT; client fields (file, priority, clientMessageId) are carried")
+    @DisplayName("null type defaults to CHAT; client fields (file, clientMessageId) are carried, legacy priority ignored")
     void sendMessage_clientFieldsCarried_nullTypeDefaultsToChat() throws Exception {
         InboundChatCommand command = objectMapper.readValue("""
                 {"chatRoomId":"room-1","content":"see file","priority":"URGENT",
@@ -173,7 +215,6 @@ class ChatControllerTest {
         verify(chatService).processMessage(captor.capture(), any());
         ChatMessage sent = captor.getValue();
         assertThat(sent.getType()).isEqualTo(ChatMessage.MessageType.CHAT);
-        assertThat(sent.getPriority()).isEqualTo("URGENT");
         assertThat(sent.getFileUrl()).isEqualTo("/api/files/a.pdf");
         assertThat(sent.getFileName()).isEqualTo("a.pdf");
         assertThat(sent.getFileContentType()).isEqualTo("application/pdf");
@@ -370,8 +411,8 @@ class ChatControllerTest {
     }
 
     private InboundChatCommand buildCommand(ChatMessage.MessageType type) {
-        return new InboundChatCommand(ROOM_ID, "hello", type, null, null, null, null, null,
-                null, null, null, null);
+        return new InboundChatCommand(ROOM_ID, "hello", type.name(), null, null, null, null, null,
+                null, null, null);
     }
 
     private ChatMessage buildChatMessage() {

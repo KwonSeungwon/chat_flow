@@ -35,7 +35,7 @@ class _TestHarnessState extends State<_TestHarness> {
     return Scaffold(
       body: ChatInput(
         isConnected: true,
-        onSend: (_, {String priority = 'ROUTINE'}) {},
+        onSend: (_) {},
         roomId: widget.roomIdNotifier.value,
       ),
     );

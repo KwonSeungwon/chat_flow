@@ -22,7 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V19) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V20) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -104,8 +104,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 19 versioned migrations (V1..V19) should have been executed")
-                .isEqualTo(19);
+                .as("All 20 versioned migrations (V1..V20) should have been executed")
+                .isEqualTo(20);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;
@@ -428,6 +428,108 @@ class FlywayMigrationTest {
                 .as("game entities should validate against the V19 schema")
                 .doesNotThrowAnyException();
         factory.destroy();
+    }
+
+    // ── Test 15: V20 — medical concepts normalized on existing data ──────
+
+    /**
+     * Migrates a fresh database to V19, seeds pre-rebrand data (a HANDOFF room with the
+     * teal default color and allowed roles, a PATIENT_CARD, an SBAR card, a reply to the
+     * card, a mention and a report on the card), then applies V20.
+     */
+    @Test
+    void v20_normalizesHandoffRoomsAndDeletesMedicalCards() throws SQLException {
+        final String db = "chatflow_v20";
+        try (Connection conn = connect(POSTGRES.getDatabaseName());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE DATABASE " + db);
+        }
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE users (user_id VARCHAR(50) PRIMARY KEY, username VARCHAR(100) NOT NULL)");
+        }
+        Flyway.configure()
+                .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .target("19")
+                .load()
+                .migrate();
+
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("INSERT INTO chat_rooms (id, name, color, room_type, allowed_roles, created_at) VALUES "
+                    + "('r-handoff', 'Ward', '#00796B', 'HANDOFF', 'NURSE,DOCTOR', now()), "
+                    + "('r-general', 'Lounge', '#ff0000', 'GENERAL', 'NURSE', now())");
+            stmt.executeUpdate("UPDATE chat_rooms SET pinned_message_id = 'm-card' WHERE id = 'r-handoff'");
+            stmt.executeUpdate("INSERT INTO chat_messages (message_id, chat_room_id, username, content, timestamp, type) VALUES "
+                    + "('m-card', 'r-handoff', 'a', '{\"name\":\"x\"}', now(), 'PATIENT_CARD'), "
+                    + "('m-sbar', 'r-handoff', 'a', '{\"type\":\"SBAR\",\"s\":\"x\"}', now(), 'CHAT'), "
+                    + "('m-text', 'r-handoff', 'a', 'hello', now(), 'CHAT')");
+            stmt.executeUpdate("INSERT INTO chat_messages (message_id, chat_room_id, username, content, timestamp, type, "
+                    + "parent_message_id, parent_message_preview) VALUES "
+                    + "('m-reply', 'r-handoff', 'b', 'ok', now(), 'CHAT', 'm-sbar', 'a: {\"type\":\"SBAR\"')");
+            stmt.executeUpdate("INSERT INTO message_mentions (message_id, room_id, mentioned_user_id, mentioned_username, "
+                    + "from_username) VALUES ('m-card', 'r-handoff', 'u-b', 'b', 'a'), ('m-text', 'r-handoff', 'u-b', 'b', 'a')");
+            stmt.executeUpdate("INSERT INTO message_reports (message_id, room_id, reported_by, reason) "
+                    + "VALUES ('m-sbar', 'r-handoff', 'u-b', 'SPAM')");
+            stmt.executeUpdate("INSERT INTO message_edit_history (message_id, previous_content, edited_at, edited_by) VALUES "
+                    + "('m-card', 'old card', now(), 'a'), "
+                    + "('m-text', '{\"type\":\"SBAR\",\"s\":\"y\"}', now(), 'a'), "
+                    + "('m-text', 'helo', now(), 'a')");
+        }
+
+        MigrateResult v20 = Flyway.configure()
+                .dataSource(jdbcUrl(db), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+        assertThat(v20.success).isTrue();
+
+        try (Connection conn = connect(db);
+             Statement stmt = conn.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT room_type, color, allowed_roles, pinned_message_id FROM chat_rooms WHERE id = 'r-handoff'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isEqualTo("GENERAL");
+                assertThat(rs.getString(2)).isEqualTo("#6366f1");
+                assertThat(rs.getString(3)).isNull();
+                assertThat(rs.getString(4)).isNull();
+            }
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT color, allowed_roles FROM chat_rooms WHERE id = 'r-general'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isEqualTo("#ff0000");
+                assertThat(rs.getString(2)).isNull();
+            }
+            Set<String> remaining = new HashSet<>();
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id FROM chat_messages")) {
+                while (rs.next()) remaining.add(rs.getString(1));
+            }
+            assertThat(remaining).containsExactlyInAnyOrder("m-text", "m-reply");
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT parent_message_id, parent_message_preview FROM chat_messages WHERE message_id = 'm-reply'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isNull();
+                assertThat(rs.getString(2)).isNull();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id FROM message_mentions")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("m-text");
+                assertThat(rs.next()).isFalse();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM message_reports")) {
+                rs.next();
+                assertThat(rs.getInt(1)).isZero();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id, previous_content FROM message_edit_history")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("m-text");
+                assertThat(rs.getString(2)).isEqualTo("helo");
+                assertThat(rs.next()).isFalse();
+            }
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

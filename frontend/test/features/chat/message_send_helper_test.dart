@@ -9,7 +9,6 @@ import 'package:chatflow/features/chat/internal/message_send_helper.dart';
 import 'package:chatflow/features/chat/internal/stomp_message_dispatcher.dart';
 import 'package:chatflow/features/chat/state/chat_messages_state.dart';
 import 'package:chatflow/shared/models/chat_message.dart';
-import 'package:chatflow/shared/models/patient_card.dart';
 
 class _FakeStomp extends StompService {
   bool connected = false;
@@ -159,15 +158,13 @@ void main() {
         reason: 'the bubble stays until its echo replaces it');
   });
 
-  test('patientCardWhileOffline_queued', () {
-    h.helper.sendPatientCard(
-      'room-1',
-      const PatientCard(patientName: 'P', roomNumber: '101', diagnosis: 'D'),
-    );
+  test('sendMessage_payloadHasNoPriority', () {
+    h.stomp.connected = true;
+    h.helper.sendMessage(roomId: 'room-1', content: 'hi');
 
-    expect(h.stomp.sent, isEmpty);
-    expect(h.queue.length, 1);
-    expect(h.state.messages.single.type, 'PATIENT_CARD');
+    final payload = h.stomp.sent.single;
+    expect(payload['type'], 'CHAT');
+    expect(payload.containsKey('priority'), isFalse);
   });
 
   test('retry_reusesClientId_secondEchoDropped', () {

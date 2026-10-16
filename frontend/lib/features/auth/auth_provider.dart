@@ -15,7 +15,6 @@ class AuthState {
   final String? token;
   final String? userId;
   final String username;
-  final String role;
   final String? profileImageUrl;
   final bool isLoading;
   final String? error;
@@ -25,7 +24,6 @@ class AuthState {
     this.token,
     this.userId,
     this.username = '',
-    this.role = 'NURSE',
     this.profileImageUrl,
     this.isLoading = false,
     this.error,
@@ -38,7 +36,6 @@ class AuthState {
     String? token,
     String? userId,
     String? username,
-    String? role,
     String? profileImageUrl,
     bool clearProfileImageUrl = false,
     bool? isLoading,
@@ -49,7 +46,6 @@ class AuthState {
       token: token ?? this.token,
       userId: userId ?? this.userId,
       username: username ?? this.username,
-      role: role ?? this.role,
       profileImageUrl:
           clearProfileImageUrl ? null : (profileImageUrl ?? this.profileImageUrl),
       isLoading: isLoading ?? this.isLoading,
@@ -100,13 +96,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final userId = await _storage.read(key: StorageKeys.userId);
       final username = await _storage.read(key: StorageKeys.username);
       if (token != null && !_isJwtExpired(token)) {
-        final role = await _storage.read(key: StorageKeys.role);
         final profileImageUrl = await _storage.read(key: StorageKeys.profileImage);
         state = AuthState(
           token: token,
           userId: userId,
           username: username ?? '',
-          role: role ?? 'NURSE',
           profileImageUrl: profileImageUrl,
           isHydrated: true,
         );
@@ -158,10 +152,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      final role = resp.data['role']?.toString() ?? 'NURSE';
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
-      await _saveCredentials(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl);
-      state = AuthState(token: token, userId: userId, username: username, role: role, profileImageUrl: profileImageUrl, isHydrated: true);
+      await _saveCredentials(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl, isHydrated: true);
       // Re-arm the beforeunload handler — was unregistered on previous logout,
       // and main.dart only registers once at startup. Without this, FCM topics
       // would not be detached on tab close for the new session.
@@ -220,19 +213,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> register(String username, String password, {String role = 'NURSE'}) async {
+  Future<void> register(String username, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final resp = await _dioClient.dio.post(
         '/api/auth/register',
-        data: {'username': username, 'password': password, 'role': role},
+        data: {'username': username, 'password': password},
       );
       final token = resp.data['token'] as String;
       final userId = resp.data['userId']?.toString() ?? '';
-      final respRole = resp.data['role']?.toString() ?? role;
       final profileImageUrl = resp.data['profileImageUrl']?.toString();
-      await _saveCredentials(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl);
-      state = AuthState(token: token, userId: userId, username: username, role: respRole, profileImageUrl: profileImageUrl, isHydrated: true);
+      await _saveCredentials(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl, isHydrated: true);
       _armBeforeUnloadHandler();
     } on DioException catch (e) {
       final code = e.response?.statusCode;
@@ -285,13 +277,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String token,
     required String userId,
     required String username,
-    String role = 'NURSE',
     String? profileImageUrl,
   }) async {
     await _storage.write(key: StorageKeys.token, value: token);
     await _storage.write(key: StorageKeys.userId, value: userId);
     await _storage.write(key: StorageKeys.username, value: username);
-    await _storage.write(key: StorageKeys.role, value: role);
     if (profileImageUrl != null) {
       await _storage.write(key: StorageKeys.profileImage, value: profileImageUrl);
     } else {

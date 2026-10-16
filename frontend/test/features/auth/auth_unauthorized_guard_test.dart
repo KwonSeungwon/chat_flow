@@ -67,7 +67,7 @@ void main() {
 
   test('세션이 있으면 401에 state를 리셋한다 — 강제 로그아웃', () async {
     final (notifier, client) = notifierWith({
-      '/api/auth/login': (200, '{"token":"t","userId":"u1","role":"NURSE"}'),
+      '/api/auth/login': (200, '{"token":"t","userId":"u1"}'),
     });
     addTearDown(notifier.dispose);
 

@@ -13,12 +13,12 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({
       StorageKeys.userId: 'u1',
       RoomKeywordsNotifier.storageKeyFor('u1'): jsonEncode({
-        'room-1': ['urgent'],
+        'room-1': ['lunch'],
       }),
     });
 
     expect(
-        await FcmService.checkKeywordMatch('room-1', 'This is URGENT'), isTrue);
+        await FcmService.checkKeywordMatch('room-1', 'Is LUNCH ready'), isTrue);
     expect(await FcmService.checkKeywordMatch('room-1', 'all fine'), isFalse);
   });
 
@@ -26,20 +26,20 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({
       StorageKeys.userId: 'u2',
       RoomKeywordsNotifier.storageKeyFor('u1'): jsonEncode({
-        'room-1': ['urgent'],
+        'room-1': ['lunch'],
       }),
     });
 
-    expect(await FcmService.checkKeywordMatch('room-1', 'urgent'), isFalse);
+    expect(await FcmService.checkKeywordMatch('room-1', 'lunch'), isFalse);
   });
 
   test('keywordMatch_noUser_noFilter', () async {
     FlutterSecureStorage.setMockInitialValues({
       'chatflow.roomKeywords': jsonEncode({
-        'room-1': ['urgent'],
+        'room-1': ['lunch'],
       }),
     });
 
-    expect(await FcmService.checkKeywordMatch('room-1', 'urgent'), isFalse);
+    expect(await FcmService.checkKeywordMatch('room-1', 'lunch'), isFalse);
   });
 }

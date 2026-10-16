@@ -1,15 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/time_format.dart';
 import '../../../shared/models/chat_message.dart';
-import '../../../shared/models/patient_card.dart';
-import 'bubbles/avatar.dart';
 import 'bubbles/chat_bubble.dart';
 import 'bubbles/file_bubble.dart';
-import 'bubbles/patient_card_bubble.dart';
-import 'bubbles/sbar_card.dart';
 import 'bubbles/system_bubble.dart';
 import 'dividers/date_divider.dart';
 import 'dividers/unread_divider.dart';
@@ -504,49 +499,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             Widget bubble;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
               bubble = SystemBubble(msg: msg);
-            } else if (type == 'PATIENT_CARD') {
-              final card = PatientCard.tryParseContent(msg.content);
-              final isMine = msg.username == widget.currentUsername;
-              final readCount = widget.readCounts[msg.effectiveId] ?? 0;
-              if (card != null) {
-                bubble = PatientCardBubble(
-                  msg: msg,
-                  card: card,
-                  isMine: isMine,
-                  time: _formatTime(msg.timestamp),
-                  readCount: readCount,
-                );
-              } else {
-                // Malformed JSON — fall back to plain text bubble so the
-                // message is not silently hidden.
-                bubble = ChatBubble(
-                  msg: msg,
-                  isMine: isMine,
-                  me: widget.currentUsername,
-                  time: _formatTime(msg.timestamp),
-                  readCount: readCount,
-                  onReply: (!msg.deleted && widget.onReplySelected != null)
-                      ? () => widget.onReplySelected!(msg)
-                      : null,
-                  onScrollToParent: (msg.isReply && msg.parentMessageId != null && widget.onScrollToParentMessage != null)
-                      ? () => widget.onScrollToParentMessage!(msg.parentMessageId!)
-                      : null,
-                  onDelete: (isMine && !msg.deleted && widget.onDeleteMessage != null)
-                      ? () => widget.onDeleteMessage!(msg.effectiveId)
-                      : null,
-                  onEdit: (isMine && !msg.deleted && widget.onEditMessage != null)
-                      ? () => widget.onEditMessage!(msg.effectiveId, msg.content)
-                      : null,
-                  onViewEditHistory: (msg.edited && !msg.deleted && widget.onViewEditHistory != null)
-                      ? () => widget.onViewEditHistory!(msg.effectiveId, msg.content)
-                      : null,
-                  onReadCountTap: (isMine && readCount > 0 && widget.onReadCountTap != null)
-                      ? () => widget.onReadCountTap!(msg.effectiveId)
-                      : null,
-                  onOpenThread: widget.onOpenThread,
-                  replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
-                );
-              }
             } else if (msg.isFileMessage) {
               final isMine = msg.username == widget.currentUsername;
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
@@ -559,40 +511,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
               );
             } else {
-              // SBAR structured message detection
-              Map<String, dynamic>? sbarData;
-              if (msg.content.startsWith('{') && msg.content.contains('"type":"SBAR"')) {
-                try { sbarData = jsonDecode(msg.content) as Map<String, dynamic>; } catch (_) {}
-              }
-
               final isAiQuestion = msg.content.startsWith('[AI에게] ');
               final readCount = widget.readCounts[msg.effectiveId] ?? 0;
               final isMine = msg.username == widget.currentUsername;
 
-              if (sbarData != null) {
-                bubble = Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!isMine) ...[
-                        Avatar(name: msg.username, color: avatarColor(msg.username)),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(child: Column(
-                        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                        children: [
-                          if (!isMine && isFirstInGroup)
-                            Padding(padding: const EdgeInsets.only(left: 4, bottom: 3), child: Text(msg.username, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant))),
-                          SbarCard(sbar: sbarData),
-                          if (showTime) Padding(padding: const EdgeInsets.only(top: 2), child: Text(_formatTime(msg.timestamp), style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(140)))),
-                        ],
-                      )),
-                      if (isMine) const SizedBox(width: 6),
-                    ],
-                  ),
-                );
-              } else {
               bubble = ChatBubble(
                 msg: msg,
                 isMine: isMine,
@@ -639,7 +561,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
                 onOpenThread: widget.onOpenThread,
                 replyCount: widget.replyCountFor?.call(msg.effectiveId) ?? 0,
               );
-              } // end non-SBAR else
             }
 
             // Wrap with highlight overlay for search-navigated messages

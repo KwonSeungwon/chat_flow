@@ -20,7 +20,7 @@ class _Adapter implements HttpClientAdapter {
     String body = '{}';
     if (options.path == '/api/auth/login') {
       current = (options.data as Map)['username'] as String;
-      body = '{"token":"t-$current","userId":"$current","role":"NURSE"}';
+      body = '{"token":"t-$current","userId":"$current"}';
     } else if (options.path == '/api/users/me') {
       meCalls++;
       body = '{"id":"$current","username":"$current",'

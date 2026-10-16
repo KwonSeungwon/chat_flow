@@ -21,7 +21,7 @@ class _Adapter implements HttpClientAdapter {
     String body = '[]';
     if (options.path == '/api/auth/login') {
       final u = (options.data as Map)['username'];
-      body = '{"token":"t-$u","userId":"$u","role":"NURSE"}';
+      body = '{"token":"t-$u","userId":"$u"}';
     } else if (options.path.startsWith('/api/chat/scheduled-messages')) {
       scheduledCalls++;
     }
@@ -86,13 +86,13 @@ void main() {
     final sub = container.listen(roomKeywordsProvider, (_, __) {});
     addTearDown(sub.close);
     await loginAs('alice');
-    await container.read(roomKeywordsProvider.notifier).setKeywords('r1', ['urgent']);
+    await container.read(roomKeywordsProvider.notifier).setKeywords('r1', ['lunch']);
 
     await loginAs('bob');
     expect(container.read(roomKeywordsProvider), isEmpty);
 
     await loginAs('alice');
-    expect(container.read(roomKeywordsProvider)['r1'], ['urgent']);
+    expect(container.read(roomKeywordsProvider)['r1'], ['lunch']);
   });
 
   test('notification policy: B does not inherit A mute', () async {

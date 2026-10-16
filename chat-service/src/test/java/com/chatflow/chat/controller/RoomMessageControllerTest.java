@@ -113,5 +113,23 @@ class RoomMessageControllerTest {
                     && "alice: world".equals(msg.getForwardedFrom())
             ));
         }
+
+        @Test
+        @DisplayName("old client priority field is ignored -> 200")
+        void ignores_legacy_priority_field() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("content", "hello", "priority", "STAT"));
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isOk());
+
+            verify(messageSenderService).send(argThat(msg -> "hello".equals(msg.getContent())));
+        }
     }
 }

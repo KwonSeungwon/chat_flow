@@ -82,7 +82,7 @@ class ChatPage extends ConsumerWidget {
               },
             )
         : null;
-    final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'ChatFlow';
+    final roomDisplayName = roomData?.name ?? effectiveRoomId ?? 'Gossiplog';
 
     return PopScope(
       canPop: effectiveRoomId == null || isWide,
@@ -275,10 +275,6 @@ class ChatPage extends ConsumerWidget {
                     Text(
                       auth.username.isNotEmpty ? auth.username : '사용자',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    Text(
-                      auth.role,
-                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),

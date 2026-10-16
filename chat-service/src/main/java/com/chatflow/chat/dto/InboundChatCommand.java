@@ -15,30 +15,37 @@ import java.util.Set;
  * contract is stable; {@code fileType} is a legacy alias for {@code fileContentType}
  * (the key the Flutter client actually sends).
  *
- * @param type            one of {@link #ALLOWED_TYPES}; {@code null} means CHAT
+ * @param type            a {@link MessageType} name, one of {@link #ALLOWED_TYPES}; {@code null}
+ *                        or blank means CHAT. Kept as a string so an unknown or retired name
+ *                        (e.g. PATIENT_CARD from an old client) reaches the rejection path
+ *                        instead of failing deserialization silently.
  * @param clientMessageId optional client-side id, echoed back on the broadcast
- * @param priority        ROUTINE / URGENT ...; {@code null} or blank means ROUTINE
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record InboundChatCommand(
-        String chatRoomId, String content, MessageType type,
+        String chatRoomId, String content, String type,
         String parentMessageId, String fileUrl, String fileName, Long fileSize, String fileType,
         String clientMessageId,
         String forwardedFrom,
-        String priority, String fileContentType) {
+        String fileContentType) {
 
     /** The only message types a user may author. Everything else is server-generated. */
     public static final Set<MessageType> ALLOWED_TYPES =
-            Set.of(MessageType.CHAT, MessageType.FILE, MessageType.PATIENT_CARD);
+            Set.of(MessageType.CHAT, MessageType.FILE);
 
-    private static final String DEFAULT_PRIORITY = "ROUTINE";
-
+    /** The requested type, CHAT when absent, or {@code null} when the name is unknown. */
     public MessageType effectiveType() {
-        return type != null ? type : MessageType.CHAT;
+        if (type == null || type.isBlank()) return MessageType.CHAT;
+        try {
+            return MessageType.valueOf(type);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public boolean hasAllowedType() {
-        return ALLOWED_TYPES.contains(effectiveType());
+        MessageType effective = effectiveType();
+        return effective != null && ALLOWED_TYPES.contains(effective);
     }
 
     /** Builds the outbound message stamped with the session identity. */
@@ -49,7 +56,6 @@ public record InboundChatCommand(
         message.setUsername(username);
         message.setContent(content);
         message.setType(effectiveType());
-        message.setPriority(priority != null && !priority.isBlank() ? priority : DEFAULT_PRIORITY);
         message.setParentMessageId(parentMessageId);
         message.setFileUrl(fileUrl);
         message.setFileName(fileName);

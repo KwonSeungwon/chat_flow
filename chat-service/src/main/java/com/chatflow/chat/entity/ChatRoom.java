@@ -40,7 +40,7 @@ public class ChatRoom {
     private String externalId;
 
     @Builder.Default
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = RoomTypeConverter.class)
     @Column(name = "room_type", length = 20)
     private RoomType roomType = RoomType.GENERAL;
 
@@ -56,9 +56,6 @@ public class ChatRoom {
     @Builder.Default
     @Column(name = "allow_invites")
     private boolean allowInvites = true;
-
-    @Column(name = "allowed_roles", length = 200)
-    private String allowedRoles;
 
     @Builder.Default
     @Column(name = "participant_count")

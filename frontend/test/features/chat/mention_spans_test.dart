@@ -16,8 +16,8 @@ List<String> highlightedAsMe(String content, {String? me}) =>
 void main() {
   group('findMentionSpans — general', () {
     test('finds ascii, Hangul, dotted and underscored names', () {
-      expect(highlighted('hi @bob and @김간호사, also @under_score and @phill.park'),
-          ['@bob', '@김간호사', '@under_score', '@phill.park']);
+      expect(highlighted('hi @bob and @김철수, also @under_score and @phill.park'),
+          ['@bob', '@김철수', '@under_score', '@phill.park']);
     });
 
     test('returns nothing when there is no @', () {
@@ -35,8 +35,8 @@ void main() {
     });
 
     test('trailing punctuation stays out of the highlight', () {
-      expect(highlighted('@bob, @김간호사! @phill.park.'),
-          ['@bob', '@김간호사', '@phill.park']);
+      expect(highlighted('@bob, @김철수! @phill.park.'),
+          ['@bob', '@김철수', '@phill.park']);
     });
 
     test('leading punctuation cannot open a name', () {
@@ -94,9 +94,9 @@ void main() {
     });
 
     test('a Korean particle glued to my name is not a mention', () {
-      // The server cannot resolve "@김간호사님" either, so highlighting it
+      // The server cannot resolve "@김철수님" either, so highlighting it
       // would promise a notification that never arrives.
-      expect(highlightedAsMe('@김간호사님 안녕', me: '김간호사'), isEmpty);
+      expect(highlightedAsMe('@김철수님 안녕', me: '김철수'), isEmpty);
     });
 
     test('an empty or absent username never matches', () {
