@@ -181,4 +181,63 @@ void main() {
     expect(service.isConnected, isTrue);
     service.disconnect();
   });
+
+  testWidgets('retriesExhausted_keepsRetryingPeriodically', (tester) async {
+    connect();
+    // Every attempt fails; well past the backoff budget it must still retry.
+    for (var i = 0; i < 14; i++) {
+      clients.last.config.onWebSocketError('down');
+      await tester.pump(const Duration(seconds: 31));
+      expect(clients, hasLength(i + 2), reason: 'attempt ${i + 1}');
+    }
+    service.disconnect();
+  });
+
+  testWidgets('reconnectNow_whileDown_connectsImmediately', (tester) async {
+    connect();
+    clients.single.config.onWebSocketError('down'); // backoff pending
+
+    service.reconnectNow(); // e.g. app resumed
+    await tester.pump();
+
+    expect(clients, hasLength(2));
+    // The pending backoff timer was replaced, not doubled.
+    await tester.pump(const Duration(seconds: 2));
+    expect(clients, hasLength(2));
+    service.disconnect();
+  });
+
+  test('reconnectNow_whenConnectedOrLeft_isNoop', () {
+    connect();
+    clients.single.config.onConnect(connectedFrame());
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+
+    service.disconnect();
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+  });
+
+  test('connected_isReportedAfterSubscribeAndAddUser', () {
+    final sentAtConnected = <String>[];
+    final subscribedAtConnected = <String>[];
+    service.connect(
+      roomId: 'room-1',
+      username: 'alice',
+      userId: 'u1',
+      token: 'tok',
+      onMessage: (_) {},
+      onConnectionChanged: (connected) {
+        if (!connected) return;
+        // Offline-queue flush runs here: the room must already be joined.
+        sentAtConnected.addAll(clients.last.sent);
+        subscribedAtConnected.addAll(clients.last.subscribed);
+      },
+    );
+    clients.single.config.onConnect(connectedFrame());
+
+    expect(subscribedAtConnected, contains('/topic/chat/room-1'));
+    expect(sentAtConnected, contains('/app/chat.addUser'));
+    service.disconnect();
+  });
 }

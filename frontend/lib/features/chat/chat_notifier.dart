@@ -187,7 +187,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
 
-    // Connect WebSocket
+    // Connect WebSocket. A later connected=true is a reconnect: messages sent
+    // while the socket was down never reach us over STOMP, so refetch them.
+    var wasConnected = false;
     _stompService.connect(
       roomId: roomId,
       username: _username,
@@ -200,6 +202,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
           if (connected) {
+            if (wasConnected) _refetchLatest(roomId);
+            wasConnected = true;
             _send.flushOfflineQueue();
           }
         }
@@ -285,6 +289,32 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Subscribe FCM token to room topic for push notifications (fire & forget)
     _subscribeFcmToRoom(roomId);
   }
+
+  /// Re-reads the newest history page after a reconnect and merges it, so
+  /// messages broadcast while the socket was down show up.
+  Future<void> _refetchLatest(String roomId) async {
+    try {
+      final resp = await _dioClient.dio.get(
+        '/api/chat/rooms/$roomId/messages',
+        queryParameters: {'size': 50},
+      );
+      if (!mounted || _currentRoomId != roomId) return;
+      final latest = <ChatMessage>[];
+      for (final e in apiResponseList(resp.data)) {
+        try {
+          latest.add(ChatMessage.fromJson(e as Map<String, dynamic>));
+        } catch (parseErr) {
+          debugPrint('[ChatNotifier] refetch parse error: $parseErr');
+        }
+      }
+      _mergeMessages(latest);
+    } catch (e) {
+      debugPrint('[ChatNotifier] refetch after reconnect failed: $e');
+    }
+  }
+
+  /// Reconnects the room socket now if it is down (app resumed).
+  void reconnectIfNeeded() => _stompService.reconnectNow();
 
   Future<void> _subscribeFcmToRoom(String roomId) => _fcmSub.subscribe(roomId);
   Future<void> _unsubscribeFcmFromRoom(String roomId) =>

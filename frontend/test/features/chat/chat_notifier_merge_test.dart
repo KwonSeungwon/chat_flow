@@ -20,6 +20,12 @@ class _FakeDioClient implements DioClient {
 }
 
 class _FakeStompService extends StompService {
+  ConnectionCallback? onConnectionChanged;
+  int reconnectNowCalls = 0;
+
+  @override
+  void reconnectNow() => reconnectNowCalls++;
+
   @override
   void connect({
     required String roomId,
@@ -39,7 +45,9 @@ class _FakeStompService extends StompService {
     BannedCallback? onBanned,
     TransientErrorCallback? onTransientError,
     JoinRejectedCallback? onJoinRejected,
-  }) {}
+  }) {
+    this.onConnectionChanged = onConnectionChanged;
+  }
 }
 
 final _refProvider = Provider<Ref>((ref) => ref);
@@ -64,6 +72,7 @@ ChatNotifier _notifier(
   Map<String, Object> bodies, {
   Future<void> Function(String path)? onPath,
   void Function(RequestOptions options)? onRequest,
+  _FakeStompService? stomp,
 }) {
   final dio = Dio(BaseOptions(baseUrl: 'http://test'));
   dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
@@ -83,7 +92,7 @@ ChatNotifier _notifier(
     token: 'tok',
     username: 'alice',
     userId: 'u1',
-    stompService: _FakeStompService(),
+    stompService: stomp ?? _FakeStompService(),
   );
   addTearDown(notifier.dispose);
   return notifier;
@@ -194,5 +203,44 @@ void main() {
 
     expect(state().messages.map((m) => m.messageId ?? m.content),
         ['old', 'pending', 'new']);
+  });
+
+  test('reconnect_refetchesLatestHistoryAndMerges', () async {
+    final stomp = _FakeStompService();
+    var page = [_msg('m1', '2026-10-16T10:00:01')];
+    var historyCalls = 0;
+    final bodies = <String, Object>{};
+    final notifier = _notifier(container, bodies, stomp: stomp,
+        onRequest: (o) {
+      if (o.path == '/api/chat/rooms/room-1/messages') {
+        historyCalls++;
+        bodies[o.path] = _ok(page);
+      }
+    });
+    final state = _stateOf(notifier);
+    await notifier.joinRoom('room-1');
+
+    stomp.onConnectionChanged!(true); // first connect: no refetch
+    await Future<void>.delayed(Duration.zero);
+    expect(historyCalls, 1);
+
+    // Socket drops; m2 is sent while we are away; socket comes back.
+    stomp.onConnectionChanged!(false);
+    page = [
+      _msg('m1', '2026-10-16T10:00:01'),
+      _msg('m2', '2026-10-16T10:00:02'),
+    ];
+    stomp.onConnectionChanged!(true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(historyCalls, 2);
+    expect(state().messages.map((m) => m.messageId), ['m1', 'm2']);
+  });
+
+  test('reconnectIfNeeded_delegatesToStomp', () {
+    final stomp = _FakeStompService();
+    final notifier = _notifier(container, const {}, stomp: stomp);
+    notifier.reconnectIfNeeded();
+    expect(stomp.reconnectNowCalls, 1);
   });
 }

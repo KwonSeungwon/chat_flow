@@ -105,4 +105,42 @@ void main() {
 
     expect(service.isConnected, isFalse);
   });
+
+  void connectApp() => service.connect(
+      userId: 'u1',
+      token: 'tok',
+      onRoomUpdate: (_, __,
+          {mentionedUsernames = const [],
+          content = '',
+          senderUsername = ''}) {});
+
+  testWidgets('retriesExhausted_keepsRetryingPeriodically', (tester) async {
+    connectApp();
+    for (var i = 0; i < 14; i++) {
+      clients.last.config.onWebSocketError('down');
+      await tester.pump(const Duration(seconds: 61));
+      expect(clients, hasLength(i + 2), reason: 'attempt ${i + 1}');
+    }
+  });
+
+  testWidgets('reconnectNow_whileDown_connectsImmediately', (tester) async {
+    connectApp();
+    clients.single.config.onWebSocketError('down');
+
+    service.reconnectNow();
+    expect(clients, hasLength(2));
+    await tester.pump(const Duration(seconds: 3));
+    expect(clients, hasLength(2));
+  });
+
+  test('reconnectNow_whenConnectedOrLoggedOut_isNoop', () {
+    connectApp();
+    clients.single.config.onConnect(connectedFrame());
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+
+    service.disconnect();
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+  });
 }

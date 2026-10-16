@@ -28,6 +28,8 @@ class AppStompService {
   Timer? _reconnectTimer;
   int _retryCount = 0;
   static const int _maxRetries = 10;
+  /// After the backoff budget is spent, keep retrying at this interval.
+  static const Duration _periodicRetry = Duration(seconds: 30);
 
   String? _userId;
   String? _token;
@@ -139,15 +141,28 @@ class AppStompService {
   void _scheduleReconnect() {
     // onWebSocketError and onWebSocketDone both fire for one drop.
     if (_reconnectTimer?.isActive ?? false) return;
-    if (_retryCount >= _maxRetries) return;
-    final delay = Duration(seconds: (1 << _retryCount).clamp(2, 60));
-    _retryCount++;
+    final Duration delay;
+    if (_retryCount >= _maxRetries) {
+      delay = _periodicRetry;
+    } else {
+      delay = Duration(seconds: (1 << _retryCount).clamp(2, 60));
+      _retryCount++;
+    }
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(delay, () {
       if (!_manualDisconnect && _token != null) {
         _doConnect(_token!);
       }
     });
+  }
+
+  /// Reconnects right away if the socket is down (app resumed). No-op while
+  /// connected or after [disconnect].
+  void reconnectNow() {
+    if (_connected || _manualDisconnect || _token == null) return;
+    _reconnectTimer?.cancel();
+    _retryCount = 0;
+    _doConnect(_token!);
   }
 
   void disconnect() {
