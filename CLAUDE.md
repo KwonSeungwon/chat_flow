@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ChatFlow는 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이다. WebSocket(STOMP) 실시간 채팅을 핵심 기능으로 제공한다. 검색·AI 요약 서비스와 Elasticsearch·Kafka는 제거됐다(Gateway + Chat 2서비스 구성). `/world` 학습 게임(위키 던전)이 추가되는 중이다.
+제품명은 Gossiplog(app.gossiplog.com)로, 캐주얼 채팅 앱에 학습 게임 "위키 던전"을 더한 구성이다. 내부 코드명과 패키지는 ChatFlow(`chatflow`)를 유지한다. 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이며, 가입은 사용자명과 비밀번호만 받는다. WebSocket(STOMP) 실시간 채팅을 핵심 기능으로 제공한다. 검색·AI 요약 서비스와 Elasticsearch·Kafka는 제거됐다(Gateway + Chat 2서비스 구성). `/world` 학습 게임(위키 던전)은 chat-service에 포함되며 관리자는 `GAME_ADMIN_USER_IDS`로 지정한다. Android APK는 3.0.0 "Gossiplog"이다.
 
 ## Architecture
 

@@ -1,4 +1,4 @@
-# ChatFlow Frontend
+# Gossiplog Frontend (코드명 ChatFlow)
 
 Flutter Web + Android 크로스 플랫폼 프론트엔드.
 
