@@ -131,4 +131,34 @@ void main() {
 
     expect(stomp.connectCalls, 1);
   });
+
+  for (final op in ['delete', 'edit']) {
+    test('${op}Message_failsAfterDispose_noStateWrite', () async {
+      final gate = Completer<void>();
+      final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+      dio.interceptors
+          .add(InterceptorsWrapper(onRequest: (options, handler) async {
+        await gate.future;
+        handler.reject(DioException(requestOptions: options));
+      }));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = ChatNotifier(
+        _FakeDioClient(dio),
+        ref: container.read(_refProvider),
+        token: 'tok',
+        username: 'alice',
+        userId: 'u1',
+        stompService: _FakeStompService(),
+      );
+
+      final result = op == 'delete'
+          ? notifier.deleteMessage('room-1', 'm1')
+          : notifier.editMessage('room-1', 'm1', 'new');
+      notifier.dispose(); // user left the room while the request was in flight
+      gate.complete();
+
+      expect(await result, isFalse);
+    });
+  }
 }

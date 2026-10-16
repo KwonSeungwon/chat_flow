@@ -397,6 +397,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       return true;
     } catch (_) {
       // Rollback on failure — restore original message list
+      if (!mounted) return false;
       state = state.copyWith(messages: originalMessages);
       return false;
     }
@@ -425,6 +426,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       );
       return true;
     } catch (_) {
+      if (!mounted) return false;
       state = state.copyWith(messages: originalMessages);
       return false;
     }

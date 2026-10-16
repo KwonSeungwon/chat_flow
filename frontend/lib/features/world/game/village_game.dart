@@ -105,6 +105,8 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
       'flag',
       for (final id in VillageMap.buildings.keys) 'building_$id',
     ]);
+    // 읽는 사이에 게임이 dispose됐으면(마을을 떠남) 더 만들지 않는다.
+    if (_bank.isDisposed) return;
 
     world.onTap = _onTapWorld;
     world.add(_tiles);
