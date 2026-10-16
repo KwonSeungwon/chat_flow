@@ -6,7 +6,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
-import org.springframework.data.redis.core.ReactiveValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
+import reactor.core.publisher.Flux;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -14,7 +15,7 @@ import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,8 +28,7 @@ import static org.mockito.Mockito.*;
  * Verifies:
  * - Non-login/register paths bypass the filter entirely (no Redis calls)
  * - Requests under the limit pass through to the chain
- * - First request sets TTL via expire()
- * - Subsequent requests (count > 1) skip expire()
+ * - Counting is a single atomic Lua INCR+EXPIRE call
  * - Requests exceeding MAX_REQUESTS (10) are rejected with 429 + Retry-After header
  * - Redis failure → fail-open (request passes through to the chain)
  * - CF-Connecting-IP resolves client IP; X-Forwarded-For is ignored
@@ -41,9 +41,6 @@ class LoginRateLimitFilterTest {
     private ReactiveStringRedisTemplate redis;
 
     @Mock
-    private ReactiveValueOperations<String, String> valueOps;
-
-    @Mock
     private WebFilterChain chain;
 
     private LoginRateLimitFilter filter;
@@ -52,7 +49,46 @@ class LoginRateLimitFilterTest {
     void setUp() {
         filter = new LoginRateLimitFilter(redis);
         lenient().when(chain.filter(any())).thenReturn(Mono.empty());
-        lenient().when(redis.opsForValue()).thenReturn(valueOps);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubCount(String key, long count) {
+        when(redis.execute(any(RedisScript.class), eq(List.of(key)), anyList()))
+                .thenReturn(Flux.just(count));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void verifyCounted(String key) {
+        verify(redis).execute(any(RedisScript.class), eq(List.of(key)), anyList());
+    }
+
+    // ── Encoded / non-canonical paths must not bypass the limit ──
+
+    @Test
+    void percentEncodedLoginPath_isStillRateLimited() {
+        stubCount("rl:login:127.0.0.1", 11L);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.method(org.springframework.http.HttpMethod.POST, java.net.URI.create("/api/auth/%6Cogin"))
+                        .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 12345))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        verify(chain, never()).filter(any());
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    void doubleSlashRegisterPath_isStillRateLimited() {
+        stubCount("rl:login:127.0.0.1", 11L);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.method(org.springframework.http.HttpMethod.POST, java.net.URI.create("/api//auth/regist%65r"))
+                        .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 12345))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
     }
 
     // ── Non-login paths bypass the filter ────────────────────────
@@ -66,7 +102,7 @@ class LoginRateLimitFilterTest {
                 .verifyComplete();
 
         verify(chain).filter(exchange);
-        verifyNoInteractions(valueOps);
+        verifyNoInteractions(redis);
     }
 
     @Test
@@ -78,16 +114,14 @@ class LoginRateLimitFilterTest {
                 .verifyComplete();
 
         verify(chain).filter(exchange);
-        verifyNoInteractions(valueOps);
+        verifyNoInteractions(redis);
     }
 
     // ── Login path — under limit passes through ─────────────────
 
     @Test
-    void loginPath_firstRequest_passesAndSetsTTL() {
-        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(1L));
-        when(redis.expire(eq("rl:login:127.0.0.1"), any(Duration.class)))
-                .thenReturn(Mono.just(true));
+    void loginPath_firstRequest_passes() {
+        stubCount("rl:login:127.0.0.1", 1L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -99,14 +133,11 @@ class LoginRateLimitFilterTest {
 
         // Chain was invoked (request passed through)
         verify(chain).filter(exchange);
-        // TTL was set for first request (count == 1)
-        verify(redis).expire(eq("rl:login:127.0.0.1"), eq(Duration.ofSeconds(60)));
     }
 
     @Test
-    void loginPath_subsequentRequest_skipsExpire() {
-        // count=5, not the first request → expire() should NOT be called
-        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(5L));
+    void loginPath_subsequentRequest_passes() {
+        stubCount("rl:login:127.0.0.1", 5L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -117,12 +148,11 @@ class LoginRateLimitFilterTest {
                 .verifyComplete();
 
         verify(chain).filter(exchange);
-        verify(redis, never()).expire(anyString(), any(Duration.class));
     }
 
     @Test
     void registerPath_underLimit_passesThrough() {
-        when(valueOps.increment("rl:login:10.0.0.1")).thenReturn(Mono.just(10L));
+        stubCount("rl:login:10.0.0.1", 10L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/register")
@@ -141,7 +171,7 @@ class LoginRateLimitFilterTest {
     @Test
     void loginPath_overLimit_returns429WithRetryAfter() {
         // count=11 exceeds MAX_REQUESTS (10) → must be rejected
-        when(valueOps.increment("rl:login:192.168.1.1")).thenReturn(Mono.just(11L));
+        stubCount("rl:login:192.168.1.1", 11L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -163,7 +193,7 @@ class LoginRateLimitFilterTest {
 
     @Test
     void registerPath_overLimit_returns429() {
-        when(valueOps.increment("rl:login:10.0.0.1")).thenReturn(Mono.just(100L));
+        stubCount("rl:login:10.0.0.1", 100L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/register")
@@ -181,8 +211,8 @@ class LoginRateLimitFilterTest {
 
     @Test
     void redisFailure_failOpen_passesThrough() {
-        when(valueOps.increment(anyString()))
-                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+        when(redis.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.error(new RuntimeException("Redis connection refused")));
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -196,11 +226,28 @@ class LoginRateLimitFilterTest {
         verify(chain).filter(exchange);
     }
 
+    @Test
+    void downstreamError_propagates_andChainRunsOnce() {
+        stubCount("rl:login:127.0.0.1", 1L);
+        when(chain.filter(any())).thenReturn(Mono.error(new IllegalStateException("downstream")));
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/auth/register")
+                        .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 12345))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain))
+                .expectError(IllegalStateException.class)
+                .verify();
+
+        verify(chain, times(1)).filter(exchange);
+    }
+
     // ── Client IP resolution (X-Forwarded-For is never trusted) ──
 
     @Test
     void cfConnectingIp_usedAsKey() {
-        when(valueOps.increment("rl:login:203.0.113.50")).thenReturn(Mono.just(2L));
+        stubCount("rl:login:203.0.113.50", 2L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -209,13 +256,13 @@ class LoginRateLimitFilterTest {
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        verify(valueOps).increment("rl:login:203.0.113.50");
+        verifyCounted("rl:login:203.0.113.50");
     }
 
     @Test
     void loginLimit_rotatingXff_stillLimited() {
         // 같은 CF-Connecting-IP에서 XFF만 바꿔도 동일 키로 집계되어 429
-        when(valueOps.increment("rl:login:203.0.113.50")).thenReturn(Mono.just(11L));
+        stubCount("rl:login:203.0.113.50", 11L);
 
         for (String spoofed : new String[] {"1.1.1.1", "2.2.2.2", "3.3.3.3"}) {
             MockServerWebExchange exchange = MockServerWebExchange.from(
@@ -228,14 +275,13 @@ class LoginRateLimitFilterTest {
 
             assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
         }
-        verify(valueOps, never()).increment("rl:login:1.1.1.1");
+        verify(redis, never()).execute(any(RedisScript.class), eq(List.of("rl:login:1.1.1.1")), anyList());
         verify(chain, never()).filter(any());
     }
 
     @Test
     void xForwardedFor_aloneIsIgnored_fallsBackToRemoteAddress() {
-        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(1L));
-        when(redis.expire(eq("rl:login:127.0.0.1"), any(Duration.class))).thenReturn(Mono.just(true));
+        stubCount("rl:login:127.0.0.1", 1L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -245,14 +291,14 @@ class LoginRateLimitFilterTest {
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        verify(valueOps).increment("rl:login:127.0.0.1");
+        verifyCounted("rl:login:127.0.0.1");
     }
 
     // ── Boundary: exactly at limit passes, limit+1 rejects ──────
 
     @Test
     void boundaryAtLimit_count10_passes() {
-        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(10L));
+        stubCount("rl:login:127.0.0.1", 10L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -268,7 +314,7 @@ class LoginRateLimitFilterTest {
 
     @Test
     void boundaryOverLimit_count11_rejects() {
-        when(valueOps.increment("rl:login:127.0.0.1")).thenReturn(Mono.just(11L));
+        stubCount("rl:login:127.0.0.1", 11L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")

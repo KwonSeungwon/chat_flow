@@ -3,6 +3,7 @@ package com.chatflow.gateway.security;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -100,12 +101,36 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                 .contextWrite(ReactiveSecurityContextHolder.withAuthentication(auth));
     }
 
+    private static final java.util.regex.Pattern FILE_PATH = java.util.regex.Pattern.compile("^/api/files/[A-Za-z0-9-]+$");
+
     private String extractToken(ServerHttpRequest request) {
         String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
-        // WebSocket 연결용 쿼리 파라미터 지원
+        // 쿼리 파라미터 토큰은 헤더를 못 붙이는 경로만 허용: WebSocket 연결, <img>가 쓰는 파일 GET
+        // ws 경로는 디코딩된 세그먼트로 판단하고 "." / ".." 세그먼트가 있으면 거부한다.
+        StringBuilder sb = new StringBuilder();
+        for (org.springframework.http.server.PathContainer.Element e : request.getPath().pathWithinApplication().elements()) {
+            if (e instanceof org.springframework.http.server.PathContainer.PathSegment seg) {
+                String v = seg.valueToMatch();
+                if (v.equals(".") || v.equals("..")) {
+                    return null;
+                }
+                if (!v.isEmpty()) {
+                    sb.append('/').append(v);
+                }
+            }
+        }
+        String path = sb.toString();
+        boolean ws = path.equals("/ws") || path.startsWith("/ws/")
+                || path.equals("/ws-native") || path.startsWith("/ws-native/");
+        // 파일은 디코딩하지 않은 원본 경로가 "/api/files/{uuid}" 형태일 때만 (%2f, .., 추가 세그먼트 거부)
+        boolean file = HttpMethod.GET.equals(request.getMethod())
+                && FILE_PATH.matcher(request.getPath().value()).matches();
+        if (!ws && !file) {
+            return null;
+        }
         return request.getQueryParams().getFirst("token");
     }
 }

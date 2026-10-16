@@ -23,8 +23,9 @@ public record ProfileUpdateRequest(
             if (profileImageUrl.length() > MAX_PROFILE_IMAGE_URL_LENGTH) {
                 throw new IllegalArgumentException("profileImageUrl too long (max " + MAX_PROFILE_IMAGE_URL_LENGTH + ")");
             }
-            if (!profileImageUrl.startsWith("http://") && !profileImageUrl.startsWith("https://") && !profileImageUrl.startsWith("/")) {
-                throw new IllegalArgumentException("profileImageUrl must be http(s) URL or absolute path");
+            // 업로드 흐름이 만드는 값은 "/api/files/{uuid}" 뿐이다. "//host"(프로토콜 상대)와 http:는 받지 않는다.
+            if (!profileImageUrl.startsWith("https://") && !profileImageUrl.startsWith("/api/files/")) {
+                throw new IllegalArgumentException("profileImageUrl must be an https URL or /api/files/ path");
             }
         }
         if (statusMessage != null && statusMessage.length() > MAX_STATUS_MESSAGE_LENGTH) {
