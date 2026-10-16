@@ -34,7 +34,7 @@ class ChatRoomRepositoryVisibleRoomsTest {
         LocalDateTime t = LocalDateTime.of(2026, 1, 1, 0, 0);
         save("public", RoomType.GENERAL, false, null, t.plusMinutes(1));
         save("password", RoomType.GENERAL, false, "$2a$10$hash", t.plusMinutes(2));
-        save("handoff", RoomType.HANDOFF, false, null, t.plusMinutes(3));
+        save("public-2", RoomType.GENERAL, false, null, t.plusMinutes(3));
         save("private-other", RoomType.GENERAL, true, null, t.plusMinutes(4));
         save("private-mine", RoomType.GENERAL, true, null, t.plusMinutes(5));
         save("dm-other", RoomType.DIRECT, false, null, t.plusMinutes(6));
@@ -57,11 +57,11 @@ class ChatRoomRepositoryVisibleRoomsTest {
     }
 
     @Test
-    void returnsPublicPasswordHandoffAndOwnRooms_newestFirst() {
+    void returnsPublicPasswordAndOwnRooms_newestFirst() {
         List<String> ids = chatRoomRepository.findVisibleOrderByLastActivity(ME)
                 .stream().map(ChatRoom::getId).toList();
 
-        assertThat(ids).containsExactly("dm-mine", "private-mine", "handoff", "password", "public");
+        assertThat(ids).containsExactly("dm-mine", "private-mine", "public-2", "password", "public");
     }
 
     @Test
@@ -69,6 +69,6 @@ class ChatRoomRepositoryVisibleRoomsTest {
         List<String> ids = chatRoomRepository.findVisibleOrderByLastActivity("stranger")
                 .stream().map(ChatRoom::getId).toList();
 
-        assertThat(ids).containsExactly("handoff", "password", "public");
+        assertThat(ids).containsExactly("public-2", "password", "public");
     }
 }

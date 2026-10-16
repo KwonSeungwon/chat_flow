@@ -30,7 +30,6 @@ class ChatRoomMapperTest {
                 .isPrivate(true)
                 .password("secret-hashed")
                 .allowInvites(false)
-                .allowedRoles("ADMIN,MOD")
                 .participantCount(5)
                 .maxParticipants(10)
                 .createdBy("user-1")
@@ -52,7 +51,6 @@ class ChatRoomMapperTest {
         assertThat(dto.getRoomType()).isEqualTo("GENERAL");
         assertThat(dto.isPrivate()).isTrue();
         assertThat(dto.isAllowInvites()).isFalse();
-        assertThat(dto.getAllowedRoles()).isEqualTo("ADMIN,MOD");
         assertThat(dto.getParticipantCount()).isEqualTo(5);
         assertThat(dto.getMaxParticipants()).isEqualTo(10);
         assertThat(dto.getCreatedBy()).isEqualTo("user-1");
@@ -98,11 +96,12 @@ class ChatRoomMapperTest {
         // leaked keys must be gone
         assertThat(json).doesNotContainKey("password");
         assertThat(json).doesNotContainKey("full");
+        assertThat(json).doesNotContainKey("allowedRoles");
 
         // keys the frontend ChatRoom.fromJson consumes must remain
         assertThat(json).containsKeys(
                 "id", "name", "description", "color", "externalId",
-                "roomType", "isPrivate", "allowInvites", "allowedRoles",
+                "roomType", "isPrivate", "allowInvites",
                 "participantCount", "maxParticipants", "createdBy",
                 "createdAt", "lastMessageAt", "pinnedMessageId");
     }

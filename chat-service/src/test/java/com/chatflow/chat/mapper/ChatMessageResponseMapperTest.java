@@ -27,7 +27,6 @@ class ChatMessageResponseMapperTest {
                 .content("hello")
                 .timestamp(LocalDateTime.of(2026, 6, 7, 9, 30))
                 .type("CHAT")
-                .priority("URGENT")
                 .isAiGenerated(true)
                 .fileUrl("http://x/f.png")
                 .fileName("f.png")
@@ -54,7 +53,6 @@ class ChatMessageResponseMapperTest {
         assertThat(dto.getContent()).isEqualTo("hello");
         assertThat(dto.getTimestamp()).isEqualTo(LocalDateTime.of(2026, 6, 7, 9, 30));
         assertThat(dto.getType()).isEqualTo("CHAT");
-        assertThat(dto.getPriority()).isEqualTo("URGENT");
         assertThat(dto.isAiGenerated()).isTrue();
         assertThat(dto.getFileUrl()).isEqualTo("http://x/f.png");
         assertThat(dto.getFileName()).isEqualTo("f.png");
@@ -115,7 +113,7 @@ class ChatMessageResponseMapperTest {
         // keys the frontend ChatMessage.fromJson consumes must remain
         assertThat(json).containsKeys(
                 "messageId", "chatRoomId", "userId", "username", "content",
-                "timestamp", "type", "priority", "aiGenerated",
+                "timestamp", "type", "aiGenerated",
                 "fileUrl", "fileName", "fileContentType",
                 "parentMessageId", "parentMessagePreview", "forwardedFrom",
                 "deleted", "edited", "editedAt", "pinned", "reactions");

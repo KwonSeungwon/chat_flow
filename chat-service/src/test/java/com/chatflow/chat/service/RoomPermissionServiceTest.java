@@ -151,14 +151,6 @@ class RoomPermissionServiceTest {
     }
 
     @Test
-    void requireNotDmRoom_handoffRoom_passes() {
-        ChatRoom room = ChatRoom.builder().id(ROOM_ID).roomType(RoomType.HANDOFF).build();
-        when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.of(room));
-
-        assertDoesNotThrow(() -> roomPermissionService.requireNotDmRoom(ROOM_ID));
-    }
-
-    @Test
     void requireNotDmRoom_roomNotFound_passes() {
         when(chatRoomRepository.findById(ROOM_ID)).thenReturn(Optional.empty());
 

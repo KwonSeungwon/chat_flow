@@ -44,9 +44,6 @@ public abstract class BaseMessage {
 
     private String roomType;
 
-    @lombok.Builder.Default
-    private String priority = "ROUTINE";
-
     private String fileUrl;
     private String fileName;
     private String fileContentType;
@@ -57,6 +54,6 @@ public abstract class BaseMessage {
     private String forwardedFrom;  // "originalSender: truncatedContent" — 전달 메시지 원본 발신자+내용 요약
 
     public enum MessageType {
-        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, PATIENT_CARD, FILE
+        CHAT, JOIN, LEAVE, SYSTEM, AI_SUMMARY, FILE
     }
 }

@@ -103,7 +103,6 @@ public class ChatRoomService {
                 .isPrivate(request.isPrivate())
                 .password(request.getPassword() != null && !request.getPassword().isBlank()
                         ? passwordEncoder.encode(request.getPassword()) : null)
-                .allowedRoles(request.getAllowedRoles())
                 .allowInvites(request.isAllowInvites())
                 .participantCount(0)
                 .maxParticipants(MAX_PARTICIPANTS)
