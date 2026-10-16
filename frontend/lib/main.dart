@@ -131,7 +131,7 @@ class ChatFlowApp extends ConsumerWidget {
             .watch(roomUnreadCountsProvider)
             .values
             .fold<int>(0, (sum, c) => sum + c))
-        : 'ChatFlow';
+        : 'Gossiplog';
 
     // App-level STOMP (unread increments) follows the signed-in user.
     ref.watch(roomUpdateListenerProvider);

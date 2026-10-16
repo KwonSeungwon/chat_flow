@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Gossiplog small-size icon (favicon / <=48px): island slab + bubble only, so it stays legible at 24px. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7CEFF"/>
+      <stop offset="1" stop-color="#FFE2C8"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" fill="url(#sky)"/>
+  <polygon points="14,88 64,113 64,122 14,97" fill="#5A9D74"/>
+  <polygon points="64,113 114,88 114,97 64,122" fill="#4A8A63"/>
+  <polygon points="64,63 114,88 64,113 14,88" fill="#7CC48E"/>
+  <polygon points="52,86 64,62 76,86 64,92" fill="#FF7A6B"/>
+  <path d="M28 12 H100 a12 12 0 0 1 12 12 V50 a12 12 0 0 1 -12 12 H60 L44 76 L46 62 H28 a12 12 0 0 1 -12 -12 V24 a12 12 0 0 1 12 -12 z" fill="#FFFFFF"/>
+  <g fill="#6C8CFF"><circle cx="44" cy="37" r="7"/><circle cx="64" cy="37" r="7"/><circle cx="84" cy="37" r="7"/></g>
+</svg>

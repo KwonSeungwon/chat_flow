@@ -26,10 +26,10 @@ class FcmService {
       'BILKh58G8pGKBiKJR4gG17LhnkSkxACyzcNV4PqvC61SIhiu5mLeRkZa5AgqKFbP2BQAx0x7PpmrwqDGKZe3qyA';
 
   static const _channelId = 'chatflow_messages';
-  static const _channelName = 'ChatFlow Messages';
+  static const _channelName = 'Gossiplog 메시지';
 
   static const _keywordChannelId = 'chatflow_keywords';
-  static const _keywordChannelName = 'ChatFlow 키워드 알림';
+  static const _keywordChannelName = 'Gossiplog 키워드 알림';
 
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifs = FlutterLocalNotificationsPlugin();
@@ -77,7 +77,7 @@ class FcmService {
         const AndroidNotificationChannel(
           _channelId,
           _channelName,
-          description: 'ChatFlow 채팅 메시지 알림',
+          description: 'Gossiplog 채팅 메시지 알림',
           importance: Importance.high,
         ),
       );
@@ -85,7 +85,7 @@ class FcmService {
         const AndroidNotificationChannel(
           _keywordChannelId,
           _keywordChannelName,
-          description: 'ChatFlow 키워드 매칭 알림',
+          description: 'Gossiplog 키워드 매칭 알림',
           importance: Importance.max,
         ),
       );

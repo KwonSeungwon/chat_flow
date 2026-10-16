@@ -36,7 +36,7 @@ class SidebarHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'ChatFlow',
+                  'Gossiplog',
                   style: TextStyle(
                     color: cs.onSurface,
                     fontSize: 15,
