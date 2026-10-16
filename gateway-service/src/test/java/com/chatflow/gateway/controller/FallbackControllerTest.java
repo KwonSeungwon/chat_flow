@@ -90,24 +90,6 @@ class FallbackControllerTest {
                 .verifyComplete();
     }
 
-    // ── FHIR fallback ───────────────────────────────────────────
-
-    @Test
-    void fhirFallback_returns503WithCorrectService() {
-        StepVerifier.create(controller.fhirFallback())
-                .assertNext(response -> {
-                    assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-                    assertEquals("30", response.getHeaders().getFirst("Retry-After"));
-
-                    Map<String, Object> body = response.getBody();
-                    assertNotNull(body);
-                    assertEquals("fhir-service", body.get("service"));
-                    assertEquals("FHIR 서비스가 일시적으로 불안정합니다.", body.get("message"));
-                    assertEquals(30, body.get("retryAfterSeconds"));
-                })
-                .verifyComplete();
-    }
-
     // ── Files fallback ──────────────────────────────────────────
 
     @Test

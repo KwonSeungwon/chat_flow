@@ -37,11 +37,6 @@ public class FallbackController {
         return buildFallback("search-service", "검색 서비스가 일시적으로 불안정합니다.", 15);
     }
 
-    @RequestMapping("/fhir")
-    public Mono<ResponseEntity<Map<String, Object>>> fhirFallback() {
-        return buildFallback("fhir-service", "FHIR 서비스가 일시적으로 불안정합니다.", 30);
-    }
-
     @RequestMapping("/files")
     public Mono<ResponseEntity<Map<String, Object>>> filesFallback() {
         return buildFallback("file-service", "파일 서비스가 일시적으로 불안정합니다.", 30);
