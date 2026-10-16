@@ -82,17 +82,6 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleMuted_returns423() {
-        ResponseEntity<ErrorResponse> response =
-                handler.handleMuted(new MutedException("muted until..."));
-
-        assertEquals(HttpStatus.LOCKED, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals("MUTED", response.getBody().getCode());
-        assertEquals(423, response.getBody().getStatus());
-    }
-
-    @Test
     void handleQuotaExceeded_returns429() {
         ResponseEntity<ErrorResponse> response =
                 handler.handleQuotaExceeded(new QuotaExceededException("limit reached"));

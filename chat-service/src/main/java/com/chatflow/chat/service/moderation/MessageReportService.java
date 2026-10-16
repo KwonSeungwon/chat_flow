@@ -29,7 +29,6 @@ public class MessageReportService {
 
     private static final int RATE_LIMIT_PER_MINUTE = 5;
     private static final Duration RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
-    private static final int MESSAGE_PREVIEW_MAX_LENGTH = 200;
 
     private final MessageReportRepository messageReportRepository;
     private final ChatMessageRepository chatMessageRepository;

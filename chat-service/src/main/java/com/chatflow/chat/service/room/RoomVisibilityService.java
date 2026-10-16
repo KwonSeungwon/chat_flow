@@ -47,20 +47,6 @@ public class RoomVisibilityService {
     }
 
     /**
-     * 명시적 unhide (선택적 -- 보통은 새 메시지로 자동 재출현).
-     */
-    public void unhide(String userId, String roomId) {
-        if (redisHealth.isCircuitOpen()) return;
-        try {
-            redisTemplate.opsForHash().delete(HIDDEN_KEY_PREFIX + userId, roomId);
-            redisHealth.recordSuccess();
-            log.info("DM 방 숨김 해제: userId={}, roomId={}", userId, roomId);
-        } catch (Exception e) {
-            redisHealth.recordFailure(e);
-        }
-    }
-
-    /**
      * userId의 hidden roomId -> hidden_at 맵 조회.
      * Redis 장애 시 빈 맵 반환 (fail-open: 모두 보임).
      */

@@ -76,10 +76,6 @@ public class UserPresenceService {
         return true;
     }
 
-    public boolean join(ChatMessage message) {
-        return join(message, null);
-    }
-
     public void leave(String roomId, String username, String sessionId) {
         participantRegistry.removeSession(roomId, username, sessionId);
 
@@ -97,10 +93,6 @@ public class UserPresenceService {
             int participantCount = participantRegistry.getRoomParticipantUserIds(roomId).size();
             presenceBroadcast.broadcastLeave(roomId, username, participantCount);
         }
-    }
-
-    public void leave(String roomId, String username) {
-        leave(roomId, username, null);
     }
 
     public Set<String> getRoomParticipantUserIds(String roomId) {

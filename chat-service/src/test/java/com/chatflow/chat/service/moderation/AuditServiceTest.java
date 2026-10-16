@@ -92,13 +92,13 @@ class AuditServiceTest {
     @Test
     void logAccess_handles_null_username() {
         assertThatCode(() ->
-                service.logAccess("user-2", null, "room-7", AuditEvent.ROOM_JOIN)
+                service.logAccess("user-2", null, "room-7", AuditEvent.ROOM_HIDDEN)
         ).doesNotThrowAnyException();
 
         verify(outboxEventRepository).save(outboxCaptor.capture());
         OutboxEvent saved = outboxCaptor.getValue();
         assertThat(saved.getTopic()).isEqualTo("audit-events");
-        assertThat(saved.getEventType()).isEqualTo(AuditEvent.ROOM_JOIN);
+        assertThat(saved.getEventType()).isEqualTo(AuditEvent.ROOM_HIDDEN);
 
         List<ILoggingEvent> events = listAppender.list;
         assertThat(events).hasSize(1);

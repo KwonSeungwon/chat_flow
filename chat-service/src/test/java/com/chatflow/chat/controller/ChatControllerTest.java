@@ -79,7 +79,6 @@ class ChatControllerTest {
 
         chatController.sendMessage(command, headerAccessor);
 
-        verify(chatService, never()).processMessage(any(ChatMessage.class));
         verify(chatService, never()).processMessage(any(ChatMessage.class), any());
         verify(messagingTemplate).convertAndSendToUser(
                 eq(USER_ID), eq("/queue/errors"), any(Map.class));
@@ -95,7 +94,6 @@ class ChatControllerTest {
 
         ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
         verify(chatService).processMessage(captor.capture(), eq(memberEntity));
-        verify(chatService, never()).processMessage(any(ChatMessage.class));
         assertThat(captor.getValue().getContent()).isEqualTo("hello");
         assertThat(captor.getValue().getChatRoomId()).isEqualTo(ROOM_ID);
     }

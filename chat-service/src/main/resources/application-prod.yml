@@ -79,8 +79,6 @@ spring:
       group-id: chat-service-prod-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      properties:
-        spring.json.trusted.packages: "com.chatflow.common.dto"
       auto-offset-reset: earliest
       enable-auto-commit: false
       max-poll-records: 100
