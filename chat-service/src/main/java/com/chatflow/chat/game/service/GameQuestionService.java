@@ -23,6 +23,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -75,6 +77,15 @@ public class GameQuestionService {
                 .map(GameDungeon::getId).collect(Collectors.toSet());
         validateBatch(request, dungeonIds);
 
+        try {
+            return insertBatch(request);
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent upload inserted the same hash (or topic) first; the transaction rolls back.
+            throw duplicate("동시에 올라온 같은 내용의 문제가 있습니다. 다시 시도하세요.");
+        }
+    }
+
+    private BulkUploadResult insertBatch(BulkUploadRequest request) {
         int inserted = 0;
         int skipped = 0;
         Set<String> seenHashes = new HashSet<>();
@@ -140,33 +151,46 @@ public class GameQuestionService {
         GameQuestionStatus newStatus = request.status() == null ? null : parseStatus(request.status());
 
         String stem = request.stem() != null ? request.stem().trim() : question.getStem();
+        List<String> oldChoices = readChoices(question.getChoices());
         List<String> choices = request.choices() != null
                 ? request.choices().stream().map(String::trim).toList()
-                : readChoices(question.getChoices());
+                : oldChoices;
         int answerIndex = request.answerIndex() != null ? request.answerIndex() : question.getAnswerIndex();
+        String explanation = request.explanation() != null ? request.explanation().trim() : question.getExplanation();
+        boolean contentChanged = !stem.equals(question.getStem()) || !choices.equals(oldChoices)
+                || answerIndex != question.getAnswerIndex() || !explanation.equals(question.getExplanation());
+
         String hash = contentHash(stem, choices, answerIndex);
         if (!hash.equals(question.getContentHash())) {
             questionRepository.findByContentHash(hash)
                     .filter(other -> !other.getId().equals(question.getId()))
                     .ifPresent(other -> {
-                        throw new GameException(409, "DUPLICATE_QUESTION",
-                                "같은 내용의 문제가 이미 있습니다. (id=" + other.getId() + ")");
+                        throw duplicate("같은 내용의 문제가 이미 있습니다. (id=" + other.getId() + ")");
                     });
             question.setContentHash(hash);
         }
         question.setStem(stem);
         question.setChoices(writeChoices(choices));
         question.setAnswerIndex((short) answerIndex);
-        if (request.explanation() != null) {
-            question.setExplanation(request.explanation().trim());
+        question.setExplanation(explanation);
+
+        // Editing an approved question sends it back to review unless the PATCH sets status itself.
+        if (newStatus == null && contentChanged && question.getStatus() == GameQuestionStatus.APPROVED) {
+            newStatus = GameQuestionStatus.DRAFT;
         }
-        if (newStatus != null && newStatus != question.getStatus()) {
+        if (newStatus == GameQuestionStatus.DRAFT) {
+            question.setStatus(GameQuestionStatus.DRAFT);
+            question.setReviewedAt(null);
+        } else if (newStatus != null && newStatus != question.getStatus()) {
             question.setStatus(newStatus);
-            if (newStatus != GameQuestionStatus.DRAFT) {
-                question.setReviewedAt(LocalDateTime.now());
-            }
+            question.setReviewedAt(LocalDateTime.now());
         }
-        GameQuestion saved = questionRepository.save(question);
+        GameQuestion saved;
+        try {
+            saved = questionRepository.saveAndFlush(question);
+        } catch (DataIntegrityViolationException e) {
+            throw duplicate("같은 내용의 문제가 이미 있습니다.");
+        }
         GameTopic topic = topicRepository.findById(saved.getTopicId()).orElse(null);
         return toDto(saved, topic);
     }
@@ -251,10 +275,14 @@ public class GameQuestionService {
 
     private static GameQuestionStatus parseStatus(String status) {
         try {
-            return GameQuestionStatus.valueOf(status);
+            return GameQuestionStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException | NullPointerException e) {
             throw GameException.validation("status는 DRAFT, APPROVED, REJECTED 중 하나여야 합니다.");
         }
+    }
+
+    private static GameException duplicate(String message) {
+        return new GameException(409, "DUPLICATE_QUESTION", message);
     }
 
     private static boolean isBlank(String value) {

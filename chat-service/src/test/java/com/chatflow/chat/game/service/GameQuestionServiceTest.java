@@ -236,6 +236,63 @@ class GameQuestionServiceTest {
                 .hasFieldOrPropertyWithValue("status", 404);
     }
 
+    @Test
+    void patch_contentChangeOnApproved_revertsToDraftAndClearsReviewedAt() {
+        Long id = approvedQuestionId();
+
+        AdminQuestionDto dto = service.patch(id, new QuestionPatchRequest(null, null, null, "better exp", null));
+
+        assertThat(dto.status()).isEqualTo("DRAFT");
+        assertThat(questionRepository.findById(id).orElseThrow().getReviewedAt()).isNull();
+    }
+
+    @Test
+    void patch_contentChangeOnApproved_withExplicitStatus_keepsThatStatus() {
+        Long id = approvedQuestionId();
+
+        AdminQuestionDto dto = service.patch(id, new QuestionPatchRequest("q1 fixed", null, null, null, "APPROVED"));
+
+        assertThat(dto.status()).isEqualTo("APPROVED");
+        assertThat(questionRepository.findById(id).orElseThrow().getReviewedAt()).isNotNull();
+    }
+
+    @Test
+    void patch_sameContentOnApproved_staysApproved() {
+        Long id = approvedQuestionId();
+
+        AdminQuestionDto dto = service.patch(id, new QuestionPatchRequest(" q1 ", null, 1, null, null));
+
+        assertThat(dto.status()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void patch_statusDraft_clearsReviewedAt() {
+        Long id = approvedQuestionId();
+
+        AdminQuestionDto dto = service.patch(id, new QuestionPatchRequest(null, null, null, null, "DRAFT"));
+
+        assertThat(dto.status()).isEqualTo("DRAFT");
+        assertThat(questionRepository.findById(id).orElseThrow().getReviewedAt()).isNull();
+    }
+
+    @Test
+    void status_isCaseInsensitive() {
+        service.bulkUpload(request(topic("jvm", "GC", null, question("q1", 1))));
+        Long id = questionRepository.findAll().get(0).getId();
+
+        assertThat(service.patch(id, new QuestionPatchRequest(null, null, null, null, "approved")).status())
+                .isEqualTo("APPROVED");
+        assertThat(service.list("Approved", 0, 20).total()).isEqualTo(1);
+    }
+
+    private Long approvedQuestionId() {
+        service.bulkUpload(request(topic("jvm", "GC", null, question("q1", 1))));
+        Long id = questionRepository.findAll().get(0).getId();
+        service.patch(id, new QuestionPatchRequest(null, null, null, null, "APPROVED"));
+        assertThat(questionRepository.findById(id).orElseThrow().getReviewedAt()).isNotNull();
+        return id;
+    }
+
     // ── helpers ─────────────────────────────────────────────────
 
     private static void assertValidationError(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {

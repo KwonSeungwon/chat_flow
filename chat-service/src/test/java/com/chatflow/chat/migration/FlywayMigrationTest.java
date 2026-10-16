@@ -397,6 +397,38 @@ class FlywayMigrationTest {
         }
     }
 
+    // ── Test 14: V19 — game entities pass Hibernate ddl-auto=validate ──────
+
+    /**
+     * Prod runs {@code ddl-auto: validate}, which no other test exercises. Boots a JPA
+     * EntityManagerFactory over the game entities against the migrated schema, using the
+     * same naming strategies Spring Boot applies.
+     */
+    @Test
+    void v19_gameEntitiesPassHibernateSchemaValidation() throws SQLException {
+        assertThat(columnDataType("game_question", "content_hash")).isEqualTo("character");
+
+        org.springframework.jdbc.datasource.DriverManagerDataSource dataSource =
+                new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                        POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean factory =
+                new org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setPackagesToScan("com.chatflow.chat.game.entity");
+        factory.setJpaVendorAdapter(new org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter());
+        factory.setJpaPropertyMap(java.util.Map.of(
+                "hibernate.hbm2ddl.auto", "validate",
+                "hibernate.physical_naming_strategy",
+                "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy",
+                "hibernate.implicit_naming_strategy",
+                "org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy"));
+
+        org.assertj.core.api.Assertions.assertThatCode(factory::afterPropertiesSet)
+                .as("game entities should validate against the V19 schema")
+                .doesNotThrowAnyException();
+        factory.destroy();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     /**

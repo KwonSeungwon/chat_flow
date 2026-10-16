@@ -69,6 +69,25 @@ class GameAdminControllerTest {
     }
 
     @Test
+    void missingUserHeader_onListAndPatch_returns401() throws Exception {
+        mockMvc.perform(get("/api/game/admin/questions"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/api/game/admin/questions/7")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(questionService);
+    }
+
+    @Test
+    void nonAdmin_onPatch_returns403() throws Exception {
+        mockMvc.perform(patch("/api/game/admin/questions/7").header("X-User-Id", "someone")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GAME_FORBIDDEN"));
+        verifyNoInteractions(questionService);
+    }
+
+    @Test
     void nonAdmin_returns403() throws Exception {
         mockMvc.perform(get("/api/game/admin/questions").header("X-User-Id", "someone"))
                 .andExpect(status().isForbidden())
