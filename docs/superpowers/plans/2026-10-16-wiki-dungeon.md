@@ -44,7 +44,7 @@
 - `GameAdminGuard.requireAdmin(String userId)` → 허용 목록 밖이면 `GameForbiddenException`(403 `GAME_FORBIDDEN`)
 - `POST /api/game/admin/questions/bulk` body = 스펙 bulk JSON → `ApiResponse<{inserted:int, skipped:int}>`
   - 검증: `dungeonId`는 8개 중 하나, `choices` 정확히 4개·각 1~200자, `answerIndex` 0..3, `stem` 1~500자, `explanation` 1~1000자, topic `title` 1~200자. 위반 시 400 `VALIDATION_ERROR`(배치 전체 거부).
-  - topic은 `(dungeonId,title)`로 upsert, 몬스터는 topic당 1개 upsert(`name`, `spriteKey` 기본 `slime`).
+  - topic은 `(dungeonId,title)`로 upsert, 몬스터는 topic당 1개 upsert(`name`, `spriteKey` 기본 `monster_<dungeonId>`).
   - `content_hash` = SHA-256 hex of `stem.trim() + "\u0001" + String.join("\u0001", choices.trim()) + "\u0001" + answerIndex`. 같은 해시는 skip.
 - `GET /api/game/admin/questions?status=DRAFT&page=0&size=20` → `ApiResponse<{items:[{id, dungeonId, topicTitle, stem, choices, answerIndex, explanation, status}], total}>`
 - `PATCH /api/game/admin/questions/{id}` body `{stem?, choices?, answerIndex?, explanation?, status?}` → 수정된 문제. 내용이 바뀌면 `content_hash` 재계산(충돌 시 409 `DUPLICATE_QUESTION`). `status`가 APPROVED/REJECTED로 바뀌면 `reviewed_at=now`.
