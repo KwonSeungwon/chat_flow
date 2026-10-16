@@ -266,7 +266,6 @@ class StompAuthChannelInterceptorTest {
         @Test
         @DisplayName("rejects non-member subscribe to deep room sub-topic (/thread/...)")
         void nonMember_subscribesToThread_rejected() {
-            when(membershipChecker.isMember(ROOM_ID, USER_ID)).thenReturn(false);
             Message<?> msg = buildSubscribeMessage("/topic/chat/" + ROOM_ID + "/thread/t1");
 
             Message<?> result = interceptor.preSend(msg, channel);
@@ -345,13 +344,44 @@ class StompAuthChannelInterceptorTest {
         }
 
         @Test
-        @DisplayName("allows non-chat topic subscription without membership check")
-        void nonChatTopic_allowed() {
-            Message<?> msg = buildSubscribeMessage("/topic/notifications");
+        @DisplayName("allows /user/queue/room-updates subscription without membership check")
+        void userQueueRoomUpdates_allowed() {
+            Message<?> msg = buildSubscribeMessage("/user/queue/room-updates");
 
             Message<?> result = interceptor.preSend(msg, channel);
 
             assertThat(result).isNotNull();
+            verifyNoInteractions(membershipChecker);
+        }
+
+        @Test
+        @DisplayName("rejects non-chat topic subscription (not on the allow-list)")
+        void nonChatTopic_rejected() {
+            Message<?> msg = buildSubscribeMessage("/topic/notifications");
+
+            assertThat(interceptor.preSend(msg, channel)).isNull();
+        }
+
+        @Test
+        @DisplayName("rejects wildcard and direct broker subscriptions")
+        void wildcardOrDirectBroker_rejected() {
+            for (String dest : new String[]{
+                    "/topic/**", "/topic/*", "/topic/chat/**", "/topic/chat/*",
+                    "/topic/chat/" + ROOM_ID + "/**", "/topic/chat/" + ROOM_ID + "/*",
+                    "/topic/chat/{roomId}", "/topic/chat/room?", "/queue/errors",
+                    "/queue/**", "/user/queue/*", "/user/**", "/app/chat.sendMessage"}) {
+                assertThat(interceptor.preSend(buildSubscribeMessage(dest), channel))
+                        .as(dest).isNull();
+            }
+            verifyNoInteractions(membershipChecker);
+        }
+
+        @Test
+        @DisplayName("rejects member subscription to an unknown room sub-topic")
+        void unknownRoomSubTopic_rejected() {
+            Message<?> msg = buildSubscribeMessage("/topic/chat/" + ROOM_ID + "/thread/t1");
+
+            assertThat(interceptor.preSend(msg, channel)).isNull();
         }
     }
 
@@ -362,15 +392,34 @@ class StompAuthChannelInterceptorTest {
     class EdgeCaseTests {
 
         @Test
-        @DisplayName("SUBSCRIBE to /topic/chat/ with no roomId segment passes through (malformed, no broker match)")
-        void topicChatNoRoomId_passesThrough() {
-            // "/topic/chat/" has a trailing slash but no roomId segment — regex requires [^/]+
-            // so it doesn't match the room-topic pattern. Harmless: no broker will deliver to it.
+        @DisplayName("SUBSCRIBE to /topic/chat/ with no roomId segment is rejected")
+        void topicChatNoRoomId_rejected() {
             Message<?> msg = buildSubscribeMessage("/topic/chat/");
 
-            Message<?> result = interceptor.preSend(msg, channel);
+            assertThat(interceptor.preSend(msg, channel)).isNull();
+        }
 
-            assertThat(result).isNotNull();
+        @Test
+        @DisplayName("SEND to a broker destination (/topic, /queue, /user) is dropped")
+        void sendToBrokerDestination_dropped() {
+            for (String dest : new String[]{"/topic/chat/" + ROOM_ID, "/queue/errors",
+                    "/user/" + USER_ID + "/queue/kicked", "/topic/chat/" + ROOM_ID + "/typing"}) {
+                StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
+                accessor.setDestination(dest);
+                accessor.setSessionAttributes(new HashMap<>(Map.of("userId", USER_ID)));
+                Message<?> msg = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+                assertThat(interceptor.preSend(msg, channel)).as(dest).isNull();
+            }
+        }
+
+        @Test
+        @DisplayName("SEND without a destination is dropped")
+        void sendWithoutDestination_dropped() {
+            StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
+            Message<?> msg = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+            assertThat(interceptor.preSend(msg, channel)).isNull();
         }
 
         @Test

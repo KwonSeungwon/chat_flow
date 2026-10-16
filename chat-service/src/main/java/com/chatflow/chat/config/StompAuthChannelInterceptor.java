@@ -35,9 +35,11 @@ import java.util.regex.Pattern;
  *       to avoid killing the WebSocket session on edge-case timing issues.</li>
  * </ol>
  *
- * <p>Non-room destinations ({@code /user/**}, {@code /queue/**}, other
- * {@code /topic/*} that don't match {@code /topic/chat/{roomId}...}) pass
- * through without a membership check.
+ * <p>SUBSCRIBE is allow-listed: {@code /user/queue/...} (no membership check)
+ * and {@code /topic/chat/{roomId}} plus the sub-topics the server publishes
+ * (membership-checked). Anything else, and any destination with an Ant
+ * wildcard or template character, is dropped. SEND is accepted only for
+ * {@code /app/...} so clients can never publish to the broker directly.
  */
 @Slf4j
 @Component
@@ -56,7 +58,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
      * Capture group 1 = roomId.
      */
     private static final Pattern ROOM_TOPIC_PATTERN =
-            Pattern.compile("^/topic/chat/([^/]+)(?:/.*)?$");
+            Pattern.compile("^/topic/chat/([^/]+)(?:/(?:errors|read-receipts|typing|presence|members))?$");
+
+    /** Per-user queues; resolved by the user-destination handler to the subscriber's own session. */
+    private static final Pattern USER_QUEUE_PATTERN = Pattern.compile("^/user/queue/[^/]+$");
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -70,6 +75,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return switch (command) {
             case CONNECT -> handleConnect(message, accessor);
             case SUBSCRIBE -> handleSubscribe(message, accessor);
+            case SEND -> handleSend(message, accessor);
             default -> message;
         };
     }
@@ -127,18 +133,35 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         return claims;
     }
 
+    /** SEND: only application destinations; broker destinations are client-unpublishable. */
+    private Message<?> handleSend(Message<?> message, StompHeaderAccessor accessor) {
+        String destination = accessor.getDestination();
+        if (destination == null || !destination.startsWith("/app/")) {
+            log.warn("STOMP SEND rejected: destination={} session={}", destination, accessor.getSessionId());
+            return null;
+        }
+        return message;
+    }
+
     /**
      * SUBSCRIBE: authorize room-topic destinations against membership.
      * Returns {@code null} to silently drop the frame if the user is not a member.
      */
     private Message<?> handleSubscribe(Message<?> message, StompHeaderAccessor accessor) {
         String destination = accessor.getDestination();
-        if (destination == null) return message;
+        if (destination == null || destination.indexOf('*') >= 0 || destination.indexOf('?') >= 0
+                || destination.indexOf('{') >= 0) {
+            log.warn("STOMP SUBSCRIBE rejected: wildcard or missing destination={}", destination);
+            return null;
+        }
+        if (USER_QUEUE_PATTERN.matcher(destination).matches()) {
+            return message;
+        }
 
         Matcher matcher = ROOM_TOPIC_PATTERN.matcher(destination);
         if (!matcher.matches()) {
-            // Not a room topic — /user/queue/..., /topic/notifications, etc. Allow.
-            return message;
+            log.warn("STOMP SUBSCRIBE rejected: destination not allow-listed: {}", destination);
+            return null;
         }
 
         String roomId = matcher.group(1);
