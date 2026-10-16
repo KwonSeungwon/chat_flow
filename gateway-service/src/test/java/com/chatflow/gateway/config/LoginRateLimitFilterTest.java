@@ -226,6 +226,23 @@ class LoginRateLimitFilterTest {
         verify(chain).filter(exchange);
     }
 
+    @Test
+    void downstreamError_propagates_andChainRunsOnce() {
+        stubCount("rl:login:127.0.0.1", 1L);
+        when(chain.filter(any())).thenReturn(Mono.error(new IllegalStateException("downstream")));
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/auth/register")
+                        .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 12345))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain))
+                .expectError(IllegalStateException.class)
+                .verify();
+
+        verify(chain, times(1)).filter(exchange);
+    }
+
     // ── Client IP resolution (X-Forwarded-For is never trusted) ──
 
     @Test

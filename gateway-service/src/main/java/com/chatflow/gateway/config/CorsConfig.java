@@ -3,6 +3,8 @@ package com.chatflow.gateway.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
@@ -18,6 +20,7 @@ import java.util.List;
 public class CorsConfig {
 
     @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE) // 401/429 같은 조기 응답에도 CORS 헤더가 붙도록 가장 먼저
     public CorsWebFilter corsWebFilter(
             @Value("${chatflow.cors.allowed-origins:https://app.gossiplog.com}") List<String> allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();

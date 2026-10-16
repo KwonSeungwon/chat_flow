@@ -59,16 +59,17 @@ public class LoginRateLimitFilter implements WebFilter {
         return redis.execute(INCR_EXPIRE_SCRIPT, List.of(key), List.of(String.valueOf(WINDOW_SECONDS)))
                 .next()
                 .defaultIfEmpty(0L)
+                .onErrorResume(e -> {
+                    // Redis 장애 시 fail-open — 정상 서비스 유지 우선. 다운스트림 오류는 여기서 삼키면 안 된다
+                    // (체인이 한 번 더 실행돼 가입 같은 요청이 두 번 처리된다).
+                    log.warn("Login rate limit check failed (fail-open): {}", e.getMessage());
+                    return Mono.just(0L);
+                })
                 .flatMap(count -> {
                     if (count > MAX_REQUESTS) {
                         log.warn("Login rate limit exceeded: ip={} path={} count={}", ip, path, count);
                         return writeRateLimited(exchange);
                     }
-                    return chain.filter(exchange);
-                })
-                .onErrorResume(e -> {
-                    // Redis 장애 시 fail-open — 정상 서비스 유지 우선
-                    log.warn("Login rate limit check failed (fail-open): {}", e.getMessage());
                     return chain.filter(exchange);
                 });
     }

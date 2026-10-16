@@ -3,6 +3,7 @@ package com.chatflow.gateway.security;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -105,7 +106,14 @@ public class JwtAuthenticationWebFilter implements WebFilter {
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
-        // WebSocket 연결용 쿼리 파라미터 지원
+        // 쿼리 파라미터 토큰은 헤더를 못 붙이는 경로만 허용: WebSocket 연결, <img>가 쓰는 파일 GET
+        String path = request.getPath().pathWithinApplication().value();
+        boolean ws = path.equals("/ws") || path.startsWith("/ws/")
+                || path.equals("/ws-native") || path.startsWith("/ws-native/");
+        boolean file = HttpMethod.GET.equals(request.getMethod()) && path.startsWith("/api/files/");
+        if (!ws && !file) {
+            return null;
+        }
         return request.getQueryParams().getFirst("token");
     }
 }
