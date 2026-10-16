@@ -17,14 +17,11 @@ class KafkaTopicConfigTest {
         ReflectionTestUtils.setField(config, "replicationFactor", replication);
 
         NewTopic chatMessages = config.chatMessagesTopic();
-        NewTopic aiSummaryRequests = config.aiSummaryRequestsTopic();
         NewTopic aiSummaries = config.aiSummariesTopic();
 
         assertAll(
                 () -> assertEquals(replication, chatMessages.replicationFactor(),
                         "chatMessages replication"),
-                () -> assertEquals(replication, aiSummaryRequests.replicationFactor(),
-                        "aiSummaryRequests replication"),
                 () -> assertEquals(replication, aiSummaries.replicationFactor(),
                         "aiSummaries replication")
         );
@@ -36,14 +33,11 @@ class KafkaTopicConfigTest {
         ReflectionTestUtils.setField(config, "replicationFactor", (short) 1);
 
         NewTopic chatMessages = config.chatMessagesTopic();
-        NewTopic aiSummaryRequests = config.aiSummaryRequestsTopic();
         NewTopic aiSummaries = config.aiSummariesTopic();
 
         assertAll(
                 () -> assertEquals(3, chatMessages.numPartitions(),
                         "chatMessages partitions"),
-                () -> assertEquals(3, aiSummaryRequests.numPartitions(),
-                        "aiSummaryRequests partitions"),
                 () -> assertEquals(3, aiSummaries.numPartitions(),
                         "aiSummaries partitions")
         );

@@ -154,9 +154,8 @@ public class MessageSenderService {
                     .toList();
         }
 
-        String aiTopic = shouldRequestAISummary(message) ? KafkaTopics.AI_SUMMARY_REQUESTS : null;
         chatPersistenceService.persistMessageAndPublish(
-                message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", aiTopic, mentionEntities);
+                message, KafkaTopics.CHAT_MESSAGES, "MESSAGE_SENT", null, mentionEntities);
         messageCounter.increment();
         chatRoomService.updateLastMessageAt(message.getChatRoomId());
 
@@ -211,16 +210,6 @@ public class MessageSenderService {
     private static void clearReply(ChatMessage message) {
         message.setParentMessageId(null);
         message.setParentMessagePreview(null);
-    }
-
-    private boolean shouldRequestAISummary(ChatMessage message) {
-        if (message.getType() != MessageType.CHAT) return false;
-        return message.getContent() != null && message.getContent().length() > 100;
-    }
-
-    // Test seam — package-private to avoid making the rule public.
-    boolean shouldRequestAISummaryForTest(ChatMessage message) {
-        return shouldRequestAISummary(message);
     }
 
     private String buildPreview(String username, String content) {

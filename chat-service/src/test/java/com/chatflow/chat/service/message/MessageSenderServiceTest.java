@@ -23,52 +23,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for the shouldRequestAISummary rule in MessageSenderService.
- *
- * The method is private, so we exercise it via a package-private test seam
- * (shouldRequestAISummaryForTest) with null collaborators; the send() tests
- * at the bottom use a separately wired instance with Mockito mocks.
- */
+/** Unit tests for MessageSenderService.send(): reply scoping and server-owned flags. */
 class MessageSenderServiceTest {
-
-    private final MessageSenderService service =
-            new MessageSenderService(null, null, null, null, null, null,
-                    new SimpleMeterRegistry());
-
-    @Test
-    void shouldRequestAISummary_returns_false_for_non_chat_types() {
-        String longContent = "x".repeat(150);
-        for (MessageType t : MessageType.values()) {
-            if (t == MessageType.CHAT) continue;
-            ChatMessage msg = ChatMessage.builder()
-                    .type(t).content(longContent).build();
-            assertThat(service.shouldRequestAISummaryForTest(msg))
-                    .as("type=%s should not request summary", t)
-                    .isFalse();
-        }
-    }
-
-    @Test
-    void shouldRequestAISummary_short_chat_returns_false() {
-        ChatMessage msg = ChatMessage.builder()
-                .type(MessageType.CHAT).content("short").build();
-        assertThat(service.shouldRequestAISummaryForTest(msg)).isFalse();
-    }
-
-    @Test
-    void shouldRequestAISummary_long_chat_returns_true() {
-        ChatMessage msg = ChatMessage.builder()
-                .type(MessageType.CHAT).content("x".repeat(150)).build();
-        assertThat(service.shouldRequestAISummaryForTest(msg)).isTrue();
-    }
-
-    @Test
-    void shouldRequestAISummary_chat_with_null_content_returns_false() {
-        ChatMessage msg = ChatMessage.builder()
-                .type(MessageType.CHAT).content(null).build();
-        assertThat(service.shouldRequestAISummaryForTest(msg)).isFalse();
-    }
 
     // ── send(): reply scoping and server-owned flags ───────────────
 

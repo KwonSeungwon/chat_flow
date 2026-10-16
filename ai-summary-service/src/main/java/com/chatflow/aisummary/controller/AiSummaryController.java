@@ -7,6 +7,7 @@ import com.chatflow.common.dto.ApiResponse;
 import com.chatflow.common.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -71,11 +72,13 @@ public class AiSummaryController {
             return ResponseEntity.badRequest().body(ApiResponse.error("chatRoomId는 필수입니다."));
         }
 
-        boolean generated = aiSummaryService.requestSummary(roomId);
-        if (generated) {
-            return ResponseEntity.ok(ApiResponse.ok(null, "요약 요청이 접수되었습니다."));
-        } else {
-            return ResponseEntity.ok(ApiResponse.error("요약할 대화 내용이 부족합니다."));
-        }
+        return switch (aiSummaryService.requestSummaryOutcome(roomId)) {
+            case GENERATED -> ResponseEntity.ok(ApiResponse.ok(null, "요약 요청이 접수되었습니다."));
+            case NO_MESSAGES -> ResponseEntity.ok(ApiResponse.error("요약할 대화 내용이 부족합니다."));
+            case RATE_LIMITED -> ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error("AI 호출 한도를 초과했습니다. 잠시 후 자동으로 다시 시도됩니다."));
+            case FAILED -> ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("요약 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."));
+        };
     }
 }
