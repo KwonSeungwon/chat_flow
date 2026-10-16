@@ -73,6 +73,24 @@ void main() {
     expect(second, ['r1']);
   });
 
+  testWidgets('onConnect_cancelsPendingReconnect', (tester) async {
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+    clients.single.config.onWebSocketError('boom');
+    // A reconnect is now pending; the socket recovers before it fires.
+    clients.single.config.onConnect(connectedFrame());
+
+    await tester.pump(const Duration(seconds: 120));
+
+    expect(clients, hasLength(1));
+    service.disconnect();
+  });
+
   test('webSocketDone_marksDisconnected', () {
     service.connect(
         userId: 'u1',

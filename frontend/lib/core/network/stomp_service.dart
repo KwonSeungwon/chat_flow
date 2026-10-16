@@ -32,6 +32,9 @@ class StompService {
   int _retryCount = 0;
   static const int _maxRetries = 10;
   Timer? _reconnectTimer;
+  /// Bumped by connect()/disconnect(): a reconnect that awaited a token
+  /// refresh across either must not create a client.
+  int _session = 0;
 
   String? _currentRoomId;
   String? _currentUsername;
@@ -89,6 +92,8 @@ class StompService {
     _onBanned = onBanned;
     _onTransientError = onTransientError;
     _onJoinRejected = onJoinRejected;
+    _session++;
+    _reconnectTimer?.cancel();
     _manualDisconnect = false;
     _retryCount = 0;
     _doConnect(token);
@@ -351,11 +356,13 @@ class StompService {
     final delay = Duration(seconds: (1 << _retryCount).clamp(1, 30));
     _retryCount++;
     _reconnectTimer?.cancel();
+    final session = _session;
     _reconnectTimer = Timer(delay, () async {
       if (!_manualDisconnect && _currentToken != null) {
         // Refresh token from secure storage before reconnecting
         if (_tokenProvider != null) {
           final freshToken = await _tokenProvider!();
+          if (_manualDisconnect || session != _session) return;
           if (freshToken != null) _currentToken = freshToken;
         }
         _doConnect(_currentToken!);
@@ -398,6 +405,7 @@ class StompService {
 
   void disconnect() {
     _manualDisconnect = true;
+    _session++;
     _reconnectTimer?.cancel();
     _client?.deactivate();
     _connected = false;

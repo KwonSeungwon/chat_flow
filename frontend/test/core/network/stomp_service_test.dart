@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -88,6 +89,40 @@ void main() {
 
     expect(service.isConnected, isTrue);
     expect(clients, hasLength(2));
+    service.disconnect();
+  });
+
+  testWidgets('disconnectDuringTokenRefresh_doesNotReconnect', (tester) async {
+    final tokenGate = Completer<String?>();
+    service.connect(
+      roomId: 'room-1',
+      username: 'alice',
+      userId: 'u1',
+      token: 'tok',
+      onMessage: (_) {},
+      onConnectionChanged: connectionEvents.add,
+      tokenProvider: () => tokenGate.future,
+    );
+    clients.single.config.onConnect(connectedFrame());
+    clients.single.config.onWebSocketDone();
+    await tester.pump(const Duration(seconds: 2)); // timer fires, awaits token
+
+    service.disconnect(); // user left the room mid-refresh
+    tokenGate.complete('fresh');
+    await tester.pump();
+
+    expect(clients, hasLength(1));
+  });
+
+  testWidgets('connect_cancelsStaleReconnectTimer', (tester) async {
+    connect();
+    clients.single.config.onWebSocketDone(); // reconnect pending (1s)
+    connect(); // manual retry
+    expect(clients, hasLength(2));
+
+    await tester.pump(const Duration(seconds: 60));
+
+    expect(clients, hasLength(2), reason: 'old timer must not reconnect');
     service.disconnect();
   });
 

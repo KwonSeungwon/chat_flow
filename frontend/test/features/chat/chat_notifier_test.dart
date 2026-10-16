@@ -48,22 +48,72 @@ class _FakeStompService extends StompService {
 final _refProvider = Provider<Ref>((ref) => ref);
 
 void main() {
-  test('joinRoom_disposedMidway_doesNotConnect', () async {
-    final historyGate = Completer<void>();
-    final historyRequested = Completer<void>();
+  // Each await in joinRoom gets its own case: the notifier is disposed while
+  // that request is in flight, and joinRoom must stop before connecting.
+  const stages = {
+    'history': '/api/chat/rooms/room-1/messages',
+    'summaries': '/api/ai-summary/room/room-1',
+    'lastRead': '/api/chat/rooms/room-1/last-read',
+  };
+  const okBodies = {
+    '/api/chat/rooms/room-1/messages': {'success': true, 'data': []},
+    '/api/ai-summary/room/room-1': {'success': true, 'data': []},
+    '/api/chat/rooms/room-1/last-read': {
+      'success': true,
+      'data': {'lastReadMessageId': ''},
+    },
+  };
+
+  for (final MapEntry(key: stage, value: gatedPath) in stages.entries) {
+    test('joinRoom_disposedMidway_doesNotConnect ($stage)', () async {
+      final gate = Completer<void>();
+      final gatedRequested = Completer<void>();
+      final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+      dio.interceptors
+          .add(InterceptorsWrapper(onRequest: (options, handler) async {
+        final body = okBodies[options.path];
+        if (body == null) {
+          handler.reject(DioException(requestOptions: options));
+          return;
+        }
+        if (options.path == gatedPath) {
+          gatedRequested.complete();
+          await gate.future;
+        }
+        handler.resolve(
+            Response(requestOptions: options, statusCode: 200, data: body));
+      }));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final stomp = _FakeStompService();
+      final notifier = ChatNotifier(
+        _FakeDioClient(dio),
+        ref: container.read(_refProvider),
+        token: 'tok',
+        username: 'alice',
+        userId: 'u1',
+        stompService: stomp,
+      );
+
+      final join = notifier.joinRoom('room-1');
+      await gatedRequested.future;
+      notifier.dispose(); // user navigated away mid-join
+      gate.complete();
+      await join;
+
+      expect(stomp.connectCalls, 0);
+    });
+  }
+
+  test('joinRoom_completes_connects (control)', () async {
     final dio = Dio(BaseOptions(baseUrl: 'http://test'));
-    dio.interceptors
-        .add(InterceptorsWrapper(onRequest: (options, handler) async {
-      if (options.path.endsWith('/messages')) {
-        historyRequested.complete();
-        await historyGate.future;
-        handler.resolve(Response(
-          requestOptions: options,
-          statusCode: 200,
-          data: {'success': true, 'data': []},
-        ));
-      } else {
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      final body = okBodies[options.path];
+      if (body == null) {
         handler.reject(DioException(requestOptions: options));
+      } else {
+        handler.resolve(
+            Response(requestOptions: options, statusCode: 200, data: body));
       }
     }));
     final container = ProviderContainer();
@@ -77,13 +127,10 @@ void main() {
       userId: 'u1',
       stompService: stomp,
     );
+    addTearDown(notifier.dispose);
 
-    final join = notifier.joinRoom('room-1');
-    await historyRequested.future;
-    notifier.dispose(); // user navigated away while history was loading
-    historyGate.complete();
-    await join;
+    await notifier.joinRoom('room-1');
 
-    expect(stomp.connectCalls, 0);
+    expect(stomp.connectCalls, 1);
   });
 }
