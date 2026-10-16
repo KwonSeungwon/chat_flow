@@ -13,16 +13,13 @@ import '../helpers/pasted_image.dart';
 import '../helpers/web_drop_target.dart';
 import 'drop_zone_overlay.dart';
 import 'patient_card_input_dialog.dart';
-import 'quick_reply_chips.dart';
 import 'sbar_input_dialog.dart';
 import 'schedule_send_sheet.dart';
 
 class ChatInput extends StatefulWidget {
   final bool isConnected;
-  final bool isAiLoading;
   final bool isHandoff;
   final void Function(String content, {String priority}) onSend;
-  final Future<void> Function(String question)? onAskAi;
   final void Function(PatientCard card)? onSendPatientCard;
   final Future<void> Function(String fileName, Uint8List bytes, String mimeType, String content)? onFilePick;
   final ChatMessage? replyTarget;
@@ -35,8 +32,7 @@ class ChatInput extends StatefulWidget {
   /// button opens a time picker; on commit the parent posts to the
   /// schedule API and clears the input. Null disables the long-press.
   final Future<void> Function(String content, DateTime scheduledAt)? onScheduleSend;
-  /// When non-null, renders QuickReplyChips above the input.
-  /// Required for the per-room provider lookup.
+  /// Keys the per-room draft store.
   final String? roomId;
   /// Called when the user presses ArrowUp while the input is empty
   /// (Slack/Discord-style "edit last message" shortcut).
@@ -45,10 +41,8 @@ class ChatInput extends StatefulWidget {
   const ChatInput({
     super.key,
     required this.isConnected,
-    this.isAiLoading = false,
     this.isHandoff = false,
     required this.onSend,
-    this.onAskAi,
     this.onSendPatientCard,
     this.onFilePick,
     this.replyTarget,
@@ -69,7 +63,6 @@ class _ChatInputState extends State<ChatInput> {
   final _controller = TextEditingController();
   final _focusNode  = FocusNode();
   final _keyboardFocusNode = FocusNode();
-  bool _aiMode = false;
   String _priority = 'ROUTINE';
   bool _isSending = false; // Guard against Korean IME double-send
   bool _isUploading = false;
@@ -287,17 +280,7 @@ class _ChatInputState extends State<ChatInput> {
     if (!widget.isConnected) return;
     _isSending = true;
     try {
-      if (_aiMode && widget.onAskAi != null && text.isNotEmpty) {
-        _clearController();
-        _focusNode.requestFocus();
-        try {
-          await widget.onAskAi!(text);
-        } catch (_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('AI 요청에 실패했습니다. 잠시 후 다시 시도해주세요.')));
-        }
-      } else if (hasFile && widget.onFilePick != null) {
+      if (hasFile && widget.onFilePick != null) {
         setState(() => _isUploading = true);
         try {
           await widget.onFilePick!(
@@ -623,65 +606,6 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
-  /// AI-mode toggle button.
-  Widget _buildAiModeToggle({
-    required ColorScheme cs,
-    required double btnSize,
-    required bool isNarrow,
-  }) {
-    return Container(
-      width: btnSize,
-      height: btnSize,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: _aiMode
-            ? AppColors.secondary.withAlpha(30)
-            : cs.surfaceContainer,
-        border: Border.all(
-          color: _aiMode ? AppColors.secondary : cs.outline,
-          width: _aiMode ? 1.5 : 1,
-        ),
-      ),
-      child: widget.isAiLoading
-          ? Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.secondary,
-                ),
-              ),
-            )
-          : Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.isConnected
-                    ? () => setState(() {
-                          _aiMode = !_aiMode;
-                          _controller.clear();
-                        })
-                    : null,
-                borderRadius: BorderRadius.circular(20),
-                child: Center(
-                  child: Text(
-                    'AI',
-                    style: TextStyle(
-                      fontSize: isNarrow ? 10 : 11,
-                      fontWeight: FontWeight.w700,
-                      color: _aiMode
-                          ? AppColors.secondary
-                          : widget.isConnected
-                              ? cs.onSurfaceVariant
-                              : cs.onSurfaceVariant.withAlpha(80),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
-
   /// Priority toggle pill (ROUTINE / URGENT / STAT) for handoff rooms.
   Widget _buildPriorityToggle({
     required ColorScheme cs,
@@ -888,9 +812,7 @@ class _ChatInputState extends State<ChatInput> {
                     ? '연결 중...'
                     : isMuted
                         ? mutedHint
-                        : _aiMode
-                            ? 'AI에게 질문하세요...'
-                            : '메시지를 입력하세요...',
+                        : '메시지를 입력하세요...',
                 hintMaxLines: 1,
                 hintStyle: TextStyle(
                     color: isMuted ? Colors.orange : cs.onSurfaceVariant.withAlpha(130),
@@ -921,7 +843,6 @@ class _ChatInputState extends State<ChatInput> {
       builder: (_, value, __) {
         final canSend = widget.isConnected &&
             (value.text.trim().isNotEmpty || _pendingFileName != null) &&
-            !(_aiMode && widget.isAiLoading) &&
             !_isUploading;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -979,36 +900,29 @@ class _ChatInputState extends State<ChatInput> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // AI mode toggle
-        if (widget.onAskAi != null) ...[
-          _buildAiModeToggle(cs: cs, btnSize: btnSize, isNarrow: isNarrow),
-          SizedBox(width: btnGap),
-        ],
         // Priority toggle (handoff rooms only)
-        if (widget.isHandoff && !_aiMode) ...[
+        if (widget.isHandoff) ...[
           _buildPriorityToggle(cs: cs, btnSize: btnSize, isNarrow: isNarrow),
           SizedBox(width: btnGap),
         ],
         // Handoff tools (SBAR + Patient card) — combined menu
-        if (widget.isHandoff && !_aiMode) ...[
+        if (widget.isHandoff) ...[
           _buildHandoffToolsMenu(cs: cs, btnSize: btnSize),
           SizedBox(width: btnGap),
         ],
-        // File attach button (hidden in AI mode)
-        if (!_aiMode && widget.onFilePick != null) ...[
+        // File attach button
+        if (widget.onFilePick != null) ...[
           _buildFileAttachButton(cs: cs, btnSize: btnSize),
           SizedBox(width: btnGap),
         ],
-        // Emoji button (hidden in AI mode)
-        if (!_aiMode) ...[
-          _CircleIconBtn(
-            icon: Icons.emoji_emotions_outlined,
-            enabled: widget.isConnected,
-            onTap: _showEmojiSheet,
-            size: btnSize,
-          ),
-          SizedBox(width: isNarrow ? 6 : 8),
-        ],
+        // Emoji button
+        _CircleIconBtn(
+          icon: Icons.emoji_emotions_outlined,
+          enabled: widget.isConnected,
+          onTap: _showEmojiSheet,
+          size: btnSize,
+        ),
+        SizedBox(width: isNarrow ? 6 : 8),
 
         // Text field (pill style)
         _buildTextField(cs),
@@ -1052,17 +966,6 @@ class _ChatInputState extends State<ChatInput> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Smart Reply suggestions
-            if (widget.roomId != null)
-              QuickReplyChips(
-                roomId: widget.roomId!,
-                onTap: (suggestion) {
-                  _controller.text = suggestion;
-                  _controller.selection =
-                      TextSelection.collapsed(offset: suggestion.length);
-                  _focusNode.requestFocus();
-                },
-              ),
             _buildMentionSuggestions(cs),
             _buildReplyBanner(cs),
             _buildCharacterCounter(),

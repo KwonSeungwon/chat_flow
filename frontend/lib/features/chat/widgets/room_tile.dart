@@ -19,7 +19,6 @@ class RoomTile extends StatefulWidget {
   final VoidCallback? onHide;
   final VoidCallback? onKeywordsTap;
   final void Function(NotificationPolicy)? onPolicyChange;
-  final VoidCallback? onSearchTap;
 
   const RoomTile({
     super.key,
@@ -35,7 +34,6 @@ class RoomTile extends StatefulWidget {
     this.onHide,
     this.onKeywordsTap,
     this.onPolicyChange,
-    this.onSearchTap,
   });
 
   @override
@@ -71,15 +69,6 @@ class _RoomTileState extends State<RoomTile> {
               },
             )),
             const Divider(height: 1),
-            if (widget.onSearchTap != null)
-              ListTile(
-                leading: const Icon(Icons.search),
-                title: const Text('이 방에서 검색'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  widget.onSearchTap?.call();
-                },
-              ),
             if (widget.onKeywordsTap != null)
               ListTile(
                 leading: const Icon(Icons.notifications_active_outlined),
@@ -132,12 +121,6 @@ class _RoomTileState extends State<RoomTile> {
             Text(p.label),
           ]),
         )),
-        if (widget.onSearchTap != null)
-          const PopupMenuItem(value: 'search', child: Row(children: [
-            Icon(Icons.search, size: 18),
-            SizedBox(width: 8),
-            Text('이 방에서 검색'),
-          ])),
         if (widget.onKeywordsTap != null)
           const PopupMenuItem(value: 'keywords', child: Row(children: [
             Icon(Icons.notifications_active_outlined, size: 18),
@@ -164,7 +147,6 @@ class _RoomTileState extends State<RoomTile> {
         final p = NotificationPolicy.values.firstWhere((e) => e.name == name, orElse: () => NotificationPolicy.all);
         widget.onPolicyChange?.call(p);
       }
-      if (value == 'search') widget.onSearchTap?.call();
       if (value == 'keywords') widget.onKeywordsTap?.call();
       if (value == 'hide') widget.onHide?.call();
       if (value == 'delete') widget.onDelete?.call();

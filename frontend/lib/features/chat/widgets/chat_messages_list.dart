@@ -5,7 +5,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/time_format.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../../shared/models/patient_card.dart';
-import 'bubbles/ai_summary_bubble.dart';
 import 'bubbles/avatar.dart';
 import 'bubbles/chat_bubble.dart';
 import 'bubbles/file_bubble.dart';
@@ -18,7 +17,6 @@ import 'dividers/unread_divider.dart';
 class ChatMessagesList extends StatefulWidget {
   final List<ChatMessage> messages;
   final String currentUsername;
-  final bool isAiLoading;
   /// messageId → read count mapping (for read receipt display)
   final Map<String, int> readCounts;
   /// If set, auto-scroll to this message after build
@@ -48,7 +46,6 @@ class ChatMessagesList extends StatefulWidget {
     super.key,
     required this.messages,
     required this.currentUsername,
-    this.isAiLoading = false,
     this.readCounts = const {},
     this.isLoadingHistory = false,
     this.hasMoreHistory = true,
@@ -444,7 +441,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     final items = _cachedItems!;
     final hasTopLoader = widget.isLoadingHistory && widget.messages.isNotEmpty;
     final topOffset = hasTopLoader ? 1 : 0;
-    final totalCount = items.length + topOffset + (widget.isAiLoading ? 1 : 0);
+    final totalCount = items.length + topOffset;
 
     return Stack(
       children: [
@@ -461,10 +458,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
               );
             }
             final adjustedIndex = index - topOffset;
-            // AI loading indicator at the bottom
-            if (adjustedIndex == items.length && widget.isAiLoading) {
-              return const AiLoadingBubble();
-            }
             final item = items[adjustedIndex];
 
             // Date divider or unread divider
@@ -511,8 +504,6 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             Widget bubble;
             if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
               bubble = SystemBubble(msg: msg);
-            } else if (type == 'AI_SUMMARY' || msg.isAiGenerated) {
-              bubble = AiSummaryCard(msg: msg);
             } else if (type == 'PATIENT_CARD') {
               final card = PatientCard.tryParseContent(msg.content);
               final isMine = msg.username == widget.currentUsername;

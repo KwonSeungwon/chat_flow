@@ -23,24 +23,9 @@ import 'internal/read_state_helper.dart';
 import 'internal/stomp_message_dispatcher.dart';
 import 'helpers/typing_controller.dart';
 import 'notification_policy_provider.dart';
-import 'quick_reply_provider.dart';
 import 'room_keywords_provider.dart';
 import 'admin/admin_event_state.dart';
 import 'admin/room_members_provider.dart';
-
-/// Parse a `/api/ai-summary/room/{id}` response into a list of summaries.
-///
-/// Accepts three shapes:
-/// - ApiResponse-wrapped: `{success, data: [...], message}` — the canonical
-///   shape after the backend was unified to use ApiResponse.
-/// - Bare list: `[...]` — kept for backward compatibility with cached
-///   responses or older deployments.
-/// - Anything else (error envelope, null, malformed) → empty list.
-List<ChatMessage> parseSummariesResponse(dynamic data) {
-  return apiResponseList(data)
-      .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-      .toList();
-}
 
 /// Korean message for a refused join (`NOT_A_MEMBER` / `operation=addUser`).
 String joinRejectedMessage(String reason) {
@@ -85,7 +70,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   /// cursor for the next page. Kept apart from state.messages so summaries
   /// and live messages cannot move it.
   DateTime? _historyCursor;
-  Timer? _quickReplyDebounce;
   late final StompMessageDispatcher _dispatcher;
   late final ReadStateHelper _readState;
   late final MessageSendHelper _send;
@@ -196,10 +180,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       state = state.copyWith(
           isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
     }
-
-    // Load AI summaries and merge into history
-    await _fetchSummaries(roomId);
-    if (!mounted) return;
 
     // Fetch last-read position and compute unread count for this session
     await _readState.fetchLastReadAndUpdateUnread(roomId);
@@ -359,28 +339,11 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   void _onMessage(Map<String, dynamic> rawMsg) => _dispatcher.dispatch(rawMsg);
 
   /// Post-append hook for genuinely new chat messages: sends an
-  /// auto read-receipt and schedules a smart-reply refresh.
+  /// auto read-receipt.
   void _afterChatMessageReceived(ChatMessage msg) {
     // Auto read-receipt: mark as read when message arrives (user is viewing room)
     if (msg.userId != _userId && _currentRoomId != null) {
       _stompService.sendReadReceipt(_currentRoomId!, msg.effectiveId);
-    }
-    // Smart Reply: refresh suggestions when a non-self HUMAN message arrives.
-    // AI summaries / Q&A responses must be excluded — otherwise the AI is
-    // asked to suggest replies to its own message, which wastes a Gemini call
-    // and produces nonsensical chips.
-    final isAi = msg.type == 'AI_SUMMARY' || msg.isAiGenerated;
-    if (msg.userId != _userId && _currentRoomId != null && !isAi) {
-      final id = msg.messageId ?? msg.localId ?? '';
-      if (id.isNotEmpty) {
-        _quickReplyDebounce?.cancel();
-        _quickReplyDebounce = Timer(const Duration(seconds: 1), () {
-          if (!mounted || _currentRoomId == null) return;
-          try {
-            _ref.read(quickReplyProvider(_currentRoomId!).notifier).refresh(id);
-          } catch (_) {/* best-effort */}
-        });
-      }
     }
   }
 
@@ -458,17 +421,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
-  Future<void> _fetchSummaries(String roomId) async {
-    try {
-      final resp = await _dioClient.dio.get('/api/ai-summary/room/$roomId');
-      final summaries = parseSummariesResponse(resp.data);
-      if (summaries.isEmpty || !mounted) return;
-      _mergeMessages(summaries);
-    } catch (_) {
-      // Best-effort — summary load must not interrupt chat
-    }
-  }
-
   /// Number of replies in the currently loaded message buffer for a given
   /// parent. Used to render the reply chip on parent messages — approximate
   /// (only counts what's loaded). The thread panel fetches the authoritative
@@ -523,56 +475,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   /// Called when user enters a room. Clears local unread count and persists last-read position.
   void markRoomRead(String roomId) => _readState.markRoomRead(roomId);
-
-  Future<String> requestSummary(String roomId) async {
-    state = state.copyWith(isSummaryLoading: true);
-    try {
-      final resp = await _dioClient.dio
-          .post('/api/ai-summary/request', data: {'chatRoomId': roomId});
-      final data = resp.data;
-      if (data is Map && data['success'] == false) {
-        return data['message']?.toString() ?? '요약할 메시지가 충분하지 않습니다.';
-      }
-      return ''; // success
-    } finally {
-      if (mounted) state = state.copyWith(isSummaryLoading: false);
-    }
-  }
-
-  static const _aiQuestionPrefix = '[AI에게] ';
-
-  Future<void> askAi(String roomId, String question) async {
-    // Send AI question via STOMP for persistence
-    final taggedContent = '$_aiQuestionPrefix$question';
-    _send.sendTyped(roomId: roomId, content: taggedContent, type: 'CHAT');
-    state = state.copyWith(isAiLoading: true);
-
-    try {
-      final resp = await _dioClient.dio.post('/api/ai-summary/ask', data: {
-        'chatRoomId': roomId,
-        'question': question,
-      });
-      if (!mounted) return;
-      // Parse AI response directly from REST — no WebSocket dependency
-      final msgJson = apiResponseMap(resp.data);
-      if (msgJson != null) {
-        final aiMsg = ChatMessage.fromJson(msgJson);
-        _mergeMessages([aiMsg]);
-        state = state.copyWith(isAiLoading: false);
-      } else {
-        state = state.copyWith(isAiLoading: false);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(isAiLoading: false);
-      // Extract backend error message for display
-      String errMsg = 'AI 답변을 가져오는데 실패했습니다.';
-      if (e is DioException && e.response?.data is Map) {
-        errMsg = (e.response!.data as Map)['message']?.toString() ?? errMsg;
-      }
-      throw Exception(errMsg);
-    }
-  }
 
   void setReplyTarget(ChatMessage message) {
     state = state.copyWith(replyTarget: message);
@@ -679,7 +581,6 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       t.cancel();
     }
     _sendingTimers.clear();
-    _quickReplyDebounce?.cancel();
     _stompService.dispose();
     super.dispose();
   }
