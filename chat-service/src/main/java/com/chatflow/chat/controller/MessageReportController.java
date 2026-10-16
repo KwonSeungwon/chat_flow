@@ -50,16 +50,14 @@ public class MessageReportController {
     }
 
     /**
-     * GET /api/chat/rooms/{roomId}/reports?status=PENDING
-     * Lists reports for a room. OWNER or MOD only (enforced in service).
+     * GET /api/chat/rooms/{roomId}/reports
+     * Lists pending reports for a room. OWNER or MOD only (enforced in service).
      */
     @RequireAuth
     @GetMapping("/api/chat/rooms/{roomId}/reports")
     public ResponseEntity<ApiResponse<List<ReportDto>>> listReports(
             @PathVariable String roomId,
-            @RequestParam(defaultValue = "PENDING") String status,
             @AuthenticatedUser String callerUserId) {
-        // Currently only PENDING listing is supported via the service method
         List<ReportDto> reports = messageReportService.listPendingReports(roomId, callerUserId);
         return ResponseEntity.ok(ApiResponse.ok(reports));
     }

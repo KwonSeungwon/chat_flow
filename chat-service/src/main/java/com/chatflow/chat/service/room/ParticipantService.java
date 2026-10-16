@@ -27,12 +27,6 @@ public class ParticipantService {
     private final RoomCacheEvictor roomCacheEvictor;
 
     @Transactional
-    public void incrementParticipantCount(String roomId) {
-        chatRoomRepository.incrementParticipantCount(roomId);
-        roomCacheEvictor.evict(roomId);
-    }
-
-    @Transactional
     public void decrementParticipantCount(String roomId) {
         chatRoomRepository.decrementParticipantCount(roomId);
         roomCacheEvictor.evict(roomId);

@@ -111,7 +111,7 @@ class AuditIndexServiceTest {
             String eventId = "evt-idempotent-001";
             AuditEvent event = AuditEvent.builder()
                     .eventId(eventId)
-                    .eventType(AuditEvent.ROOM_JOIN)
+                    .eventType(AuditEvent.ROOM_HIDDEN)
                     .userId("user-99")
                     .roomId("room-3")
                     .timestamp(LocalDateTime.of(2026, 7, 4, 10, 0, 0))
@@ -161,7 +161,7 @@ class AuditIndexServiceTest {
             // given
             AuditEvent event = AuditEvent.builder()
                     .eventId("evt-fail-001")
-                    .eventType(AuditEvent.MESSAGE_SEARCH)
+                    .eventType(AuditEvent.MESSAGE_READ)
                     .userId("user-1")
                     .roomId("room-1")
                     .timestamp(LocalDateTime.of(2026, 1, 1, 0, 0, 0))

@@ -25,10 +25,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
     List<ChatRoom> findVisibleOrderByLastActivity(@Param("userId") String userId);
 
     @Modifying
-    @Query("UPDATE ChatRoom r SET r.participantCount = r.participantCount + 1 WHERE r.id = :roomId")
-    int incrementParticipantCount(@Param("roomId") String roomId);
-
-    @Modifying
     @Query("UPDATE ChatRoom r SET r.participantCount = CASE WHEN r.participantCount > 0 THEN r.participantCount - 1 ELSE 0 END WHERE r.id = :roomId")
     int decrementParticipantCount(@Param("roomId") String roomId);
 
