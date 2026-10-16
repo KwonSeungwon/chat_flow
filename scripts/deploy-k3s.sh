@@ -51,11 +51,15 @@ step_infra() {
 # Secret이 없을 때만 생성한다. 인자: <name> <kubectl create secret generic 인자...>
 create_secret_if_absent() {
   local name="$1"; shift
-  if ssh_k3s "kubectl -n $NAMESPACE get secret $name >/dev/null 2>&1"; then
+  local out
+  if out=$(ssh_k3s "kubectl -n $NAMESPACE get secret $name 2>&1"); then
     echo "  skip: $name (already exists)"
-  else
+  elif printf '%s' "$out" | grep -q "NotFound"; then
     ssh_k3s "kubectl -n $NAMESPACE create secret generic $name $*"
     echo "  created: $name"
+  else
+    echo "ERROR: cannot check secret $name (ssh/kubeconfig problem?): $out" >&2
+    exit 1
   fi
 }
 

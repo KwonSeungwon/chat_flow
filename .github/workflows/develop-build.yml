@@ -20,8 +20,7 @@ on:
 env:
   REGISTRY: ghcr.io
   # GHCR requires lowercase repo paths. `github.repository_owner` keeps
-  # the original casing (KwonSeungwon), so the prefix is hardcoded —
-  # release.yaml has the same latent bug but has not been exercised yet.
+  # the original casing (KwonSeungwon), so the prefix is hardcoded.
   IMAGE_PREFIX: ghcr.io/kwonseungwon/chatflow
 
 permissions:
@@ -30,8 +29,7 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Tests gate — release.yaml already runs this on release/* and hotfix/*;
-  # ci.yml runs it on every PR/push. We re-run only the test job here to
+  # Tests gate — ci.yml runs it on every PR/push. We re-run only the test job here to
   # ensure the image we push corresponds to a green commit, even when the
   # PR-merge skipped checks.
   # ---------------------------------------------------------------------------

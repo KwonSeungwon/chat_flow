@@ -111,10 +111,10 @@ data:
                 expires 0;
             }
 
-            # CanvasKit wasm is versioned by engine hash — only file safe to cache long
-            location ~* ^/canvaskit/.*\.wasm$ {
-                expires 1y;
-                add_header Cache-Control "public, immutable";
+            # CanvasKit wasm filenames are not hashed (canvaskit.wasm, skwasm.wasm) —
+            # revalidate via ETag so a Flutter upgrade is picked up
+            location ~* \.wasm$ {
+                add_header Cache-Control "no-cache, must-revalidate";
             }
         }
     }
