@@ -169,4 +169,31 @@ void main() {
     expect(h.queue.length, 1);
     expect(h.state.messages.single.type, 'PATIENT_CARD');
   });
+
+  test('retry_reusesClientId_secondEchoDropped', () {
+    h.helper.sendMessage(roomId: 'room-1', content: 'hi');
+    final originalId = h.state.messages.single.localId;
+    h.failAllSending();
+
+    h.helper.retryFailedMessage(h.state.messages.single);
+    expect(h.state.messages.single.localId, originalId);
+    expect(h.queue.length, 1);
+
+    Map<String, dynamic> echo(String messageId) => {
+          'messageId': messageId,
+          'chatRoomId': 'room-1',
+          'userId': 'u1',
+          'username': 'alice',
+          'content': 'hi',
+          'type': 'CHAT',
+          'timestamp': '2026-10-16T10:00:00',
+          'clientMessageId': originalId,
+        };
+    // Late echo of the original, then the retry's own echo.
+    h.dispatcher.dispatch(echo('m1'));
+    h.dispatcher.dispatch(echo('m2'));
+
+    expect(h.state.messages, hasLength(1));
+    expect(h.state.messages.single.messageId, 'm1');
+  });
 }

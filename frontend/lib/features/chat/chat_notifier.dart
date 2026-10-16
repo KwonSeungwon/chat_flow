@@ -415,7 +415,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         return m.copyWith(
           content: newContent,
           edited: true,
-          editedAt: DateTime.now().toIso8601String(),
+          editedAt: DateTime.now().toUtc().toIso8601String(),
         );
       }
       return m;
@@ -488,26 +488,12 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 
   /// The one way fetched messages (history pages, summaries, thread
   /// replies) enter state. Messages already in state win over incoming
-  /// copies (they may carry live edits/reactions); an incoming server copy
-  /// of our own optimistic bubble (same clientMessageId) replaces it. The
-  /// timeline is re-sorted by parsed time and readCounts recomputed, since
-  /// they are positional.
+  /// copies (they may carry live edits/reactions). The timeline is
+  /// re-sorted by parsed time and readCounts recomputed, since they are
+  /// positional.
   void _mergeMessages(List<ChatMessage> incoming) {
     if (incoming.isEmpty) return;
-    final echoed = {
-      for (final m in incoming)
-        if (m.clientMessageId != null) m.clientMessageId!,
-    };
-    final kept = <ChatMessage>[];
-    for (final m in state.messages) {
-      final isEchoedBubble = m.deliveryStatus != MessageDeliveryStatus.sent &&
-          echoed.contains(m.localId);
-      if (isEchoedBubble) {
-        _sendingTimers.remove(m.localId)?.cancel();
-      } else {
-        kept.add(m);
-      }
-    }
+    final kept = state.messages;
     final seen = {for (final m in kept) m.effectiveId};
     final merged = [
       ...kept,

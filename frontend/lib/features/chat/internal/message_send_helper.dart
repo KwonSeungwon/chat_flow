@@ -66,7 +66,8 @@ class MessageSendHelper {
   /// Optimistic send for every user-sendable type (CHAT, FILE, PATIENT_CARD).
   /// Shows a 'sending' bubble, then sends over STOMP or queues it for the
   /// reconnect flush. The bubble's localId travels as `clientMessageId` so
-  /// the server echo replaces exactly this bubble.
+  /// the server echo replaces exactly this bubble. A retry passes the
+  /// original [localId] so every echo of either attempt maps to one bubble.
   void sendTyped({
     required String roomId,
     required String content,
@@ -76,9 +77,11 @@ class MessageSendHelper {
     String? fileUrl,
     String? fileName,
     String? fileContentType,
+    String? localId,
   }) {
-    final localId = const Uuid().v4();
-    final timestamp = DateTime.now().toIso8601String();
+    localId ??= const Uuid().v4();
+    // UTC with offset: naive strings are parsed as UTC when sorting.
+    final timestamp = DateTime.now().toUtc().toIso8601String();
     final msg = <String, dynamic>{
       'chatRoomId': roomId,
       'userId': userId,
@@ -185,6 +188,7 @@ class MessageSendHelper {
       fileUrl: msg.fileUrl,
       fileName: msg.fileName,
       fileContentType: msg.fileContentType,
+      localId: localId,
     );
   }
 

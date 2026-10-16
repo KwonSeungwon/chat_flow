@@ -7,6 +7,7 @@ import 'package:chatflow/core/network/dio_client.dart';
 import 'package:chatflow/core/network/stomp_service.dart';
 import 'package:chatflow/core/utils/server_time.dart';
 import 'package:chatflow/features/chat/chat_notifier.dart';
+import 'package:chatflow/shared/models/chat_message.dart';
 
 class _FakeDioClient implements DioClient {
   _FakeDioClient(this.dio);
@@ -165,4 +166,35 @@ void main() {
     expect(state().readPositions, {'u2': 'm2'});
     expect(state().readCounts, {'m1': 1, 'm2': 1});
   });
+
+  test('pendingBubble_sortsBetweenOlderAndNewerServerMessages', () async {
+    // Server sends naive UTC timestamps.
+    String serverTime(Duration offset) => DateTime.now()
+        .toUtc()
+        .add(offset)
+        .toIso8601String()
+        .replaceAll('Z', '');
+    final notifier = _notifier(container, {
+      '/api/chat/rooms/room-1/messages':
+          _ok([_msg('old', serverTime(const Duration(minutes: -1)))]),
+    });
+    final state = _stateOf(notifier);
+    await notifier.joinRoom('room-1');
+
+    notifier.sendMessage(roomId: 'room-1', content: 'pending');
+    final bubble = state().messages.last;
+    expect(
+        parseServerDateTime(bubble.timestamp)!
+            .difference(DateTime.now())
+            .inSeconds
+            .abs(),
+        lessThan(5));
+
+    notifier.mergeMessage(ChatMessage.fromJson(
+        _msg('new', serverTime(const Duration(minutes: 1)))));
+
+    expect(state().messages.map((m) => m.messageId ?? m.content),
+        ['old', 'pending', 'new']);
+  });
 }
+

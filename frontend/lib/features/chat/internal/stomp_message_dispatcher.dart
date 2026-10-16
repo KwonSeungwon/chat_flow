@@ -55,6 +55,12 @@ class StompMessageDispatcher {
   /// matched optimistic message (used to cancel the timeout timer).
   final void Function(String? localId) onSendingConfirmed;
 
+  /// clientMessageIds whose bubble already settled to a server message.
+  /// A retry reuses its clientMessageId, so the server can echo one id
+  /// twice; the second echo is dropped. Bounded, oldest evicted first.
+  final Set<String> _resolvedClientIds = <String>{};
+  static const _resolvedClientIdsCap = 200;
+
   // -------------------------------------------------------------------
   // Public entry point — called from ChatNotifier._onMessage
   // -------------------------------------------------------------------
@@ -159,7 +165,16 @@ class StompMessageDispatcher {
           m.userId == msg.userId &&
           m.content == msg.content);
     }
+    if (localIdx < 0 && clientId != null && _resolvedClientIds.contains(clientId)) {
+      return;
+    }
     if (localIdx >= 0) {
+      if (clientId != null) {
+        _resolvedClientIds.add(clientId);
+        if (_resolvedClientIds.length > _resolvedClientIdsCap) {
+          _resolvedClientIds.remove(_resolvedClientIds.first);
+        }
+      }
       final replaced = List<ChatMessage>.from(existing);
       // A history merge may already hold the server copy; then just drop
       // the bubble.
