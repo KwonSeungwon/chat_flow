@@ -4,7 +4,9 @@ import '../../../shared/models/chat_message.dart';
 // Chat Messages
 // ---------------------------------------------------------------------------
 
-enum ChatExitReason { none, deleted, full }
+/// [notMember]: the server refused `/app/chat.addUser` for this room
+/// (NOT_A_MEMBER, operation=addUser) — the room was never joined.
+enum ChatExitReason { none, deleted, full, notMember }
 
 class ChatMessagesState {
   final List<ChatMessage> messages;

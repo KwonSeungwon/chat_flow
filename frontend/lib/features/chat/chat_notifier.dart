@@ -41,10 +41,30 @@ List<ChatMessage> parseSummariesResponse(dynamic data) {
       .toList();
 }
 
+/// Korean message for a refused join (`NOT_A_MEMBER` / `operation=addUser`).
+String joinRejectedMessage(String reason) {
+  switch (reason) {
+    case 'ROOM_NOT_FOUND':
+      return '채팅방을 찾을 수 없습니다.';
+    case 'BANNED':
+      return '이 채팅방에서 차단되어 입장할 수 없습니다.';
+    case 'DM_NOT_PARTICIPANT':
+      return '이 1:1 대화의 참여자가 아닙니다.';
+    case 'PRIVATE_REQUIRES_INVITE':
+      return '비공개 채팅방은 초대 링크로만 입장할 수 있습니다.';
+    case 'PASSWORD_REQUIRED':
+      return '비밀번호를 확인한 뒤 입장할 수 있습니다.';
+    case 'ROOM_FULL':
+      return '채팅방 정원이 가득 찼습니다.';
+    default:
+      return '이 채팅방에 입장할 수 없습니다.';
+  }
+}
+
 class ChatNotifier extends StateNotifier<ChatMessagesState> {
   final DioClient _dioClient;
   final Ref _ref;
-  final StompService _stompService = StompService();
+  final StompService _stompService;
   final String _token;
   final String _username;
   final String _userId;
@@ -71,7 +91,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     required String token,
     required String username,
     required String userId,
+    StompService? stompService,
   })  : _ref = ref,
+        _stompService = stompService ?? StompService(),
         _token = token,
         _username = username,
         _userId = userId,
@@ -143,6 +165,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         '/api/chat/rooms/$roomId/messages',
         queryParameters: {'size': 50},
       );
+      if (!mounted) return;
       final data = resp.data;
       final items = apiResponseList(data);
       final history = <ChatMessage>[];
@@ -167,15 +190,18 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       );
     } catch (e) {
       debugPrint('[ChatNotifier] joinRoom error: $e');
+      if (!mounted) return;
       state = state.copyWith(
           isLoadingHistory: false, errorMessage: '메시지를 불러올 수 없습니다.');
     }
 
     // Load AI summaries and merge into history
     await _fetchSummaries(roomId);
+    if (!mounted) return;
 
     // Fetch last-read position and compute unread count for this session
     await _readState.fetchLastReadAndUpdateUnread(roomId);
+    if (!mounted) return;
 
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
@@ -273,6 +299,17 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       onTransientError: (type, message) {
         if (!mounted) return;
         state = state.copyWith(errorMessage: message);
+      },
+      // Server refused addUser: the room is not joined. StompService has
+      // already stopped reconnecting; the screen leaves on notMember.
+      onJoinRejected: (rejectedRoomId, reason) {
+        if (!mounted) return;
+        _currentRoomId = null;
+        state = state.copyWith(
+          isConnected: false,
+          exitReason: ChatExitReason.notMember,
+          errorMessage: joinRejectedMessage(reason),
+        );
       },
     );
 
@@ -653,16 +690,19 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
 final chatNotifierProvider = StateNotifierProvider.autoDispose
     .family<ChatNotifier, ChatMessagesState, String>(
   (ref, roomId) {
-    final auth = ref.watch(authProvider);
+    // Only identity fields: unrelated auth changes (avatar, isLoading) must not
+    // tear down the room socket and refetch history.
+    final (token, userId, username) = ref.watch(
+        authProvider.select((a) => (a.token, a.userId, a.username)));
     final notifier = ChatNotifier(
       ref.watch(dioClientProvider),
       ref: ref,
-      token: auth.token ?? '',
-      username: auth.username,
-      userId: auth.userId ?? '',
+      token: token ?? '',
+      username: username,
+      userId: userId ?? '',
     );
     // Guard: only join when token is available (prevents empty-token WebSocket on auth hydration)
-    if (auth.token != null) {
+    if (token != null) {
       notifier.joinRoom(roomId);
     }
     // StateNotifier.dispose()가 _stompService.dispose()를 호출하므로 ref.onDispose 중복 등록 제거.

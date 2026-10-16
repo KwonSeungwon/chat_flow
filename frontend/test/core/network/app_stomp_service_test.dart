@@ -1,0 +1,90 @@
+import 'dart:convert';
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'package:chatflow/core/network/app_stomp_service.dart';
+
+import 'fake_stomp_client.dart';
+
+void main() {
+  setUpAll(() => dotenv.testLoad(fileInput: ''));
+
+  late List<FakeStompClient> clients;
+  late AppStompService service;
+
+  setUp(() {
+    clients = [];
+    service = AppStompService(clientFactory: (config) {
+      final c = FakeStompClient(config);
+      clients.add(c);
+      return c;
+    });
+  });
+
+  tearDown(() => service.disconnect());
+
+  void deliverRoomUpdate(String roomId) {
+    clients.last.callbacks['/user/queue/room-updates']!(StompFrame(
+      command: 'MESSAGE',
+      body: jsonEncode({'type': 'UNREAD_INCREMENT', 'roomId': roomId}),
+    ));
+  }
+
+  test('connectHeaders_containBearer', () {
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+
+    final config = clients.single.config;
+    expect(config.stompConnectHeaders?['Authorization'], 'Bearer tok');
+    expect(config.reconnectDelay, Duration.zero);
+  });
+
+  test('connect_whenAlreadyConnected_replacesCallback', () {
+    final first = <String>[];
+    final second = <String>[];
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        onRoomUpdate: (roomId, _,
+                {mentionedUsernames = const [],
+                content = '',
+                senderUsername = ''}) =>
+            first.add(roomId));
+    clients.single.config.onConnect(connectedFrame());
+
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        onRoomUpdate: (roomId, _,
+                {mentionedUsernames = const [],
+                content = '',
+                senderUsername = ''}) =>
+            second.add(roomId));
+    deliverRoomUpdate('r1');
+
+    expect(clients, hasLength(1), reason: 'live socket is reused');
+    expect(first, isEmpty);
+    expect(second, ['r1']);
+  });
+
+  test('webSocketDone_marksDisconnected', () {
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+    clients.single.config.onConnect(connectedFrame());
+
+    clients.single.config.onWebSocketDone();
+
+    expect(service.isConnected, isFalse);
+  });
+}
