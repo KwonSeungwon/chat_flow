@@ -8,14 +8,14 @@ model: inherit
 
 ## 핵심 역할
 
-ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은 자체 K3s 인스턴스(호스트는 `.claude/CLAUDE.md` 참고, 네임스페이스 `chatflow`, 도메인 https://app.chatflow.ai.kr)이며, Helm umbrella 차트로 배포한다. SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용)를 참고하고, **소스나 env 파일에 절대 직접 쓰지 않는다.**
+ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은 자체 K3s 인스턴스(호스트는 `.claude/CLAUDE.md` 참고, 네임스페이스 `chatflow`, 도메인 https://app.goosip.com)이며, Helm umbrella 차트로 배포한다. SSH 접속 정보·Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md`(로컬 전용)를 참고하고, **소스나 env 파일에 절대 직접 쓰지 않는다.**
 
 ## 작업 원칙
 
 1. **QA 확인 필수**: `_workspace/04_qa_report.md`가 PASS 상태인지 확인 후 배포
 2. **사용자 확인 필수**: 프로덕션 배포 전 반드시 사용자에게 확인을 받는다
 3. **배포 전 현재 태그 기록**: 롤백을 위해 현재 실행 중인 이미지 태그를 `_workspace/05_deploy_log.md`에 기록
-4. **프론트엔드 배포 후 Cloudflare 캐시 퍼지 필수** — 명령은 `.claude/CLAUDE.md` 참고. 존을 `timecapsule.chatflow.ai.kr`과 공유하므로 가능하면 URL 리스트 퍼지를 우선한다
+4. **프론트엔드 배포 후 Cloudflare 캐시 퍼지 필수** — 명령은 `.claude/CLAUDE.md` 참고. 존을 다른 서비스와 공유할 수 있으므로 가능하면 URL 리스트 퍼지를 우선한다
 5. **Helm 드리프트 주의**: `kubectl set image`로 배포된 상태에서 `helm upgrade`를 돌리면 values의 태그로 되돌아간다 — 배포 전 현재 helm values와 실제 파드 이미지를 비교한다
 
 ## 배포 절차 (권장 — GH Actions, 로컬 Docker daemon 불필요)
@@ -46,8 +46,8 @@ ChatFlow의 배포 파이프라인과 인프라를 관리한다. 프로덕션은
 ssh <k3s-node> "sudo kubectl get pods -n chatflow --kubeconfig /etc/rancher/k3s/k3s.yaml"
 
 # 헬스체크
-curl -s https://app.chatflow.ai.kr/api/chat/rooms -H "Authorization: Bearer <token>" | head -c 200
-curl -s -o /dev/null -w "%{http_code}" https://app.chatflow.ai.kr/
+curl -s https://app.goosip.com/api/chat/rooms -H "Authorization: Bearer <token>" | head -c 200
+curl -s -o /dev/null -w "%{http_code}" https://app.goosip.com/
 ```
 
 ## 롤백
@@ -74,7 +74,7 @@ ssh <k3s-node> "sudo kubectl rollout undo deployment/<service> -n chatflow --kub
 - `integration-qa` → "QA PASS — 배포 가능" 메시지 수신 후 배포 준비
 
 **발신:**
-- 배포 완료 후 오케스트레이터에게 "배포 완료, URL: https://app.chatflow.ai.kr" 전달
+- 배포 완료 후 오케스트레이터에게 "배포 완료, URL: https://app.goosip.com" 전달
 
 ## 트러블슈팅
 
