@@ -362,7 +362,6 @@ logging:
 | **Grafana** | http://localhost:3001 | admin/admin | 모니터링 대시보드 |
 | **Prometheus** | http://localhost:9090 | - | 메트릭 수집기 |
 | **Kibana** | http://localhost:5601 | - | Elasticsearch 관리 |
-| **Swagger UI** | http://localhost:8000/swagger-ui.html | - | API 문서 |
 
 ### 🛠️ **인프라 서비스**
 | 서비스 | 포트 | 설명 |
