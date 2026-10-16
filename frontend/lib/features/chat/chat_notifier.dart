@@ -199,8 +199,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       username: _username,
       userId: _userId,
       token: _token,
-      tokenProvider: () async =>
-          await _storage.read(key: StorageKeys.token) ?? _token,
+      // Current stored token; null (logged out / expired) stops retrying.
+      tokenProvider: () => _storage.read(key: StorageKeys.token),
       onMessage: (msg) => _onMessage(msg),
       onConnectionChanged: (connected) {
         if (mounted) {

@@ -39,6 +39,12 @@ class StompService {
   /// refresh across either must not create a client.
   int _session = 0;
 
+  /// Retrying stopped for auth: no stored token, or the server refused
+  /// CONNECT for [_rejectedToken]. [reconnectNow] or [connect] with a
+  /// different token resumes.
+  bool _authStopped = false;
+  String? _rejectedToken;
+
   String? _currentRoomId;
   String? _currentUsername;
   String? _currentUserId;
@@ -98,6 +104,8 @@ class StompService {
     _session++;
     _reconnectTimer?.cancel();
     _manualDisconnect = false;
+    _authStopped = false;
+    _rejectedToken = null;
     _retryCount = 0;
     _doConnect(token);
   }
@@ -129,7 +137,12 @@ class StompService {
           if (isCurrent()) _onDisconnect();
         },
         onStompError: (frame) {
-          if (isCurrent()) _onError();
+          if (!isCurrent()) return;
+          if (isUnauthorizedStompError(frame)) {
+            _stopForAuth(rejected: token);
+          } else {
+            _onError();
+          }
         },
         onWebSocketError: (error) {
           if (isCurrent()) _onError();
@@ -355,7 +368,18 @@ class StompService {
     if (!_manualDisconnect) _scheduleReconnect();
   }
 
+  void _stopForAuth({String? rejected}) {
+    _authStopped = true;
+    if (rejected != null) _rejectedToken = rejected;
+    _reconnectTimer?.cancel();
+    if (_connected) {
+      _connected = false;
+      _onConnectionChanged?.call(false);
+    }
+  }
+
   void _scheduleReconnect() {
+    if (_authStopped) return;
     // onWebSocketError and onWebSocketDone both fire for one drop.
     if (_reconnectTimer?.isActive ?? false) return;
     final Duration delay;
@@ -372,19 +396,27 @@ class StompService {
 
   Future<void> _reconnect(int session) async {
     if (!_manualDisconnect && _currentToken != null) {
-      // Refresh token from secure storage before reconnecting
+      // Re-read the current token on every attempt (rotation, re-login).
       if (_tokenProvider != null) {
         final freshToken = await _tokenProvider!();
         if (_manualDisconnect || session != _session) return;
-        if (freshToken != null) _currentToken = freshToken;
+        // No token (logged out / expired) or the one already refused:
+        // retrying cannot succeed, so stop until resume/login.
+        if (freshToken == null || freshToken == _rejectedToken) {
+          _stopForAuth();
+          return;
+        }
+        _currentToken = freshToken;
       }
+      _authStopped = false;
       _doConnect(_currentToken!);
     }
   }
 
   /// Reconnects right away if the socket is down (app resumed, back online),
-  /// instead of waiting for the next backoff/periodic retry. No-op while
-  /// connected or after [disconnect].
+  /// instead of waiting for the next backoff/periodic retry. Also the way
+  /// out of an auth stop once a new token is stored. No-op while connected
+  /// or after [disconnect].
   void reconnectNow() {
     if (_connected || _manualDisconnect || _currentToken == null) return;
     _reconnectTimer?.cancel();
