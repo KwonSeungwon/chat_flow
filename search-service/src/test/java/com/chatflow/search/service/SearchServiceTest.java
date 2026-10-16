@@ -9,6 +9,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import com.chatflow.search.document.ChatMessageDocument;
 import com.chatflow.search.util.SearchConstants;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
@@ -155,9 +156,11 @@ class SearchServiceTest {
         stubBulkOk();
         List<String> batch = List.of(msg("m1", false, "CHAT"), "{not json", msg("m2", false, "CHAT"));
 
+        // the Jackson exception stays the cause so the shared error handler dead-letters without retry
         assertThatThrownBy(() -> searchService.indexChatMessages(batch))
                 .isInstanceOfSatisfying(BatchListenerFailedException.class,
-                        e -> assertThat(e.getIndex()).isEqualTo(1));
+                        e -> assertThat(e.getIndex()).isEqualTo(1))
+                .hasCauseInstanceOf(JsonProcessingException.class);
 
         List<BulkOperation> ops = captureSingleBulk().operations();
         assertThat(ops).hasSize(1);
