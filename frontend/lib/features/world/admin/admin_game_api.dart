@@ -136,15 +136,3 @@ class AdminGameApi {
         statusCode: e.response?.statusCode, code: code, message: message);
   }
 }
-
-/// True when the admin list endpoint answers; false on 403 (not an admin).
-/// Other failures (network, 5xx) are treated as not admin so the entry icon
-/// stays hidden.
-Future<bool> isGameAdmin(AdminGameApi api) async {
-  try {
-    await api.listQuestions(status: 'DRAFT', size: 1);
-    return true;
-  } on AdminGameApiException {
-    return false;
-  }
-}

@@ -97,6 +97,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           _ref.read(roomUnreadCountsProvider.notifier).reset(roomId),
       setUnreadCount: (roomId, count) =>
           _ref.read(roomUnreadCountsProvider.notifier).setCount(roomId, count),
+      isActiveRoom: (roomId) => _ref.read(activeRoomIdProvider) == roomId,
     );
     _dispatcher = StompMessageDispatcher(
       getCurrentState: () => state,
@@ -183,11 +184,16 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     // Fetch last-read position and compute unread count for this session
     await _readState.fetchLastReadAndUpdateUnread(roomId);
     if (!mounted) return;
+    // The entry-time markRoomRead ran before history arrived (empty id); now
+    // persist the real last message so the server's lastRead moves.
+    if (_ref.read(activeRoomIdProvider) == roomId) _readState.markRoomRead(roomId);
 
     // Set roomId before connect — _onMessage may fire before connect() returns
     _currentRoomId = roomId;
 
-    // Connect WebSocket
+    // Connect WebSocket. A later connected=true is a reconnect: messages sent
+    // while the socket was down never reach us over STOMP, so refetch them.
+    var wasConnected = false;
     _stompService.connect(
       roomId: roomId,
       username: _username,
@@ -200,6 +206,8 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
         if (mounted) {
           state = state.copyWith(isConnected: connected);
           if (connected) {
+            if (wasConnected) _refetchLatest(roomId);
+            wasConnected = true;
             _send.flushOfflineQueue();
           }
         }
@@ -286,6 +294,40 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     _subscribeFcmToRoom(roomId);
   }
 
+  /// Re-reads the newest history page after a reconnect and merges it, so
+  /// messages broadcast while the socket was down show up.
+  Future<void> _refetchLatest(String roomId) async {
+    try {
+      final resp = await _dioClient.dio.get(
+        '/api/chat/rooms/$roomId/messages',
+        queryParameters: {'size': 50},
+      );
+      if (!mounted || _currentRoomId != roomId) return;
+      final latest = <ChatMessage>[];
+      for (final e in apiResponseList(resp.data)) {
+        try {
+          latest.add(ChatMessage.fromJson(e as Map<String, dynamic>));
+        } catch (parseErr) {
+          debugPrint('[ChatNotifier] refetch parse error: $parseErr');
+        }
+      }
+      // Our own sends whose echo was lost settle their bubbles instead of
+      // showing up twice.
+      _mergeMessages([
+        for (final m in latest)
+          if (!_dispatcher.reconcileOwnMessage(m, contentFallback: false)) m,
+      ]);
+      if (_ref.read(activeRoomIdProvider) == roomId) {
+        _readState.markRoomRead(roomId);
+      }
+    } catch (e) {
+      debugPrint('[ChatNotifier] refetch after reconnect failed: $e');
+    }
+  }
+
+  /// Reconnects the room socket now if it is down (app resumed).
+  void reconnectIfNeeded() => _stompService.reconnectNow();
+
   Future<void> _subscribeFcmToRoom(String roomId) => _fcmSub.subscribe(roomId);
   Future<void> _unsubscribeFcmFromRoom(String roomId) =>
       _fcmSub.unsubscribe(roomId);
@@ -363,6 +405,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       return true;
     } catch (_) {
       // Rollback on failure — restore original message list
+      if (!mounted) return false;
       state = state.copyWith(messages: originalMessages);
       return false;
     }
@@ -391,6 +434,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
       );
       return true;
     } catch (_) {
+      if (!mounted) return false;
       state = state.copyWith(messages: originalMessages);
       return false;
     }

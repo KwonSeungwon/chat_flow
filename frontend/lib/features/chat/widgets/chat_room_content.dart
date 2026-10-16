@@ -44,9 +44,20 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   /// Captured in initState: `ref` is unusable inside dispose().
   late final StateController<String?> _activeRoomId;
 
+  /// Back in the foreground: sockets that gave up or are mid-backoff
+  /// reconnect now instead of waiting for the next retry.
+  late final AppLifecycleListener _lifecycle;
+
+  void _onResume() {
+    if (!mounted) return;
+    ref.read(chatNotifierProvider(widget.roomId).notifier).reconnectIfNeeded();
+    ref.read(appStompServiceProvider).reconnectNow();
+  }
+
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _onResume);
     _activeRoomId = ref.read(activeRoomIdProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -65,6 +76,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     // Clear active room on leave so unread increments resume for this room.
     // Deferred: providers cannot be modified during dispose. Only if it is
     // still ours — on a room switch the next room has set itself by then.

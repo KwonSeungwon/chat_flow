@@ -144,8 +144,13 @@ class StompMessageDispatcher {
     setState(getCurrentState().copyWith(messages: updated));
   }
 
-  void _handleNewMessage(Map<String, dynamic> rawMsg) {
-    final msg = ChatMessage.fromJson(rawMsg);
+  /// Settles our own optimistic bubble with its server copy [msg] (a STOMP
+  /// echo, or a message refetched after a reconnect). Returns true when [msg]
+  /// was consumed: the bubble was replaced, or [msg] is a repeat of an
+  /// already-settled clientMessageId. [contentFallback] also matches a
+  /// 'sending' bubble by content when [msg] has no clientMessageId — right
+  /// for a live echo, wrong for history (an older identical message).
+  bool reconcileOwnMessage(ChatMessage msg, {bool contentFallback = true}) {
     final state = getCurrentState();
     final existing = state.messages;
 
@@ -162,7 +167,7 @@ class StompMessageDispatcher {
             m.deliveryStatus != MessageDeliveryStatus.sent);
     // Fallback for echoes without clientMessageId: content match on a
     // bubble still 'sending'.
-    if (localIdx < 0 && msg.clientMessageId == null) {
+    if (contentFallback && localIdx < 0 && msg.clientMessageId == null) {
       localIdx = existing.indexWhere((m) =>
           m.deliveryStatus == MessageDeliveryStatus.sending &&
           m.userId == msg.userId &&
@@ -171,31 +176,37 @@ class StompMessageDispatcher {
     if (localIdx < 0 &&
         clientId != null &&
         _resolvedClientIds.contains(clientId)) {
-      return;
+      return true;
     }
-    if (localIdx >= 0) {
-      if (clientId != null) {
-        _resolvedClientIds.add(clientId);
-        if (_resolvedClientIds.length > _resolvedClientIdsCap) {
-          _resolvedClientIds.remove(_resolvedClientIds.first);
-        }
+    if (localIdx < 0) return false;
+    if (clientId != null) {
+      _resolvedClientIds.add(clientId);
+      if (_resolvedClientIds.length > _resolvedClientIdsCap) {
+        _resolvedClientIds.remove(_resolvedClientIds.first);
       }
-      final replaced = List<ChatMessage>.from(existing);
-      // A history merge may already hold the server copy; then just drop
-      // the bubble.
-      if (existing.any((m) => m.effectiveId == msg.effectiveId)) {
-        replaced.removeAt(localIdx);
-      } else {
-        replaced[localIdx] = msg;
-      }
-      // Cancel the timeout timer for the matched local message
-      onSendingConfirmed(existing[localIdx].localId);
-      setState(state.copyWith(
-        messages: replaced,
-        readCounts: computeReadCounts(replaced, state.readPositions),
-      ));
-      return;
     }
+    final replaced = List<ChatMessage>.from(existing);
+    // A history merge may already hold the server copy; then just drop
+    // the bubble.
+    if (existing.any((m) => m.effectiveId == msg.effectiveId)) {
+      replaced.removeAt(localIdx);
+    } else {
+      replaced[localIdx] = msg;
+    }
+    // Cancel the timeout timer for the matched local message
+    onSendingConfirmed(existing[localIdx].localId);
+    setState(state.copyWith(
+      messages: replaced,
+      readCounts: computeReadCounts(replaced, state.readPositions),
+    ));
+    return true;
+  }
+
+  void _handleNewMessage(Map<String, dynamic> rawMsg) {
+    final msg = ChatMessage.fromJson(rawMsg);
+    if (reconcileOwnMessage(msg)) return;
+    final state = getCurrentState();
+    final existing = state.messages;
 
     // Dedup by effectiveId
     if (existing.any((m) => m.effectiveId == msg.effectiveId)) return;

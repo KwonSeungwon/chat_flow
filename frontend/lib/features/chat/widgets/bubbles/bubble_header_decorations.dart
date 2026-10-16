@@ -46,12 +46,16 @@ class BubbleHeaderDecorations extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onSecondaryContainer,
                   ),
                   const SizedBox(width: 3),
-                  Text(
-                    '전달됨 · ${msg.forwardedFrom!}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  Flexible(
+                    child: Text(
+                      '전달됨 · ${msg.forwardedFrom!}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSecondaryContainer,
+                      ),
                     ),
                   ),
                 ],

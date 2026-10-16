@@ -10,6 +10,9 @@ import '../../core/network/dio_client.dart';
 import '../../core/utils/apk_downloader.dart';
 import 'auth_provider.dart';
 
+/// Gateway sign-up rule for usernames (after trim, 2–20 chars).
+final _usernamePattern = RegExp(r'^[A-Za-z0-9가-힣_.\-]+$');
+
 /// 로그인 화면은 앱 테마(다크/라이트)와 관계없이 파스텔 브랜드 팔레트로 고정한다.
 class _P {
   static const ink = Color(0xFF24304D);
@@ -212,6 +215,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               validator: (v) {
                 if (v == null || v.trim().length < 2) {
                   return '아이디는 2자 이상으로 해 주세요';
+                }
+                // Sign-up only: mirrors the gateway rule. Login keeps accepting
+                // older names created before the rule.
+                if (_isRegister) {
+                  final name = v.trim();
+                  if (name.length > 20) return '아이디는 20자 이하로 해 주세요';
+                  if (!_usernamePattern.hasMatch(name)) {
+                    return '아이디는 영문, 숫자, 한글, _ . - 만 쓸 수 있어요';
+                  }
                 }
                 return null;
               },

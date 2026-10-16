@@ -34,13 +34,20 @@ class GameMe {
   final int total;
   final bool graduated;
 
+  /// 위키 던전 문제 검수 관리자. 옛 서버는 보내지 않는다 → false.
+  final bool admin;
+
   const GameMe(
-      {required this.clearedCount, required this.total, required this.graduated});
+      {required this.clearedCount,
+      required this.total,
+      required this.graduated,
+      this.admin = false});
 
   factory GameMe.fromJson(Map<String, dynamic> j) => GameMe(
         clearedCount: _int(j['clearedCount']),
         total: _int(j['total'], 8),
         graduated: _bool(j['graduated']),
+        admin: _bool(j['admin']),
       );
 }
 

@@ -30,11 +30,11 @@ class _RouterNotifier extends ChangeNotifier {
     if (!auth.isHydrated) return null;
     final loc = state.matchedLocation;
     final isLoginPage = loc == '/login';
-    final isInvitePage = loc.startsWith('/invite/');
     if (!auth.isAuthenticated && !isLoginPage) {
-      // Preserve the invite path as a redirect target after login
-      if (isInvitePage) return '/login?redirect=${Uri.encodeComponent(loc)}';
-      return '/login';
+      if (auth.loggedOut) return '/login';
+      // Preserve the requested location (path + query) as the post-login target
+      // (deep link while logged out, or a session that died with a 401)
+      return '/login?redirect=${Uri.encodeComponent(state.uri.toString())}';
     }
     if (auth.isAuthenticated && isLoginPage) {
       final redirect = state.uri.queryParameters['redirect'];
@@ -119,3 +119,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+/// `MaterialApp.router`의 builder에 쓴다. 저장소 hydration이 끝나기 전에는
+/// [child](Router/Navigator)를 만들지 않고 스플래시만 그린다. 그래야 딥링크된
+/// 페이지가 로그인 여부를 모르는 채로 생성되어 API를 부르거나 로그인으로
+/// 튕기지 않는다.
+class AuthHydrationGate extends ConsumerWidget {
+  const AuthHydrationGate({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hydrated = ref.watch(authProvider.select((s) => s.isHydrated));
+    if (!hydrated) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return child;
+  }
+}

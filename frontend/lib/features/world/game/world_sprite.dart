@@ -59,16 +59,29 @@ class WorldSprite extends PositionComponent
 /// 게임 하나가 쓰는 SVG를 한 번씩만 읽어 두고 게임이 끝날 때 한꺼번에 비운다.
 class SvgBank {
   final _svgs = <String, Svg>{};
+  bool _disposed = false;
+
+  /// [dispose]가 불렸다. 그 뒤에 끝난 읽기는 바로 놓는다.
+  bool get isDisposed => _disposed;
+
+  int get length => _svgs.length;
 
   Future<void> loadAll(FlameGame game, Iterable<String> names) async {
     await Future.wait(names.map((n) async {
-      _svgs[n] = await game.loadSvg('world/$n.svg');
+      final svg = await game.loadSvg('world/$n.svg');
+      if (_disposed) {
+        svg.dispose();
+        svg.pictureInfo.picture.dispose();
+        return;
+      }
+      _svgs[n] = svg;
     }));
   }
 
   Svg operator [](String name) => _svgs[name]!;
 
   void dispose() {
+    _disposed = true;
     for (final s in _svgs.values) {
       s.dispose();
       s.pictureInfo.picture.dispose();

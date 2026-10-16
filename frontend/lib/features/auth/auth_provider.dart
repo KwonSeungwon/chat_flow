@@ -20,6 +20,10 @@ class AuthState {
   final String? error;
   final bool isHydrated;
 
+  /// The user logged out on purpose (not a 401/expiry). The router then
+  /// goes to a plain /login instead of offering to return to the old page.
+  final bool loggedOut;
+
   const AuthState({
     this.token,
     this.userId,
@@ -28,6 +32,7 @@ class AuthState {
     this.isLoading = false,
     this.error,
     this.isHydrated = false,
+    this.loggedOut = false,
   });
 
   bool get isAuthenticated => token != null;
@@ -228,9 +233,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _armBeforeUnloadHandler();
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-      final msg = code == 400
-          ? '이미 사용 중인 아이디입니다.'
-          : '회원가입 실패. 잠시 후 다시 시도해주세요.';
+      // 400: the gateway says why (rule violation / duplicate) in `error`.
+      // 409: two sign-ups raced for the same name.
+      final body = e.response?.data;
+      final serverMsg = body is Map ? body['error']?.toString() : null;
+      final msg = code == 400 && serverMsg != null && serverMsg.isNotEmpty
+          ? serverMsg
+          : code == 400 || code == 409
+              ? '이미 사용 중인 아이디입니다.'
+              : '회원가입 실패. 잠시 후 다시 시도해주세요.';
       state = AuthState(isLoading: false, error: msg, isHydrated: true);
     } catch (e) {
       debugPrint('[AuthNotifier] register error: $e');
@@ -254,7 +265,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     WebUnloadHandler.unregister();
     await _clearCredentials();
     _onSessionEnded?.call();
-    state = const AuthState(isHydrated: true);
+    state = const AuthState(isHydrated: true, loggedOut: true);
   }
 
   Future<void> changePassword(String currentPassword, String newPassword) async {

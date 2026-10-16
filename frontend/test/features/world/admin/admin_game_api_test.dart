@@ -85,25 +85,6 @@ void main() {
             .having((e) => e.isForbidden, 'f', true)));
   });
 
-  test('isGameAdmin true on success, false on 403', () async {
-    mock.data = {
-      'data': {'items': [], 'total': 0}
-    };
-    expect(await isGameAdmin(api), isTrue);
-    expect(mock.captured.single.queryParameters['size'], 1);
-    mock.status = 403;
-    expect(await isGameAdmin(api), isFalse);
-  });
-
-  test('isGameAdmin false on network error', () async {
-    final dio = Dio(BaseOptions(baseUrl: 'http://localhost'));
-    dio.interceptors.add(InterceptorsWrapper(onRequest: (o, h) {
-      h.reject(DioException(
-          requestOptions: o, type: DioExceptionType.connectionError));
-    }));
-    expect(await isGameAdmin(AdminGameApi(dio)), isFalse);
-  });
-
   test('malformed payload maps to AdminGameApiException', () async {
     mock.data = {
       'data': {
@@ -115,6 +96,5 @@ void main() {
     };
     await expectLater(api.listQuestions(status: 'DRAFT'),
         throwsA(isA<AdminGameApiException>()));
-    expect(await isGameAdmin(api), isFalse);
   });
 }

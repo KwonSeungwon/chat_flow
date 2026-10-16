@@ -112,4 +112,41 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('회원가입 아이디는 서버 규칙(2~20자, 영문·숫자·한글·_.-)을 따른다',
+      (tester) async {
+    await pump(tester, const Size(1280, 900));
+    await tester.tap(find.text('회원가입').first);
+    await tester.pumpAndSettle();
+    final id = find.widgetWithText(TextFormField, '아이디');
+    await tester.enterText(find.widgetWithText(TextFormField, '비밀번호'), 'Passw0rd!');
+    await tester.enterText(find.widgetWithText(TextFormField, '비밀번호 확인'), 'Passw0rd!');
+
+    Future<void> submit(String name) async {
+      await tester.enterText(id, name);
+      await tester.tap(find.widgetWithText(FilledButton, '회원가입'));
+      await tester.pumpAndSettle();
+    }
+
+    await submit('a' * 21);
+    expect(find.text('아이디는 20자 이하로 해 주세요'), findsOneWidget);
+    await submit('bad name!');
+    expect(find.text('아이디는 영문, 숫자, 한글, _ . - 만 쓸 수 있어요'), findsOneWidget);
+    expect(auth.registerCalls, 0);
+
+    await submit('  새_user.1-  ');
+    expect(auth.registerCalls, 1);
+    expect(auth.registeredUsername, '새_user.1-');
+  });
+
+  testWidgets('로그인 탭은 기존 아이디 규칙만 본다(옛 계정 이름 허용)', (tester) async {
+    await pump(tester, const Size(1280, 900));
+    await tester.enterText(
+        find.widgetWithText(TextFormField, '아이디'), 'Forward Tester');
+    await tester.enterText(find.widgetWithText(TextFormField, '비밀번호'), 'Passw0rd!');
+    await tester.tap(find.widgetWithText(FilledButton, '들어가기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('아이디는 영문, 숫자, 한글, _ . - 만 쓸 수 있어요'), findsNothing);
+  });
 }

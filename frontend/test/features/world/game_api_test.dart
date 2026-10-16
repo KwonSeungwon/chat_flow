@@ -165,6 +165,27 @@ void main() {
     await expectCode(api.me(), GameApiException.unavailable);
   });
 
+  test('gateway 503 SERVICE_UNAVAILABLE maps to GAME_UNAVAILABLE', () async {
+    adapter.routes['GET /api/game/dungeons'] = (
+      503,
+      {'status': 503, 'code': 'SERVICE_UNAVAILABLE', 'message': 'circuit open'}
+    );
+    adapter.routes['GET /api/game/me'] = (503, 'Service Unavailable');
+    await expectCode(api.listDungeons(), GameApiException.unavailable);
+    await expectCode(api.me(), GameApiException.unavailable);
+  });
+
+  test('me.admin is read, missing means false (old server)', () async {
+    adapter.routes['GET /api/game/me'] = (
+      200,
+      _ok({'clearedCount': 1, 'total': 8, 'graduated': false, 'admin': true})
+    );
+    expect((await api.me()).admin, isTrue);
+    adapter.routes['GET /api/game/me'] =
+        (200, _ok({'clearedCount': 1, 'total': 8, 'graduated': false}));
+    expect((await api.me()).admin, isFalse);
+  });
+
   test('connection error maps to OFFLINE', () async {
     adapter.offline = true;
     await expectCode(api.next('r1'), GameApiException.offline);
