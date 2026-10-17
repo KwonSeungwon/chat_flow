@@ -9,11 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Slf4j
 @RestController
@@ -83,22 +79,15 @@ public class ProfileController {
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
-    /** 요청에 담긴 필드만 컬럼 단위로 UPDATE한다. "" 는 NULL로 저장. */
+    /** 요청에 담긴 필드만 단일 UPDATE로 갱신한다. "" 는 NULL로 저장. */
     private Mono<Void> applyUpdates(String userId, ProfileUpdateRequest body) {
-        List<Mono<Integer>> updates = new ArrayList<>();
-        if (body.profileImageUrl() != null) {
-            updates.add(userRepository.updateProfileImageUrl(userId, emptyToNull(body.profileImageUrl())));
-        }
-        if (body.statusMessage() != null) {
-            updates.add(userRepository.updateStatusMessage(userId, emptyToNull(body.statusMessage())));
-        }
-        if (body.bio() != null) {
-            updates.add(userRepository.updateBio(userId, emptyToNull(body.bio())));
-        }
-        return Flux.concat(updates).then();
+        return userRepository.updateProfile(userId,
+                body.profileImageUrl() != null, emptyToNull(body.profileImageUrl()),
+                body.statusMessage() != null, emptyToNull(body.statusMessage()),
+                body.bio() != null, emptyToNull(body.bio())).then();
     }
 
     private static String emptyToNull(String value) {
-        return value.isEmpty() ? null : value;
+        return value == null || value.isEmpty() ? null : value;
     }
 }

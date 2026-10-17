@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** application-prod.yml 의 서킷 브레이커·타임리미터 계약을 고정한다. */
 class ProdGatewayConfigTest {
@@ -28,19 +29,24 @@ class ProdGatewayConfigTest {
     }
 
     @Test
-    void everyCircuitBreakerRouteCountsOnly502_503_504() {
+    void circuitBreakerRoutesDoNotCountHttpStatusCodes() {
+        // statusCodes를 주면 chat-service가 의도적으로 내리는 503 본문이 fallback으로 대체된다. 전송 실패만 센다.
         int checked = 0;
         for (int i = 0; i < 20; i++) {
             String base = "spring.cloud.gateway.routes[" + i + "].filters";
             for (int f = 0; f < 5; f++) {
                 if ("CircuitBreaker".equals(prop(base + "[" + f + "].name"))) {
-                    assertEquals("502,503,504", prop(base + "[" + f + "].args.statusCodes"),
-                            "route " + i + " filter " + f);
+                    assertNull(prop(base + "[" + f + "].args.statusCodes"), "route " + i + " filter " + f);
                     checked++;
                 }
             }
         }
         assertEquals(4, checked, "chat, fcm, game, file routes");
+    }
+
+    @Test
+    void fileSlowCallThresholdMatchesTimeLimiter() {
+        assertEquals("120s", prop("resilience4j.circuitbreaker.instances.fileCircuitBreaker.slow-call-duration-threshold"));
     }
 
     @Test

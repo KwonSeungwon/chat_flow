@@ -27,7 +27,6 @@ spring:
             - name: CircuitBreaker
               args:
                 name: chatCircuitBreaker
-                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/chat
             - name: Retry
               args:
@@ -50,7 +49,6 @@ spring:
             - name: CircuitBreaker
               args:
                 name: fcmCircuitBreaker
-                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/fcm
             - name: Retry
               args:
@@ -71,7 +69,6 @@ spring:
             - name: CircuitBreaker
               args:
                 name: gameCircuitBreaker
-                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/game
             - name: Retry
               args:
@@ -119,7 +116,6 @@ spring:
             - name: CircuitBreaker
               args:
                 name: fileCircuitBreaker
-                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/files
             - name: Retry
               args:
@@ -203,7 +199,8 @@ resilience4j:
       fileCircuitBreaker:
         base-config: default
         failure-rate-threshold: 70
-        slow-call-duration-threshold: 10s
+        # 파일 TimeLimiter(120s)와 맞춘다 — 대용량 업로드가 느린 호출로 집계되지 않게
+        slow-call-duration-threshold: 120s
   timelimiter:
     configs:
       default:

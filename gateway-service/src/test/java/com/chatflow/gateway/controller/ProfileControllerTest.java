@@ -95,7 +95,7 @@ class ProfileControllerTest {
                 .profileImageUrl("https://cdn/avatar.png").statusMessage("in a meeting")
                 .createdAt(baseUser.getCreatedAt()).build();
         when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser), Mono.just(updated));
-        when(userRepository.updateStatusMessage(USER_ID, "in a meeting")).thenReturn(Mono.just(1));
+        when(userRepository.updateProfile(USER_ID, false, null, true, "in a meeting", false, null)).thenReturn(Mono.just(1));
 
         ProfileUpdateRequest body = new ProfileUpdateRequest(null, "in a meeting", null);
 
@@ -107,9 +107,7 @@ class ProfileControllerTest {
                 })
                 .verifyComplete();
 
-        verify(userRepository).updateStatusMessage(USER_ID, "in a meeting");
-        verify(userRepository, never()).updateProfileImageUrl(any(), any());
-        verify(userRepository, never()).updateBio(any(), any());
+        verify(userRepository).updateProfile(USER_ID, false, null, true, "in a meeting", false, null);
         verify(userRepository, never()).save(any());
     }
 
@@ -119,14 +117,14 @@ class ProfileControllerTest {
         UserEntity updated = UserEntity.builder().seq(1L).userId(USER_ID).username(USERNAME)
                 .createdAt(baseUser.getCreatedAt()).build();
         when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser), Mono.just(updated));
-        when(userRepository.updateStatusMessage(USER_ID, null)).thenReturn(Mono.just(1));
+        when(userRepository.updateProfile(USER_ID, false, null, true, null, false, null)).thenReturn(Mono.just(1));
 
         ProfileUpdateRequest body = new ProfileUpdateRequest(null, "", null);
 
         StepVerifier.create(controller.updateMe(reqWithUserId(USER_ID), body))
                 .assertNext(response -> assertNull(response.getBody().statusMessage()))
                 .verifyComplete();
-        verify(userRepository).updateStatusMessage(USER_ID, null);
+        verify(userRepository).updateProfile(USER_ID, false, null, true, null, false, null);
     }
 
     @Test

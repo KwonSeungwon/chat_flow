@@ -116,18 +116,19 @@ public class AuthService {
         }
         // 대소문자만 다른 이름의 동시 가입은 DB UNIQUE로 못 막는다(대소문자 구분 컬럼). lower(username) 키로 직렬화한다.
         String lockKey = SIGNUP_LOCK_PREFIX + username.toLowerCase(Locale.ROOT);
-        return acquireSignupLock(lockKey)
+        String lockValue = UUID.randomUUID().toString();
+        return acquireSignupLock(lockKey, lockValue)
                 .flatMap(acquired -> acquired
-                        ? Mono.usingWhen(Mono.just(lockKey),
-                                k -> doRegister(username, password),
-                                this::releaseSignupLock)
+                        ? Mono.usingWhen(Mono.just(lockValue),
+                                v -> doRegister(username, password),
+                                v -> releaseSignupLock(lockKey, v))
                         : Mono.<AuthResponse>error(new ResponseStatusException(
                                 HttpStatus.CONFLICT, "이미 존재하는 사용자명입니다.")));
     }
 
     /** Redis 장애 시 fail-open — 기존처럼 existsBy 검사와 DB 제약에 맡긴다. */
-    private Mono<Boolean> acquireSignupLock(String key) {
-        return redisTemplate.opsForValue().setIfAbsent(key, "1", SIGNUP_LOCK_TTL)
+    private Mono<Boolean> acquireSignupLock(String key, String value) {
+        return redisTemplate.opsForValue().setIfAbsent(key, value, SIGNUP_LOCK_TTL)
                 .defaultIfEmpty(true)
                 .onErrorResume(e -> {
                     log.warn("Signup lock failed (fail-open): {}", e.getMessage());
@@ -135,8 +136,9 @@ public class AuthService {
                 });
     }
 
-    private Mono<Void> releaseSignupLock(String key) {
-        return redisTemplate.opsForValue().delete(key)
+    /** 내 값일 때만 지운다 — TTL이 지나 다른 가입이 잡은 잠금을 지우지 않는다. */
+    private Mono<Void> releaseSignupLock(String key, String value) {
+        return redisTemplate.execute(CLEAR_ACTIVE_JTI_IF_MATCH_SCRIPT, List.of(key), List.of(value))
                 .onErrorResume(e -> Mono.empty())
                 .then();
     }
@@ -244,18 +246,23 @@ public class AuthService {
                             .flatMap(updated -> {
                                 String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername());
                                 String newJti = jwtUtil.getJti(token);
+                                // 비밀번호는 이미 저장됐다. 세션 전환 실패가 500으로 보이면 안 되고,
+                                // 둘 중 하나가 실패해도 다른 하나는 반드시 실행한다.
                                 Mono<Void> blacklistCurrent = currentJti == null
                                         ? Mono.<Void>empty()
-                                        : tokenBlacklistService.blacklist(currentJti, cacheTtl).then();
-                                return blacklistCurrent
-                                        .then(rotateActiveJti(entity.getUserId(), newJti, cacheTtl))
-                                        // 비밀번호는 이미 저장됐다. 세션 전환 실패가 500으로 보이면 안 된다.
+                                        : Mono.defer(() -> tokenBlacklistService.blacklist(currentJti, cacheTtl)).then()
+                                                .onErrorResume(e -> {
+                                                    log.warn("[auth] blacklist after password change failed: userId={} {}",
+                                                            entity.getUserId(), e.getMessage());
+                                                    return Mono.empty();
+                                                });
+                                Mono<Void> rotate = Mono.defer(() -> rotateActiveJti(entity.getUserId(), newJti, cacheTtl))
                                         .onErrorResume(e -> {
-                                            log.warn("[auth] session rotation after password change failed: userId={} {}",
+                                            log.warn("[auth] active jti rotation after password change failed: userId={} {}",
                                                     entity.getUserId(), e.getMessage());
                                             return Mono.empty();
-                                        })
-                                        .thenReturn(token);
+                                        });
+                                return Mono.when(blacklistCurrent, rotate).thenReturn(token);
                             })
                 );
     }
