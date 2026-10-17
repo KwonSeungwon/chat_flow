@@ -126,6 +126,27 @@ class UnreadCursorRepositoryTest {
     }
 
     @Test
+    void countUnreadByCursor_excludesOwnMessages() {
+        memberRepository.save(member(ROOM_A, USER_ID, BASE.minusHours(10), BASE.minusHours(2)));
+
+        saveChat(ROOM_A, BASE.minusHours(1));                          // other's: unread
+        saveChatBy(ROOM_A, USER_ID, BASE.minusMinutes(30));            // own: not unread
+        saveChatBy(ROOM_A, USER_ID, BASE.minusMinutes(20));            // own: not unread
+
+        Map<String, Long> counts = toCountMap(messageRepository.countUnreadByCursor(
+                USER_ID, List.of(ROOM_A)));
+        assertThat(counts.get(ROOM_A)).isEqualTo(1L);
+    }
+
+    @Test
+    void countUnreadByCursor_onlyOwnMessages_roomAbsentFromResults() {
+        memberRepository.save(member(ROOM_A, USER_ID, BASE.minusHours(10), BASE.minusHours(2)));
+        saveChatBy(ROOM_A, USER_ID, BASE.minusMinutes(30));
+
+        assertThat(messageRepository.countUnreadByCursor(USER_ID, List.of(ROOM_A))).isEmpty();
+    }
+
+    @Test
     void countUnreadByCursor_allRead_roomAbsentFromResults() {
         // cursor is after all messages → 0 unread → room absent (no GROUP BY row)
         memberRepository.save(member(ROOM_A, USER_ID, BASE.minusHours(10), BASE));
@@ -193,12 +214,21 @@ class UnreadCursorRepositoryTest {
         saveMessage(roomId, timestamp, "CHAT", false);
     }
 
+    private void saveChatBy(String roomId, String senderId, LocalDateTime timestamp) {
+        saveMessage(roomId, senderId, timestamp, "CHAT", false);
+    }
+
     private void saveMessage(String roomId, LocalDateTime timestamp,
+                              String type, boolean deleted) {
+        saveMessage(roomId, "sender-1", timestamp, type, deleted);
+    }
+
+    private void saveMessage(String roomId, String senderId, LocalDateTime timestamp,
                               String type, boolean deleted) {
         messageRepository.save(ChatMessageEntity.builder()
                 .messageId(UUID.randomUUID().toString())
                 .chatRoomId(roomId)
-                .userId("sender-1")
+                .userId(senderId)
                 .username("sender")
                 .content("test message")
                 .timestamp(timestamp)
