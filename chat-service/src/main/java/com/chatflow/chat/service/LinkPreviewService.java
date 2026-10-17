@@ -123,9 +123,44 @@ public class LinkPreviewService {
                     || b0 >= 240;                            // reserved / broadcast
         }
         if (addr instanceof Inet6Address) {
-            return (b[0] & 0xFE) == 0xFC;                    // ULA fc00::/7
+            if ((b[0] & 0xFE) == 0xFC) return true;          // ULA fc00::/7
+            // IPv4 embedded in IPv6: check the embedded address against the IPv4 rules
+            Inet4Address embedded = embeddedIpv4(b);
+            return embedded != null && isBlocked(embedded);
         }
         return false;
+    }
+
+    /** IPv4-compatible ::a.b.c.d, NAT64 64:ff9b::/96, 6to4 2002::/16 → embedded IPv4, else null. */
+    private static Inet4Address embeddedIpv4(byte[] b) {
+        int from;
+        if (allZero(b, 0, 12)) {
+            from = 12;                                       // ::a.b.c.d
+        } else if (b[0] == 0x00 && b[1] == 0x64 && (b[2] & 0xFF) == 0xFF && (b[3] & 0xFF) == 0x9B
+                && allZero(b, 4, 12)) {
+            from = 12;                                       // 64:ff9b::a.b.c.d
+        } else if (b[0] == 0x20 && b[1] == 0x02) {
+            from = 2;                                        // 2002:aabb:ccdd::/48
+        } else {
+            return null;
+        }
+        try {
+            return (Inet4Address) InetAddress.getByAddress(java.util.Arrays.copyOfRange(b, from, from + 4));
+        } catch (UnknownHostException e) {
+            return null;                                     // unreachable: 4-byte array
+        }
+    }
+
+    private static boolean allZero(byte[] b, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (b[i] != 0) return false;
+        }
+        return true;
+    }
+
+    /** URI.getHost() keeps the brackets of an IPv6 literal; the resolver may get either form. */
+    private static String stripBrackets(String host) {
+        return host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
     }
 
     /** Whole-URL digest: bounded key length without collapsing URLs that share a prefix. */
@@ -165,11 +200,12 @@ public class LinkPreviewService {
      * 검증과 연결 사이에 DNS 응답이 바뀌어도(리바인딩) 사설 주소로 연결되지 않는다.
      * Host 헤더·SNI·인증서 검증은 원래 호스트 이름을 그대로 쓴다.
      */
-    private static DnsResolver pinnedResolver(String pinnedHost, InetAddress[] pinned) {
+    static DnsResolver pinnedResolver(String pinnedHost, InetAddress[] pinned) {
+        String key = stripBrackets(pinnedHost);
         return new DnsResolver() {
             @Override
             public InetAddress[] resolve(String host) throws UnknownHostException {
-                if (pinnedHost.equalsIgnoreCase(host)) return pinned.clone();
+                if (key.equalsIgnoreCase(stripBrackets(host))) return pinned.clone();
                 throw new UnknownHostException("Unvalidated host: " + host);
             }
 

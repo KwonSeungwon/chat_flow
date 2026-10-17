@@ -6,7 +6,9 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Read-only lookup into gateway's {@code users} table (same PostgreSQL database
@@ -19,8 +21,11 @@ public class UserDirectory {
 
     /** PostgreSQL undefined_table. */
     private static final String UNDEFINED_TABLE_POSTGRES = "42P01";
-    /** H2 TABLE_OR_VIEW_NOT_FOUND (local dev DB). */
-    private static final String UNDEFINED_TABLE_H2 = "42S02";
+    /**
+     * H2 (local dev DB) TABLE_OR_VIEW_NOT_FOUND error codes: 42102 (state 42S02),
+     * 42103 (…_WITH_CANDIDATES, state 42S03), 42104 (…_DATABASE_EMPTY, state 42S04).
+     */
+    private static final Set<Integer> UNDEFINED_TABLE_H2_CODES = Set.of(42102, 42103, 42104);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -36,8 +41,9 @@ public class UserDirectory {
                     "SELECT username FROM users WHERE user_id = ?", String.class, userId);
             return rows.isEmpty() ? null : rows.get(0);
         } catch (BadSqlGrammarException e) {
-            String state = e.getSQLException().getSQLState();
-            if (!UNDEFINED_TABLE_POSTGRES.equals(state) && !UNDEFINED_TABLE_H2.equals(state)) {
+            SQLException cause = e.getSQLException();
+            if (!UNDEFINED_TABLE_POSTGRES.equals(cause.getSQLState())
+                    && !UNDEFINED_TABLE_H2_CODES.contains(cause.getErrorCode())) {
                 throw e;
             }
             log.warn("users table unavailable, trusting client username for {}: {}", userId, e.getMessage());
