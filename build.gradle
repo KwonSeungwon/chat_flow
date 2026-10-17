@@ -27,7 +27,7 @@ subprojects {
 
     ext {
         springCloudVersion = '2023.0.0'
-        testcontainersVersion = '1.19.3'
+        testcontainersVersion = '1.21.3'
     }
 
     dependencyManagement {

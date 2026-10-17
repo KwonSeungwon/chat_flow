@@ -123,7 +123,7 @@ public class AuthService {
                                 v -> doRegister(username, password),
                                 v -> releaseSignupLock(lockKey, v))
                         : Mono.<AuthResponse>error(new ResponseStatusException(
-                                HttpStatus.CONFLICT, "이미 존재하는 사용자명입니다.")));
+                                HttpStatus.CONFLICT, "같은 아이디로 가입이 진행 중입니다. 잠시 후 다시 시도해 주세요.")));
     }
 
     /** Redis 장애 시 fail-open — 기존처럼 existsBy 검사와 DB 제약에 맡긴다. */
@@ -164,7 +164,7 @@ public class AuthService {
 
                                 return userRepository.save(entity)
                                         .onErrorMap(DataIntegrityViolationException.class,
-                                                e -> new ResponseStatusException(HttpStatus.CONFLICT, "이미 존재하는 사용자명입니다."))
+                                                e -> new ResponseStatusException(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."))
                                         .flatMap(saved -> {
                                             String token = jwtUtil.generateToken(userId, username);
                                             String newJti = jwtUtil.getJti(token);
