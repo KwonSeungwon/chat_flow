@@ -247,10 +247,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       // 400: the gateway says why (rule violation / duplicate) in `error`.
-      // 409: two sign-ups raced for the same name.
+      // 409: two sign-ups raced for the same name (lock contention or duplicate).
       final body = e.response?.data;
       final serverMsg = body is Map ? body['error']?.toString() : null;
-      final msg = code == 400 && serverMsg != null && serverMsg.isNotEmpty
+      final msg = (code == 400 || code == 409) &&
+              serverMsg != null &&
+              serverMsg.isNotEmpty
           ? serverMsg
           : code == 400 || code == 409
               ? '이미 사용 중인 아이디입니다.'

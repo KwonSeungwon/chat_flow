@@ -31,6 +31,26 @@ class _StatusAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// 요청을 받은 뒤 저장소의 토큰을 [newToken]으로 바꾸고 401을 돌려준다.
+class _SwapTokenAdapter implements HttpClientAdapter {
+  _SwapTokenAdapter(this.newToken);
+
+  final String newToken;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    await const FlutterSecureStorage()
+        .write(key: StorageKeys.token, value: newToken);
+    return ResponseBody.fromString('{}', 401, headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -146,6 +166,24 @@ void main() {
       const storage = FlutterSecureStorage();
       expect(await storage.read(key: StorageKeys.legacyRole), isNull);
       expect(await storage.read(key: StorageKeys.profileImage), isNull);
+    });
+
+    test('다른 토큰으로 나간 요청의 401은 현재 세션을 건드리지 않는다 — 비밀번호 변경 직후', () async {
+      // 요청은 옛 토큰으로 나갔고, 응답 전에 새 토큰이 저장됐다.
+      FlutterSecureStorage.setMockInitialValues(
+          {StorageKeys.token: 'old-token', StorageKeys.userId: 'u1'});
+      final client = DioClient();
+      client.dio.httpClientAdapter = _SwapTokenAdapter('new-token');
+      var called = false;
+      client.onUnauthorized = () => called = true;
+
+      await expectLater(
+          client.dio.get('/api/chat/rooms'), throwsA(isA<DioException>()));
+
+      const storage = FlutterSecureStorage();
+      expect(await storage.read(key: StorageKeys.token), 'new-token');
+      expect(await storage.read(key: StorageKeys.userId), 'u1');
+      expect(called, isFalse);
     });
   });
 }
