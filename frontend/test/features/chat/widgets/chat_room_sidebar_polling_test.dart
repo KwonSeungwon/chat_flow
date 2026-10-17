@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chatflow/core/routing/app_router.dart';
 import 'package:chatflow/features/chat/chat_rooms_provider.dart';
 import 'package:chatflow/features/chat/widgets/chat_room_sidebar.dart';
 import 'package:chatflow/shared/models/chat_room.dart';
@@ -28,12 +29,15 @@ class _FakeRooms extends StateNotifier<AsyncValue<List<ChatRoom>>>
 }
 
 Widget _app(_FakeRooms fake) {
+  final observer = RouteObserver<PageRoute<dynamic>>();
   return ProviderScope(
     overrides: [
       chatRoomsProvider.overrideWith((_) => fake),
       activeRoomIdProvider.overrideWith((_) => 'a'),
+      pageRouteObserverProvider.overrideWithValue(observer),
     ],
     child: MaterialApp(
+      navigatorObservers: [observer],
       home: Builder(
         builder: (context) => Scaffold(
           body: Column(children: [
@@ -44,6 +48,13 @@ Widget _app(_FakeRooms fake) {
               onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const Scaffold())),
               child: const Text('push'),
+            ),
+            TextButton(
+              key: const Key('dialog'),
+              onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const AlertDialog(content: Text('d'))),
+              child: const Text('dialog'),
             ),
           ]),
         ),
@@ -102,5 +113,36 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     expect(fake.fetchRoomsCalls, before);
     expect(fake.unreadCalls, initial + 1);
+  });
+
+  testWidgets('sidebar keeps polling under a dialog', (tester) async {
+    ignoreOverflow();
+    final fake = _FakeRooms({});
+    await tester.pumpWidget(_app(fake));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('dialog')));
+    await tester.pumpAndSettle();
+    final before = fake.fetchRoomsCalls;
+    await tester.pump(const Duration(seconds: 30));
+    expect(fake.fetchRoomsCalls, before + 1);
+  });
+
+  testWidgets('returning to the sidebar route refreshes at once',
+      (tester) async {
+    ignoreOverflow();
+    final fake = _FakeRooms({});
+    await tester.pumpWidget(_app(fake));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('push')));
+    await tester.pumpAndSettle();
+    final rooms = fake.fetchRoomsCalls;
+    final unread = fake.unreadCalls;
+
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
+    expect(fake.fetchRoomsCalls, rooms + 1);
+    expect(fake.unreadCalls, unread + 1);
   });
 }

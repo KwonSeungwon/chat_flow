@@ -56,10 +56,16 @@ final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
   return notifier;
 });
 
+/// Reports page pushes/pops on the root navigator to [RouteAware] widgets.
+/// Typed to [PageRoute] so dialogs and popups do not count as covering a page.
+final pageRouteObserverProvider =
+    Provider<RouteObserver<PageRoute<dynamic>>>((ref) => RouteObserver());
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
   return GoRouter(
     initialLocation: '/chat',
+    observers: [ref.watch(pageRouteObserverProvider)],
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [

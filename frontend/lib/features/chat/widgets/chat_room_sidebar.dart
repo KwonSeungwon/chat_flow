@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
@@ -28,9 +29,16 @@ class ChatRoomSidebar extends ConsumerStatefulWidget {
 }
 
 class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   Timer? _refreshTimer;
   bool _disposed = false;
+  RouteObserver<PageRoute<dynamic>>? _routeObserver;
+  PageRoute<dynamic>? _route;
+
+  /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and
+  /// its sidebar) stays mounted underneath an open room. Only a sidebar not
+  /// covered by another page polls; dialogs and popups do not cover it.
+  bool _coveredByPage = false;
 
   @override
   void initState() {
@@ -38,20 +46,48 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     WidgetsBinding.instance.addObserver(this);
     // ModalRoute.of(context) is unavailable in initState; defer to first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed && _isCurrentRoute) _loadInitialUnreadCounts();
+      if (!_disposed && !_coveredByPage) _loadInitialUnreadCounts();
     });
     _startRefreshTimer();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _route)) return;
+    _routeObserver?.unsubscribe(this);
+    _route = route;
+    // Mounted under an already-open page (deep link to a room).
+    _coveredByPage = !route.isCurrent;
+    final observer = ref.read(pageRouteObserverProvider);
+    _routeObserver = observer;
+    observer.subscribe(this, route);
+  }
+
+  @override
+  void didPushNext() => _coveredByPage = true;
+
+  @override
+  void didPopNext() {
+    _coveredByPage = false;
+    // Back in the lobby: show what changed while covered right away.
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    ref.read(chatRoomsProvider.notifier).fetchRooms();
+    final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
+    if (!_disposed && counts.isNotEmpty) {
+      ref.read(roomUnreadCountsProvider.notifier).mergeAll(_withoutActiveRoom(counts));
+    }
+  }
+
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (_disposed || !_isCurrentRoute) return;
-      ref.read(chatRoomsProvider.notifier).fetchRooms();
-      final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
-      if (!_disposed && counts.isNotEmpty) {
-        ref.read(roomUnreadCountsProvider.notifier).mergeAll(_withoutActiveRoom(counts));
-      }
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_disposed || _coveredByPage) return;
+      _refresh();
     });
   }
 
@@ -65,10 +101,6 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
       _startRefreshTimer();
     }
   }
-
-  /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and its
-  /// sidebar) stays mounted underneath an open room. Only the topmost route polls.
-  bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? true;
 
   /// The room being viewed must stay at 0 regardless of server counts.
   Map<String, int> _withoutActiveRoom(Map<String, int> counts) {
@@ -87,6 +119,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
   @override
   void dispose() {
     _disposed = true;
+    _routeObserver?.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
