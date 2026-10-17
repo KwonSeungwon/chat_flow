@@ -12,6 +12,8 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     implementation 'org.apache.tika:tika-core:2.9.2'
     implementation 'org.flywaydb:flyway-core'
+    // LinkPreview: 검증한 IP로만 연결(DnsResolver 고정). 버전은 Spring Boot BOM 관리(이미 firebase-admin 경유로 런타임에 있음)
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
 
     runtimeOnly 'com.h2database:h2'
     runtimeOnly 'org.postgresql:postgresql'

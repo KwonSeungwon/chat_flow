@@ -48,6 +48,13 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
+    /**
+     * CONNECT rejection text sent in the STOMP ERROR frame. The frontend
+     * ({@code isUnauthorizedStompError} in {@code stomp_support.dart}) stops
+     * reconnecting only when the frame contains "unauthorized" — keep the two in sync.
+     */
+    static final String CONNECT_REJECTED_MESSAGE = "Unauthorized";
+
     private final RoomMembershipChecker membershipChecker;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
@@ -92,7 +99,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             if (claims == null) {
                 log.warn("STOMP CONNECT rejected: no gateway identity and no valid Bearer token (session={})",
                         accessor.getSessionId());
-                throw new MessageDeliveryException(message, "Unauthorized");
+                throw new MessageDeliveryException(message, CONNECT_REJECTED_MESSAGE);
             }
             userId = claims.getSubject();
             if (attrs != null) {

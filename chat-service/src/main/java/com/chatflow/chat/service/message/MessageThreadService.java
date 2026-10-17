@@ -10,10 +10,9 @@ import java.util.List;
 
 /**
  * Read-only service for fetching the reply chain of a parent message.
- * Returns entities directly (matching the existing GET /messages list
- * endpoint pattern in ChatRoomController), so the JSON response carries
- * reactions, edited flag, editedAt, and pinned — fields that the shared
- * BaseMessage/ChatMessage DTO does not include.
+ * The controller maps the entities to {@code ChatMessageResponse} (the same
+ * DTO as the GET /messages history endpoints), which carries reactions,
+ * edited flag, editedAt, and pinned — fields the lean ChatMessage DTO omits.
  */
 @Service
 @RequiredArgsConstructor

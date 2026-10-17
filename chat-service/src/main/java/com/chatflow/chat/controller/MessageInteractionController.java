@@ -3,6 +3,7 @@ package com.chatflow.chat.controller;
 import com.chatflow.chat.auth.AuthenticatedUser;
 import com.chatflow.chat.auth.RequireAuth;
 import com.chatflow.chat.auth.RequireMember;
+import com.chatflow.chat.mapper.ChatMessageResponseMapper;
 import com.chatflow.chat.mapper.MessageEditHistoryMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
@@ -41,6 +42,7 @@ public class MessageInteractionController {
     private final ChatMessageRepository chatMessageRepository;
     private final MessageEditHistoryRepository editHistoryRepository;
     private final MessageEditHistoryMapper messageEditHistoryMapper;
+    private final ChatMessageResponseMapper chatMessageResponseMapper;
 
     @RequireAuth
     @DeleteMapping("/{roomId}/messages/{messageId}")
@@ -114,8 +116,8 @@ public class MessageInteractionController {
             @PathVariable String roomId,
             @PathVariable String messageId,
             @AuthenticatedUser String userId) {
-        return ResponseEntity.ok(
-                ApiResponse.ok(messageThreadService.findReplies(roomId, messageId)));
+        return ResponseEntity.ok(ApiResponse.ok(chatMessageResponseMapper.toResponseList(
+                messageThreadService.findReplies(roomId, messageId))));
     }
 
     @RequireMember

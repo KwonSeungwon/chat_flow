@@ -537,7 +537,8 @@ class FlywayMigrationTest {
 
     /**
      * Migrates to V20 with the legacy columns, seeds rows an old client could have written
-     * after V20 (HANDOFF room, PATIENT_CARD), then applies V21.
+     * after V20 (HANDOFF room, PATIENT_CARD, a pinned SBAR card with a reply, and mention,
+     * report and edit-history rows pointing at the cards), then applies V21.
      */
     @Test
     void v21_dropsMedicalColumnsAndRenormalizes() throws SQLException {
@@ -564,9 +565,23 @@ class FlywayMigrationTest {
              Statement stmt = conn.createStatement()) {
             stmt.executeUpdate("INSERT INTO chat_rooms (id, name, color, room_type, allowed_roles, created_at) VALUES "
                     + "('r-late', 'Late', '#00796B', 'HANDOFF', 'NURSE', now())");
+            stmt.executeUpdate("UPDATE chat_rooms SET pinned_message_id = 'm-sbar' WHERE id = 'r-late'");
             stmt.executeUpdate("INSERT INTO chat_messages (message_id, chat_room_id, username, content, timestamp, type) VALUES "
                     + "('m-card', 'r-late', 'a', '{\"name\":\"x\"}', now(), 'PATIENT_CARD'), "
+                    + "('m-sbar', 'r-late', 'a', '{\"type\":\"SBAR\",\"s\":\"x\"}', now(), 'CHAT'), "
                     + "('m-text', 'r-late', 'a', 'hello', now(), 'CHAT')");
+            stmt.executeUpdate("INSERT INTO chat_messages (message_id, chat_room_id, username, content, timestamp, type, "
+                    + "parent_message_id, parent_message_preview) VALUES "
+                    + "('m-reply', 'r-late', 'b', 'ok', now(), 'CHAT', 'm-sbar', 'a: {\"type\":\"SBAR\"')");
+            stmt.executeUpdate("INSERT INTO message_mentions (message_id, room_id, mentioned_user_id, mentioned_username, "
+                    + "from_username) VALUES ('m-card', 'r-late', 'u-b', 'b', 'a'), ('m-sbar', 'r-late', 'u-c', 'c', 'a'), "
+                    + "('m-text', 'r-late', 'u-b', 'b', 'a')");
+            stmt.executeUpdate("INSERT INTO message_reports (message_id, room_id, reported_by, reason) "
+                    + "VALUES ('m-sbar', 'r-late', 'u-b', 'SPAM'), ('m-card', 'r-late', 'u-c', 'SPAM')");
+            stmt.executeUpdate("INSERT INTO message_edit_history (message_id, previous_content, edited_at, edited_by) VALUES "
+                    + "('m-sbar', 'old sbar', now(), 'a'), "
+                    + "('m-text', '{\"type\":\"SBAR\",\"s\":\"y\"}', now(), 'a'), "
+                    + "('m-text', 'helo', now(), 'a')");
         }
 
         MigrateResult v21 = Flyway.configure()
@@ -579,16 +594,38 @@ class FlywayMigrationTest {
         try (Connection conn = connect(db);
              Statement stmt = conn.createStatement()) {
             try (ResultSet rs = stmt.executeQuery(
-                    "SELECT room_type, color FROM chat_rooms WHERE id = 'r-late'")) {
+                    "SELECT room_type, color, pinned_message_id FROM chat_rooms WHERE id = 'r-late'")) {
                 rs.next();
                 assertThat(rs.getString(1)).isEqualTo("GENERAL");
                 assertThat(rs.getString(2)).isEqualTo("#6366f1");
+                assertThat(rs.getString(3)).isNull();
             }
             Set<String> remaining = new HashSet<>();
             try (ResultSet rs = stmt.executeQuery("SELECT message_id FROM chat_messages")) {
                 while (rs.next()) remaining.add(rs.getString(1));
             }
-            assertThat(remaining).containsExactly("m-text");
+            assertThat(remaining).containsExactlyInAnyOrder("m-text", "m-reply");
+            try (ResultSet rs = stmt.executeQuery(
+                    "SELECT parent_message_id, parent_message_preview FROM chat_messages WHERE message_id = 'm-reply'")) {
+                rs.next();
+                assertThat(rs.getString(1)).isNull();
+                assertThat(rs.getString(2)).isNull();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id FROM message_mentions")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("m-text");
+                assertThat(rs.next()).isFalse();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM message_reports")) {
+                rs.next();
+                assertThat(rs.getInt(1)).isZero();
+            }
+            try (ResultSet rs = stmt.executeQuery("SELECT message_id, previous_content FROM message_edit_history")) {
+                assertThat(rs.next()).isTrue();
+                assertThat(rs.getString(1)).isEqualTo("m-text");
+                assertThat(rs.getString(2)).isEqualTo("helo");
+                assertThat(rs.next()).isFalse();
+            }
             try (ResultSet rs = stmt.executeQuery(
                     "SELECT table_name, column_name FROM information_schema.columns WHERE "
                             + "(table_name = 'users' AND column_name = 'role') OR "

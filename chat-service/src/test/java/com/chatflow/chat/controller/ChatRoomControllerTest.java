@@ -631,6 +631,23 @@ class ChatRoomControllerTest {
         }
 
         @Test
+        void returns_503_when_the_user_directory_lookup_fails() throws Exception {
+            when(userDirectory.resolveUsername("u2", "bob"))
+                    .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("denied"));
+
+            mockMvc.perform(post("/api/chat/rooms/dm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetUserId", "u2", "targetUsername", "bob")))
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.success").value(false));
+
+            verify(dmRoomService, never()).createOrFindDmRoom(any(), any(), any(), any());
+        }
+
+        @Test
         void returns_404_when_targetUserId_is_not_a_user() throws Exception {
             when(userDirectory.resolveUsername("ghost", "bob")).thenReturn(null);
 
