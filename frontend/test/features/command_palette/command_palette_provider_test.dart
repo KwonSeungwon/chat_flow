@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chatflow/core/network/dio_client.dart';
 import 'package:chatflow/features/chat/chat_rooms_provider.dart';
@@ -145,6 +149,53 @@ void main() {
       expect(container.read(commandPaletteProvider).isSearchingUsers, false);
     });
   });
+
+  group('user search response shapes', () {
+    setUpAll(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      dotenv.testLoad(fileInput: '');
+      FlutterSecureStorage.setMockInitialValues({});
+    });
+
+    for (final (name, body) in [
+      ('envelope', '{"data":[{"userId":"u9","username":"bobby"}]}'),
+      ('raw list', '[{"userId":"u9","username":"bobby"}]'),
+    ]) {
+      test('user results parse from $name', () async {
+        final client = DioClient()..dio.httpClientAdapter = _BodyAdapter(body);
+        final container = ProviderContainer(overrides: [
+          dioClientProvider.overrideWithValue(client),
+          chatRoomsProvider.overrideWith((ref) => _FakeChatRoomsNotifier()),
+        ]);
+        addTearDown(container.dispose);
+        container.listen(commandPaletteProvider, (_, __) {});
+
+        container.read(commandPaletteProvider.notifier).updateQuery('bob');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        final users = container
+            .read(commandPaletteProvider)
+            .results
+            .whereType<ViewProfileAction>();
+        expect(users.map((u) => u.username), ['bobby']);
+      });
+    }
+  });
+}
+
+class _BodyAdapter implements HttpClientAdapter {
+  _BodyAdapter(this.body);
+  final String body;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+          Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async =>
+      ResponseBody.fromString(body, 200, headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      });
+
+  @override
+  void close({bool force = false}) {}
 }
 
 /// Stub notifier that provides an empty room list without network calls.

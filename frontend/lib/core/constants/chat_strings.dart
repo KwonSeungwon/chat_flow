@@ -8,6 +8,7 @@ class ChatStrings {
   // 프로필
   static const String profileImageChanged = '프로필 이미지가 변경되었습니다.';
   static const String passwordChanged = '비밀번호가 변경되었습니다.';
+  static const String passwordChangedRelogin = '비밀번호가 변경되었습니다. 다시 로그인해 주세요.';
   static const String passwordChangeFailedHint = '비밀번호 변경에 실패했습니다. 현재 비밀번호를 확인해주세요.';
   static const String passwordMismatch = '새 비밀번호가 일치하지 않습니다.';
   static const String passwordTooShort = '비밀번호는 8자 이상이어야 합니다.';

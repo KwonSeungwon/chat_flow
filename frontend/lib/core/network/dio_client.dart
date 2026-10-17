@@ -66,6 +66,15 @@ class DioClient {
             // 저장소에 토큰이 있으면 만료된 것. 헤더 검사 대신 storage 직접 조회 (대소문자/Dio 직렬화 무관).
             try {
               final stored = await _storage.read(key: StorageKeys.token);
+              // 비밀번호 변경 직후처럼 요청이 나간 뒤 토큰이 교체됐다면, 옛 토큰의
+              // 401로 새 세션을 지우면 안 된다.
+              final auth = error.requestOptions.headers['Authorization'];
+              final sentToken = auth is String && auth.startsWith('Bearer ')
+                  ? auth.substring(7)
+                  : null;
+              if (stored != null && sentToken != null && sentToken != stored) {
+                return handler.next(error);
+              }
               if (stored != null) {
                 await clearStoredCredentials(_storage);
               }

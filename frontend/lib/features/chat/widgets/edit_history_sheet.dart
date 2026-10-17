@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/api_response.dart';
 
 /// Modal bottom sheet showing the edit history of a single message.
 /// Calls GET /api/chat/rooms/{roomId}/messages/{messageId}/edits and renders
@@ -54,7 +55,7 @@ class _EditHistorySheetState extends ConsumerState<EditHistorySheet> {
       final resp = await ref.read(dioClientProvider).dio.get(
             '/api/chat/rooms/${widget.roomId}/messages/${widget.messageId}/edits',
           );
-      final data = (resp.data is Map) ? resp.data['data'] : resp.data;
+      final data = unwrapApiResponse(resp.data);
       final list = (data is List)
           ? data.whereType<Map<String, dynamic>>().map(_EditEntry.fromJson).toList()
           : <_EditEntry>[];

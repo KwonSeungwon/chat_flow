@@ -235,6 +235,26 @@ class LinkPreviewServiceTest {
     }
 
     @Test
+    void preview_dnsRebinding_connectsOnlyToValidatedAddress() throws Exception {
+        // 첫 해석은 공인(테스트에서는 loopback 서버), 그 뒤 해석은 사설 주소를 돌려주는 리바인딩 리졸버.
+        // 검증한 주소로만 연결해야 하므로 해석은 hop당 한 번이고 응답은 공인 주소의 서버에서 와야 한다.
+        respond("/page", 200, "<title>Public</title>");
+        InetAddress publicAddr = InetAddress.getByAddress("rebind.test", new byte[] {127, 0, 0, 1});
+        InetAddress privateAddr = InetAddress.getByAddress("rebind.test", new byte[] {10, 0, 0, 1});
+        AtomicInteger resolutions = new AtomicInteger();
+        LinkPreviewService svc = new LinkPreviewService(redisTemplate, objectMapper,
+                a -> !a.isLoopbackAddress() && LinkPreviewService.isBlocked(a),
+                host -> new InetAddress[] {resolutions.incrementAndGet() == 1 ? publicAddr : privateAddr});
+        String url = "http://rebind.test:" + server.getAddress().getPort() + "/page";
+        cacheMiss(url);
+
+        Map<String, String> value = svc.fetch(url).value();
+
+        assertEquals("Public", value.get("title"));
+        assertEquals(1, resolutions.get(), "connection must reuse the validated resolution");
+    }
+
+    @Test
     void preview_followsSafeRedirect() {
         redirect("/r", "/final", null);
         respond("/final", 200, "<title>Landed</title>");
@@ -310,6 +330,13 @@ class LinkPreviewServiceTest {
     }
 
     @Test
+    void isBlocked_teredoPrefix_2001_0000() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2001:0:4136:e378:8000:63bf:3fff:fdd2")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2001:0:ffff::1")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("2001:4860:4860::8888")));
+    }
+
+    @Test
     void isBlocked_ipv6Ula_fc00() throws Exception {
         assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fc00::1")));
         assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fd12:3456::1")));
@@ -323,6 +350,77 @@ class LinkPreviewServiceTest {
             assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName(ip)), ip);
         }
         assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("93.184.216.34")));
+    }
+
+    @Test
+    void isBlocked_ipv4CompatibleIpv6_embeddedPrivate() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("::10.0.0.1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("::127.0.0.1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("::169.254.169.254")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("::8.8.8.8")));
+    }
+
+    @Test
+    void isBlocked_nat64_64ff9b_embeddedPrivate() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("64:ff9b::10.0.0.1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("64:ff9b::7f00:1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("64:ff9b::a9fe:a9fe")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("64:ff9b::808:808")));
+    }
+
+    @Test
+    void isBlocked_6to4_2002_embeddedPrivate() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2002:0a00:0001::1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2002:7f00:0001::")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2002:c0a8:0101::1")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("2002:0808:0808::1")));
+    }
+
+    @Test
+    void isBlocked_ipv6UniqueLocal_fc00_7() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fc12::1")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fdff:ffff::1")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("fe00::1")));
+    }
+
+    // ── IPv6 literal hosts ──────────────────────────────────────
+
+    @Test
+    void pinnedResolver_ipv6LiteralHost_matchesWithOrWithoutBrackets() throws Exception {
+        InetAddress google = InetAddress.getByName("2001:4860:4860::8888");
+        InetAddress[] pinned = {google};
+        org.apache.hc.client5.http.DnsResolver r =
+                LinkPreviewService.pinnedResolver("[2001:4860:4860::8888]", pinned);
+
+        assertArrayEquals(pinned, r.resolve("2001:4860:4860::8888"));
+        assertArrayEquals(pinned, r.resolve("[2001:4860:4860::8888]"));
+        assertThrows(java.net.UnknownHostException.class, () -> r.resolve("example.com"));
+    }
+
+    @Test
+    void preview_ipv6LiteralUrl_isFetchedThroughThePinnedResolver() throws Exception {
+        HttpServer v6;
+        try {
+            v6 = HttpServer.create(new InetSocketAddress(InetAddress.getByName("::1"), 0), 0);
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assumptions.abort("IPv6 loopback unavailable: " + e.getMessage());
+            return;
+        }
+        v6.createContext("/page", ex -> {
+            byte[] b = "<title>V6</title>".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
+        v6.start();
+        try {
+            String url = "http://[::1]:" + v6.getAddress().getPort() + "/page";
+            cacheMiss(url);
+
+            assertEquals("V6", linkPreviewService.fetch(url).value().get("title"));
+        } finally {
+            v6.stop(0);
+        }
     }
 
     // ── Null/blank URL → INVALID_INPUT ──────────────────────────

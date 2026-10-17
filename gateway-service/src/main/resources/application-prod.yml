@@ -199,7 +199,8 @@ resilience4j:
       fileCircuitBreaker:
         base-config: default
         failure-rate-threshold: 70
-        slow-call-duration-threshold: 10s
+        # 파일 TimeLimiter(120s)와 맞춘다 — 대용량 업로드가 느린 호출로 집계되지 않게
+        slow-call-duration-threshold: 120s
   timelimiter:
     configs:
       default:
@@ -214,7 +215,8 @@ resilience4j:
         base-config: default
       fileCircuitBreaker:
         base-config: default
-        timeout-duration: 30s
+        # 업로드 한도(55MB)에서 느린 회선이 끊기지 않게
+        timeout-duration: 120s
 
 jwt:
   secret: ${JWT_SECRET}

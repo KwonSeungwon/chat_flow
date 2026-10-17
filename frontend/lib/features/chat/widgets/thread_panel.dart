@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/api_response.dart';
 import '../../../core/utils/server_time.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../auth/auth_provider.dart';
@@ -56,7 +57,7 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
         '/api/chat/rooms/${widget.roomId}/messages/${widget.parent.effectiveId}/replies',
       );
       if (!mounted) return;
-      final raw = (resp.data is Map) ? resp.data['data'] : resp.data;
+      final raw = unwrapApiResponse(resp.data);
       if (raw is List) {
         setState(() => _fetched = [
               for (final entry in raw)

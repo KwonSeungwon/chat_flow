@@ -294,23 +294,59 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     _subscribeFcmToRoom(roomId);
   }
 
+  /// Older pages a reconnect refetch may add to close a gap over 50 messages.
+  static const _maxGapPages = 5;
+
   /// Re-reads the newest history page after a reconnect and merges it, so
-  /// messages broadcast while the socket was down show up.
+  /// messages broadcast while the socket was down show up. If the gap is
+  /// larger than a page, keeps paging back until it reaches a message
+  /// already held (at most [_maxGapPages] more pages). If it still has not
+  /// reached one, the fetched pages replace the timeline rather than leave
+  /// a silent hole; older history loads again from their oldest message.
   Future<void> _refetchLatest(String roomId) async {
     try {
-      final resp = await _dioClient.dio.get(
-        '/api/chat/rooms/$roomId/messages',
-        queryParameters: {'size': 50},
-      );
-      if (!mounted || _currentRoomId != roomId) return;
+      final known = {
+        for (final m in state.messages)
+          if (m.messageId != null || m.id != null) m.effectiveId,
+      };
       final latest = <ChatMessage>[];
-      for (final e in apiResponseList(resp.data)) {
-        try {
-          latest.add(ChatMessage.fromJson(e as Map<String, dynamic>));
-        } catch (parseErr) {
-          debugPrint('[ChatNotifier] refetch parse error: $parseErr');
+      var gapOpen = false;
+      for (var page = 0; page <= _maxGapPages; page++) {
+        final resp = await _dioClient.dio.get(
+          '/api/chat/rooms/$roomId/messages',
+          queryParameters: {'size': 50, if (page > 0) 'page': page},
+        );
+        if (!mounted || _currentRoomId != roomId) return;
+        final items = apiResponseList(resp.data);
+        final batch = <ChatMessage>[];
+        for (final e in items) {
+          try {
+            batch.add(ChatMessage.fromJson(e as Map<String, dynamic>));
+          } catch (parseErr) {
+            debugPrint('[ChatNotifier] refetch parse error: $parseErr');
+          }
         }
+        latest.addAll(batch);
+        if (known.isEmpty ||
+            items.length < 50 ||
+            batch.any((m) => known.contains(m.effectiveId))) {
+          break;
+        }
+        gapOpen = page == _maxGapPages;
       }
+      if (gapOpen) {
+        // Keep only unsent local bubbles (sending/failed).
+        state = state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (m.deliveryStatus != MessageDeliveryStatus.sent) m,
+          ],
+          hasMoreHistory: true,
+        );
+        _historyCursor = null;
+        _advanceHistoryCursor(latest);
+      }
+      _applyServerEdits(latest);
       // Our own sends whose echo was lost settle their bubbles instead of
       // showing up twice.
       _mergeMessages([
@@ -323,6 +359,32 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
     } catch (e) {
       debugPrint('[ChatNotifier] refetch after reconnect failed: $e');
     }
+  }
+
+  /// Edits and deletions made while the socket was down: take the server's
+  /// content and flags for messages already in state.
+  void _applyServerEdits(List<ChatMessage> fresh) {
+    final byId = {for (final m in fresh) m.effectiveId: m};
+    var changed = false;
+    final updated = <ChatMessage>[];
+    for (final m in state.messages) {
+      final f = byId[m.effectiveId];
+      if (f != null &&
+          (f.content != m.content ||
+              f.deleted != m.deleted ||
+              f.edited != m.edited ||
+              f.editedAt != m.editedAt)) {
+        changed = true;
+        updated.add(m.copyWith(
+            content: f.content,
+            deleted: f.deleted,
+            edited: f.edited,
+            editedAt: f.editedAt));
+      } else {
+        updated.add(m);
+      }
+    }
+    if (changed) state = state.copyWith(messages: updated);
   }
 
   /// Reconnects the room socket now if it is down (app resumed).

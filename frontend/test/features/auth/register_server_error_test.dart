@@ -55,4 +55,15 @@ void main() {
   test('409 (duplicate race) shows duplicate text', () async {
     expect(await registerError(409, {'error': ''}), '이미 사용 중인 아이디입니다.');
   });
+
+  test('409 with server message shows that message', () async {
+    expect(
+        await registerError(
+            409, {'error': '같은 아이디로 가입이 진행 중입니다. 잠시 후 다시 시도해 주세요.'}),
+        '같은 아이디로 가입이 진행 중입니다. 잠시 후 다시 시도해 주세요.');
+  });
+
+  test('409 without body message falls back to duplicate text', () async {
+    expect(await registerError(409, {}), '이미 사용 중인 아이디입니다.');
+  });
 }

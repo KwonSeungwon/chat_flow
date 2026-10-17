@@ -2,7 +2,6 @@ package com.chatflow.gateway.controller;
 
 import com.chatflow.gateway.dto.ProfileResponse;
 import com.chatflow.gateway.dto.ProfileUpdateRequest;
-import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,11 +54,9 @@ public class ProfileController {
 
         return userRepository.findByUserId(userId)
                 .switchIfEmpty(Mono.error(new IllegalStateException("User not found: " + userId)))
-                .flatMap(user -> {
-                    apply(user, body);
-                    return userRepository.save(user);
-                })
-                .doOnSuccess(saved -> log.info("Profile updated: userId={}", saved.getUserId()))
+                .flatMap(user -> applyUpdates(userId, body)
+                        .then(Mono.defer(() -> userRepository.findByUserId(userId))))
+                .doOnSuccess(saved -> log.info("Profile updated: userId={}", userId))
                 .map(ProfileResponse::from)
                 .map(ResponseEntity::ok)
                 .onErrorResume(IllegalStateException.class,
@@ -82,15 +79,15 @@ public class ProfileController {
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
-    private void apply(UserEntity user, ProfileUpdateRequest body) {
-        if (body.profileImageUrl() != null) {
-            user.setProfileImageUrl(body.profileImageUrl().isEmpty() ? null : body.profileImageUrl());
-        }
-        if (body.statusMessage() != null) {
-            user.setStatusMessage(body.statusMessage().isEmpty() ? null : body.statusMessage());
-        }
-        if (body.bio() != null) {
-            user.setBio(body.bio().isEmpty() ? null : body.bio());
-        }
+    /** 요청에 담긴 필드만 단일 UPDATE로 갱신한다. "" 는 NULL로 저장. */
+    private Mono<Void> applyUpdates(String userId, ProfileUpdateRequest body) {
+        return userRepository.updateProfile(userId,
+                body.profileImageUrl() != null, emptyToNull(body.profileImageUrl()),
+                body.statusMessage() != null, emptyToNull(body.statusMessage()),
+                body.bio() != null, emptyToNull(body.bio())).then();
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
     }
 }

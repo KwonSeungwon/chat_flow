@@ -39,15 +39,20 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
       _loading = true;
       _error = null;
     });
+    // The router may tear this dialog down mid-call (session ended), so grab
+    // what we need before awaiting.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
-      await ref
+      final result = await ref
           .read(authProvider.notifier)
           .changePassword(_currentCtrl.text, _newCtrl.text);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ChatStrings.passwordChanged)),
-      );
+      if (mounted) navigator.pop();
+      messenger.showSnackBar(SnackBar(
+        content: Text(result == PasswordChangeResult.reloginRequired
+            ? ChatStrings.passwordChangedRelogin
+            : ChatStrings.passwordChanged),
+      ));
     } catch (_) {
       if (!mounted) return;
       setState(() {

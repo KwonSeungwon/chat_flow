@@ -5,20 +5,28 @@ import com.chatflow.chat.result.Result;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.io.CloseMode;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -33,7 +41,7 @@ import java.util.regex.Pattern;
 /**
  * URL 링크 프리뷰(OG 태그) 조회 서비스.
  * SSRF 방어: 리다이렉트를 자동으로 따라가지 않고 직접 처리하며(최대 3 hop),
- * 매 hop마다 호스트가 해석되는 모든 주소를 검증한다.
+ * 매 hop마다 호스트가 해석되는 모든 주소를 검증하고 검증한 주소로만 연결한다.
  */
 @Slf4j
 @Service
@@ -57,13 +65,15 @@ public class LinkPreviewService {
         return t;
     });
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .connectTimeout(Duration.ofMillis(3000))
-            .build();
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final Predicate<InetAddress> blockedPolicy;
+    private final HostResolver resolver;
+
+    /** 호스트 이름 해석기. 테스트에서 리바인딩 DNS를 흉내 내려고 교체한다. */
+    interface HostResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
+    }
 
     @Autowired
     public LinkPreviewService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
@@ -73,9 +83,16 @@ public class LinkPreviewService {
     /** 테스트용: 주소 차단 정책을 교체할 수 있다. */
     LinkPreviewService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
                        Predicate<InetAddress> blockedPolicy) {
+        this(redisTemplate, objectMapper, blockedPolicy, InetAddress::getAllByName);
+    }
+
+    /** 테스트용: 차단 정책과 호스트 해석기를 교체할 수 있다. */
+    LinkPreviewService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
+                       Predicate<InetAddress> blockedPolicy, HostResolver resolver) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.blockedPolicy = blockedPolicy;
+        this.resolver = resolver;
     }
 
     private static Pattern[] ogPatterns(String property) {
@@ -106,9 +123,45 @@ public class LinkPreviewService {
                     || b0 >= 240;                            // reserved / broadcast
         }
         if (addr instanceof Inet6Address) {
-            return (b[0] & 0xFE) == 0xFC;                    // ULA fc00::/7
+            if ((b[0] & 0xFE) == 0xFC) return true;          // ULA fc00::/7
+            if (b[0] == 0x20 && b[1] == 0x01 && b[2] == 0 && b[3] == 0) return true; // Teredo 2001:0000::/32
+            // IPv4 embedded in IPv6: check the embedded address against the IPv4 rules
+            Inet4Address embedded = embeddedIpv4(b);
+            return embedded != null && isBlocked(embedded);
         }
         return false;
+    }
+
+    /** IPv4-compatible ::a.b.c.d, NAT64 64:ff9b::/96, 6to4 2002::/16 → embedded IPv4, else null. */
+    private static Inet4Address embeddedIpv4(byte[] b) {
+        int from;
+        if (allZero(b, 0, 12)) {
+            from = 12;                                       // ::a.b.c.d
+        } else if (b[0] == 0x00 && b[1] == 0x64 && (b[2] & 0xFF) == 0xFF && (b[3] & 0xFF) == 0x9B
+                && allZero(b, 4, 12)) {
+            from = 12;                                       // 64:ff9b::a.b.c.d
+        } else if (b[0] == 0x20 && b[1] == 0x02) {
+            from = 2;                                        // 2002:aabb:ccdd::/48
+        } else {
+            return null;
+        }
+        try {
+            return (Inet4Address) InetAddress.getByAddress(java.util.Arrays.copyOfRange(b, from, from + 4));
+        } catch (UnknownHostException e) {
+            return null;                                     // unreachable: 4-byte array
+        }
+    }
+
+    private static boolean allZero(byte[] b, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (b[i] != 0) return false;
+        }
+        return true;
+    }
+
+    /** URI.getHost() keeps the brackets of an IPv6 literal; the resolver may get either form. */
+    private static String stripBrackets(String host) {
+        return host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
     }
 
     /** Whole-URL digest: bounded key length without collapsing URLs that share a prefix. */
@@ -122,7 +175,8 @@ public class LinkPreviewService {
         }
     }
 
-    private URI validate(URI uri) {
+    /** 스킴·호스트를 검사하고 호스트를 한 번 해석해 모든 주소를 검증한다. 연결은 이 주소로만 한다. */
+    private InetAddress[] validate(URI uri) {
         String scheme = uri.getScheme();
         if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
             throw new IllegalArgumentException("Only http/https schemes are allowed");
@@ -130,18 +184,40 @@ public class LinkPreviewService {
         String host = uri.getHost();
         if (host == null || host.isBlank()) throw new IllegalArgumentException("Missing host in URL");
         try {
-            for (InetAddress addr : InetAddress.getAllByName(host)) {
+            InetAddress[] addresses = resolver.resolve(host);
+            for (InetAddress addr : addresses) {
                 if (blockedPolicy.test(addr)) {
                     throw new IllegalArgumentException("Access to private/internal addresses is forbidden");
                 }
             }
+            return addresses;
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException("Unable to resolve host: " + host);
         }
-        return uri;
     }
 
-    private String fetchHtml(String url) throws IOException, InterruptedException {
+    /**
+     * 검증한 주소만 돌려주는 DnsResolver. HTTP 클라이언트가 DNS를 다시 조회하지 않으므로
+     * 검증과 연결 사이에 DNS 응답이 바뀌어도(리바인딩) 사설 주소로 연결되지 않는다.
+     * Host 헤더·SNI·인증서 검증은 원래 호스트 이름을 그대로 쓴다.
+     */
+    static DnsResolver pinnedResolver(String pinnedHost, InetAddress[] pinned) {
+        String key = stripBrackets(pinnedHost);
+        return new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String host) throws UnknownHostException {
+                if (key.equalsIgnoreCase(stripBrackets(host))) return pinned.clone();
+                throw new UnknownHostException("Unvalidated host: " + host);
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String host) {
+                return host;
+            }
+        };
+    }
+
+    private String fetchHtml(String url) throws IOException {
         URI current;
         try {
             current = URI.create(url);
@@ -149,44 +225,52 @@ public class LinkPreviewService {
             throw new IllegalArgumentException("Malformed URL: " + e.getMessage());
         }
         for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-            validate(current);
-            HttpRequest request = HttpRequest.newBuilder(current)
-                    .timeout(Duration.ofMillis(8000))
-                    .header("User-Agent", "Mozilla/5.0 ChatFlow-Bot")
-                    .GET()
+            InetAddress[] validated = validate(current);
+            HttpGet request = new HttpGet(current);
+            request.setHeader("User-Agent", "Mozilla/5.0 ChatFlow-Bot");
+            CloseableHttpClient client = HttpClients.custom()
+                    .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                            .setDnsResolver(pinnedResolver(current.getHost(), validated))
+                            .setDefaultConnectionConfig(ConnectionConfig.custom()
+                                    .setConnectTimeout(Timeout.ofMilliseconds(3000))
+                                    .setSocketTimeout(Timeout.ofMilliseconds(READ_TIMEOUT_MS))
+                                    .build())
+                            .build())
+                    .setDefaultRequestConfig(RequestConfig.custom()
+                            .setResponseTimeout(Timeout.ofMilliseconds(READ_TIMEOUT_MS))
+                            .build())
+                    .disableRedirectHandling()
+                    .disableAutomaticRetries()
                     .build();
-            HttpResponse<InputStream> resp = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            InputStream body = resp.body();
-            // HttpRequest.timeout은 헤더 수신까지만 제한 — 본문 읽기 전체에 데드라인을 걸고 만료 시 스트림을 닫는다
-            ScheduledFuture<?> watchdog = WATCHDOG.schedule(() -> {
-                try {
-                    body.close();
-                } catch (IOException ignored) {
-                    // 이미 닫힘
-                }
-            }, READ_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            try (body) {
-                int status = resp.statusCode();
+            // 응답 수신과 본문 읽기 전체에 데드라인을 걸고 만료 시 요청을 중단(연결 폐기)한다
+            ScheduledFuture<?> watchdog = WATCHDOG.schedule(request::cancel, READ_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            try {
+                ClassicHttpResponse resp = client.executeOpen(null, request, null);
+                int status = resp.getCode();
                 if (status >= 300 && status < 400) {
-                    String location = resp.headers().firstValue("Location")
-                            .orElseThrow(() -> new IOException("Redirect without Location"));
-                    current = current.resolve(location);
+                    Header location = resp.getFirstHeader("Location");
+                    if (location == null) throw new IOException("Redirect without Location");
+                    current = current.resolve(location.getValue());
                     continue;
                 }
                 if (status < 200 || status >= 300) {
                     throw new IOException("Unexpected status " + status);
                 }
-                long contentLength = resp.headers().firstValueAsLong("Content-Length").orElse(-1);
-                if (contentLength > LINK_PREVIEW_MAX_BYTES) {
+                HttpEntity entity = resp.getEntity();
+                if (entity == null) throw new IOException("Empty response");
+                if (entity.getContentLength() > LINK_PREVIEW_MAX_BYTES) {
                     throw new IOException("Response Content-Length exceeds 1MB limit");
                 }
-                byte[] buf = body.readNBytes(LINK_PREVIEW_MAX_BYTES + 1);
+                byte[] buf = entity.getContent().readNBytes(LINK_PREVIEW_MAX_BYTES + 1);
                 if (buf.length > LINK_PREVIEW_MAX_BYTES) {
                     throw new IOException("Response body exceeds 1MB limit");
                 }
                 return new String(buf, StandardCharsets.UTF_8);
             } finally {
                 watchdog.cancel(false);
+                // 남은 본문을 끝까지 읽지(drain) 않고 연결을 버린다
+                request.cancel();
+                client.close(CloseMode.IMMEDIATE);
             }
         }
         throw new IOException("Too many redirects");

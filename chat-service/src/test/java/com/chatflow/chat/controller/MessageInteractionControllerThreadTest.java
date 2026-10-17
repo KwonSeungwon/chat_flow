@@ -6,6 +6,8 @@ import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.entity.ChatMessageEntity;
 import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
+import com.chatflow.chat.mapper.ChatMessageResponseMapper;
+import com.chatflow.chat.mapper.ChatMessageResponseMapperImpl;
 import com.chatflow.chat.mapper.MessageEditHistoryMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
 import com.chatflow.chat.repository.MessageEditHistoryRepository;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -51,6 +54,7 @@ class MessageInteractionControllerThreadTest {
     @Mock private MessageEditHistoryRepository editHistoryRepository;
     @Mock private MessageEditHistoryMapper messageEditHistoryMapper;
     @Mock private RoomMembershipGuard membershipGuard;
+    @Spy private ChatMessageResponseMapper chatMessageResponseMapper = new ChatMessageResponseMapperImpl();
 
     @InjectMocks
     private MessageInteractionController controller;
@@ -87,6 +91,29 @@ class MessageInteractionControllerThreadTest {
             .andExpect(jsonPath("$.data[0].reactions").exists())
             .andExpect(jsonPath("$.data[0].edited").value(true))
             .andExpect(jsonPath("$.data[0].pinned").value(true));
+    }
+
+    @Test
+    void getReplies_serializes_the_message_response_dto_not_the_entity() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        ChatMessageEntity reply = ChatMessageEntity.builder()
+            .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
+            .content("got it").type(ChatMessage.MessageType.CHAT.name())
+            .parentMessageId("p1").timestamp(LocalDateTime.now())
+            .build();
+        when(messageThreadService.findReplies("room-1", "p1")).thenReturn(List.of(reply));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].messageId").value("r1"))
+            .andExpect(jsonPath("$.data[0].username").value("alice"))
+            .andExpect(jsonPath("$.data[0].content").value("got it"))
+            .andExpect(jsonPath("$.data[0].type").value("CHAT"))
+            .andExpect(jsonPath("$.data[0].timestamp").exists())
+            .andExpect(jsonPath("$.data[0].deleted").value(false))
+            // entity-only persistence flag (Persistable#isNew) must not leak onto the wire
+            .andExpect(jsonPath("$.data[0].new").doesNotExist());
     }
 
     @Test

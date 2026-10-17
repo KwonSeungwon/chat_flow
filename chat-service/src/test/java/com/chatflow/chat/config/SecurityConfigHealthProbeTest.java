@@ -3,6 +3,7 @@ package com.chatflow.chat.config;
 import com.chatflow.chat.repository.RoomMemberRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -16,15 +17,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Kubernetes liveness/readiness probes hit the health-group paths without credentials.
- * A 401/403 here would crashloop the pod.
+ * A 401/403 here would crashloop the pod. Prometheus scrapes /actuator/prometheus
+ * the same way (in-cluster only — ingress and gateway never route /actuator).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@AutoConfigureObservability(tracing = false) // Boot disables metrics export in tests; the scrape endpoint needs it
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "jwt.secret=test-secret-for-chat-service-testing-12345",
         "GATEWAY_INTERNAL_SECRET=test-internal-secret",
-        "management.endpoint.health.probes.enabled=true"
+        "management.endpoint.health.probes.enabled=true",
+        "management.endpoints.web.exposure.include=health,prometheus"
 })
 class SecurityConfigHealthProbeTest {
 
@@ -48,5 +52,11 @@ class SecurityConfigHealthProbeTest {
         if (code == 401 || code == 403) {
             throw new AssertionError("readiness probe rejected by security: " + code);
         }
+    }
+
+    @Test
+    void prometheusScrape_unauthenticated_isOpen() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk());
     }
 }

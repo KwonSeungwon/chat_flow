@@ -31,6 +31,7 @@ class AuthServiceTest {
     @Mock private TokenBlacklistService tokenBlacklistService;
     @Mock private ReactiveStringRedisTemplate redisTemplate;
     @Mock private UserRepository userRepository;
+    @Mock private org.springframework.data.redis.core.ReactiveValueOperations<String, String> valueOps;
 
     private AuthService authService;
 
@@ -41,6 +42,12 @@ class AuthServiceTest {
         authService = new AuthService(
                 jwtUtil, passwordEncoder, tokenBlacklistService,
                 redisTemplate, userRepository, EXPIRATION_MS);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(Mono.just(true));
+        lenient().when(redisTemplate.execute(any(RedisScript.class),
+                argThat((List<String> keys) -> keys != null && keys.size() == 1
+                        && keys.get(0).startsWith("chatflow:signup:lock:")),
+                anyList())).thenReturn(Flux.just(1L));
     }
 
     // ── register ─────────────────────────────────────────────────
@@ -189,8 +196,8 @@ class AuthServiceTest {
                 })
                 .verifyComplete();
 
-        // then: Lua script executed to set active_jti
-        verify(redisTemplate).execute(any(RedisScript.class), anyList(), anyList());
+        // then: Lua script executed to set active_jti (+ 가입 잠금 해제 스크립트 1회)
+        verify(redisTemplate, times(2)).execute(any(RedisScript.class), anyList(), anyList());
     }
 
     // ── logout ───────────────────────────────────────────────────
@@ -364,11 +371,16 @@ class AuthServiceTest {
         when(userRepository.findByUsername("cpuser5")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
         when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
-        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+        when(userRepository.updateEncodedPassword("user-cp5", "new-enc")).thenReturn(Mono.just(1));
+        when(jwtUtil.generateToken("user-cp5", "cpuser5")).thenReturn("new-tok");
+        when(jwtUtil.getJti("new-tok")).thenReturn("new-jti");
+        when(tokenBlacklistService.blacklist(eq("cur-jti"), any(Duration.class)))
+                .thenReturn(Mono.error(new RuntimeException("redis down")));
         when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp5",
                 "chatflow:blacklist:")), anyList())).thenReturn(Flux.error(new RuntimeException("redis down")));
 
         StepVerifier.create(authService.changePassword("cpuser5", "currentpw", "newpasswd", "cur-jti"))
+                .expectNext("new-tok")
                 .verifyComplete();
     }
 
@@ -384,7 +396,7 @@ class AuthServiceTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void changePassword_pinsActiveJtiToCurrentToken() {
+    void changePassword_issuesNewToken_blacklistsCurrentJti_rotatesActiveJti_withoutFullSave() {
         UserEntity entity = UserEntity.builder()
                 .userId("user-cp4").username("cpuser4").encodedPassword("old-enc")
                 .createdAt(LocalDateTime.now()).build();
@@ -392,16 +404,147 @@ class AuthServiceTest {
         when(userRepository.findByUsername("cpuser4")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
         when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
-        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
-        // 회전 스크립트: 현재 토큰과 다른 active jti가 있었다면 그것이 무효화되어 반환된다
+        when(userRepository.updateEncodedPassword("user-cp4", "new-enc")).thenReturn(Mono.just(1));
+        when(jwtUtil.generateToken("user-cp4", "cpuser4")).thenReturn("new-tok");
+        when(jwtUtil.getJti("new-tok")).thenReturn("new-jti");
+        when(tokenBlacklistService.blacklist(eq("cur-jti"), any(Duration.class))).thenReturn(Mono.just(true));
+        // 회전 스크립트: 이전 active jti(다른 세션)는 스크립트가 블랙리스트한다
         when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp4",
-                "chatflow:blacklist:")), anyList())).thenReturn(Flux.just("stale-jti"));
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.just("other-session-jti"));
 
         StepVerifier.create(authService.changePassword("cpuser4", "currentpw", "newpasswd", "cur-jti"))
+                .expectNext("new-tok")
                 .verifyComplete();
 
         verify(redisTemplate).execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp4",
-                "chatflow:blacklist:")), eq(List.of("cur-jti", "3600", "1")));
+                "chatflow:blacklist:")), eq(List.of("new-jti", "3600", "1")));
+        verify(tokenBlacklistService).blacklist(eq("cur-jti"), any(Duration.class));
+        // lost update 방지: 엔티티 전체 save 금지, 비밀번호 컬럼만 UPDATE
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void changePassword_blacklistFailure_stillRotatesActiveJti() {
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp6").username("cpuser6").encodedPassword("old-enc")
+                .createdAt(LocalDateTime.now()).build();
+        allowPasswordAttempt();
+        when(userRepository.findByUsername("cpuser6")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
+        when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
+        when(userRepository.updateEncodedPassword("user-cp6", "new-enc")).thenReturn(Mono.just(1));
+        when(jwtUtil.generateToken("user-cp6", "cpuser6")).thenReturn("new-tok");
+        when(jwtUtil.getJti("new-tok")).thenReturn("new-jti");
+        when(tokenBlacklistService.blacklist(eq("cur-jti"), any(Duration.class)))
+                .thenReturn(Mono.error(new RuntimeException("redis blip")));
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp6",
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.empty());
+
+        StepVerifier.create(authService.changePassword("cpuser6", "currentpw", "newpasswd", "cur-jti"))
+                .expectNext("new-tok")
+                .verifyComplete();
+
+        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp6",
+                "chatflow:blacklist:")), eq(List.of("new-jti", "3600", "1")));
+    }
+
+    // ── updateProfileImage: 컬럼 단위 UPDATE ────────────────────────
+
+    @Test
+    void updateProfileImage_updatesOnlyThatColumn() {
+        UserEntity entity = UserEntity.builder().userId("u-pi").username("piuser").build();
+        when(userRepository.findByUsername("piuser")).thenReturn(Mono.just(entity));
+        when(userRepository.updateProfileImageUrl("u-pi", "https://cdn/a.png")).thenReturn(Mono.just(1));
+
+        StepVerifier.create(authService.updateProfileImage("piuser", "https://cdn/a.png")).verifyComplete();
+
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    // ── register: 대소문자만 다른 이름 동시 가입 직렬화 ─────────────
+
+    @Test
+    void register_sameLowerNameConcurrently_onlyOneSucceeds() {
+        java.util.concurrent.ConcurrentHashMap<String, String> locks = new java.util.concurrent.ConcurrentHashMap<>();
+        when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenAnswer(inv -> Mono.fromSupplier(
+                        () -> locks.putIfAbsent(inv.getArgument(0), inv.getArgument(1)) == null));
+        // 잠금 해제 스크립트(compare-and-delete): 값이 같을 때만 지운다
+        when(redisTemplate.execute(any(RedisScript.class),
+                argThat((List<String> keys) -> keys != null && keys.size() == 1
+                        && keys.get(0).startsWith("chatflow:signup:lock:")),
+                anyList()))
+                .thenAnswer(inv -> {
+                    String key = ((List<String>) inv.getArgument(1)).get(0);
+                    String val = ((List<String>) inv.getArgument(2)).get(0);
+                    return Flux.just(locks.remove(key, val) ? 1L : 0L);
+                });
+        when(userRepository.existsByUsernameIgnoreCase(anyString())).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenReturn("enc");
+        when(userRepository.save(any(UserEntity.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)).delayElement(Duration.ofMillis(300)));
+        when(jwtUtil.generateToken(anyString(), anyString())).thenReturn("tok");
+        when(jwtUtil.getJti("tok")).thenReturn("jti");
+        when(redisTemplate.execute(any(RedisScript.class), argThat((List<String> k) -> k != null && k.size() == 2), anyList()))
+                .thenReturn(Flux.empty());
+
+        Mono<String> a = authService.register(new AuthService.AuthRequest("Alice", "password123"))
+                .map(r -> "ok").onErrorResume(e -> Mono.just("err"));
+        Mono<String> b = authService.register(new AuthService.AuthRequest("alice", "password123"))
+                .map(r -> "ok").onErrorResume(e -> Mono.just("err"));
+
+        StepVerifier.create(Mono.zip(a, b).map(t -> List.of(t.getT1(), t.getT2())))
+                .assertNext(r -> assertEquals(1, r.stream().filter("ok"::equals).count(), "results: " + r))
+                .verifyComplete();
+        assertTrue(locks.isEmpty(), "lock released after completion");
+    }
+
+    @Test
+    void register_releasesLockOnlyIfValueMatches_viaCompareAndDelete() {
+        java.util.concurrent.atomic.AtomicReference<String> lockValue = new java.util.concurrent.atomic.AtomicReference<>();
+        when(valueOps.setIfAbsent(eq("chatflow:signup:lock:carol"), anyString(), any(Duration.class)))
+                .thenAnswer(inv -> { lockValue.set(inv.getArgument(1)); return Mono.just(true); });
+        when(userRepository.existsByUsernameIgnoreCase("Carol")).thenReturn(Mono.just(true));
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("Carol", "password123")))
+                .expectError(IllegalArgumentException.class).verify();
+
+        assertNotNull(lockValue.get());
+        assertNotEquals("1", lockValue.get(), "lock value must be a random token, not a constant");
+        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of("chatflow:signup:lock:carol")),
+                eq(List.of(lockValue.get())));
+        verify(valueOps, never()).delete(anyString());
+    }
+
+    @Test
+    void register_lockedName_returns409() {
+        when(valueOps.setIfAbsent(eq("chatflow:signup:lock:alice"), anyString(), any(Duration.class)))
+                .thenReturn(Mono.just(false));
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("ALICE", "password123")))
+                .expectErrorSatisfies(err -> {
+                    var rse = assertInstanceOf(org.springframework.web.server.ResponseStatusException.class, err);
+                    assertEquals(409, rse.getStatusCode().value());
+                })
+                .verify();
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    @Test
+    void register_redisLockFailure_failsOpen() {
+        when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(Mono.error(new RuntimeException("redis down")));
+        when(userRepository.existsByUsernameIgnoreCase("bob")).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenReturn("enc");
+        when(userRepository.save(any(UserEntity.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(jwtUtil.generateToken(anyString(), eq("bob"))).thenReturn("tok");
+        when(jwtUtil.getJti("tok")).thenReturn("jti");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(Flux.empty());
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("bob", "password123")))
+                .assertNext(resp -> assertEquals("tok", resp.token()))
+                .verifyComplete();
     }
 
     // ── threading: BCrypt must run off the event loop ─────────────
@@ -493,9 +636,14 @@ class AuthServiceTest {
             encodeThread.set(Thread.currentThread().getName());
             return "new-enc";
         });
-        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+        when(userRepository.updateEncodedPassword("user-cp", "new-enc")).thenReturn(Mono.just(1));
+        when(jwtUtil.generateToken("user-cp", "cpuser")).thenReturn("new-tok");
+        when(jwtUtil.getJti("new-tok")).thenReturn("new-jti");
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp",
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.empty());
 
         StepVerifier.create(authService.changePassword("cpuser", "currentpw", "newpasswd", null))
+                .expectNext("new-tok")
                 .verifyComplete();
 
         assertNotNull(matchesThread.get(), "passwordEncoder.matches should have been called");

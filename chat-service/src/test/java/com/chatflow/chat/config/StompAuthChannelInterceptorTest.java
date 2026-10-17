@@ -170,6 +170,19 @@ class StompAuthChannelInterceptorTest {
         }
 
         @Test
+        @DisplayName("CONNECT rejection text is the fixed contract the frontend matches (stomp_support.dart)")
+        void connect_rejectionMessage_isTheFrontendContract() {
+            Message<?> msg = buildConnectMessage(null);
+
+            // The frontend stops reconnecting only when the ERROR frame contains "unauthorized"
+            // (isUnauthorizedStompError). Changing this text silently turns it into endless retries.
+            assertThat(StompAuthChannelInterceptor.CONNECT_REJECTED_MESSAGE).isEqualTo("Unauthorized");
+            assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                    .isInstanceOf(MessagingException.class)
+                    .hasMessage("Unauthorized");
+        }
+
+        @Test
         @DisplayName("token signed with another secret — CONNECT rejected")
         void connect_withForgedToken_rejected() {
             String jwt = token("some-other-secret-that-is-at-least-32-bytes!!", USER_ID, USERNAME,

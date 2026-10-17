@@ -280,8 +280,8 @@ class LoginRateLimitFilterTest {
     }
 
     @Test
-    void xForwardedFor_aloneIsIgnored_fallsBackToRemoteAddress() {
-        stubCount("rl:login:127.0.0.1", 1L);
+    void xForwardedFor_withoutCfHeader_usesFirstValue() {
+        stubCount("rl:login:1.2.3.4", 1L);
 
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/auth/login")
@@ -291,7 +291,7 @@ class LoginRateLimitFilterTest {
 
         StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
 
-        verifyCounted("rl:login:127.0.0.1");
+        verifyCounted("rl:login:1.2.3.4");
     }
 
     // ── Boundary: exactly at limit passes, limit+1 rejects ──────
