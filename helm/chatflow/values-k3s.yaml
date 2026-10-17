@@ -84,7 +84,7 @@ frontend:
   image:
     name: frontend
     # 2026-07-29 회원가입 아바타 envelope 파싱 핫픽스
-    tag: "sha-5f6314592053eaf43a83f494a1874ba0bc4f6a2f"
+    tag: "sha-f1535bdc3580560d2b77f44650ce8f967894b064"
   service:
     port: 80
     type: ClusterIP
