@@ -71,7 +71,8 @@ public class AuthController {
             return Mono.just(ResponseEntity.badRequest().build());
         }
         return authService.changePassword(username, currentPassword, newPassword, currentJti(request))
-                .then(Mono.just(ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."))))
+                // token: 새 세션 토큰. 현재 토큰은 블랙리스트되므로 클라이언트는 이 값으로 교체해야 한다.
+                .map(token -> ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다.", "token", token)))
                 .onErrorResume(IllegalArgumentException.class,
                         e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
     }

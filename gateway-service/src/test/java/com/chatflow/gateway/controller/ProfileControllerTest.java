@@ -90,9 +90,12 @@ class ProfileControllerTest {
     }
 
     @Test
-    void updateMe_partialUpdate_appliesOnlyProvidedFields() {
-        when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser));
-        when(userRepository.save(any(UserEntity.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+    void updateMe_partialUpdate_updatesOnlyProvidedColumns() {
+        UserEntity updated = UserEntity.builder().seq(1L).userId(USER_ID).username(USERNAME)
+                .profileImageUrl("https://cdn/avatar.png").statusMessage("in a meeting")
+                .createdAt(baseUser.getCreatedAt()).build();
+        when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser), Mono.just(updated));
+        when(userRepository.updateProfile(USER_ID, false, null, true, "in a meeting", false, null)).thenReturn(Mono.just(1));
 
         ProfileUpdateRequest body = new ProfileUpdateRequest(null, "in a meeting", null);
 
@@ -104,23 +107,24 @@ class ProfileControllerTest {
                 })
                 .verifyComplete();
 
-        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
-        verify(userRepository).save(captor.capture());
-        assertEquals("in a meeting", captor.getValue().getStatusMessage());
-        assertEquals("https://cdn/avatar.png", captor.getValue().getProfileImageUrl());
+        verify(userRepository).updateProfile(USER_ID, false, null, true, "in a meeting", false, null);
+        verify(userRepository, never()).save(any());
     }
 
     @Test
     void updateMe_emptyString_clearsField() {
         baseUser.setStatusMessage("old");
-        when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser));
-        when(userRepository.save(any(UserEntity.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        UserEntity updated = UserEntity.builder().seq(1L).userId(USER_ID).username(USERNAME)
+                .createdAt(baseUser.getCreatedAt()).build();
+        when(userRepository.findByUserId(USER_ID)).thenReturn(Mono.just(baseUser), Mono.just(updated));
+        when(userRepository.updateProfile(USER_ID, false, null, true, null, false, null)).thenReturn(Mono.just(1));
 
         ProfileUpdateRequest body = new ProfileUpdateRequest(null, "", null);
 
         StepVerifier.create(controller.updateMe(reqWithUserId(USER_ID), body))
                 .assertNext(response -> assertNull(response.getBody().statusMessage()))
                 .verifyComplete();
+        verify(userRepository).updateProfile(USER_ID, false, null, true, null, false, null);
     }
 
     @Test

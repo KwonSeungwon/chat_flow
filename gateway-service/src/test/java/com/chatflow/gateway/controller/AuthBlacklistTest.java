@@ -81,12 +81,18 @@ class AuthBlacklistTest {
         when(userRepository.findByUsername("testuser")).thenReturn(Mono.just(user));
         when(userRepository.save(any(UserEntity.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(userRepository.updateEncodedPassword(anyString(), anyString())).thenReturn(Mono.just(1));
+        lenient().when(userRepository.updateProfileImageUrl(anyString(), anyString())).thenReturn(Mono.just(1));
+        lenient().when(tokenBlacklistService.blacklist(anyString(), any(Duration.class))).thenReturn(Mono.just(true));
 
         // Redis template stubs for LoginRateLimitFilter
         ReactiveValueOperations<String, String> valueOps = mock(ReactiveValueOperations.class);
         lenient().when(reactiveStringRedisTemplate.opsForValue()).thenReturn(valueOps);
         // LoginRateLimitFilter calls increment() for /login and /register
         lenient().when(valueOps.increment(anyString())).thenReturn(Mono.just(1L));
+        // 가입 잠금(SET NX)과 해제
+        lenient().when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(Mono.just(true));
+        lenient().when(valueOps.delete(anyString())).thenReturn(Mono.just(true));
         lenient().when(reactiveStringRedisTemplate.expire(anyString(), any(Duration.class)))
                 .thenReturn(Mono.just(true));
         // Lua scripts: rate-limit counters return 1, session rotation returns no previous jti
@@ -162,10 +168,14 @@ class AuthBlacklistTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{\"currentPassword\":\"old12345\",\"newPassword\":\"newpass12345\"}")
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.message").isEqualTo("비밀번호가 변경되었습니다.")
+                .jsonPath("$.token").isNotEmpty();
 
         // Confirm AuthService was actually invoked (user lookup happened)
         verify(userRepository).findByUsername("testuser");
+        verify(tokenBlacklistService).blacklist(eq(validJti), any(Duration.class));
     }
 
     // ── Login remains permitAll (not blocked by authenticated()) ──
@@ -208,6 +218,18 @@ class AuthBlacklistTest {
                 .exchange()
                 // Should succeed (200), NOT 401 from Spring Security
                 .expectStatus().isOk();
+    }
+
+    // ── Prometheus scrape: 인증 없이 통과 (401이 아님; 테스트 프로필은 health만 노출하므로 404) ──
+
+    @Test
+    void actuatorPrometheus_isPermitAll() {
+        webTestClient.get().uri("/actuator/prometheus").exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    void actuatorOther_stillRequiresAuth() {
+        webTestClient.get().uri("/actuator/env").exchange().expectStatus().isUnauthorized();
     }
 
     // ── Logout remains permitAll (even with a blacklisted token) ──
