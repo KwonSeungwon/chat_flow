@@ -33,13 +33,17 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     with WidgetsBindingObserver, RouteAware {
   Timer? _refreshTimer;
   bool _disposed = false;
-  RouteObserver<PageRoute<dynamic>>? _routeObserver;
+  PageRouteObserver? _routeObserver;
   PageRoute<dynamic>? _route;
 
   /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and
   /// its sidebar) stays mounted underneath an open room. Only a sidebar not
   /// covered by another page polls; dialogs and popups do not cover it.
-  bool _coveredByPage = false;
+  /// Read live from the route stack on every tick.
+  bool get _coveredByPage {
+    final route = _route;
+    return route != null && _routeObserver!.isCoveredByPage(route);
+  }
 
   @override
   void initState() {
@@ -59,19 +63,13 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     if (route is! PageRoute<dynamic> || identical(route, _route)) return;
     _routeObserver?.unsubscribe(this);
     _route = route;
-    // Mounted under an already-open page (deep link to a room).
-    _coveredByPage = !route.isCurrent;
     final observer = ref.read(pageRouteObserverProvider);
     _routeObserver = observer;
     observer.subscribe(this, route);
   }
 
   @override
-  void didPushNext() => _coveredByPage = true;
-
-  @override
   void didPopNext() {
-    _coveredByPage = false;
     // Back in the lobby: show what changed while covered right away.
     _refresh();
   }

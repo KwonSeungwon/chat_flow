@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:chatflow/core/routing/app_router.dart';
 import 'package:chatflow/features/chat/chat_rooms_provider.dart';
 import 'package:chatflow/features/chat/widgets/chat_room_sidebar.dart';
@@ -29,7 +30,7 @@ class _FakeRooms extends StateNotifier<AsyncValue<List<ChatRoom>>>
 }
 
 Widget _app(_FakeRooms fake) {
-  final observer = RouteObserver<PageRoute<dynamic>>();
+  final observer = PageRouteObserver();
   return ProviderScope(
     overrides: [
       chatRoomsProvider.overrideWith((_) => fake),
@@ -144,5 +145,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.fetchRoomsCalls, rooms + 1);
     expect(fake.unreadCalls, unread + 1);
+  });
+
+  testWidgets(
+      'room page removed under a dialog: lobby sidebar resumes polling',
+      (tester) async {
+    ignoreOverflow();
+    final fake = _FakeRooms({});
+    final observer = PageRouteObserver();
+    final router = GoRouter(
+      initialLocation: '/chat',
+      observers: [observer],
+      routes: [
+        GoRoute(
+          path: '/chat',
+          builder: (_, __) => const Scaffold(
+              body: SizedBox(
+                  height: 400, child: ChatRoomSidebar(currentRoomId: 'a'))),
+          routes: [
+            GoRoute(
+              path: 'room',
+              builder: (context, __) => Scaffold(
+                body: TextButton(
+                  key: const Key('roomDialog'),
+                  onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const AlertDialog(content: Text('d'))),
+                  child: const Text('dialog'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        chatRoomsProvider.overrideWith((_) => fake),
+        activeRoomIdProvider.overrideWith((_) => 'a'),
+        pageRouteObserverProvider.overrideWithValue(observer),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pump();
+
+    router.go('/chat/room');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('roomDialog')));
+    await tester.pumpAndSettle();
+
+    router.go('/chat');
+    await tester.pumpAndSettle();
+    final before = fake.fetchRoomsCalls;
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pump();
+    expect(fake.fetchRoomsCalls, greaterThan(before));
   });
 }
