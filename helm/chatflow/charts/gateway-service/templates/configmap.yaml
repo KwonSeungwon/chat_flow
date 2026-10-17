@@ -5,5 +5,5 @@ metadata:
   labels:
     {{- include "gateway-service.labels" . | nindent 4 }}
 data:
-  JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m"
+  JAVA_TOOL_OPTIONS: "-Xmx256m -Xms128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Duser.timezone=UTC"
   JWT_EXPIRATION_MS: {{ .Values.jwtExpirationMs | default "3600000" | quote }}

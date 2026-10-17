@@ -1,0 +1,12 @@
+# Root Dockerfile (backend) copies only <service>/build/libs/<service>-1.0.0.jar.
+# The frontend image builds from ./frontend as its own context.
+build/
+*/build/*
+!*/build/libs
+.gradle/
+**/.gradle/
+frontend/build/
+**/node_modules/
+.superpowers/
+.playwright-mcp/
+**/*.apk
