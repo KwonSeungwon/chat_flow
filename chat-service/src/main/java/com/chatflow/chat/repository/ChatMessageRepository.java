@@ -62,6 +62,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
            "AND m.chatRoomId IN :roomIds " +
            "AND m.timestamp > COALESCE(rm.lastReadAt, rm.joinedAt) " +
            "AND m.type = 'CHAT' AND m.deleted = false " +
+           "AND (m.userId IS NULL OR m.userId <> :userId) " +
            "GROUP BY m.chatRoomId")
     List<Object[]> countUnreadByCursor(@Param("userId") String userId,
                                        @Param("roomIds") List<String> roomIds);
