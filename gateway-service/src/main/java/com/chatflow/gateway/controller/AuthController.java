@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -29,7 +30,10 @@ public class AuthController {
         return authService.register(request)
                 .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .onErrorResume(IllegalArgumentException.class,
-                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
+                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))))
+                .onErrorResume(ResponseStatusException.class,
+                        e -> Mono.just(ResponseEntity.status(e.getStatusCode())
+                                .body(Map.of("error", String.valueOf(e.getReason())))));
     }
 
     @PostMapping("/login")

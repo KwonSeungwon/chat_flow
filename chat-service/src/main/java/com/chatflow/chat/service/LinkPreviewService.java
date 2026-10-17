@@ -124,6 +124,7 @@ public class LinkPreviewService {
         }
         if (addr instanceof Inet6Address) {
             if ((b[0] & 0xFE) == 0xFC) return true;          // ULA fc00::/7
+            if (b[0] == 0x20 && b[1] == 0x01 && b[2] == 0 && b[3] == 0) return true; // Teredo 2001:0000::/32
             // IPv4 embedded in IPv6: check the embedded address against the IPv4 rules
             Inet4Address embedded = embeddedIpv4(b);
             return embedded != null && isBlocked(embedded);

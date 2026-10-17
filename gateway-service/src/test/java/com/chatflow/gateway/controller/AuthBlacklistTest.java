@@ -348,7 +348,23 @@ class AuthBlacklistTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("{\"username\":\"newuser\",\"password\":\"securepass123\"}")
                 .exchange()
-                .expectStatus().isEqualTo(409);
+                .expectStatus().isEqualTo(409)
+                .expectBody().jsonPath("$.error").isEqualTo("이미 사용 중인 아이디입니다.");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void register_lockHeld_returns409WithBody() {
+        ReactiveValueOperations<String, String> ops = reactiveStringRedisTemplate.opsForValue();
+        when(ops.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(Mono.just(false));
+
+        webTestClient.post().uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"username\":\"newuser\",\"password\":\"securepass123\"}")
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody().jsonPath("$.error")
+                .isEqualTo("같은 아이디로 가입이 진행 중입니다. 잠시 후 다시 시도해 주세요.");
     }
 
     // ── M5: password change attempts limited per user ──

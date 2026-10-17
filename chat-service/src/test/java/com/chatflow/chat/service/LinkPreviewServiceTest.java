@@ -330,6 +330,13 @@ class LinkPreviewServiceTest {
     }
 
     @Test
+    void isBlocked_teredoPrefix_2001_0000() throws Exception {
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2001:0:4136:e378:8000:63bf:3fff:fdd2")));
+        assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("2001:0:ffff::1")));
+        assertFalse(LinkPreviewService.isBlocked(InetAddress.getByName("2001:4860:4860::8888")));
+    }
+
+    @Test
     void isBlocked_ipv6Ula_fc00() throws Exception {
         assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fc00::1")));
         assertTrue(LinkPreviewService.isBlocked(InetAddress.getByName("fd12:3456::1")));
