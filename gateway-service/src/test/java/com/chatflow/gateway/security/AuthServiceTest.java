@@ -505,7 +505,7 @@ class AuthServiceTest {
         java.util.concurrent.atomic.AtomicReference<String> lockValue = new java.util.concurrent.atomic.AtomicReference<>();
         when(valueOps.setIfAbsent(eq("chatflow:signup:lock:carol"), anyString(), any(Duration.class)))
                 .thenAnswer(inv -> { lockValue.set(inv.getArgument(1)); return Mono.just(true); });
-        when(userRepository.existsByUsernameIgnoreCase("carol")).thenReturn(Mono.just(true));
+        when(userRepository.existsByUsernameIgnoreCase("Carol")).thenReturn(Mono.just(true));
 
         StepVerifier.create(authService.register(new AuthService.AuthRequest("Carol", "password123")))
                 .expectError(IllegalArgumentException.class).verify();
