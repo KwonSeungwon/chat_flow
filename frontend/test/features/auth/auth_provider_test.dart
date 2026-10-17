@@ -97,6 +97,34 @@ void main() {
     expect(await s.read(key: StorageKeys.profileImage), isNull);
   });
 
+  test('비밀번호 변경 응답에 token이 있으면 저장 토큰과 상태를 새 토큰으로 바꾼다', () async {
+    client.dio.httpClientAdapter = _PasswordAdapter(
+        '{"message":"비밀번호가 변경되었습니다.","token":"t-new"}');
+    await notifier.changePassword('Passw0rd!', 'NewPassw0rd!');
+    const s = FlutterSecureStorage();
+    expect(await s.read(key: StorageKeys.token), 't-new');
+    expect(notifier.debugState.token, 't-new');
+    expect(notifier.debugState.userId, 'u1');
+    expect(notifier.debugState.username, 'alice');
+    expect(notifier.debugState.profileImageUrl, '/a.png');
+  });
+
+  test('envelope 안의 token도 읽는다', () async {
+    client.dio.httpClientAdapter =
+        _PasswordAdapter('{"success":true,"data":{"token":"t-env"}}');
+    await notifier.changePassword('Passw0rd!', 'NewPassw0rd!');
+    expect(notifier.debugState.token, 't-env');
+  });
+
+  test('옛 서버(token 없음)면 기존 토큰을 유지한다', () async {
+    client.dio.httpClientAdapter =
+        _PasswordAdapter('{"message":"비밀번호가 변경되었습니다."}');
+    await notifier.changePassword('Passw0rd!', 'NewPassw0rd!');
+    const s = FlutterSecureStorage();
+    expect(await s.read(key: StorageKeys.token), 't');
+    expect(notifier.debugState.token, 't');
+  });
+
   test('copyWith(clearProfileImageUrl) 은 아바타를 null로 만든다', () {
     const s = AuthState(profileImageUrl: '/a.png');
     expect(s.copyWith().profileImageUrl, '/a.png');
@@ -110,6 +138,19 @@ class _NoAvatarAdapter extends _Adapter {
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     return ResponseBody.fromString(
         '{"token":"t2","userId":"u2"}', 200, headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    });
+  }
+}
+
+class _PasswordAdapter extends _Adapter {
+  _PasswordAdapter(this.body);
+  final String body;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    return ResponseBody.fromString(body, 200, headers: {
       Headers.contentTypeHeader: [Headers.jsonContentType],
     });
   }

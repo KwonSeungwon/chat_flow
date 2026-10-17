@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/fcm_service.dart';
 import '../../core/services/web_unload_handler.dart';
@@ -269,10 +270,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> changePassword(String currentPassword, String newPassword) async {
-    await _dioClient.dio.put('/api/auth/password', data: {
+    final resp = await _dioClient.dio.put('/api/auth/password', data: {
       'currentPassword': currentPassword,
       'newPassword': newPassword,
     });
+    // The server revokes the old token and returns a new one. Older servers
+    // send none: keep the current token.
+    final token = apiResponseField<String>(resp.data, 'token');
+    if (token == null || token.isEmpty) return;
+    await _storage.write(key: StorageKeys.token, value: token);
+    // State change re-keys the STOMP connections (room + app-level), which
+    // read the stored token on (re)connect.
+    state = state.copyWith(token: token);
   }
 
   Future<void> updateProfileImage(String profileImageUrl) async {
