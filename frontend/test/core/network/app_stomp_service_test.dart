@@ -204,4 +204,31 @@ void main() {
       expect(clients, hasLength(2));
     });
   });
+
+  testWidgets('tokenProviderThrows_schedulesNextRetry', (tester) async {
+    var calls = 0;
+    Future<String?> provider() async {
+      calls++;
+      if (calls == 1) throw Exception('storage locked');
+      return 'tok2';
+    }
+    service.connect(
+        userId: 'u1',
+        token: 'tok',
+        tokenProvider: provider,
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+    clients.single.config.onWebSocketDone();
+    await tester.pump(const Duration(seconds: 3)); // first retry: throws
+    expect(calls, 1);
+    expect(clients, hasLength(1));
+    await tester.pump(const Duration(seconds: 70)); // next retry
+    expect(calls, 2);
+    expect(clients, hasLength(2));
+    expect(clients.last.config.stompConnectHeaders?['Authorization'],
+        'Bearer tok2');
+    service.disconnect();
+  });
 }

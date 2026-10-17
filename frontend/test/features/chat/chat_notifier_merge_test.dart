@@ -341,4 +341,96 @@ void main() {
     expect(msgs.last.deliveryStatus, MessageDeliveryStatus.sent);
     expect(puts, ['m2']);
   });
+
+  group('reconnect refetch gap fill', () {
+    List<Map<String, dynamic>> pageOf(String prefix, int minute) => [
+          for (var i = 0; i < 50; i++)
+            _msg('$prefix$i',
+                '2026-10-16T10:${minute.toString().padLeft(2, '0')}:${i.toString().padLeft(2, '0')}'),
+        ];
+
+    Future<(ChatNotifier, _FakeStompService, List<Object?>)> joined(
+        List<Map<String, dynamic>> Function(int page) pageBody) async {
+      final stomp = _FakeStompService();
+      final pages = <Object?>[];
+      var joinedRoom = false;
+      final bodies = <String, Object>{};
+      final notifier = _notifier(container, bodies, stomp: stomp,
+          onRequest: (o) {
+        if (o.path != '/api/chat/rooms/room-1/messages') return;
+        if (!joinedRoom) {
+          bodies[o.path] = _ok([_msg('m1', '2026-10-16T09:00:00')]);
+          return;
+        }
+        final page = (o.queryParameters['page'] as int?) ?? 0;
+        pages.add(page);
+        bodies[o.path] = _ok(pageBody(page));
+      });
+      await notifier.joinRoom('room-1');
+      joinedRoom = true;
+      stomp.onConnectionChanged!(true);
+      stomp.onConnectionChanged!(false);
+      return (notifier, stomp, pages);
+    }
+
+    test('a gap over 50 pages back until it overlaps', () async {
+      final (notifier, stomp, pages) = await joined((page) => switch (page) {
+            0 => pageOf('b', 2),
+            _ => [_msg('m1', '2026-10-16T09:00:00'), ...pageOf('a', 1).take(49)],
+          });
+      final state = _stateOf(notifier);
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(pages, [0, 1]);
+      final ids = state().messages.map((m) => m.messageId).toList();
+      expect(ids.length, 1 + 49 + 50);
+      expect(ids.first, 'm1');
+      expect(ids.last, 'b49');
+    });
+
+    test('gap fill stops after 5 more pages', () async {
+      final (_, stomp, pages) =
+          await joined((page) => pageOf('p$page-', 30 - page));
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(pages, [0, 1, 2, 3, 4, 5]);
+    });
+
+    test('refetch updates edited content and deleted state of known messages',
+        () async {
+      final (notifier, stomp, _) = await joined((_) => [
+            {
+              ..._msg('m1', '2026-10-16T09:00:00'),
+              'content': 'fixed',
+              'edited': true,
+              'editedAt': '2026-10-16T09:05:00',
+            },
+          ]);
+      final state = _stateOf(notifier);
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      var m1 = state().messages.single;
+      expect(m1.content, 'fixed');
+      expect(m1.edited, isTrue);
+      expect(m1.editedAt, '2026-10-16T09:05:00');
+
+      stomp.onConnectionChanged!(false);
+      // Deleted while away.
+      final (notifier2, stomp2, _) = await joined((_) => [
+            {
+              ..._msg('m1', '2026-10-16T09:00:00'),
+              'content': '삭제된 메시지입니다.',
+              'deleted': true,
+            },
+          ]);
+      final state2 = _stateOf(notifier2);
+      stomp2.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      m1 = state2().messages.single;
+      expect(m1.deleted, isTrue);
+      expect(m1.content, '삭제된 메시지입니다.');
+    });
+  });
 }

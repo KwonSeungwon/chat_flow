@@ -189,7 +189,15 @@ class AppStompService {
     if (_manualDisconnect || _token == null) return;
     // Re-read the current token on every attempt (rotation, re-login).
     if (_tokenProvider != null) {
-      final fresh = await _tokenProvider!();
+      final String? fresh;
+      try {
+        fresh = await _tokenProvider!();
+      } catch (e) {
+        // Storage read failed: not an auth answer, try again later.
+        debugPrint('[AppSTOMP] token read failed: $e');
+        if (!_manualDisconnect && session == _session) _scheduleReconnect();
+        return;
+      }
       if (_manualDisconnect || session != _session) return;
       // No token, or the one already refused: stop until resume/login.
       if (fresh == null || fresh == _rejectedToken) {
