@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
 import '../../../core/services/fcm_service.dart';
-import '../chat_provider.dart' show chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider;
+import '../chat_provider.dart' show activeRoomIdProvider, chatRoomsProvider, roomUnreadCountsProvider, roomNotificationPolicyProvider, NotificationPolicy, roomSortProvider, RoomSortOption, HideRoomResult, roomKeywordsProvider;
 import 'create_room_dialog.dart';
 import 'sidebar_header.dart';
 import 'room_tile.dart';
@@ -36,18 +36,21 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadInitialUnreadCounts();
+    // ModalRoute.of(context) is unavailable in initState; defer to first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_disposed && _isCurrentRoute) _loadInitialUnreadCounts();
+    });
     _startRefreshTimer();
   }
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (_disposed) return;
+      if (_disposed || !_isCurrentRoute) return;
       ref.read(chatRoomsProvider.notifier).fetchRooms();
       final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
       if (!_disposed && counts.isNotEmpty) {
-        ref.read(roomUnreadCountsProvider.notifier).mergeAll(counts);
+        ref.read(roomUnreadCountsProvider.notifier).mergeAll(_withoutActiveRoom(counts));
       }
     });
   }
@@ -63,10 +66,21 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     }
   }
 
+  /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and its
+  /// sidebar) stays mounted underneath an open room. Only the topmost route polls.
+  bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? true;
+
+  /// The room being viewed must stay at 0 regardless of server counts.
+  Map<String, int> _withoutActiveRoom(Map<String, int> counts) {
+    final active = ref.read(activeRoomIdProvider);
+    if (active == null || !counts.containsKey(active)) return counts;
+    return {...counts, active: 0};
+  }
+
   Future<void> _loadInitialUnreadCounts() async {
     final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
     if (!_disposed && counts.isNotEmpty) {
-      ref.read(roomUnreadCountsProvider.notifier).replaceAll(counts);
+      ref.read(roomUnreadCountsProvider.notifier).replaceAll(_withoutActiveRoom(counts));
     }
   }
 
