@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/api_response.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
@@ -301,9 +302,8 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                     if (q.length < 2) { setDialogState(() => results = []); return; }
                     try {
                       final resp = await ref.read(dioClientProvider).dio.get('/api/users/search', queryParameters: {'q': q});
-                      if (resp.data is Map && resp.data['data'] is List) {
-                        setDialogState(() => results = (resp.data['data'] as List).cast<Map<String, dynamic>>());
-                      }
+                      final users = apiResponseList(resp.data);
+                      setDialogState(() => results = users.cast<Map<String, dynamic>>());
                     } catch (_) {}
                   },
                 ),
@@ -328,11 +328,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                               'targetUserId': u['userId'],
                               'targetUsername': u['username'],
                             });
-                            final roomData = resp.data;
-                            String? roomId;
-                            if (roomData is Map && roomData['data'] is Map) {
-                              roomId = roomData['data']['id']?.toString();
-                            }
+                            final roomId = apiResponseMap(resp.data)?['id']?.toString();
                             if (roomId != null) {
                               await roomsNotifier.fetchRooms();
                               router.go('/chat/$roomId');

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/network/api_response.dart';
 import '../chat/chat_rooms_provider.dart';
 import 'command_action.dart';
 
@@ -122,11 +123,7 @@ class CommandPaletteNotifier extends StateNotifier<CommandPaletteState> {
       final resp = await dio.get('/api/users/search', queryParameters: {'q': query});
       if (!mounted) return;
 
-      final data = resp.data;
-      List<dynamic> users = [];
-      if (data is Map && data['data'] is List) {
-        users = data['data'] as List;
-      }
+      final users = apiResponseList(resp.data);
 
       final userActions = users.map((u) {
         final map = u as Map<String, dynamic>;
