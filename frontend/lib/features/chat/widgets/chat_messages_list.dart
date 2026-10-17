@@ -363,7 +363,8 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     final items = <Object>[];
     String? lastDate;
     bool unreadInserted = false;
-    for (final msg in messages) {
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
       final date = _formatDate(msg.timestamp);
       if (date.isNotEmpty && date != lastDate) {
         items.add(date);
@@ -375,7 +376,10 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
           widget.lastReadMessageId != null &&
           widget.lastReadMessageId!.isNotEmpty &&
           msg.effectiveId == widget.lastReadMessageId &&
-          msg != messages.last) {
+          // Own messages are never unread: need a later message from someone else.
+          messages
+              .skip(i + 1)
+              .any((m) => m.username != widget.currentUsername)) {
         items.add(_unreadDividerMarker);
         unreadInserted = true;
       }
