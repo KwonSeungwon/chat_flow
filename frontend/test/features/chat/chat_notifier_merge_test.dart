@@ -341,4 +341,131 @@ void main() {
     expect(msgs.last.deliveryStatus, MessageDeliveryStatus.sent);
     expect(puts, ['m2']);
   });
+
+  group('reconnect refetch gap fill', () {
+    List<Map<String, dynamic>> pageOf(String prefix, int minute) => [
+          for (var i = 0; i < 50; i++)
+            _msg('$prefix$i',
+                '2026-10-16T10:${minute.toString().padLeft(2, '0')}:${i.toString().padLeft(2, '0')}'),
+        ];
+
+    Future<(ChatNotifier, _FakeStompService, List<Object?>)> joined(
+        List<Map<String, dynamic>> Function(int page) pageBody,
+        {List<RequestOptions>? requests}) async {
+      final stomp = _FakeStompService();
+      final pages = <Object?>[];
+      var joinedRoom = false;
+      final bodies = <String, Object>{};
+      final notifier = _notifier(container, bodies, stomp: stomp,
+          onRequest: (o) {
+        requests?.add(o);
+        if (o.path != '/api/chat/rooms/room-1/messages') return;
+        if (!joinedRoom) {
+          bodies[o.path] = _ok([_msg('m1', '2026-10-16T09:00:00')]);
+          return;
+        }
+        final page = (o.queryParameters['page'] as int?) ?? 0;
+        pages.add(page);
+        bodies[o.path] = _ok(pageBody(page));
+      });
+      await notifier.joinRoom('room-1');
+      joinedRoom = true;
+      stomp.onConnectionChanged!(true);
+      stomp.onConnectionChanged!(false);
+      return (notifier, stomp, pages);
+    }
+
+    test('a gap over 50 pages back until it overlaps', () async {
+      final (notifier, stomp, pages) = await joined((page) => switch (page) {
+            0 => pageOf('b', 2),
+            _ => [_msg('m1', '2026-10-16T09:00:00'), ...pageOf('a', 1).take(49)],
+          });
+      final state = _stateOf(notifier);
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(pages, [0, 1]);
+      final ids = state().messages.map((m) => m.messageId).toList();
+      expect(ids.length, 1 + 49 + 50);
+      expect(ids.first, 'm1');
+      expect(ids.last, 'b49');
+    });
+
+    test('gap fill stops after 5 more pages', () async {
+      final (_, stomp, pages) =
+          await joined((page) => pageOf('p$page-', 30 - page));
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(pages, [0, 1, 2, 3, 4, 5]);
+    });
+
+    test('gap still open after the cap: fetched pages replace the timeline',
+        () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      FlutterSecureStorage.setMockInitialValues({});
+      dotenv.testLoad(fileInput: '');
+      final requests = <RequestOptions>[];
+      final (notifier, stomp, _) = await joined(
+          (page) => pageOf('p$page-', 30 - page),
+          requests: requests);
+      final state = _stateOf(notifier);
+      // Sent while down: an unsent local bubble that must survive.
+      notifier.sendMessage(roomId: 'room-1', content: 'hi');
+      final localId = state().messages.last.localId!;
+
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final msgs = state().messages;
+      expect(msgs.where((m) => m.messageId == 'm1'), isEmpty,
+          reason: 'older local messages would leave a silent hole');
+      expect(msgs.where((m) => m.messageId != null), hasLength(300));
+      expect(msgs.where((m) => m.localId == localId), hasLength(1));
+      expect(state().hasMoreHistory, isTrue);
+
+      requests.clear();
+      await notifier.loadMoreHistory('room-1');
+      final cursor = requests
+          .singleWhere((o) => o.path.endsWith('/messages/cursor'))
+          .queryParameters['before'];
+      expect(cursor,
+          parseServerDateTime('2026-10-16T10:25:00')!.toUtc().toIso8601String());
+    });
+
+    test('refetch updates edited content and deleted state of known messages',
+        () async {
+      final (notifier, stomp, _) = await joined((_) => [
+            {
+              ..._msg('m1', '2026-10-16T09:00:00'),
+              'content': 'fixed',
+              'edited': true,
+              'editedAt': '2026-10-16T09:05:00',
+            },
+          ]);
+      final state = _stateOf(notifier);
+      stomp.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      var m1 = state().messages.single;
+      expect(m1.content, 'fixed');
+      expect(m1.edited, isTrue);
+      expect(m1.editedAt, '2026-10-16T09:05:00');
+
+      stomp.onConnectionChanged!(false);
+      // Deleted while away.
+      final (notifier2, stomp2, _) = await joined((_) => [
+            {
+              ..._msg('m1', '2026-10-16T09:00:00'),
+              'content': '삭제된 메시지입니다.',
+              'deleted': true,
+            },
+          ]);
+      final state2 = _stateOf(notifier2);
+      stomp2.onConnectionChanged!(true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      m1 = state2().messages.single;
+      expect(m1.deleted, isTrue);
+      expect(m1.content, '삭제된 메시지입니다.');
+    });
+  });
 }

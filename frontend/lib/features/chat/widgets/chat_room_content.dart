@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/services/browser_online.dart';
 import '../../auth/auth_provider.dart';
 import '../bookmark_provider.dart';
 import '../chat_provider.dart';
@@ -48,6 +49,9 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   /// reconnect now instead of waiting for the next retry.
   late final AppLifecycleListener _lifecycle;
 
+  /// Browser back online (web): same as a resume.
+  late final StreamSubscription<void> _online;
+
   void _onResume() {
     if (!mounted) return;
     ref.read(chatNotifierProvider(widget.roomId).notifier).reconnectIfNeeded();
@@ -58,6 +62,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(onResume: _onResume);
+    _online = ref.read(browserOnlineProvider).listen((_) => _onResume());
     _activeRoomId = ref.read(activeRoomIdProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -77,6 +82,7 @@ class ChatRoomContentState extends ConsumerState<ChatRoomContent> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _online.cancel();
     // Clear active room on leave so unread increments resume for this room.
     // Deferred: providers cannot be modified during dispose. Only if it is
     // still ours — on a room switch the next room has set itself by then.

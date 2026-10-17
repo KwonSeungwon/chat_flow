@@ -398,7 +398,15 @@ class StompService {
     if (!_manualDisconnect && _currentToken != null) {
       // Re-read the current token on every attempt (rotation, re-login).
       if (_tokenProvider != null) {
-        final freshToken = await _tokenProvider!();
+        final String? freshToken;
+        try {
+          freshToken = await _tokenProvider!();
+        } catch (e) {
+          // Storage read failed: not an auth answer, try again later.
+          debugPrint('[STOMP] token read failed: $e');
+          if (!_manualDisconnect && session == _session) _scheduleReconnect();
+          return;
+        }
         if (_manualDisconnect || session != _session) return;
         // No token (logged out / expired) or the one already refused:
         // retrying cannot succeed, so stop until resume/login.

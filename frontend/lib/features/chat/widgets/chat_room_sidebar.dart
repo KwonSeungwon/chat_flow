@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/api_response.dart';
+import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/chat_room.dart';
 import '../../auth/auth_provider.dart';
@@ -28,9 +30,20 @@ class ChatRoomSidebar extends ConsumerStatefulWidget {
 }
 
 class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   Timer? _refreshTimer;
   bool _disposed = false;
+  PageRouteObserver? _routeObserver;
+  PageRoute<dynamic>? _route;
+
+  /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and
+  /// its sidebar) stays mounted underneath an open room. Only a sidebar not
+  /// covered by another page polls; dialogs and popups do not cover it.
+  /// Read live from the route stack on every tick.
+  bool get _coveredByPage {
+    final route = _route;
+    return route != null && _routeObserver!.isCoveredByPage(route);
+  }
 
   @override
   void initState() {
@@ -38,20 +51,42 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
     WidgetsBinding.instance.addObserver(this);
     // ModalRoute.of(context) is unavailable in initState; defer to first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed && _isCurrentRoute) _loadInitialUnreadCounts();
+      if (!_disposed && !_coveredByPage) _loadInitialUnreadCounts();
     });
     _startRefreshTimer();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _route)) return;
+    _routeObserver?.unsubscribe(this);
+    _route = route;
+    final observer = ref.read(pageRouteObserverProvider);
+    _routeObserver = observer;
+    observer.subscribe(this, route);
+  }
+
+  @override
+  void didPopNext() {
+    // Back in the lobby: show what changed while covered right away.
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    ref.read(chatRoomsProvider.notifier).fetchRooms();
+    final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
+    if (!_disposed && counts.isNotEmpty) {
+      ref.read(roomUnreadCountsProvider.notifier).mergeAll(_withoutActiveRoom(counts));
+    }
+  }
+
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      if (_disposed || !_isCurrentRoute) return;
-      ref.read(chatRoomsProvider.notifier).fetchRooms();
-      final counts = await ref.read(chatRoomsProvider.notifier).fetchUnreadCounts();
-      if (!_disposed && counts.isNotEmpty) {
-        ref.read(roomUnreadCountsProvider.notifier).mergeAll(_withoutActiveRoom(counts));
-      }
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_disposed || _coveredByPage) return;
+      _refresh();
     });
   }
 
@@ -65,10 +100,6 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
       _startRefreshTimer();
     }
   }
-
-  /// `/chat/:roomId` is a child route of `/chat`, so the lobby ChatPage (and its
-  /// sidebar) stays mounted underneath an open room. Only the topmost route polls.
-  bool get _isCurrentRoute => ModalRoute.of(context)?.isCurrent ?? true;
 
   /// The room being viewed must stay at 0 regardless of server counts.
   Map<String, int> _withoutActiveRoom(Map<String, int> counts) {
@@ -87,6 +118,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
   @override
   void dispose() {
     _disposed = true;
+    _routeObserver?.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
@@ -268,9 +300,8 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                     if (q.length < 2) { setDialogState(() => results = []); return; }
                     try {
                       final resp = await ref.read(dioClientProvider).dio.get('/api/users/search', queryParameters: {'q': q});
-                      if (resp.data is Map && resp.data['data'] is List) {
-                        setDialogState(() => results = (resp.data['data'] as List).cast<Map<String, dynamic>>());
-                      }
+                      final users = apiResponseList(resp.data);
+                      setDialogState(() => results = users.cast<Map<String, dynamic>>());
                     } catch (_) {}
                   },
                 ),
@@ -295,11 +326,7 @@ class _ChatRoomSidebarState extends ConsumerState<ChatRoomSidebar>
                               'targetUserId': u['userId'],
                               'targetUsername': u['username'],
                             });
-                            final roomData = resp.data;
-                            String? roomId;
-                            if (roomData is Map && roomData['data'] is Map) {
-                              roomId = roomData['data']['id']?.toString();
-                            }
+                            final roomId = apiResponseMap(resp.data)?['id']?.toString();
                             if (roomId != null) {
                               await roomsNotifier.fetchRooms();
                               router.go('/chat/$roomId');

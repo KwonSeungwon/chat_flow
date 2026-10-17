@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/constants/storage_keys.dart';
+import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/fcm_service.dart';
 import '../../core/services/web_unload_handler.dart';
@@ -60,17 +61,29 @@ class AuthState {
   }
 }
 
+/// Outcome of a successful password change.
+enum PasswordChangeResult {
+  changed,
+
+  /// Changed on the server, but the new token could not be stored. The old
+  /// token is already revoked, so the session was ended: sign in again.
+  reloginRequired,
+}
+
 class AuthNotifier extends StateNotifier<AuthState> {
   final DioClient _dioClient;
-  static const _storage = FlutterSecureStorage();
+  final FlutterSecureStorage _storage;
 
   bool _fcmStopInFlight = false;
 
   /// 세션이 끝날 때(로그아웃/만료) 계정 범위 리소스(STOMP 연결 등)를 정리하는 훅.
   final void Function()? _onSessionEnded;
 
-  AuthNotifier(this._dioClient, {void Function()? onSessionEnded})
+  AuthNotifier(this._dioClient,
+      {void Function()? onSessionEnded,
+      FlutterSecureStorage storage = const FlutterSecureStorage()})
       : _onSessionEnded = onSessionEnded,
+        _storage = storage,
         super(const AuthState()) {
     _dioClient.onUnauthorized = () {
       // 애초에 세션이 없으면 리셋할 것도, 끊을 푸시도 없다. 여기서 리셋해버리면
@@ -255,10 +268,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       debugPrint('[AuthNotifier] logout error: $e');
     }
+    await _endSession();
+  }
+
+  /// Local half of logging out, after the server was (or need not be) told.
+  Future<void> _endSession() async {
     // Unsubscribe this device from all room topics server-side, then invalidate
     // the local FCM token. Unsubscribe-all (not just deleteToken) is what
     // reliably stops pushes — a deleted token lingers in the topic until Firebase
-    // lazily evicts it. The JWT is still valid here, so the call is authenticated.
+    // lazily evicts it. The call is permitAll, so a revoked JWT is fine.
     await _stopFcmPushes();
     // Detach the beforeunload handler so a future tab close after logout
     // doesn't fire POST /api/fcm/unsubscribe-all with a stale/empty JWT.
@@ -268,11 +286,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState(isHydrated: true, loggedOut: true);
   }
 
-  Future<void> changePassword(String currentPassword, String newPassword) async {
-    await _dioClient.dio.put('/api/auth/password', data: {
+  Future<PasswordChangeResult> changePassword(
+      String currentPassword, String newPassword) async {
+    final resp = await _dioClient.dio.put('/api/auth/password', data: {
       'currentPassword': currentPassword,
       'newPassword': newPassword,
     });
+    // The server revokes the old token and returns a new one. Older servers
+    // send none: keep the current token.
+    final token = apiResponseField<String>(resp.data, 'token');
+    if (token == null || token.isEmpty) return PasswordChangeResult.changed;
+    try {
+      await _storage.write(key: StorageKeys.token, value: token);
+    } catch (e) {
+      // The change went through and the old token is revoked: end the
+      // session cleanly instead of reporting a failure.
+      debugPrint('[AuthNotifier] storing new token failed: $e');
+      await _endSession();
+      return PasswordChangeResult.reloginRequired;
+    }
+    // State change re-keys the STOMP connections (room + app-level), which
+    // read the stored token on (re)connect.
+    state = state.copyWith(token: token);
+    return PasswordChangeResult.changed;
   }
 
   Future<void> updateProfileImage(String profileImageUrl) async {

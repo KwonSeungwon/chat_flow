@@ -56,10 +56,63 @@ final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
   return notifier;
 });
 
+/// Reports page pushes/pops on the root navigator to [RouteAware] widgets
+/// (typed to [PageRoute], so dialogs and popups send no events), and tracks
+/// the whole route stack so a widget can ask whether a page covers its route
+/// right now. Events alone miss a page removed under a dialog (didRemove
+/// sends no didPopNext).
+class PageRouteObserver extends RouteObserver<PageRoute<dynamic>> {
+  final List<Route<dynamic>> _stack = [];
+
+  /// True if a [PageRoute] sits above [route]; pageless routes do not count.
+  bool isCoveredByPage(Route<dynamic> route) {
+    final i = _stack.indexOf(route);
+    if (i < 0) return !route.isCurrent;
+    return _stack.skip(i + 1).any((r) => r is PageRoute);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.add(route);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    super.didPop(route, previousRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    super.didRemove(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final i = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (newRoute != null) {
+      if (i < 0) {
+        _stack.add(newRoute);
+      } else {
+        _stack[i] = newRoute;
+      }
+    } else if (i >= 0) {
+      _stack.removeAt(i);
+    }
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+}
+
+final pageRouteObserverProvider =
+    Provider<PageRouteObserver>((ref) => PageRouteObserver());
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(_routerNotifierProvider);
   return GoRouter(
     initialLocation: '/chat',
+    observers: [ref.watch(pageRouteObserverProvider)],
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [
