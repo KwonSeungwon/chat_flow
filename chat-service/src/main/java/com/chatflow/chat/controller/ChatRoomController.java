@@ -25,6 +25,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -260,16 +261,23 @@ public class ChatRoomController {
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
         // The target's name comes from the users table, never from the client.
-        String targetUsername = userDirectory.resolveUsername(body.targetUserId(), body.targetUsername());
+        String targetUsername;
+        try {
+            targetUsername = userDirectory.resolveUsername(body.targetUserId(), body.targetUsername());
+            if (targetUsername != null && (username == null || username.isBlank())) {
+                username = userDirectory.resolveUsername(userId, null);
+                if (username == null) {
+                    return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+                }
+            }
+        } catch (DataAccessException e) {
+            log.warn("User directory lookup failed for DM {} -> {}: {}", userId, body.targetUserId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("사용자 정보를 확인할 수 없습니다. 잠시 후 다시 시도하세요."));
+        }
         if (targetUsername == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.error("대상 사용자를 찾을 수 없습니다."));
-        }
-        if (username == null || username.isBlank()) {
-            username = userDirectory.resolveUsername(userId, null);
-            if (username == null) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
-            }
         }
         ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), targetUsername);
         // Seed both DM participants — they may both want to call member-gated
