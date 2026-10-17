@@ -116,6 +116,32 @@ void main() {
     expect(notifier.debugState.token, 't-env');
   });
 
+  test('새 토큰 저장이 실패하면 변경은 성공으로 두고 깨끗이 로그아웃한다', () async {
+    final storage = _FailingTokenWriteStorage();
+    final n = AuthNotifier(client,
+        onSessionEnded: () => sessionEnded++, storage: storage);
+    addTearDown(n.dispose);
+    await n.login('alice', 'Passw0rd!');
+    storage.failTokenWrite = true;
+    client.dio.httpClientAdapter = _PasswordAdapter(
+        '{"message":"비밀번호가 변경되었습니다.","token":"t-new"}');
+
+    final result = await n.changePassword('Passw0rd!', 'NewPassw0rd!');
+
+    expect(result, PasswordChangeResult.reloginRequired);
+    expect(n.debugState.token, isNull);
+    expect(n.debugState.loggedOut, isTrue);
+    expect(sessionEnded, 1);
+    expect((await readAll()).values.every((v) => v == null), isTrue);
+  });
+
+  test('정상 교체는 changed를 돌려준다', () async {
+    client.dio.httpClientAdapter =
+        _PasswordAdapter('{"message":"ok","token":"t-new"}');
+    expect(await notifier.changePassword('Passw0rd!', 'NewPassw0rd!'),
+        PasswordChangeResult.changed);
+  });
+
   test('옛 서버(token 없음)면 기존 토큰을 유지한다', () async {
     client.dio.httpClientAdapter =
         _PasswordAdapter('{"message":"비밀번호가 변경되었습니다."}');
@@ -153,5 +179,26 @@ class _PasswordAdapter extends _Adapter {
     return ResponseBody.fromString(body, 200, headers: {
       Headers.contentTypeHeader: [Headers.jsonContentType],
     });
+  }
+}
+
+class _FailingTokenWriteStorage extends FlutterSecureStorage {
+  bool failTokenWrite = false;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) {
+    if (failTokenWrite && key == StorageKeys.token) {
+      throw Exception('secure storage write failed');
+    }
+    return super.write(key: key, value: value);
   }
 }
