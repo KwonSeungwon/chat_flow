@@ -47,6 +47,8 @@ public class SecurityConfig {
                         .pathMatchers("/ws/**").permitAll()
                         .pathMatchers("/ws-native", "/ws-native/**").permitAll()
                         .pathMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
+                        // Prometheus scrape(클러스터 내부). 운영 ingress는 /api, /ws만 gateway로 보내고 / 는 frontend nginx라 외부 노출 없음.
+                        .pathMatchers("/actuator/prometheus").permitAll()
                         .pathMatchers("/api/fallback/**").permitAll()
                         // FCM unsubscribe-all is token-only (the FCM device token identifies the
                         // device; Firebase verifies ownership) and destructive only against the

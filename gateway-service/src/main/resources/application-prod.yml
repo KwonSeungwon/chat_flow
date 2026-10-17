@@ -27,6 +27,7 @@ spring:
             - name: CircuitBreaker
               args:
                 name: chatCircuitBreaker
+                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/chat
             - name: Retry
               args:
@@ -49,6 +50,7 @@ spring:
             - name: CircuitBreaker
               args:
                 name: fcmCircuitBreaker
+                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/fcm
             - name: Retry
               args:
@@ -69,6 +71,7 @@ spring:
             - name: CircuitBreaker
               args:
                 name: gameCircuitBreaker
+                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/game
             - name: Retry
               args:
@@ -116,6 +119,7 @@ spring:
             - name: CircuitBreaker
               args:
                 name: fileCircuitBreaker
+                statusCodes: 502,503,504
                 fallbackUri: forward:/api/fallback/files
             - name: Retry
               args:
@@ -214,7 +218,8 @@ resilience4j:
         base-config: default
       fileCircuitBreaker:
         base-config: default
-        timeout-duration: 30s
+        # 업로드 한도(55MB)에서 느린 회선이 끊기지 않게
+        timeout-duration: 120s
 
 jwt:
   secret: ${JWT_SECRET}

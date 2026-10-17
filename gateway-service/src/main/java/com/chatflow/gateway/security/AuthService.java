@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -72,6 +73,8 @@ public class AuthService {
     private static final String PASSWORD_RATE_KEY_PREFIX = "rl:pwd:";
     private static final int PASSWORD_WINDOW_SECONDS = 60;
     private static final int PASSWORD_MAX_ATTEMPTS = 5;
+    private static final String SIGNUP_LOCK_PREFIX = "chatflow:signup:lock:";
+    private static final Duration SIGNUP_LOCK_TTL = Duration.ofSeconds(10);
 
     /** 없는 사용자도 bcrypt 비교를 한 번 돌려 응답 시간으로 존재 여부가 드러나지 않게 한다. */
     private final String dummyEncodedPassword;
@@ -111,6 +114,34 @@ public class AuthService {
             return Mono.error(new IllegalArgumentException(
                     "아이디는 2~20자의 한글, 영문, 숫자, _ . - 만 사용할 수 있습니다."));
         }
+        // 대소문자만 다른 이름의 동시 가입은 DB UNIQUE로 못 막는다(대소문자 구분 컬럼). lower(username) 키로 직렬화한다.
+        String lockKey = SIGNUP_LOCK_PREFIX + username.toLowerCase(Locale.ROOT);
+        return acquireSignupLock(lockKey)
+                .flatMap(acquired -> acquired
+                        ? Mono.usingWhen(Mono.just(lockKey),
+                                k -> doRegister(username, password),
+                                this::releaseSignupLock)
+                        : Mono.<AuthResponse>error(new ResponseStatusException(
+                                HttpStatus.CONFLICT, "이미 존재하는 사용자명입니다.")));
+    }
+
+    /** Redis 장애 시 fail-open — 기존처럼 existsBy 검사와 DB 제약에 맡긴다. */
+    private Mono<Boolean> acquireSignupLock(String key) {
+        return redisTemplate.opsForValue().setIfAbsent(key, "1", SIGNUP_LOCK_TTL)
+                .defaultIfEmpty(true)
+                .onErrorResume(e -> {
+                    log.warn("Signup lock failed (fail-open): {}", e.getMessage());
+                    return Mono.just(true);
+                });
+    }
+
+    private Mono<Void> releaseSignupLock(String key) {
+        return redisTemplate.opsForValue().delete(key)
+                .onErrorResume(e -> Mono.empty())
+                .then();
+    }
+
+    private Mono<AuthResponse> doRegister(String username, String password) {
         return userRepository.existsByUsernameIgnoreCase(username)
                 .flatMap(exists -> {
                     if (exists) {
@@ -179,17 +210,18 @@ public class AuthService {
         }
         return userRepository.findByUsername(username)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
-                .flatMap(entity -> {
-                    entity.setProfileImageUrl(profileImageUrl);
-                    return userRepository.save(entity);
-                })
+                .flatMap(entity -> userRepository.updateProfileImageUrl(entity.getUserId(), profileImageUrl))
                 .then();
     }
 
     /**
-     * @param currentJti 이 요청을 보낸 토큰의 jti. null이 아니면 active jti를 이 값으로 고정하고 다른 active 세션은 블랙리스트한다.
+     * 비밀번호 변경 후 새 세션 토큰을 발급한다. 현재 토큰은 블랙리스트하고 active jti를 새 토큰으로 회전해
+     * (스크립트가 이전 active 세션을 블랙리스트) 다른 기기 세션도 무효화한다.
+     *
+     * @param currentJti 이 요청을 보낸 토큰의 jti. null이면 블랙리스트는 건너뛴다.
+     * @return 새 JWT
      */
-    public Mono<Void> changePassword(String username, String currentPassword, String newPassword, String currentJti) {
+    public Mono<String> changePassword(String username, String currentPassword, String newPassword, String currentJti) {
         if (newPassword == null || newPassword.length() < 8) {
             return Mono.error(new IllegalArgumentException("새 비밀번호는 8자 이상이어야 합니다."));
         }
@@ -208,21 +240,24 @@ public class AuthService {
                                 return passwordEncoder.encode(newPassword);
                             })
                             .subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(encoded -> {
-                                entity.setEncodedPassword(encoded);
-                                return userRepository.save(entity);
+                            .flatMap(encoded -> userRepository.updateEncodedPassword(entity.getUserId(), encoded))
+                            .flatMap(updated -> {
+                                String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername());
+                                String newJti = jwtUtil.getJti(token);
+                                Mono<Void> blacklistCurrent = currentJti == null
+                                        ? Mono.<Void>empty()
+                                        : tokenBlacklistService.blacklist(currentJti, cacheTtl).then();
+                                return blacklistCurrent
+                                        .then(rotateActiveJti(entity.getUserId(), newJti, cacheTtl))
+                                        // 비밀번호는 이미 저장됐다. 세션 전환 실패가 500으로 보이면 안 된다.
+                                        .onErrorResume(e -> {
+                                            log.warn("[auth] session rotation after password change failed: userId={} {}",
+                                                    entity.getUserId(), e.getMessage());
+                                            return Mono.empty();
+                                        })
+                                        .thenReturn(token);
                             })
-                            .flatMap(saved -> currentJti == null
-                                    ? Mono.<Void>empty()
-                                    : rotateActiveJti(entity.getUserId(), currentJti, cacheTtl)
-                                            // 비밀번호는 이미 저장됐다. 세션 고정 실패가 500으로 보이면 안 된다.
-                                            .onErrorResume(e -> {
-                                                log.warn("[auth] active jti rotation after password change failed: userId={} {}",
-                                                        entity.getUserId(), e.getMessage());
-                                                return Mono.empty();
-                                            }))
-                )
-                .then();
+                );
     }
 
     /** 사용자당 분당 5회. Redis 장애 시 fail-open. */
