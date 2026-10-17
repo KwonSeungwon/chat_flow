@@ -357,13 +357,19 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     }
   }
 
+  static bool _isSystemType(String type) {
+    final t = type.toUpperCase();
+    return t == 'JOIN' || t == 'LEAVE' || t == 'SYSTEM';
+  }
+
   static const _unreadDividerMarker = '__UNREAD_DIVIDER__';
 
   List<Object> _buildItemsWithDividers(List<ChatMessage> messages) {
     final items = <Object>[];
     String? lastDate;
     bool unreadInserted = false;
-    for (final msg in messages) {
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
       final date = _formatDate(msg.timestamp);
       if (date.isNotEmpty && date != lastDate) {
         items.add(date);
@@ -375,7 +381,12 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
           widget.lastReadMessageId != null &&
           widget.lastReadMessageId!.isNotEmpty &&
           msg.effectiveId == widget.lastReadMessageId &&
-          msg != messages.last) {
+          // Own messages are never unread: need a later message from someone else.
+          messages
+              .skip(i + 1)
+              .any((m) =>
+                  !_isSystemType(m.type) &&
+                  m.username != widget.currentUsername)) {
         items.add(_unreadDividerMarker);
         unreadInserted = true;
       }
@@ -505,7 +516,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             }
 
             Widget bubble;
-            if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
+            if (_isSystemType(type)) {
               bubble = SystemBubble(msg: msg);
             } else if (msg.isFileMessage) {
               final isMine = msg.username == widget.currentUsername;
