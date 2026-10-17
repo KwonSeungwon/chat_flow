@@ -23,13 +23,16 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MessageReactionService {
 
+    /** Distinct emoji keys per message — bounds the reactions JSON. */
+    static final int MAX_DISTINCT_EMOJIS = 50;
+
     private final ChatMessageRepository chatMessageRepository;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public Result<Boolean, ChatErrorCode> toggleReaction(String roomId, String messageId, String emoji, String userId) {
-        return chatMessageRepository.findById(messageId)
+        return chatMessageRepository.findByIdForUpdate(messageId)
                 .filter(entity -> roomId.equals(entity.getChatRoomId()))
                 .<Result<Boolean, ChatErrorCode>>map(entity -> {
             Map<String, List<String>> map;
@@ -39,6 +42,10 @@ public class MessageReactionService {
                         : new LinkedHashMap<>();
             } catch (Exception e) {
                 map = new LinkedHashMap<>();
+            }
+            if (!map.containsKey(emoji) && map.size() >= MAX_DISTINCT_EMOJIS) {
+                return Result.<Boolean, ChatErrorCode>err(ChatErrorCode.INVALID_INPUT,
+                        "한 메시지에 리액션은 " + MAX_DISTINCT_EMOJIS + "종류까지 달 수 있습니다.");
             }
             List<String> users = map.computeIfAbsent(emoji, k -> new java.util.ArrayList<>());
             boolean added;

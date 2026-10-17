@@ -53,10 +53,10 @@ class GameProgressAnswerRepositoryTest {
 
     @Test
     void countCorrectGroupedByUser_countsOnlyCorrect() {
-        answer("u1", true);
-        answer("u1", true);
-        answer("u1", false);
-        answer("u2", false);
+        answer("u1", 1L, true);
+        answer("u1", 2L, true);
+        answer("u1", 3L, false);
+        answer("u2", 1L, false);
 
         Map<String, Long> counts = answerRepository.countCorrectGroupedByUser().stream()
                 .collect(Collectors.toMap(GameAnswerRepository.UserCorrectCount::getUserId,
@@ -65,13 +65,26 @@ class GameProgressAnswerRepositoryTest {
         assertThat(counts).containsOnly(Map.entry("u1", 2L));
     }
 
+    @Test
+    void countCorrectGroupedByUser_countsAQuestionOnce_howeverOftenItIsReplayed() {
+        answer("u1", 1L, true);
+        answer("u1", 1L, true);
+        answer("u1", 1L, true);
+        answer("u1", 2L, true);
+
+        assertThat(answerRepository.countCorrectGroupedByUser())
+                .singleElement()
+                .extracting(GameAnswerRepository.UserCorrectCount::getCorrectCount)
+                .isEqualTo(2L);
+    }
+
     private void progress(String userId, String dungeonId, LocalDateTime clearedAt, String username) {
         progressRepository.save(GameProgress.builder().userId(userId).dungeonId(dungeonId)
                 .clearedAt(clearedAt).username(username).bestStreak(0).build());
     }
 
-    private void answer(String userId, boolean correct) {
-        answerRepository.save(GameAnswer.builder().userId(userId).questionId(1L).correct(correct)
+    private void answer(String userId, Long questionId, boolean correct) {
+        answerRepository.save(GameAnswer.builder().userId(userId).questionId(questionId).correct(correct)
                 .answeredAt(LocalDateTime.now()).nextDueAt(LocalDateTime.now()).build());
     }
 }

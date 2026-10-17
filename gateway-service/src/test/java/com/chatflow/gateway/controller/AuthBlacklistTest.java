@@ -1,5 +1,6 @@
 package com.chatflow.gateway.controller;
 
+import com.chatflow.gateway.config.LoginRateLimitFilter;
 import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
 import com.chatflow.gateway.security.JwtUtil;
@@ -53,6 +54,9 @@ class AuthBlacklistTest {
     @MockBean
     private ReactiveStringRedisTemplate reactiveStringRedisTemplate;
 
+    @org.springframework.beans.factory.annotation.Value("${jwt.secret}")
+    private String jwtSecret;
+
     private String validToken;
     private String validJti;
 
@@ -85,6 +89,10 @@ class AuthBlacklistTest {
         lenient().when(valueOps.increment(anyString())).thenReturn(Mono.just(1L));
         lenient().when(reactiveStringRedisTemplate.expire(anyString(), any(Duration.class)))
                 .thenReturn(Mono.just(true));
+        // Lua scripts: rate-limit counters return 1, session rotation returns no previous jti
+        lenient().when(reactiveStringRedisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenAnswer(inv -> inv.getArgument(0) == LoginRateLimitFilter.INCR_EXPIRE_SCRIPT
+                        ? Flux.just(1L) : Flux.empty());
     }
 
     // ── MUST-HAVE regression: blacklisted token → 401 on /api/auth/password ──
@@ -188,7 +196,7 @@ class AuthBlacklistTest {
     @Test
     @SuppressWarnings("unchecked")
     void register_noToken_isPermitAll() {
-        when(userRepository.existsByUsername("newuser")).thenReturn(Mono.just(false));
+        when(userRepository.existsByUsernameIgnoreCase("newuser")).thenReturn(Mono.just(false));
         when(userRepository.save(any(UserEntity.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(reactiveStringRedisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
@@ -218,5 +226,121 @@ class AuthBlacklistTest {
                 .header("Authorization", "Bearer " + validToken)
                 .exchange()
                 .expectStatus().isOk();
+    }
+
+    // ── M4: profileImageUrl validation ──
+
+    private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec putProfile(String url) {
+        return webTestClient.put().uri("/api/auth/profile")
+                .header("Authorization", "Bearer " + validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"username\":\"testuser\",\"profileImageUrl\":\"" + url + "\"}")
+                .exchange();
+    }
+
+    @Test
+    void updateProfile_uploadFlowValue_accepted() {
+        putProfile("/api/files/3f2b8c1e-aaaa-bbbb-cccc-1234567890ab").expectStatus().isOk();
+        putProfile("https://cdn.example.com/a.png").expectStatus().isOk();
+    }
+
+    @Test
+    void updateProfile_protocolRelativeHttpAndOtherPaths_rejected() {
+        putProfile("//evil.example.com/a.png").expectStatus().isBadRequest();
+        putProfile("http://cdn.example.com/a.png").expectStatus().isBadRequest();
+        putProfile("javascript:alert(1)").expectStatus().isBadRequest();
+        putProfile("/etc/passwd").expectStatus().isBadRequest();
+    }
+
+    // ── L6: expired / malformed token logout is an idempotent no-op (200), never 500 ──
+
+    @Test
+    void logout_expiredToken_isIdempotentOk() {
+        String expired = io.jsonwebtoken.Jwts.builder()
+                .id("exp-jti").subject("user-1").claim("username", "testuser")
+                .issuedAt(new java.util.Date(System.currentTimeMillis() - 7_200_000))
+                .expiration(new java.util.Date(System.currentTimeMillis() - 3_600_000))
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                        jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .compact();
+
+        webTestClient.post().uri("/api/auth/logout")
+                .header("Authorization", "Bearer " + expired)
+                .exchange()
+                .expectStatus().isOk();
+    }
+
+    @Test
+    void logout_malformedToken_isIdempotentOk() {
+        webTestClient.post().uri("/api/auth/logout")
+                .header("Authorization", "Bearer garbage")
+                .exchange()
+                .expectStatus().isOk();
+    }
+
+    // ── L10: ?token= only for websocket and file GETs ──
+
+    @Test
+    void queryParamToken_onRegularApiPath_isIgnored() {
+        webTestClient.get().uri("/api/users/me?token=" + validToken)
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void queryParamToken_onFileGet_stillAuthenticates() {
+        webTestClient.get().uri("/api/files/3f2b8c1e-aaaa-4bbb-8ccc-1234567890ab?token=" + validToken)
+                .exchange()
+                .expectStatus().value(status -> org.junit.jupiter.api.Assertions.assertNotEquals(401, status));
+    }
+
+    @Test
+    void queryParamToken_onFilePathWithDotSegments_isIgnored() {
+        for (String p : new String[] {"/api/files/%2e%2e/users/me", "/api/files/%2E%2E/users/me", "/api/files/./../users/me",
+                "/api/files/..%2fusers/me", "/api/files/..%2Fusers/me", "/api/files/abc/extra", "/api/files/a%2Fb", "/api/files/a%5Cb"}) {
+            webTestClient.get().uri(uriBuilder -> uriBuilder.path("/").build().resolve(p + "?token=" + validToken))
+                    .exchange()
+                    .expectStatus().isUnauthorized();
+        }
+    }
+
+    // ── M3: register error body and duplicate handling ──
+
+    @Test
+    void register_invalidUsername_returns400WithMessage() {
+        webTestClient.post().uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"username\":\"bad name!\",\"password\":\"securepass123\"}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.error").isNotEmpty();
+    }
+
+    @Test
+    void register_duplicateRace_returns409() {
+        when(userRepository.existsByUsernameIgnoreCase("newuser")).thenReturn(Mono.just(false));
+        doReturn(Mono.error(new org.springframework.dao.DataIntegrityViolationException("dup")))
+                .when(userRepository).save(any(UserEntity.class));
+
+        webTestClient.post().uri("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"username\":\"newuser\",\"password\":\"securepass123\"}")
+                .exchange()
+                .expectStatus().isEqualTo(409);
+    }
+
+    // ── M5: password change attempts limited per user ──
+
+    @Test
+    void changePassword_sixthAttempt_returns429() {
+        when(reactiveStringRedisTemplate.execute(eq(LoginRateLimitFilter.INCR_EXPIRE_SCRIPT), anyList(), anyList()))
+                .thenReturn(Flux.just(6L));
+
+        webTestClient.put().uri("/api/auth/password")
+                .header("Authorization", "Bearer " + validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"currentPassword\":\"old12345\",\"newPassword\":\"newpass12345\"}")
+                .exchange()
+                .expectStatus().isEqualTo(429);
     }
 }

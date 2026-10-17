@@ -9,5 +9,6 @@ public interface UserRepository extends ReactiveCrudRepository<UserEntity, Long>
     Mono<UserEntity> findByUsername(String username);
     Mono<UserEntity> findByUserId(String userId);
     Mono<Boolean> existsByUsername(String username);
+    Mono<Boolean> existsByUsernameIgnoreCase(String username);
     Flux<UserEntity> findByUsernameContainingIgnoreCaseOrderByUsernameAsc(String query);
 }

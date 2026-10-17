@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chatflow/core/network/dio_client.dart';
 import 'package:chatflow/core/network/stomp_service.dart';
 import 'package:chatflow/core/utils/server_time.dart';
 import 'package:chatflow/features/chat/chat_notifier.dart';
+import 'package:chatflow/features/chat/chat_rooms_provider.dart';
 import 'package:chatflow/shared/models/chat_message.dart';
 
 class _FakeDioClient implements DioClient {
@@ -20,6 +23,12 @@ class _FakeDioClient implements DioClient {
 }
 
 class _FakeStompService extends StompService {
+  ConnectionCallback? onConnectionChanged;
+  int reconnectNowCalls = 0;
+
+  @override
+  void reconnectNow() => reconnectNowCalls++;
+
   @override
   void connect({
     required String roomId,
@@ -39,7 +48,9 @@ class _FakeStompService extends StompService {
     BannedCallback? onBanned,
     TransientErrorCallback? onTransientError,
     JoinRejectedCallback? onJoinRejected,
-  }) {}
+  }) {
+    this.onConnectionChanged = onConnectionChanged;
+  }
 }
 
 final _refProvider = Provider<Ref>((ref) => ref);
@@ -64,6 +75,7 @@ ChatNotifier _notifier(
   Map<String, Object> bodies, {
   Future<void> Function(String path)? onPath,
   void Function(RequestOptions options)? onRequest,
+  _FakeStompService? stomp,
 }) {
   final dio = Dio(BaseOptions(baseUrl: 'http://test'));
   dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
@@ -83,7 +95,7 @@ ChatNotifier _notifier(
     token: 'tok',
     username: 'alice',
     userId: 'u1',
-    stompService: _FakeStompService(),
+    stompService: stomp ?? _FakeStompService(),
   );
   addTearDown(notifier.dispose);
   return notifier;
@@ -194,5 +206,139 @@ void main() {
 
     expect(state().messages.map((m) => m.messageId ?? m.content),
         ['old', 'pending', 'new']);
+  });
+
+  test('reconnect_refetchesLatestHistoryAndMerges', () async {
+    final stomp = _FakeStompService();
+    var page = [_msg('m1', '2026-10-16T10:00:01')];
+    var historyCalls = 0;
+    final bodies = <String, Object>{};
+    final notifier = _notifier(container, bodies, stomp: stomp,
+        onRequest: (o) {
+      if (o.path == '/api/chat/rooms/room-1/messages') {
+        historyCalls++;
+        bodies[o.path] = _ok(page);
+      }
+    });
+    final state = _stateOf(notifier);
+    await notifier.joinRoom('room-1');
+
+    stomp.onConnectionChanged!(true); // first connect: no refetch
+    await Future<void>.delayed(Duration.zero);
+    expect(historyCalls, 1);
+
+    // Socket drops; m2 is sent while we are away; socket comes back.
+    stomp.onConnectionChanged!(false);
+    page = [
+      _msg('m1', '2026-10-16T10:00:01'),
+      _msg('m2', '2026-10-16T10:00:02'),
+    ];
+    stomp.onConnectionChanged!(true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(historyCalls, 2);
+    expect(state().messages.map((m) => m.messageId), ['m1', 'm2']);
+  });
+
+  test('reconnectIfNeeded_delegatesToStomp', () {
+    final stomp = _FakeStompService();
+    final notifier = _notifier(container, const {}, stomp: stomp);
+    notifier.reconnectIfNeeded();
+    expect(stomp.reconnectNowCalls, 1);
+  });
+
+  test('activeRoom_noUnreadBadge_andMarksLastHistoryMessageRead', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    container.read(activeRoomIdProvider.notifier).state = 'room-1';
+    final puts = <Object?>[];
+    final notifier = _notifier(
+      container,
+      {
+        '/api/chat/rooms/room-1/messages': _ok([
+          _msg('m1', '2026-10-16T10:00:01'),
+          _msg('m2', '2026-10-16T10:00:02'),
+        ]),
+        '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': 'm1'}),
+      },
+      onRequest: (o) {
+        if (o.method == 'PUT' && o.path.endsWith('/last-read')) {
+          puts.add((o.data as Map)['lastReadMessageId']);
+        }
+      },
+    );
+
+    await notifier.joinRoom('room-1');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(container.read(roomUnreadCountsProvider)['room-1'] ?? 0, 0);
+    expect(puts, ['m2']);
+  });
+
+  test('inactiveRoom_keepsUnreadCount', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    final notifier = _notifier(container, {
+      '/api/chat/rooms/room-1/messages': _ok([
+        _msg('m1', '2026-10-16T10:00:01'),
+        _msg('m2', '2026-10-16T10:00:02'),
+      ]),
+      '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': 'm1'}),
+    });
+
+    await notifier.joinRoom('room-1');
+
+    expect(container.read(roomUnreadCountsProvider)['room-1'], 1);
+  });
+
+  test('reconnect_refetchSettlesOwnPendingBubble_andMarksRead', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    FlutterSecureStorage.setMockInitialValues({});
+    dotenv.testLoad(fileInput: '');
+    container.read(activeRoomIdProvider.notifier).state = 'room-1';
+    final stomp = _FakeStompService();
+    var page = <Map<String, dynamic>>[_msg('m1', '2026-10-16T10:00:01')];
+    final bodies = <String, Object>{
+      '/api/chat/rooms/room-1/last-read': _ok({'lastReadMessageId': ''}),
+    };
+    final puts = <Object?>[];
+    final notifier = _notifier(container, bodies, stomp: stomp, onRequest: (o) {
+      if (o.path == '/api/chat/rooms/room-1/messages') bodies[o.path] = _ok(page);
+      if (o.method == 'PUT' && o.path.endsWith('/last-read')) {
+        puts.add((o.data as Map)['lastReadMessageId']);
+      }
+    });
+    final state = _stateOf(notifier);
+    await notifier.joinRoom('room-1');
+    stomp.onConnectionChanged!(true);
+    stomp.onConnectionChanged!(false);
+
+    // Sent while the socket is down: an optimistic bubble.
+    notifier.sendMessage(roomId: 'room-1', content: 'hi');
+    final localId = state().messages.last.localId!;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    puts.clear();
+
+    // The server got it (e.g. flushed just before the drop); its copy comes
+    // back in the refetch, the echo never arrived.
+    page = [
+      _msg('m1', '2026-10-16T10:00:01'),
+      {
+        ..._msg('m2', '2026-10-16T10:00:02'),
+        'userId': 'u1',
+        'username': 'alice',
+        'content': 'hi',
+        'clientMessageId': localId,
+      },
+    ];
+    stomp.onConnectionChanged!(true);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final msgs = state().messages;
+    expect(msgs.map((m) => m.messageId), ['m1', 'm2']);
+    expect(msgs.last.deliveryStatus, MessageDeliveryStatus.sent);
+    expect(puts, ['m2']);
   });
 }

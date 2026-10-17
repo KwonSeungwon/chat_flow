@@ -38,7 +38,8 @@ public interface GameAnswerRepository extends JpaRepository<GameAnswer, Long> {
         long getCorrectCount();
     }
 
-    @Query("SELECT a.userId AS userId, COUNT(a) AS correctCount FROM GameAnswer a "
+    /** Distinct questions answered correctly — replaying a question does not raise it. */
+    @Query("SELECT a.userId AS userId, COUNT(DISTINCT a.questionId) AS correctCount FROM GameAnswer a "
             + "WHERE a.correct = true GROUP BY a.userId")
     List<UserCorrectCount> countCorrectGroupedByUser();
 }

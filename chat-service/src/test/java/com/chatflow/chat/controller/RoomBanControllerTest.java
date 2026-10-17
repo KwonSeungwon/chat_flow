@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.entity.RoomBanEntity;
 import com.chatflow.chat.entity.RoomMemberEntity;
 import com.chatflow.chat.entity.RoomRole;
@@ -53,6 +54,7 @@ class RoomBanControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -157,6 +159,20 @@ class RoomBanControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"reason\":\"spam\"}"))
                     .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void banUser_overlongReasonOrUserId_returns400() throws Exception {
+            for (String body : new String[]{
+                    "{\"userId\":\"" + TARGET_ID + "\",\"reason\":\"" + "r".repeat(256) + "\"}",
+                    "{\"userId\":\"" + "u".repeat(37) + "\",\"reason\":\"spam\"}"}) {
+                mockMvc.perform(post("/api/chat/rooms/{roomId}/bans", ROOM_ID)
+                                .header("X-User-Id", CALLER_ID)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andExpect(status().isBadRequest());
+            }
+            verify(roomBanService, never()).banUser(anyString(), anyString(), anyString(), any());
         }
 
         @Test

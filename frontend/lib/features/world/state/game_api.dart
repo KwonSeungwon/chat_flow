@@ -101,6 +101,9 @@ class GameApi {
       code = data['code']?.toString() ?? code;
       message = data['message']?.toString() ?? message;
     }
+    // Gateway circuit/timeout fallback answers 503 SERVICE_UNAVAILABLE (or a
+    // non-JSON body): same "the game is down" notice as GAME_UNAVAILABLE.
+    if (e.response?.statusCode == 503) code = GameApiException.unavailable;
     return GameApiException(code,
         statusCode: e.response?.statusCode, message: message);
   }

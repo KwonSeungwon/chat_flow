@@ -16,6 +16,7 @@ import reactor.test.StepVerifier;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,7 +54,7 @@ class AuthServiceTest {
                 .readValue("{\"username\":\"evil\",\"password\":\"password123\",\"role\":\"ADMIN\"}",
                         AuthService.AuthRequest.class);
 
-        when(userRepository.existsByUsername("evil")).thenReturn(Mono.just(false));
+        when(userRepository.existsByUsernameIgnoreCase("evil")).thenReturn(Mono.just(false));
         when(passwordEncoder.encode("password123")).thenReturn("enc");
         when(userRepository.save(any(UserEntity.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
@@ -161,7 +162,7 @@ class AuthServiceTest {
     @Test
     void register_setsActiveJti() {
         // given
-        when(userRepository.existsByUsername("newreg")).thenReturn(Mono.just(false));
+        when(userRepository.existsByUsernameIgnoreCase("newreg")).thenReturn(Mono.just(false));
         when(passwordEncoder.encode("securepass")).thenReturn("encoded-pw");
 
         UserEntity saved = UserEntity.builder()
@@ -195,25 +196,212 @@ class AuthServiceTest {
     // ── logout ───────────────────────────────────────────────────
 
     @Test
-    void logout_clearsActiveJti_andBlacklists() {
-        // given
+    @SuppressWarnings("unchecked")
+    void logout_clearsActiveJtiOnlyIfItMatchesTokenJti_andBlacklists() {
         String token = "some-jwt-token";
         when(jwtUtil.getJti(token)).thenReturn("logout-jti");
         when(jwtUtil.getUserId(token)).thenReturn("user-5");
         when(jwtUtil.getRemainingTtlMs(token)).thenReturn(1_800_000L);
-
+        when(tokenBlacklistService.isBlacklisted("logout-jti")).thenReturn(Mono.just(false));
         when(tokenBlacklistService.blacklist(eq("logout-jti"), any(Duration.class)))
                 .thenReturn(Mono.just(true));
-        when(redisTemplate.delete("chatflow:user:active_jti:user-5"))
-                .thenReturn(Mono.just(1L));
+        when(redisTemplate.execute(any(RedisScript.class),
+                eq(List.of("chatflow:user:active_jti:user-5")), eq(List.of("logout-jti"))))
+                .thenReturn(Flux.just(1L));
 
-        // when
-        StepVerifier.create(authService.logout(token))
+        StepVerifier.create(authService.logout(token)).verifyComplete();
+
+        verify(tokenBlacklistService).blacklist(eq("logout-jti"), eq(Duration.ofMillis(1_800_000L)));
+        verify(redisTemplate).execute(any(RedisScript.class),
+                eq(List.of("chatflow:user:active_jti:user-5")), eq(List.of("logout-jti")));
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    void logout_alreadyBlacklistedToken_isNoOp() {
+        // 옛 토큰의 logout이 새 세션의 active_jti를 지우면 안 된다
+        String token = "old-token";
+        when(jwtUtil.getJti(token)).thenReturn("old-jti");
+        when(jwtUtil.getUserId(token)).thenReturn("user-6");
+        when(jwtUtil.getRemainingTtlMs(token)).thenReturn(1_000L);
+        when(tokenBlacklistService.isBlacklisted("old-jti")).thenReturn(Mono.just(true));
+
+        StepVerifier.create(authService.logout(token)).verifyComplete();
+
+        verify(tokenBlacklistService, never()).blacklist(anyString(), any(Duration.class));
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    void logout_expiredToken_failsAsMonoErrorNotSyncThrow() {
+        when(jwtUtil.getJti("expired")).thenThrow(new io.jsonwebtoken.ExpiredJwtException(null, null, "expired"));
+
+        Mono<Void> result = authService.logout("expired");
+
+        StepVerifier.create(result)
+                .expectError(io.jsonwebtoken.JwtException.class)
+                .verify();
+    }
+
+    // ── register validation (신규 가입에만 적용) ───────────────────
+
+    @Test
+    void register_invalidUsernames_rejected() {
+        for (String bad : new String[] {"a", "x".repeat(21), "has space", "bad!char", "a\n", "a/b", "  ", null}) {
+            StepVerifier.create(authService.register(new AuthService.AuthRequest(bad, "password123")))
+                    .expectErrorSatisfies(err -> assertInstanceOf(IllegalArgumentException.class, err))
+                    .verify();
+        }
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void register_trimsUsername_andAcceptsAllowedCharset() {
+        when(userRepository.existsByUsernameIgnoreCase("김철수_a.b-1")).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenReturn("enc");
+        when(userRepository.save(any(UserEntity.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(jwtUtil.generateToken(anyString(), eq("김철수_a.b-1"))).thenReturn("tok");
+        when(jwtUtil.getJti("tok")).thenReturn("jti");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(Flux.empty());
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("  김철수_a.b-1 ", "password123")))
+                .assertNext(resp -> assertEquals("김철수_a.b-1", resp.username()))
+                .verifyComplete();
+    }
+
+    @Test
+    void register_caseInsensitiveDuplicate_rejected() {
+        when(userRepository.existsByUsernameIgnoreCase("Alice")).thenReturn(Mono.just(true));
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("Alice", "password123")))
+                .expectErrorSatisfies(err -> assertInstanceOf(IllegalArgumentException.class, err))
+                .verify();
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    @Test
+    void register_duplicateRace_mapsTo409() {
+        when(userRepository.existsByUsernameIgnoreCase("racer")).thenReturn(Mono.just(false));
+        when(passwordEncoder.encode("password123")).thenReturn("enc");
+        when(userRepository.save(any(UserEntity.class)))
+                .thenReturn(Mono.error(new org.springframework.dao.DataIntegrityViolationException("dup")));
+
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("racer", "password123")))
+                .expectErrorSatisfies(err -> {
+                    var rse = assertInstanceOf(org.springframework.web.server.ResponseStatusException.class, err);
+                    assertEquals(409, rse.getStatusCode().value());
+                })
+                .verify();
+    }
+
+    @Test
+    void register_passwordOver72Bytes_rejected() {
+        String longPw = "가".repeat(25); // 75 bytes
+        StepVerifier.create(authService.register(new AuthService.AuthRequest("validname", longPw)))
+                .expectErrorSatisfies(err -> assertInstanceOf(IllegalArgumentException.class, err))
+                .verify();
+        verify(userRepository, never()).save(any(UserEntity.class));
+    }
+
+    @Test
+    void login_legacyUsernameOutsideNewRule_stillWorks() {
+        UserEntity entity = UserEntity.builder()
+                .userId("legacy-1").username("a b!").encodedPassword("enc")
+                .createdAt(LocalDateTime.now()).build();
+        when(userRepository.findByUsername("a b!")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("pass1234", "enc")).thenReturn(true);
+        when(jwtUtil.generateToken("legacy-1", "a b!")).thenReturn("legacy-token");
+        when(jwtUtil.getJti("legacy-token")).thenReturn("legacy-jti");
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(Flux.empty());
+
+        StepVerifier.create(authService.login(new AuthService.AuthRequest("a b!", "pass1234")))
+                .assertNext(resp -> assertEquals("a b!", resp.username()))
+                .verifyComplete();
+    }
+
+    @Test
+    void login_unknownUser_stillRunsBcryptCompare() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Mono.empty());
+
+        StepVerifier.create(authService.login(new AuthService.AuthRequest("ghost", "whatever1")))
+                .expectErrorSatisfies(err -> assertEquals("잘못된 사용자명 또는 비밀번호입니다", err.getMessage()))
+                .verify();
+
+        verify(passwordEncoder).matches(eq("whatever1"), any());
+    }
+
+    // ── changePassword: 시도 제한 / 세션 고정 ───────────────────────
+
+    @SuppressWarnings("unchecked")
+    private void allowPasswordAttempt() {
+        when(redisTemplate.execute(eq(com.chatflow.gateway.config.LoginRateLimitFilter.INCR_EXPIRE_SCRIPT),
+                anyList(), anyList())).thenReturn(Flux.just(1L));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void changePassword_sixthAttemptInWindow_returns429() {
+        when(redisTemplate.execute(eq(com.chatflow.gateway.config.LoginRateLimitFilter.INCR_EXPIRE_SCRIPT),
+                eq(List.of("rl:pwd:cpuser3")), anyList())).thenReturn(Flux.just(6L));
+
+        StepVerifier.create(authService.changePassword("cpuser3", "a", "newpasswd", null))
+                .expectErrorSatisfies(err -> {
+                    var rse = assertInstanceOf(org.springframework.web.server.ResponseStatusException.class, err);
+                    assertEquals(429, rse.getStatusCode().value());
+                })
+                .verify();
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void changePassword_rotateFailureAfterSave_stillSucceeds() {
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp5").username("cpuser5").encodedPassword("old-enc")
+                .createdAt(LocalDateTime.now()).build();
+        allowPasswordAttempt();
+        when(userRepository.findByUsername("cpuser5")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
+        when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp5",
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.error(new RuntimeException("redis down")));
+
+        StepVerifier.create(authService.changePassword("cpuser5", "currentpw", "newpasswd", "cur-jti"))
+                .verifyComplete();
+    }
+
+    @Test
+    void logout_tokenWithoutJti_completesWithoutError() {
+        when(jwtUtil.getJti("legacy")).thenReturn(null);
+        when(jwtUtil.getUserId("legacy")).thenReturn("user-7");
+        when(jwtUtil.getRemainingTtlMs("legacy")).thenReturn(1_000L);
+
+        StepVerifier.create(authService.logout("legacy")).verifyComplete();
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void changePassword_pinsActiveJtiToCurrentToken() {
+        UserEntity entity = UserEntity.builder()
+                .userId("user-cp4").username("cpuser4").encodedPassword("old-enc")
+                .createdAt(LocalDateTime.now()).build();
+        allowPasswordAttempt();
+        when(userRepository.findByUsername("cpuser4")).thenReturn(Mono.just(entity));
+        when(passwordEncoder.matches("currentpw", "old-enc")).thenReturn(true);
+        when(passwordEncoder.encode("newpasswd")).thenReturn("new-enc");
+        when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
+        // 회전 스크립트: 현재 토큰과 다른 active jti가 있었다면 그것이 무효화되어 반환된다
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp4",
+                "chatflow:blacklist:")), anyList())).thenReturn(Flux.just("stale-jti"));
+
+        StepVerifier.create(authService.changePassword("cpuser4", "currentpw", "newpasswd", "cur-jti"))
                 .verifyComplete();
 
-        // then
-        verify(tokenBlacklistService).blacklist(eq("logout-jti"), eq(Duration.ofMillis(1_800_000L)));
-        verify(redisTemplate).delete("chatflow:user:active_jti:user-5");
+        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of("chatflow:user:active_jti:user-cp4",
+                "chatflow:blacklist:")), eq(List.of("cur-jti", "3600", "1")));
     }
 
     // ── threading: BCrypt must run off the event loop ─────────────
@@ -223,7 +411,7 @@ class AuthServiceTest {
         // Capture the thread that executes passwordEncoder.encode
         AtomicReference<String> encodeThread = new AtomicReference<>();
 
-        when(userRepository.existsByUsername("threadtest")).thenReturn(Mono.just(false));
+        when(userRepository.existsByUsernameIgnoreCase("threadtest")).thenReturn(Mono.just(false));
         when(passwordEncoder.encode("password123")).thenAnswer(inv -> {
             encodeThread.set(Thread.currentThread().getName());
             return "encoded-thread";
@@ -295,6 +483,7 @@ class AuthServiceTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
+        allowPasswordAttempt();
         when(userRepository.findByUsername("cpuser")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("currentpw", "old-enc")).thenAnswer(inv -> {
             matchesThread.set(Thread.currentThread().getName());
@@ -306,7 +495,7 @@ class AuthServiceTest {
         });
         when(userRepository.save(any(UserEntity.class))).thenReturn(Mono.just(entity));
 
-        StepVerifier.create(authService.changePassword("cpuser", "currentpw", "newpasswd"))
+        StepVerifier.create(authService.changePassword("cpuser", "currentpw", "newpasswd", null))
                 .verifyComplete();
 
         assertNotNull(matchesThread.get(), "passwordEncoder.matches should have been called");
@@ -329,17 +518,18 @@ class AuthServiceTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
+        allowPasswordAttempt();
         when(userRepository.findByUsername("cpuser2")).thenReturn(Mono.just(entity));
         when(passwordEncoder.matches("wrongpw", "old-enc")).thenReturn(false);
 
-        StepVerifier.create(authService.changePassword("cpuser2", "wrongpw", "newpasswd"))
+        StepVerifier.create(authService.changePassword("cpuser2", "wrongpw", "newpasswd", null))
                 .expectErrorSatisfies(err -> {
                     assertInstanceOf(IllegalArgumentException.class, err);
                     assertEquals("현재 비밀번호가 올바르지 않습니다.", err.getMessage());
                 })
                 .verify(Duration.ofSeconds(5));
 
-        verify(passwordEncoder, never()).encode(anyString());
+        verify(passwordEncoder, never()).encode("newpasswd");
         verify(userRepository, never()).save(any(UserEntity.class));
     }
 }

@@ -27,6 +27,7 @@ public class GameDungeonQueryService {
     private final GameDungeonRepository dungeonRepository;
     private final GameQuestionRepository questionRepository;
     private final GameProgressRepository progressRepository;
+    private final GameAdminGuard adminGuard;
 
     @Transactional(readOnly = true)
     public List<DungeonSummary> dungeons(String userId) {
@@ -47,7 +48,7 @@ public class GameDungeonQueryService {
     @Transactional(readOnly = true)
     public GameMeResponse me(String userId) {
         int cleared = clearedDungeonIds(userId).size();
-        return new GameMeResponse(cleared, TOTAL_DUNGEONS, cleared >= TOTAL_DUNGEONS);
+        return new GameMeResponse(cleared, TOTAL_DUNGEONS, cleared >= TOTAL_DUNGEONS, adminGuard.isAdmin(userId));
     }
 
     private Set<String> clearedDungeonIds(String userId) {

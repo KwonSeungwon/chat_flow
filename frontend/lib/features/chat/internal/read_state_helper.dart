@@ -18,6 +18,7 @@ class ReadStateHelper {
     required this.userId,
     required this.resetUnreadCount,
     required this.setUnreadCount,
+    required this.isActiveRoom,
   });
 
   /// Returns the live [ChatMessagesState] snapshot.
@@ -41,6 +42,9 @@ class ReadStateHelper {
 
   /// Sets the unread count for a specific room via the notifier.
   final void Function(String roomId, int count) setUnreadCount;
+
+  /// Whether the user is viewing [roomId] right now. Its unread badge stays 0.
+  final bool Function(String roomId) isActiveRoom;
 
   // -------------------------------------------------------------------
   // Public API
@@ -97,8 +101,9 @@ class ReadStateHelper {
         setState(getCurrentState().copyWith(lastReadMessageId: lastReadId));
       }
 
-      // Update global unread counts map
-      setUnreadCount(roomId, unreadCount);
+      // Update global unread counts map — not for the room on screen, which
+      // is being read right now (markRoomRead follows the history load).
+      if (!isActiveRoom(roomId)) setUnreadCount(roomId, unreadCount);
     } catch (_) {
       // Non-critical — best effort
     }

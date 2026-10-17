@@ -66,8 +66,10 @@ public class RoomAccessPolicy {
         if (isBanned(roomId, userId)) return deny(Denial.BANNED);
         boolean dm = room.getRoomType() == RoomType.DIRECT;
         return switch (via) {
-            // DM_CREATE is only valid for the DM room DmRoomService just resolved.
-            case DM_CREATE -> dm ? ALLOWED : deny(Denial.DM_NOT_PARTICIPANT);
+            // DM_CREATE is only valid for the DM room DmRoomService just resolved, and
+            // never seats a third user in a DM that already has its two participants.
+            case DM_CREATE -> dm && (isMember(roomId, userId) || roomMemberRepository.countByRoomId(roomId) < 2)
+                    ? ALLOWED : deny(Denial.DM_NOT_PARTICIPANT);
             // A password grant only means something on a room that has a password;
             // private rooms and DMs are never enterable by password.
             case PASSWORD -> {

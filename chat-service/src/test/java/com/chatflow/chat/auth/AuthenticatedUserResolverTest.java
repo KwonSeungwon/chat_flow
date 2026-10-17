@@ -2,6 +2,12 @@ package com.chatflow.chat.auth;
 
 import com.chatflow.chat.exception.UnauthorizedException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.util.List;
 import org.springframework.core.MethodParameter;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.ServletWebRequest;
@@ -14,6 +20,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuthenticatedUserResolverTest {
 
     private final AuthenticatedUserResolver resolver = new AuthenticatedUserResolver();
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private static void authenticate(String userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    }
 
     static class Sample {
         @SuppressWarnings("unused")
@@ -37,12 +53,40 @@ class AuthenticatedUserResolverTest {
     }
 
     @Test
-    void resolves_header_value_when_present() throws Exception {
+    void resolves_the_authenticated_principal() throws Exception {
+        authenticate("user-42");
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-User-Id", "user-42");
         Object value = resolver.resolveArgument(param("required"), null,
                 new ServletWebRequest(req), null);
         assertThat(value).isEqualTo("user-42");
+    }
+
+    @Test
+    void ignores_an_X_User_Id_header_that_differs_from_the_principal() throws Exception {
+        authenticate("user-42");
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.addHeader("X-User-Id", "victim");
+        Object value = resolver.resolveArgument(param("required"), null,
+                new ServletWebRequest(req), null);
+        assertThat(value).isEqualTo("user-42");
+    }
+
+    @Test
+    void throws_Unauthorized_for_a_bare_header_without_authentication() throws Exception {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.addHeader("X-User-Id", "user-42");
+        assertThatThrownBy(() -> resolver.resolveArgument(param("required"), null,
+                new ServletWebRequest(req), null))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void anonymous_authentication_is_not_a_user() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(new AnonymousAuthenticationToken(
+                "k", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS")));
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        assertThat(resolver.resolveArgument(param("optional"), null,
+                new ServletWebRequest(req), null)).isNull();
     }
 
     @Test
@@ -63,9 +107,9 @@ class AuthenticatedUserResolverTest {
     }
 
     @Test
-    void throws_Unauthorized_when_header_blank_and_required() throws Exception {
+    void throws_Unauthorized_when_principal_blank_and_required() throws Exception {
+        authenticate("   ");
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-User-Id", "   ");
         assertThatThrownBy(() -> resolver.resolveArgument(param("required"), null,
                 new ServletWebRequest(req), null))
                 .isInstanceOf(UnauthorizedException.class);

@@ -1,5 +1,6 @@
 import 'package:chatflow/features/world/game/village_game.dart';
 import 'package:chatflow/features/world/game/village_map.dart';
+import 'package:chatflow/features/world/game/world_sprite.dart';
 import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
 import 'package:flutter/widgets.dart';
@@ -219,5 +220,16 @@ void main() {
       expect(game.camera.isRemoved, isTrue);
       expect(avatar.assetsReleased, isTrue);
     }
+  });
+
+  testWidgets('SvgBank disposed mid-load drops late SVGs', (tester) async {
+    await tester.runAsync(() async {
+      final bank = SvgBank();
+      final load = bank.loadAll(FlameGame(), ['tree', 'fountain']);
+      bank.dispose(); // game left before the reads finished
+      await load;
+      expect(bank.length, 0);
+      expect(bank.isDisposed, isTrue);
+    });
   });
 }

@@ -128,7 +128,10 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # Same pin as ci.yml so the image is built with the tested SDK.
+          flutter-version: '3.41.6'
           channel: stable
+          cache: true
 
       - name: Seed .env asset
         working-directory: ./frontend
@@ -142,11 +145,15 @@ jobs:
           WS_URL=wss://app.gossiplog.com/ws-native
           ENV
 
-      - name: Flutter build web
+      - name: Flutter test
         working-directory: ./frontend
         run: |
           flutter pub get
-          flutter build web --release
+          flutter test
+
+      - name: Flutter build web
+        working-directory: ./frontend
+        run: flutter build web --release
 
       - name: Log in to GHCR
         uses: docker/login-action@v3

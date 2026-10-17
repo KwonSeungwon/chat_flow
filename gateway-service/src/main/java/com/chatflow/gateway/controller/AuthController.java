@@ -3,6 +3,9 @@ package com.chatflow.gateway.controller;
 import com.chatflow.gateway.security.AuthService;
 import com.chatflow.gateway.security.AuthService.AuthRequest;
 import com.chatflow.gateway.security.AuthService.AuthResponse;
+import com.chatflow.gateway.security.JwtUtil;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -19,13 +22,14 @@ import reactor.core.publisher.Mono;
 public class AuthController {
 
     private final AuthService authService;
+    private final JwtUtil jwtUtil;
 
     @PostMapping("/register")
-    public Mono<ResponseEntity<AuthResponse>> register(@RequestBody AuthRequest request) {
+    public Mono<ResponseEntity<Object>> register(@RequestBody AuthRequest request) {
         return authService.register(request)
-                .map(ResponseEntity::ok)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
                 .onErrorResume(IllegalArgumentException.class,
-                        e -> Mono.just(ResponseEntity.badRequest().build()));
+                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
     }
 
     @PostMapping("/login")
@@ -66,7 +70,7 @@ public class AuthController {
         if (currentPassword == null || newPassword == null) {
             return Mono.just(ResponseEntity.badRequest().build());
         }
-        return authService.changePassword(username, currentPassword, newPassword)
+        return authService.changePassword(username, currentPassword, newPassword, currentJti(request))
                 .then(Mono.just(ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다."))))
                 .onErrorResume(IllegalArgumentException.class,
                         e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
@@ -85,6 +89,15 @@ public class AuthController {
         return URLDecoder.decode(encoded, StandardCharsets.UTF_8);
     }
 
+    /** Authorization 헤더의 토큰 jti. 헤더가 없거나 파싱이 안 되면 null (JWT 필터가 이미 검증한 뒤라 정상 경로에선 항상 있다). */
+    private String currentJti(ServerHttpRequest request) {
+        String bearer = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearer == null || !bearer.startsWith("Bearer ")) {
+            return null;
+        }
+        return jwtUtil.tryParse(bearer.substring(7)).map(Claims::getId).orElse(null);
+    }
+
     @PostMapping("/logout")
     public Mono<ResponseEntity<Void>> logout(ServerHttpRequest request) {
         String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -94,6 +107,8 @@ public class AuthController {
         String token = bearerToken.substring(7);
         return authService.logout(token)
                 .then(Mono.just(ResponseEntity.ok().<Void>build()))
+                .onErrorResume(e -> e instanceof JwtException || e instanceof IllegalArgumentException,
+                        e -> Mono.just(ResponseEntity.ok().<Void>build())) // 만료·위조 토큰: 멱등 no-op
                 .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
     }
 }

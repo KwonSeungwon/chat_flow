@@ -38,4 +38,6 @@ public class RunState {
     /** Consecutive correct answers in this run (any phase); the max feeds {@code game_progress.best_streak}. */
     private int streak;
     private int bestStreak;
+    /** Cleared or failed: kept only so a resent final answer gets its stored result. */
+    private boolean finished;
 }

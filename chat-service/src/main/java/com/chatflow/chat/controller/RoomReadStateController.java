@@ -39,7 +39,8 @@ public class RoomReadStateController {
         if (userId == null) {
             return ResponseEntity.ok(ApiResponse.ok(Map.of()));
         }
-        List<ChatRoom> rooms = chatRoomService.getAllRooms();
+        // Only rooms the caller can see — never other users' DMs or private rooms.
+        List<ChatRoom> rooms = chatRoomService.getVisibleRooms(userId);
         List<String> roomIds = rooms.stream().map(ChatRoom::getId).collect(Collectors.toList());
         Map<String, Long> counts = unreadCountService.getUnreadCounts(userId, roomIds);
         return ResponseEntity.ok(ApiResponse.ok(counts));

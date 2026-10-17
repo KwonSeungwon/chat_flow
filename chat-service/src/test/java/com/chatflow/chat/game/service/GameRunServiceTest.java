@@ -378,7 +378,7 @@ class GameRunServiceTest {
     }
 
     @Test
-    void bossThreeInARow_clears_upsertsProgress_andDeletesRun() {
+    void bossThreeInARow_clears_upsertsProgress_andEndsRun() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
         for (int i = 0; i < 5; i++) answerCorrect(runId);
@@ -388,7 +388,7 @@ class GameRunServiceTest {
 
         assertThat(clear.cleared()).isTrue();
         assertThat(clear.failed()).isFalse();
-        assertThat(store).doesNotContainKey("chatflow:game:run:" + runId);
+        assertRunEnded(runId);
         GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
         assertThat(progress.getClearedAt()).isEqualTo(NOW);
         assertThat(progress.getBestStreak()).isEqualTo(8);
@@ -432,7 +432,7 @@ class GameRunServiceTest {
     }
 
     @Test
-    void zeroHearts_fails_andDeletesRun() {
+    void zeroHearts_fails_andEndsRun() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
         answerWrong(runId);
@@ -442,7 +442,7 @@ class GameRunServiceTest {
         assertThat(last.hearts()).isZero();
         assertThat(last.failed()).isTrue();
         assertThat(last.cleared()).isFalse();
-        assertThat(store).doesNotContainKey("chatflow:game:run:" + runId);
+        assertRunEnded(runId);
         GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
         assertThat(progress.getClearedAt()).isNull();
     }
@@ -464,6 +464,75 @@ class GameRunServiceTest {
                 .filter(a -> a.getAnsweredAt().equals(NOW)).findFirst().orElseThrow();
         assertThat(saved.isCorrect()).isTrue();
         assertThat(saved.getNextDueAt()).isEqualTo(NOW.plusDays(3));
+    }
+
+    @Test
+    void finalAnswerResent_returnsTheStoredResult_withoutRecordingAgain() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        answerWrong(runId);
+        answerWrong(runId);
+        AnswerResult last = answerWrong(runId);
+
+        AnswerResult again = service.answer(USER, "앨리스", runId, new AnswerRequest(3, 0));
+
+        assertThat(again).isEqualTo(last);
+        assertThat(answerRepository.findAll()).hasSize(3);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void answerWhoseTransactionRollsBack_leavesTheRunStateAsItWas() {
+        try {
+            approved(8);
+            String runId = service.start(USER, "jvm").runId();
+            String before = store.get("chatflow:game:run:" + runId);
+            TransactionTemplate tx = new TransactionTemplate(transactionManager);
+
+            tx.executeWithoutResult(s -> {
+                service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0));
+                s.setRollbackOnly(); // e.g. the DB commit fails after the answer was applied
+            });
+
+            assertThat(store.get("chatflow:game:run:" + runId)).isEqualTo(before);
+            assertThat(store).doesNotContainKey("chatflow:game:run:" + runId + ":seq:1");
+            assertThat(answerRepository.count()).isZero();
+            assertThat(service.next(USER, runId).seq()).isEqualTo(1);
+        } finally {
+            answerRepository.deleteAll();
+            progressRepository.deleteAll();
+            monsterRepository.deleteAll();
+            questionRepository.deleteAll();
+            topicRepository.deleteAll();
+            dungeonRepository.deleteAll();
+        }
+    }
+
+    @Test
+    void questionRejectedWhileQueued_isNotServed() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        Long queued = state(runId).getNormalQueue().get(0);
+        reject(queued);
+
+        answerCorrect(runId);
+
+        assertThat(state(runId).getCurrentQuestionId()).isNotEqualTo(queued);
+    }
+
+    @Test
+    void currentQuestionRejected_nextServesAnApprovedOne() {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        Long current = state(runId).getCurrentQuestionId();
+        reject(current);
+
+        NextEncounter encounter = service.next(USER, runId);
+
+        assertThat(encounter.question().id()).isNotEqualTo(current);
+        assertThat(questionRepository.findById(encounter.question().id()).orElseThrow().getStatus())
+                .isEqualTo(GameQuestionStatus.APPROVED);
+        assertThat(state(runId).getCurrentQuestionId()).isEqualTo(encounter.question().id());
     }
 
     @Test
@@ -568,6 +637,21 @@ class GameRunServiceTest {
         RunState s = state(runId);
         short idx = questionRepository.findById(s.getCurrentQuestionId()).orElseThrow().getAnswerIndex();
         return service.answer(USER, "앨리스", runId, new AnswerRequest(s.getSeq(), (idx + 1) % 4));
+    }
+
+    /** An ended run serves no further encounter or new answer. */
+    private void assertRunEnded(String runId) {
+        assertThatThrownBy(() -> service.next(USER, runId))
+                .isInstanceOfSatisfying(GameException.class, e -> assertThat(e.getCode()).isEqualTo("RUN_EXPIRED"));
+        int nextSeq = state(runId).getSeq() + 1;
+        assertThatThrownBy(() -> service.answer(USER, "앨리스", runId, new AnswerRequest(nextSeq, 0)))
+                .isInstanceOfSatisfying(GameException.class, e -> assertThat(e.getCode()).isEqualTo("RUN_EXPIRED"));
+    }
+
+    private void reject(Long questionId) {
+        GameQuestion q = questionRepository.findById(questionId).orElseThrow();
+        q.setStatus(GameQuestionStatus.REJECTED);
+        questionRepository.saveAndFlush(q);
     }
 
     private RunState state(String runId) {

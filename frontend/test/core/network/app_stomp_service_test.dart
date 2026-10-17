@@ -105,4 +105,103 @@ void main() {
 
     expect(service.isConnected, isFalse);
   });
+
+  void connectApp() => service.connect(
+      userId: 'u1',
+      token: 'tok',
+      onRoomUpdate: (_, __,
+          {mentionedUsernames = const [],
+          content = '',
+          senderUsername = ''}) {});
+
+  testWidgets('retriesExhausted_keepsRetryingPeriodically', (tester) async {
+    connectApp();
+    for (var i = 0; i < 14; i++) {
+      clients.last.config.onWebSocketError('down');
+      await tester.pump(const Duration(seconds: 61));
+      expect(clients, hasLength(i + 2), reason: 'attempt ${i + 1}');
+    }
+  });
+
+  testWidgets('reconnectNow_whileDown_connectsImmediately', (tester) async {
+    connectApp();
+    clients.single.config.onWebSocketError('down');
+
+    service.reconnectNow();
+    expect(clients, hasLength(2));
+    await tester.pump(const Duration(seconds: 3));
+    expect(clients, hasLength(2));
+  });
+
+  test('reconnectNow_whenConnectedOrLoggedOut_isNoop', () {
+    connectApp();
+    clients.single.config.onConnect(connectedFrame());
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+
+    service.disconnect();
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+  });
+
+  group('token re-read and auth stop', () {
+    String? storedToken;
+    void connectWithStorage() => service.connect(
+        userId: 'u1',
+        token: 'tok',
+        tokenProvider: () async => storedToken,
+        onRoomUpdate: (_, __,
+            {mentionedUsernames = const [],
+            content = '',
+            senderUsername = ''}) {});
+    StompFrame unauthorized() =>
+        StompFrame(command: 'ERROR', headers: {'message': 'Unauthorized'});
+
+    testWidgets('reconnect_usesCurrentStoredToken', (tester) async {
+      storedToken = 'rotated';
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(clients, hasLength(2));
+      expect(clients.last.config.stompConnectHeaders?['Authorization'],
+          'Bearer rotated');
+    });
+
+    testWidgets('reconnect_noStoredToken_stopsRetrying', (tester) async {
+      storedToken = null;
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+    });
+
+    testWidgets('unauthorizedConnect_stopsRetrying', (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+    });
+
+    testWidgets('afterUnauthorized_resumeRetriesOnlyWithNewToken',
+        (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone();
+
+      service.reconnectNow();
+      await tester.pump();
+      expect(clients, hasLength(1));
+
+      storedToken = 'fresh';
+      service.reconnectNow();
+      await tester.pump();
+      expect(clients, hasLength(2));
+    });
+  });
 }

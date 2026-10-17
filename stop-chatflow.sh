@@ -88,50 +88,6 @@ stop_backend_services() {
     done
 }
 
-# 프론트엔드 종료
-stop_frontend() {
-    log_step "프론트엔드 종료 중..."
-    
-    if [ -f "logs/frontend.pid" ]; then
-        local pid=$(cat "logs/frontend.pid")
-        if ps -p $pid > /dev/null 2>&1; then
-            log_info "🛑 Vue3 프론트엔드 종료 중... (PID: $pid)"
-            kill $pid 2>/dev/null || true
-            
-            # Graceful shutdown 대기
-            local count=0
-            while ps -p $pid > /dev/null 2>&1 && [ $count -lt 5 ]; do
-                sleep 1
-                ((count++))
-            done
-            
-            # 강제 종료
-            if ps -p $pid > /dev/null 2>&1; then
-                log_warning "프론트엔드 강제 종료 중..."
-                kill -9 $pid 2>/dev/null || true
-            fi
-            
-            log_success "프론트엔드 종료 완료"
-        else
-            log_warning "프론트엔드 PID 파일은 있지만 프로세스가 실행 중이 아닙니다."
-        fi
-        rm -f "logs/frontend.pid"
-    else
-        log_info "프론트엔드 PID 파일이 없습니다."
-    fi
-    
-    # npm/node 프로세스들 추가 정리
-    local npm_pids=$(pgrep -f "npm run dev" 2>/dev/null || true)
-    local vite_pids=$(pgrep -f "vite" 2>/dev/null || true)
-    local node_pids=$(pgrep -f "node.*vite" 2>/dev/null || true)
-    
-    for pid in $npm_pids $vite_pids $node_pids; do
-        if [ -n "$pid" ]; then
-            log_info "추가 프론트엔드 프로세스 종료 중... (PID: $pid)"
-            kill $pid 2>/dev/null || true
-        fi
-    done
-}
 
 # Gradle 데몬 종료
 stop_gradle_daemon() {
@@ -176,7 +132,7 @@ stop_docker_services() {
 cleanup_by_ports() {
     log_step "포트 기반 프로세스 정리 중..."
     
-    local ports=(3000 8000 8080)
+    local ports=(8000 8080)
     
     for port in "${ports[@]}"; do
         local pids=$(lsof -ti:$port 2>/dev/null || true)
@@ -229,18 +185,8 @@ check_final_status() {
         remaining_processes=1
     fi
     
-    # Node.js 프로세스 체크
-    local node_procs=$(pgrep -f "node.*chatflow\|npm run dev\|vite" 2>/dev/null || true)
-    if [ -n "$node_procs" ]; then
-        log_warning "남은 Node.js 프로세스가 있습니다:"
-        echo "$node_procs" | while read pid; do
-            echo -e "  ${YELLOW}PID $pid:${NC} $(ps -p $pid -o comm= 2>/dev/null || echo 'Unknown')"
-        done
-        remaining_processes=1
-    fi
-    
     # 포트 사용 체크
-    local ports=(3000 8000 8080)
+    local ports=(8000 8080)
     for port in "${ports[@]}"; do
         if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
             log_warning "포트 $port이 여전히 사용 중입니다."
@@ -256,7 +202,6 @@ check_final_status() {
         echo -e "${CYAN}수동으로 정리하려면:${NC}"
         echo -e "${CYAN}  pkill -f chatflow${NC}"
         echo -e "${CYAN}  pkill -f 'gradle.*bootRun'${NC}"
-        echo -e "${CYAN}  pkill -f 'npm run dev'${NC}"
     fi
 }
 
@@ -268,7 +213,6 @@ print_completion() {
     echo -e "${WHITE}=== 📊 종료된 서비스 ===${NC}"
     echo -e "${CYAN}🚪 Gateway Service${NC}        (Port: 8000)"
     echo -e "${CYAN}💬 Chat Service${NC}           (Port: 8080)"  
-    echo -e "${CYAN}🎨 Vue3 Frontend${NC}          (Port: 3000)"
     echo ""
     echo -e "${WHITE}=== 🐳 종료된 인프라 ===${NC}"
     echo -e "${RED}🔴 Valkey${NC}                 (Port: 6379)"
@@ -290,7 +234,6 @@ main() {
         confirm_shutdown
     fi
     
-    stop_frontend
     stop_backend_services
     stop_gradle_daemon
     cleanup_by_ports

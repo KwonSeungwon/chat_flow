@@ -13,6 +13,7 @@ import com.chatflow.chat.service.room.DmRoomService;
 import com.chatflow.chat.service.room.RoomAccessPolicy;
 import com.chatflow.chat.service.room.RoomMembershipService;
 import com.chatflow.chat.service.room.RoomVisibilityService;
+import com.chatflow.chat.service.room.UserDirectory;
 import com.chatflow.chat.result.ChatErrorCode;
 import com.chatflow.chat.result.ErrorResponses;
 import com.chatflow.chat.result.Result;
@@ -44,6 +45,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ChatRoomController {
 
+    private static final String PASSWORD_ATTEMPT_KEY_PREFIX = "chatflow:room:pw-attempts:";
+    private static final long PASSWORD_ATTEMPT_WINDOW_SECONDS = 60;
+    static final org.springframework.data.redis.core.script.RedisScript<Long> PASSWORD_ATTEMPT_SCRIPT =
+            org.springframework.data.redis.core.script.RedisScript.of(
+                    "local n = redis.call('INCR', KEYS[1]) "
+                            + "if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end "
+                            + "return n", Long.class);
+    private static final int MAX_PASSWORD_ATTEMPTS = 5;
+
     private final ChatRoomService chatRoomService;
     private final RoomMembershipService roomMembershipService;
     private final RoomPermissionService roomPermissionService;
@@ -52,6 +62,7 @@ public class ChatRoomController {
     private final RoomVisibilityService roomVisibilityService;
     private final ChatRoomMapper chatRoomMapper;
     private final RoomAccessPolicy roomAccessPolicy;
+    private final UserDirectory userDirectory;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getAllRooms(
@@ -124,6 +135,10 @@ public class ChatRoomController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("DM 방은 비밀번호로 입장할 수 없습니다."));
         }
+        if (tooManyPasswordAttempts(roomId, userId)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error("비밀번호 시도가 너무 많습니다. 1분 뒤 다시 시도해 주세요."));
+        }
         if (!chatRoomService.verifyRoomPassword(roomId, request.password())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
@@ -137,6 +152,22 @@ public class ChatRoomController {
                     .body(ApiResponse.error(denialMessage(decision.reason())));
         }
         return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
+    }
+
+    /**
+     * Fixed one-minute window per (room, user). INCR and the first-hit EXPIRE run
+     * as one script, so a counter never exists without a TTL. Valkey down → not limited.
+     */
+    private boolean tooManyPasswordAttempts(String roomId, String userId) {
+        String key = PASSWORD_ATTEMPT_KEY_PREFIX + roomId + ":" + userId;
+        try {
+            Long attempts = redisTemplate.execute(PASSWORD_ATTEMPT_SCRIPT, List.of(key),
+                    String.valueOf(PASSWORD_ATTEMPT_WINDOW_SECONDS));
+            return attempts != null && attempts > MAX_PASSWORD_ATTEMPTS;
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Password attempt limiter unavailable: {}", e.getMessage());
+            return false;
+        }
     }
 
     @RequireMember
@@ -228,7 +259,19 @@ public class ChatRoomController {
             @Valid @RequestBody CreateDmRequest body,
             @AuthenticatedUser String userId,
             @RequestHeader(value = "X-Username", required = false) String username) {
-        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), body.targetUsername());
+        // The target's name comes from the users table, never from the client.
+        String targetUsername = userDirectory.resolveUsername(body.targetUserId(), body.targetUsername());
+        if (targetUsername == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("대상 사용자를 찾을 수 없습니다."));
+        }
+        if (username == null || username.isBlank()) {
+            username = userDirectory.resolveUsername(userId, null);
+            if (username == null) {
+                return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+            }
+        }
+        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), targetUsername);
         // Seed both DM participants — they may both want to call member-gated
         // endpoints without sending a STOMP message first. room_members is the
         // DM participant list RoomAccessPolicy checks.
@@ -239,7 +282,7 @@ public class ChatRoomController {
                     .body(ApiResponse.error(denialMessage(self.reason())));
         }
         roomMembershipService.grantMembership(
-                dm.getId(), body.targetUserId(), body.targetUsername(), RoomAccessPolicy.GrantPath.DM_CREATE);
+                dm.getId(), body.targetUserId(), targetUsername, RoomAccessPolicy.GrantPath.DM_CREATE);
         return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
     }
 

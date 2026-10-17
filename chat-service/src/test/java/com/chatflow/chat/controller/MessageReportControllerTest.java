@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.dto.ReportDto;
 import com.chatflow.chat.entity.ReportReason;
 import com.chatflow.chat.entity.ReportStatus;
@@ -48,6 +49,7 @@ class MessageReportControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -144,6 +146,16 @@ class MessageReportControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"comment\":\"no reason given\"}"))
                     .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void submitReport_overlongComment_returns400() throws Exception {
+            mockMvc.perform(post("/api/chat/messages/{messageId}/reports", MESSAGE_ID)
+                            .header("X-User-Id", CALLER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"SPAM\",\"comment\":\"" + "c".repeat(501) + "\"}"))
+                    .andExpect(status().isBadRequest());
+            verifyNoInteractions(messageReportService);
         }
 
         @Test

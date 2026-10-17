@@ -2,6 +2,7 @@ package com.chatflow.chat.game.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.controller.RoomMembershipGuard;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.game.dto.AdminQuestionDto;
@@ -55,6 +56,7 @@ class GameAdminControllerTest {
         GameAdminController controller = new GameAdminController(new GameAdminGuard(ADMIN), questionService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

@@ -5,6 +5,10 @@ import com.chatflow.chat.exception.ForbiddenException;
 import com.chatflow.chat.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.util.List;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,6 +32,16 @@ class AuthInterceptorTest {
     @BeforeEach
     void setUp() {
         interceptor = new AuthInterceptor(membershipGuard);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private static void authenticate(String userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId, null, List.of()));
     }
 
     @SuppressWarnings("unused")
@@ -62,16 +76,35 @@ class AuthInterceptorTest {
 
     @Test
     void requireAuth_passes_when_header_present() throws Exception {
+        authenticate("user-1");
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-User-Id", "user-1");
         MockHttpServletResponse res = new MockHttpServletResponse();
         assertTrue(interceptor.preHandle(req, res, handler("authOnly")));
     }
 
     @Test
-    void requireMember_delegates_to_guard() throws Exception {
+    void requireMember_checks_the_principal_not_the_X_User_Id_header() throws Exception {
+        authenticate("user-1");
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.addHeader("X-User-Id", "victim");
+        req.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE,
+                Map.of("roomId", "room-42"));
+        assertTrue(interceptor.preHandle(req, new MockHttpServletResponse(), handler("roomGated")));
+        verify(membershipGuard).requireMember("room-42", "user-1");
+    }
+
+    @Test
+    void requireAuth_throws_for_a_bare_header_without_authentication() throws Exception {
         MockHttpServletRequest req = new MockHttpServletRequest();
         req.addHeader("X-User-Id", "user-1");
+        assertThrows(UnauthorizedException.class,
+                () -> interceptor.preHandle(req, new MockHttpServletResponse(), handler("authOnly")));
+    }
+
+    @Test
+    void requireMember_delegates_to_guard() throws Exception {
+        authenticate("user-1");
+        MockHttpServletRequest req = new MockHttpServletRequest();
         req.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE,
                 Map.of("roomId", "room-42"));
         MockHttpServletResponse res = new MockHttpServletResponse();
@@ -81,8 +114,8 @@ class AuthInterceptorTest {
 
     @Test
     void requireMember_propagates_Forbidden_from_guard() throws Exception {
+        authenticate("user-1");
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-User-Id", "user-1");
         req.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE,
                 Map.of("roomId", "room-42"));
         MockHttpServletResponse res = new MockHttpServletResponse();
@@ -94,8 +127,8 @@ class AuthInterceptorTest {
 
     @Test
     void requireMember_throws_MissingRoomPathVariable_when_pathVar_missing() throws Exception {
+        authenticate("user-1");
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-User-Id", "user-1");
         // Deliberately do NOT set URI_TEMPLATE_VARIABLES_ATTRIBUTE — simulates
         // a @RequireMember annotation on a method whose URI lacks the path var.
         MockHttpServletResponse res = new MockHttpServletResponse();

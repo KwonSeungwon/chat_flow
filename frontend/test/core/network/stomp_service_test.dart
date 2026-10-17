@@ -181,4 +181,143 @@ void main() {
     expect(service.isConnected, isTrue);
     service.disconnect();
   });
+
+  testWidgets('retriesExhausted_keepsRetryingPeriodically', (tester) async {
+    connect();
+    // Every attempt fails; well past the backoff budget it must still retry.
+    for (var i = 0; i < 14; i++) {
+      clients.last.config.onWebSocketError('down');
+      await tester.pump(const Duration(seconds: 31));
+      expect(clients, hasLength(i + 2), reason: 'attempt ${i + 1}');
+    }
+    service.disconnect();
+  });
+
+  testWidgets('reconnectNow_whileDown_connectsImmediately', (tester) async {
+    connect();
+    clients.single.config.onWebSocketError('down'); // backoff pending
+
+    service.reconnectNow(); // e.g. app resumed
+    await tester.pump();
+
+    expect(clients, hasLength(2));
+    // The pending backoff timer was replaced, not doubled.
+    await tester.pump(const Duration(seconds: 2));
+    expect(clients, hasLength(2));
+    service.disconnect();
+  });
+
+  test('reconnectNow_whenConnectedOrLeft_isNoop', () {
+    connect();
+    clients.single.config.onConnect(connectedFrame());
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+
+    service.disconnect();
+    service.reconnectNow();
+    expect(clients, hasLength(1));
+  });
+
+  test('connected_isReportedAfterSubscribeAndAddUser', () {
+    final sentAtConnected = <String>[];
+    final subscribedAtConnected = <String>[];
+    service.connect(
+      roomId: 'room-1',
+      username: 'alice',
+      userId: 'u1',
+      token: 'tok',
+      onMessage: (_) {},
+      onConnectionChanged: (connected) {
+        if (!connected) return;
+        // Offline-queue flush runs here: the room must already be joined.
+        sentAtConnected.addAll(clients.last.sent);
+        subscribedAtConnected.addAll(clients.last.subscribed);
+      },
+    );
+    clients.single.config.onConnect(connectedFrame());
+
+    expect(subscribedAtConnected, contains('/topic/chat/room-1'));
+    expect(sentAtConnected, contains('/app/chat.addUser'));
+    service.disconnect();
+  });
+
+  group('token re-read and auth stop', () {
+    String? storedToken;
+    void connectWithStorage() => service.connect(
+          roomId: 'room-1',
+          username: 'alice',
+          userId: 'u1',
+          token: 'tok',
+          onMessage: (_) {},
+          onConnectionChanged: connectionEvents.add,
+          tokenProvider: () async => storedToken,
+        );
+    StompFrame unauthorized() =>
+        StompFrame(command: 'ERROR', headers: {'message': 'Unauthorized'});
+
+    testWidgets('reconnect_usesCurrentStoredToken', (tester) async {
+      storedToken = 'rotated';
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(clients, hasLength(2));
+      expect(clients.last.config.stompConnectHeaders?['Authorization'],
+          'Bearer rotated');
+      service.disconnect();
+    });
+
+    testWidgets('reconnect_noStoredToken_stopsRetrying', (tester) async {
+      storedToken = null; // logged out in another tab / expired and cleared
+      connectWithStorage();
+      clients.single.config.onWebSocketDone();
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+      service.disconnect();
+    });
+
+    testWidgets('unauthorizedConnect_stopsRetrying', (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone(); // server closes after ERROR
+      await tester.pump(const Duration(minutes: 10));
+
+      expect(clients, hasLength(1));
+      expect(service.isConnected, isFalse);
+      service.disconnect();
+    });
+
+    testWidgets('afterUnauthorized_resumeRetriesOnlyWithNewToken',
+        (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(unauthorized());
+      clients.single.config.onWebSocketDone();
+
+      service.reconnectNow(); // same rejected token: stay down
+      await tester.pump();
+      expect(clients, hasLength(1));
+
+      storedToken = 'fresh'; // logged in again
+      service.reconnectNow();
+      await tester.pump();
+      expect(clients, hasLength(2));
+      expect(clients.last.config.stompConnectHeaders?['Authorization'],
+          'Bearer fresh');
+      service.disconnect();
+    });
+
+    testWidgets('otherStompError_keepsRetrying', (tester) async {
+      storedToken = 'tok';
+      connectWithStorage();
+      clients.single.config.onStompError(
+          StompFrame(command: 'ERROR', headers: {'message': 'broker down'}));
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(clients, hasLength(2));
+      service.disconnect();
+    });
+  });
 }

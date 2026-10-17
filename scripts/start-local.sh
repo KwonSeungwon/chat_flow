@@ -38,21 +38,13 @@ nohup ./gradlew :chat-service:bootRun --args="--spring.profiles.active=local" > 
 echo $! > logs/chat-local.pid
 sleep 5
 
-# 프론트엔드 시작
-echo -e "${YELLOW}🎨 Starting Frontend...${NC}"
-cd frontend
-if [ ! -d "node_modules" ]; then
-    npm install
-fi
-nohup npm run dev > ../logs/frontend-local.log 2>&1 &
-echo $! > ../logs/frontend-local.pid
-cd ..
+# 프론트엔드(Flutter)는 대화형 flutter run이라 별도 터미널에서 실행한다
+echo -e "${YELLOW}🎨 Frontend: cd frontend && flutter run -d chrome${NC}"
 
 echo ""
 echo -e "${GREEN}✅ ChatFlow Local Environment Started Successfully!${NC}"
 echo ""
 echo -e "${CYAN}🌐 Access URLs:${NC}"
-echo -e "  Frontend:  http://localhost:3000"
 echo -e "  API:       http://localhost:8000"
 echo -e "  H2 Console: http://localhost:8080/h2-console"
 echo -e "  Grafana:   http://localhost:3001"

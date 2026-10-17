@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/utils/server_time.dart';
 import '../../../shared/models/chat_message.dart';
 import '../../auth/auth_provider.dart';
 import '../chat_provider.dart' show chatNotifierProvider;
@@ -32,9 +33,15 @@ class ThreadPanel extends ConsumerStatefulWidget {
   ConsumerState<ThreadPanel> createState() => _ThreadPanelState();
 }
 
+final _epoch = DateTime.fromMillisecondsSinceEpoch(0);
+
 class _ThreadPanelState extends ConsumerState<ThreadPanel> {
   bool _loading = true;
   String? _error;
+
+  /// Replies fetched from the server. Kept here, not merged into the room
+  /// timeline: old replies would land above the loaded history out of order.
+  List<ChatMessage> _fetched = const [];
 
   @override
   void initState() {
@@ -51,13 +58,10 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
       if (!mounted) return;
       final raw = (resp.data is Map) ? resp.data['data'] : resp.data;
       if (raw is List) {
-        final notifier =
-            ref.read(chatNotifierProvider(widget.roomId).notifier);
-        for (final entry in raw) {
-          if (entry is Map<String, dynamic>) {
-            notifier.mergeMessage(ChatMessage.fromJson(entry));
-          }
-        }
+        setState(() => _fetched = [
+              for (final entry in raw)
+                if (entry is Map<String, dynamic>) ChatMessage.fromJson(entry),
+            ]);
       }
     } catch (e) {
       // Localized message — do not leak the raw exception class to users.
@@ -90,10 +94,16 @@ class _ThreadPanelState extends ConsumerState<ThreadPanel> {
                 (m) => m?.effectiveId == widget.parent.effectiveId,
                 orElse: () => null) ??
         widget.parent;
-    final replies = messages
-        .where((m) =>
-            m.parentMessageId == widget.parent.effectiveId && !m.deleted)
-        .toList();
+    // Fetched replies, with live copies from the timeline (edits, deletes,
+    // new replies over STOMP) winning by id.
+    final byId = <String, ChatMessage>{
+      for (final m in _fetched) m.effectiveId: m,
+      for (final m in messages)
+        if (m.parentMessageId == widget.parent.effectiveId) m.effectiveId: m,
+    };
+    final replies = byId.values.where((m) => !m.deleted).toList()
+      ..sort((a, b) => (parseServerDateTime(a.timestamp) ?? _epoch)
+          .compareTo(parseServerDateTime(b.timestamp) ?? _epoch));
     final currentUsername = ref.watch(authProvider).username;
 
     return DraggableScrollableSheet(

@@ -49,7 +49,9 @@ public class MessageReportService {
      *
      * @return the report id (new or existing if idempotent)
      */
-    @Transactional
+    // Deliberately not @Transactional: the insert runs in the repository's own
+    // transaction, so a UNIQUE race loser can re-read the winner instead of
+    // committing a rollback-only (PostgreSQL: aborted) transaction → 500.
     public Long submitReport(String messageId, String reporterUserId,
                              ReportReason reason, String comment) {
         // 1. Look up message

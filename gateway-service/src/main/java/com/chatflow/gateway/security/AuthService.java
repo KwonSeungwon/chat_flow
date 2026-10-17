@@ -6,6 +6,11 @@ import com.chatflow.gateway.entity.UserEntity;
 import com.chatflow.gateway.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import com.chatflow.gateway.config.LoginRateLimitFilter;
+import com.chatflow.gateway.dto.ProfileUpdateRequest;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,10 +18,12 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -52,6 +59,23 @@ public class AuthService {
             String.class
     );
 
+    /** 현재 active jti가 이 토큰의 것일 때만 지운다 — 옛 토큰의 logout이 새 세션을 끊지 못하게 한다. */
+    private static final RedisScript<Long> CLEAR_ACTIVE_JTI_IF_MATCH_SCRIPT = RedisScript.of(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end\n" +
+            "return 0",
+            Long.class
+    );
+
+    /** 신규 가입에만 적용한다. 기존 사용자명은 이 규칙 밖일 수 있어 로그인에는 쓰지 않는다. */
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[A-Za-z0-9가-힣_.-]{2,20}$");
+    private static final int MAX_PASSWORD_BYTES = 72; // bcrypt 입력 한계
+    private static final String PASSWORD_RATE_KEY_PREFIX = "rl:pwd:";
+    private static final int PASSWORD_WINDOW_SECONDS = 60;
+    private static final int PASSWORD_MAX_ATTEMPTS = 5;
+
+    /** 없는 사용자도 bcrypt 비교를 한 번 돌려 응답 시간으로 존재 여부가 드러나지 않게 한다. */
+    private final String dummyEncodedPassword;
+
     public AuthService(JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
                        TokenBlacklistService tokenBlacklistService,
                        ReactiveStringRedisTemplate redisTemplate,
@@ -63,6 +87,7 @@ public class AuthService {
         this.redisTemplate = redisTemplate;
         this.userRepository = userRepository;
         this.cacheTtl = Duration.ofMillis(expirationMs);
+        this.dummyEncodedPassword = passwordEncoder.encode("chatflow-dummy-password");
     }
 
     /** 옛 클라이언트가 보내는 role 등 알 수 없는 속성은 무시한다. */
@@ -74,33 +99,44 @@ public class AuthService {
      * 회원가입: DB write → active JTI 등록 → 토큰 발급
      */
     public Mono<AuthResponse> register(AuthRequest request) {
-        if (request.password() == null || request.password().length() < 8) {
+        String password = request.password();
+        if (password == null || password.length() < 8) {
             return Mono.error(new IllegalArgumentException("비밀번호는 8자 이상이어야 합니다."));
         }
-        return userRepository.existsByUsername(request.username())
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            return Mono.error(new IllegalArgumentException("비밀번호가 너무 깁니다. (최대 72바이트)"));
+        }
+        String username = request.username() == null ? "" : request.username().trim();
+        if (!USERNAME_PATTERN.matcher(username).matches()) {
+            return Mono.error(new IllegalArgumentException(
+                    "아이디는 2~20자의 한글, 영문, 숫자, _ . - 만 사용할 수 있습니다."));
+        }
+        return userRepository.existsByUsernameIgnoreCase(username)
                 .flatMap(exists -> {
                     if (exists) {
                         return Mono.<AuthResponse>error(
-                                new IllegalArgumentException("이미 존재하는 사용자명입니다: " + request.username()));
+                                new IllegalArgumentException("이미 존재하는 사용자명입니다: " + username));
                     }
                     String userId = UUID.randomUUID().toString();
 
-                    return Mono.fromCallable(() -> passwordEncoder.encode(request.password()))
+                    return Mono.fromCallable(() -> passwordEncoder.encode(password))
                             .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(encoded -> {
                                 UserEntity entity = UserEntity.builder()
                                         .userId(userId)
-                                        .username(request.username())
+                                        .username(username)
                                         .encodedPassword(encoded)
                                         .createdAt(LocalDateTime.now())
                                         .build();
 
                                 return userRepository.save(entity)
+                                        .onErrorMap(DataIntegrityViolationException.class,
+                                                e -> new ResponseStatusException(HttpStatus.CONFLICT, "이미 존재하는 사용자명입니다."))
                                         .flatMap(saved -> {
-                                            String token = jwtUtil.generateToken(userId, request.username());
+                                            String token = jwtUtil.generateToken(userId, username);
                                             String newJti = jwtUtil.getJti(token);
                                             return rotateActiveJti(userId, newJti, cacheTtl)
-                                                    .thenReturn(new AuthResponse(token, userId, request.username(), null));
+                                                    .thenReturn(new AuthResponse(token, userId, username, null));
                                         });
                             });
                 });
@@ -112,7 +148,11 @@ public class AuthService {
     public Mono<AuthResponse> login(AuthRequest request) {
         // 비밀번호 검증은 항상 DB에서 수행
         return userRepository.findByUsername(request.username())
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))
+                .switchIfEmpty(Mono.defer(() ->
+                        Mono.fromCallable(() -> passwordEncoder.matches(
+                                        request.password() == null ? "" : request.password(), dummyEncodedPassword))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .then(Mono.<UserEntity>error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))))
                 .flatMap(entity ->
                     Mono.fromCallable(() -> passwordEncoder.matches(request.password(), entity.getEncodedPassword()))
                             .subscribeOn(Schedulers.boundedElastic())
@@ -132,6 +172,11 @@ public class AuthService {
      * 프로필 이미지 변경: DB update
      */
     public Mono<Void> updateProfileImage(String username, String profileImageUrl) {
+        try {
+            new ProfileUpdateRequest(profileImageUrl, null, null).validate();
+        } catch (IllegalArgumentException e) {
+            return Mono.error(e);
+        }
         return userRepository.findByUsername(username)
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
                 .flatMap(entity -> {
@@ -141,12 +186,19 @@ public class AuthService {
                 .then();
     }
 
-    public Mono<Void> changePassword(String username, String currentPassword, String newPassword) {
+    /**
+     * @param currentJti 이 요청을 보낸 토큰의 jti. null이 아니면 active jti를 이 값으로 고정하고 다른 active 세션은 블랙리스트한다.
+     */
+    public Mono<Void> changePassword(String username, String currentPassword, String newPassword, String currentJti) {
         if (newPassword == null || newPassword.length() < 8) {
             return Mono.error(new IllegalArgumentException("새 비밀번호는 8자 이상이어야 합니다."));
         }
-        // 비밀번호 검증은 항상 DB에서 수행
-        return userRepository.findByUsername(username)
+        if (newPassword.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            return Mono.error(new IllegalArgumentException("새 비밀번호가 너무 깁니다. (최대 72바이트)"));
+        }
+        return checkPasswordAttempts(username)
+                // 비밀번호 검증은 항상 DB에서 수행
+                .then(Mono.defer(() -> userRepository.findByUsername(username)))
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
                 .flatMap(entity ->
                     Mono.fromCallable(() -> {
@@ -160,16 +212,51 @@ public class AuthService {
                                 entity.setEncodedPassword(encoded);
                                 return userRepository.save(entity);
                             })
+                            .flatMap(saved -> currentJti == null
+                                    ? Mono.<Void>empty()
+                                    : rotateActiveJti(entity.getUserId(), currentJti, cacheTtl)
+                                            // 비밀번호는 이미 저장됐다. 세션 고정 실패가 500으로 보이면 안 된다.
+                                            .onErrorResume(e -> {
+                                                log.warn("[auth] active jti rotation after password change failed: userId={} {}",
+                                                        entity.getUserId(), e.getMessage());
+                                                return Mono.empty();
+                                            }))
                 )
                 .then();
     }
 
+    /** 사용자당 분당 5회. Redis 장애 시 fail-open. */
+    private Mono<Void> checkPasswordAttempts(String username) {
+        return redisTemplate.execute(LoginRateLimitFilter.INCR_EXPIRE_SCRIPT,
+                        List.of(PASSWORD_RATE_KEY_PREFIX + username),
+                        List.of(String.valueOf(PASSWORD_WINDOW_SECONDS)))
+                .next()
+                .onErrorResume(e -> {
+                    log.warn("Password rate limit check failed (fail-open): {}", e.getMessage());
+                    return Mono.empty();
+                })
+                .flatMap(count -> count > PASSWORD_MAX_ATTEMPTS
+                        ? Mono.<Void>error(new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                                "비밀번호 변경 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."))
+                        : Mono.<Void>empty());
+    }
+
+    /** 만료·위조 토큰이면 JwtException/IllegalArgumentException을 Mono 에러로 낸다. */
     public Mono<Void> logout(String token) {
-        String jti = jwtUtil.getJti(token);
-        String userId = jwtUtil.getUserId(token);
-        long remainingMs = jwtUtil.getRemainingTtlMs(token);
-        return tokenBlacklistService.blacklist(jti, Duration.ofMillis(remainingMs))
-                .then(clearActiveJti(userId));
+        return Mono.defer(() -> {
+            String jti = jwtUtil.getJti(token);
+            String userId = jwtUtil.getUserId(token);
+            long remainingMs = jwtUtil.getRemainingTtlMs(token);
+            if (jti == null) {
+                return Mono.<Void>empty(); // jti 없는 레거시 토큰: 블랙리스트할 키가 없다
+            }
+            // 이미 블랙리스트된 토큰(다른 기기 로그인 등으로 무효화됨)은 아무것도 하지 않는다.
+            return tokenBlacklistService.isBlacklisted(jti)
+                    .flatMap(blacklisted -> blacklisted
+                            ? Mono.<Void>empty()
+                            : tokenBlacklistService.blacklist(jti, Duration.ofMillis(remainingMs))
+                                    .then(clearActiveJti(userId, jti)));
+        });
     }
 
     // ---- Active JTI tracking (single-session enforcement) ----
@@ -193,9 +280,11 @@ public class AuthService {
         .then();
     }
 
-    private Mono<Void> clearActiveJti(String userId) {
-        if (userId == null) return Mono.empty();
-        return redisTemplate.delete(SecurityKeys.ACTIVE_JTI_PREFIX + userId).then();
+    private Mono<Void> clearActiveJti(String userId, String jti) {
+        if (userId == null || jti == null) return Mono.empty();
+        return redisTemplate.execute(CLEAR_ACTIVE_JTI_IF_MATCH_SCRIPT,
+                        List.of(SecurityKeys.ACTIVE_JTI_PREFIX + userId), List.of(jti))
+                .then();
     }
 
 }

@@ -9,6 +9,7 @@ import com.chatflow.chat.game.entity.GameMonster;
 import com.chatflow.chat.game.entity.GameProgress;
 import com.chatflow.chat.game.entity.GameProgressId;
 import com.chatflow.chat.game.entity.GameQuestion;
+import com.chatflow.chat.game.entity.GameQuestionStatus;
 import com.chatflow.chat.game.entity.GameTopic;
 import com.chatflow.chat.game.exception.GameException;
 import com.chatflow.chat.game.repository.GameAnswerRepository;
@@ -29,6 +30,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.sql.PreparedStatement;
@@ -133,8 +136,15 @@ public class GameRunService {
     @Transactional(readOnly = true)
     public NextEncounter next(String userId, String runId) {
         RunState state = load(userId, runId);
+        if (state.isFinished()) throw runExpired();
         touch(runId);
         GameQuestion question = question(state.getCurrentQuestionId());
+        if (question.getStatus() != GameQuestionStatus.APPROVED) {
+            // rejected after it was queued: serve an approved one instead
+            state.setCurrentQuestionId(takeNext(state));
+            save(state);
+            question = question(state.getCurrentQuestionId());
+        }
         GameTopic topic = topicRepository.findById(question.getTopicId()).orElseThrow();
         GameMonster monster = state.getPhase() == RunState.Phase.BOSS
                 ? monsterRepository.findByDungeonIdAndBossTrue(state.getDungeonId()).orElse(null)
@@ -158,6 +168,7 @@ public class GameRunService {
         if (previous != null) {
             return previous;
         }
+        if (state.isFinished()) throw runExpired();
         if (request.seq() != state.getSeq()) {
             throw new GameException(409, "SEQ_MISMATCH", "현재 차례의 문제가 아닙니다.");
         }
@@ -173,6 +184,7 @@ public class GameRunService {
             }
             throw new GameException(409, "ANSWER_IN_PROGRESS", "답안을 처리하는 중입니다.");
         }
+        restoreOnRollback(runId, request.seq(), json(state));
         try {
             return applyAnswer(userId, username, runId, state, request.seq(), choice);
         } catch (RuntimeException e) {
@@ -219,14 +231,14 @@ public class GameRunService {
                 topic.getTitle(), topic.getSourceRef(), state.getHearts(), state.getKills(),
                 state.getPhase() == RunState.Phase.BOSS, cleared, failed);
 
+        state.getAnswered().put(seq, result);
         if (cleared || failed) {
-            delete(runId);
+            state.setFinished(true);
         } else {
-            state.getAnswered().put(seq, result);
             state.setSeq(state.getSeq() + 1);
             state.setCurrentQuestionId(takeNext(state));
-            save(state);
         }
+        save(state);
         return result;
     }
 
@@ -292,22 +304,26 @@ public class GameRunService {
         });
     }
 
-    /** Next unanswered id from the phase queue, or a fresh draw when the queue has none left. */
+    /**
+     * Next unanswered, still-approved id from the phase queue, or a fresh draw when the queue has
+     * none left. Questions rejected since the run started are skipped.
+     */
     private Long takeNext(RunState state) {
+        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+        Set<Long> approved = Set.copyOf(pool);
         List<Long> queue = state.getPhase() == RunState.Phase.BOSS ? state.getBossQueue() : state.getNormalQueue();
         while (!queue.isEmpty()) {
             Long id = queue.remove(0);
-            if (!state.getAnsweredIds().contains(id)) return id;
+            if (!state.getAnsweredIds().contains(id) && approved.contains(id)) return id;
         }
-        return draw(state);
+        return draw(state, pool);
     }
 
     /**
      * Random approved question not yet answered in this run. Only when every question has been
      * answered are ids reused, and even then never the question just answered (if there is another).
      */
-    private Long draw(RunState state) {
-        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+    private Long draw(RunState state, List<Long> pool) {
         List<Long> candidates = pool.stream().filter(id -> !state.getAnsweredIds().contains(id)).toList();
         if (candidates.isEmpty()) {
             candidates = pool.size() >= 2
@@ -368,18 +384,25 @@ public class GameRunService {
             }
         }
         if (state == null || !userId.equals(state.getUserId())) {
-            throw new GameException(404, "RUN_EXPIRED", "던전이 무너졌습니다.");
+            throw runExpired();
         }
         return state;
     }
 
-    private void save(RunState state) {
-        String json;
+    private static GameException runExpired() {
+        return new GameException(404, "RUN_EXPIRED", "던전이 무너졌습니다.");
+    }
+
+    private String json(RunState state) {
         try {
-            json = objectMapper.writeValueAsString(state);
+            return objectMapper.writeValueAsString(state);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Cannot serialize run state", e);
         }
+    }
+
+    private void save(RunState state) {
+        String json = json(state);
         try {
             redis.opsForValue().set(RUN_KEY_PREFIX + state.getRunId(), json, RUN_TTL);
         } catch (DataAccessException e) {
@@ -387,17 +410,30 @@ public class GameRunService {
         }
     }
 
+    /**
+     * The run state is written inside the answer transaction (a Valkey outage then rolls the
+     * answer back). If the transaction itself rolls back afterwards, put the state and the seq
+     * claim back so Valkey never runs ahead of the database.
+     */
+    private void restoreOnRollback(String runId, int seq, String previousJson) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_ROLLED_BACK) return;
+                try {
+                    redis.opsForValue().set(RUN_KEY_PREFIX + runId, previousJson, RUN_TTL);
+                } catch (DataAccessException e) {
+                    log.warn("Could not restore run state {} after rollback: {}", runId, e.getMessage());
+                }
+                releaseSeq(runId, seq);
+            }
+        });
+    }
+
     private void touch(String runId) {
         try {
             redis.expire(RUN_KEY_PREFIX + runId, RUN_TTL);
-        } catch (DataAccessException e) {
-            throw unavailable(e);
-        }
-    }
-
-    private void delete(String runId) {
-        try {
-            redis.delete(RUN_KEY_PREFIX + runId);
         } catch (DataAccessException e) {
             throw unavailable(e);
         }

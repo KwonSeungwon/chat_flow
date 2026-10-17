@@ -6,9 +6,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Controller-method parameter annotation. Resolves to the value of the
- * X-User-Id request header. If {@link #required()} is true (default) and
- * the header is missing/blank, the AuthenticatedUserResolver throws
+ * Controller-method parameter annotation. Resolves to the user id
+ * JwtAuthFilter authenticated. If {@link #required()} is true (default) and
+ * there is none, the AuthenticatedUserResolver throws
  * UnauthorizedException. If false, resolves to null — for endpoints that
  * support anonymous callers (e.g. lobby room list).
  */

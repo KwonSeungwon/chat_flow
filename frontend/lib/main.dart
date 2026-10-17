@@ -65,20 +65,6 @@ Future<void> main() async {
       child: const ChatFlowApp(),
     ));
 
-    // On web, fire POST /api/fcm/unsubscribe-all with keepalive before the tab
-    // closes. sendBeacon cannot carry an Authorization header, so fetch+keepalive
-    // is the only viable primitive here. The stub is a no-op on native platforms.
-    WebUnloadHandler.register(
-      jwtProvider: () => container.read(authProvider).token ?? '',
-      fcmTokenProvider: FcmService.getToken,
-      // On web the app runs on the same origin as the gateway, so an empty
-      // string resolves to a relative URL (/api/fcm/unsubscribe-all).
-      // Native builds use API_BASE_URL from the .env file.
-      apiBaseUrl: kIsWeb
-          ? ''
-          : const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
-    );
-
     _initFirebaseInBackground(container);
   }, (error, stack) {
     if (isHarmlessFocusTraversalError(error, stack)) return;
@@ -89,6 +75,21 @@ Future<void> main() async {
 Future<void> _initFirebaseInBackground(ProviderContainer container) async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    // On web, fire POST /api/fcm/unsubscribe-all with keepalive before the tab
+    // closes. sendBeacon cannot carry an Authorization header, so fetch+keepalive
+    // is the only viable primitive here. The stub is a no-op on native platforms.
+    // Registered after Firebase init: its FCM token lookup needs the app.
+    WebUnloadHandler.register(
+      jwtProvider: () => container.read(authProvider).token ?? '',
+      fcmTokenProvider: FcmService.getToken,
+      // On web the app runs on the same origin as the gateway, so an empty
+      // string resolves to a relative URL (/api/fcm/unsubscribe-all).
+      // Native builds use API_BASE_URL from the .env file.
+      apiBaseUrl: kIsWeb
+          ? ''
+          : const String.fromEnvironment('API_BASE_URL', defaultValue: ''),
+    );
 
     if (!kIsWeb) {
       FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
@@ -162,7 +163,8 @@ class ChatFlowApp extends ConsumerWidget {
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(fontScale.factor),
             ),
-            child: AppShortcuts(child: child ?? const SizedBox()),
+            child: AppShortcuts(
+                child: AuthHydrationGate(child: child ?? const SizedBox())),
           );
         },
       ),

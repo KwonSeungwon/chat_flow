@@ -3,6 +3,7 @@ package com.chatflow.chat.game.service;
 import com.chatflow.chat.game.exception.GameForbiddenException;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -31,6 +32,14 @@ class GameAdminGuardTest {
         GameAdminGuard guard = new GameAdminGuard("admin-1");
         assertThatThrownBy(() -> guard.requireAdmin("user-2"))
                 .isInstanceOf(GameForbiddenException.class);
+    }
+
+    @Test
+    void isAdmin_reflectsTheList() {
+        GameAdminGuard guard = new GameAdminGuard("admin-1, admin-2");
+        assertThat(guard.isAdmin("admin-2")).isTrue();
+        assertThat(guard.isAdmin("user-1")).isFalse();
+        assertThat(guard.isAdmin(null)).isFalse();
     }
 
     @Test

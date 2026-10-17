@@ -128,6 +128,16 @@ class GlobalExceptionHandlerTest {
             throw new QuotaExceededException("scheduled message limit reached (max 100)");
         }
 
+        @GetMapping("/integrity")
+        public String integrity() {
+            throw new org.springframework.dao.DataIntegrityViolationException("value too long for type");
+        }
+
+        @GetMapping("/too-large")
+        public String tooLarge() {
+            throw new org.springframework.web.multipart.MaxUploadSizeExceededException(50L * 1024 * 1024);
+        }
+
         @GetMapping("/illegal-state")
         public String illegalState() {
             throw new IllegalStateException("Cannot call value() on Failure");
@@ -185,6 +195,22 @@ class GlobalExceptionHandlerTest {
                     .andExpect(status().isTooManyRequests())
                     .andExpect(jsonPath("$.code").value("QUOTA_EXCEEDED"))
                     .andExpect(jsonPath("$.status").value(429));
+        }
+
+        @Test
+        void dataIntegrityViolation_returns409_notInternalError() throws Exception {
+            mockMvc.perform(get("/test/integrity"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("DATA_CONFLICT"))
+                    .andExpect(jsonPath("$.status").value(409));
+        }
+
+        @Test
+        void maxUploadSizeExceeded_returns413() throws Exception {
+            mockMvc.perform(get("/test/too-large"))
+                    .andExpect(status().isPayloadTooLarge())
+                    .andExpect(jsonPath("$.code").value("PAYLOAD_TOO_LARGE"))
+                    .andExpect(jsonPath("$.status").value(413));
         }
 
         @Test

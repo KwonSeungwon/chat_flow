@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../../core/constants/storage_keys.dart';
 
 import '../../auth/auth_provider.dart';
 import '../chat_rooms_provider.dart';
@@ -21,6 +24,7 @@ final roomUpdateListenerProvider = Provider<void>((ref) {
   service.connect(
     userId: userId,
     token: token,
+    tokenProvider: () => const FlutterSecureStorage().read(key: StorageKeys.token),
     onRoomUpdate: (
       roomId,
       type, {

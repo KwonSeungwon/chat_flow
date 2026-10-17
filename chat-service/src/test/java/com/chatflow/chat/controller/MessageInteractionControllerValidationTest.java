@@ -2,6 +2,7 @@ package com.chatflow.chat.controller;
 
 import com.chatflow.chat.auth.AuthInterceptor;
 import com.chatflow.chat.auth.AuthenticatedUserResolver;
+import com.chatflow.chat.auth.TestAuthFilter;
 import com.chatflow.chat.exception.GlobalExceptionHandler;
 import com.chatflow.chat.mapper.MessageEditHistoryMapper;
 import com.chatflow.chat.repository.ChatMessageRepository;
@@ -62,6 +63,7 @@ class MessageInteractionControllerValidationTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
                 .addInterceptors(new AuthInterceptor(membershipGuard))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -159,6 +161,22 @@ class MessageInteractionControllerValidationTest {
                             .header("X-User-Id", "user-1"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors.emoji").exists());
+
+            verify(messageReactionService, never())
+                    .toggleReaction(anyString(), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("emoji longer than 32 chars -> 400 VALIDATION_ERROR")
+        void returns_400_when_emoji_too_long() throws Exception {
+            doNothing().when(membershipGuard).requireMember("r1", "user-1");
+
+            mockMvc.perform(post("/api/chat/rooms/r1/messages/msg-1/reactions")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"emoji\":\"" + "x".repeat(33) + "\"}")
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.fieldErrors.emoji").exists());
 
             verify(messageReactionService, never())

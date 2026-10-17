@@ -57,7 +57,6 @@ main() {
     print_header
     
     echo -e "${WHITE}=== 🚀 Application Services ===${NC}"
-    check_service_status "Vue3 Frontend     " 3000
     check_service_status "Gateway Service   " 8000 "http://localhost:8000/actuator/health"
     check_service_status "Chat Service      " 8080 "http://localhost:8080/actuator/health"
     
@@ -70,7 +69,7 @@ main() {
     
     echo ""
     echo -e "${WHITE}=== 🌐 Quick Access ===${NC}"
-    echo -e "${CYAN}웹 앱:${NC}      http://localhost:3000"
+    echo -e "${CYAN}웹 앱:${NC}      cd frontend && flutter run -d chrome"
     echo -e "${CYAN}Grafana:${NC}    http://localhost:3001"
     echo ""
 }
