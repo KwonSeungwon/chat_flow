@@ -357,6 +357,11 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
     }
   }
 
+  static bool _isSystemType(String type) {
+    final t = type.toUpperCase();
+    return t == 'JOIN' || t == 'LEAVE' || t == 'SYSTEM';
+  }
+
   static const _unreadDividerMarker = '__UNREAD_DIVIDER__';
 
   List<Object> _buildItemsWithDividers(List<ChatMessage> messages) {
@@ -379,7 +384,9 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
           // Own messages are never unread: need a later message from someone else.
           messages
               .skip(i + 1)
-              .any((m) => m.username != widget.currentUsername)) {
+              .any((m) =>
+                  !_isSystemType(m.type) &&
+                  m.username != widget.currentUsername)) {
         items.add(_unreadDividerMarker);
         unreadInserted = true;
       }
@@ -509,7 +516,7 @@ class _ChatMessagesListState extends State<ChatMessagesList> {
             }
 
             Widget bubble;
-            if (type == 'JOIN' || type == 'LEAVE' || type == 'SYSTEM') {
+            if (_isSystemType(type)) {
               bubble = SystemBubble(msg: msg);
             } else if (msg.isFileMessage) {
               final isMine = msg.username == widget.currentUsername;

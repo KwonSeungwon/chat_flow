@@ -4,14 +4,14 @@ import 'package:chatflow/features/chat/widgets/chat_messages_list.dart';
 import 'package:chatflow/shared/models/chat_message.dart';
 
 void main() {
-  ChatMessage msg(String id, String user) => ChatMessage(
+  ChatMessage msg(String id, String user, [String type = 'CHAT']) => ChatMessage(
         messageId: id,
         chatRoomId: 'r1',
         userId: '$user-id',
         username: user,
         content: 'c-$id',
         timestamp: '2026-10-16T10:00:00Z',
-        type: 'CHAT',
+        type: type,
       );
 
   Future<void> pump(WidgetTester tester, List<ChatMessage> messages) async {
@@ -38,5 +38,20 @@ void main() {
     final divY = tester.getTopLeft(find.text('여기까지 읽었습니다')).dy;
     expect(tester.getTopLeft(find.text('c-m1')).dy, lessThan(divY));
     expect(tester.getTopLeft(find.text('c-m2')).dy, greaterThan(divY));
+  });
+
+  testWidgets('lastRead가 마지막 메시지면 구분선이 없다', (tester) async {
+    await pump(tester, [msg('m0', 'alice'), msg('m1', 'alice')]);
+    expect(find.text('여기까지 읽었습니다'), findsNothing);
+  });
+
+  testWidgets('lastRead 뒤에 내 메시지와 남의 JOIN/LEAVE만 있으면 구분선이 없다', (tester) async {
+    await pump(tester, [
+      msg('m1', 'alice'),
+      msg('m2', 'bob'),
+      msg('m3', 'carol', 'JOIN'),
+      msg('m4', 'carol', 'LEAVE'),
+    ]);
+    expect(find.text('여기까지 읽었습니다'), findsNothing);
   });
 }
