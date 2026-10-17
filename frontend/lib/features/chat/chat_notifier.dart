@@ -300,7 +300,9 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
   /// Re-reads the newest history page after a reconnect and merges it, so
   /// messages broadcast while the socket was down show up. If the gap is
   /// larger than a page, keeps paging back until it reaches a message
-  /// already held (at most [_maxGapPages] more pages).
+  /// already held (at most [_maxGapPages] more pages). If it still has not
+  /// reached one, the fetched pages replace the timeline rather than leave
+  /// a silent hole; older history loads again from their oldest message.
   Future<void> _refetchLatest(String roomId) async {
     try {
       final known = {
@@ -308,6 +310,7 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
           if (m.messageId != null || m.id != null) m.effectiveId,
       };
       final latest = <ChatMessage>[];
+      var gapOpen = false;
       for (var page = 0; page <= _maxGapPages; page++) {
         final resp = await _dioClient.dio.get(
           '/api/chat/rooms/$roomId/messages',
@@ -329,6 +332,19 @@ class ChatNotifier extends StateNotifier<ChatMessagesState> {
             batch.any((m) => known.contains(m.effectiveId))) {
           break;
         }
+        gapOpen = page == _maxGapPages;
+      }
+      if (gapOpen) {
+        // Keep only unsent local bubbles (sending/failed).
+        state = state.copyWith(
+          messages: [
+            for (final m in state.messages)
+              if (m.deliveryStatus != MessageDeliveryStatus.sent) m,
+          ],
+          hasMoreHistory: true,
+        );
+        _historyCursor = null;
+        _advanceHistoryCursor(latest);
       }
       _applyServerEdits(latest);
       // Our own sends whose echo was lost settle their bubbles instead of
