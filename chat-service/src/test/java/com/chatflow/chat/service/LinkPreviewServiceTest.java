@@ -235,6 +235,26 @@ class LinkPreviewServiceTest {
     }
 
     @Test
+    void preview_dnsRebinding_connectsOnlyToValidatedAddress() throws Exception {
+        // 첫 해석은 공인(테스트에서는 loopback 서버), 그 뒤 해석은 사설 주소를 돌려주는 리바인딩 리졸버.
+        // 검증한 주소로만 연결해야 하므로 해석은 hop당 한 번이고 응답은 공인 주소의 서버에서 와야 한다.
+        respond("/page", 200, "<title>Public</title>");
+        InetAddress publicAddr = InetAddress.getByAddress("rebind.test", new byte[] {127, 0, 0, 1});
+        InetAddress privateAddr = InetAddress.getByAddress("rebind.test", new byte[] {10, 0, 0, 1});
+        AtomicInteger resolutions = new AtomicInteger();
+        LinkPreviewService svc = new LinkPreviewService(redisTemplate, objectMapper,
+                a -> !a.isLoopbackAddress() && LinkPreviewService.isBlocked(a),
+                host -> new InetAddress[] {resolutions.incrementAndGet() == 1 ? publicAddr : privateAddr});
+        String url = "http://rebind.test:" + server.getAddress().getPort() + "/page";
+        cacheMiss(url);
+
+        Map<String, String> value = svc.fetch(url).value();
+
+        assertEquals("Public", value.get("title"));
+        assertEquals(1, resolutions.get(), "connection must reuse the validated resolution");
+    }
+
+    @Test
     void preview_followsSafeRedirect() {
         redirect("/r", "/final", null);
         respond("/final", 200, "<title>Landed</title>");
