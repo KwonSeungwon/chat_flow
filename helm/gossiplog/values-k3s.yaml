@@ -39,7 +39,7 @@ gateway-service:
   image:
     name: gateway-service
     # 2026-07-22 FCM 알림 정리 배포
-    tag: "sha-5f6314592053eaf43a83f494a1874ba0bc4f6a2f"
+    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
   service:
     port: 8000
     type: ClusterIP
@@ -61,7 +61,7 @@ chat-service:
   image:
     name: chat-service
     # 2026-07-28 배포
-    tag: "sha-5f6314592053eaf43a83f494a1874ba0bc4f6a2f"
+    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
   service:
     port: 8080
     type: ClusterIP
@@ -84,7 +84,7 @@ frontend:
   image:
     name: frontend
     # 2026-07-29 회원가입 아바타 envelope 파싱 핫픽스
-    tag: "sha-f1535bdc3580560d2b77f44650ce8f967894b064"
+    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
   service:
     port: 80
     type: ClusterIP
