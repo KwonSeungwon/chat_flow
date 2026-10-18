@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# ChatFlow 로컬 개발 환경 통합 실행 스크립트
+# Gossiplog 로컬 개발 환경 통합 실행 스크립트
 # 작성자: KwonSeungwon
-# 설명: 전체 ChatFlow 시스템을 로컬에서 한 번에 실행
+# 설명: 전체 Gossiplog 시스템을 로컬에서 한 번에 실행
 
 set -e  # 에러 발생시 스크립트 중단
 
@@ -42,7 +42,7 @@ print_header() {
     echo -e "${CYAN}"
     cat << "EOF"
     ╔═══════════════════════════════════════════╗
-    ║              ChatFlow 🚀                  ║
+    ║              Gossiplog 🚀                  ║
     ║         로컬 개발 환경 실행기              ║
     ║                                           ║
     ║  실시간 채팅                              ║
@@ -260,7 +260,7 @@ create_log_dir() {
 # 최종 상태 출력
 print_status() {
     echo ""
-    echo -e "${GREEN}🎉 ChatFlow가 성공적으로 시작되었습니다! 🎉${NC}"
+    echo -e "${GREEN}🎉 Gossiplog가 성공적으로 시작되었습니다! 🎉${NC}"
     echo ""
     echo -e "${WHITE}=== 📊 서비스 접속 정보 ===${NC}"
     echo -e "${CYAN}🌐 웹 애플리케이션${NC}      cd frontend && flutter run -d chrome"
@@ -280,7 +280,7 @@ print_status() {
     echo -e "${CYAN}tail -f logs/chat-service.log${NC}"
     echo ""
     echo -e "${WHITE}=== ⚡ 종료 방법 ===${NC}"
-    echo -e "${RED}./stop-chatflow.sh${NC}      - 모든 서비스 종료"
+    echo -e "${RED}./stop-gossiplog.sh${NC}      - 모든 서비스 종료"
     echo -e "${RED}Ctrl+C${NC}                  - 이 스크립트만 종료 (서비스는 계속 실행)"
     echo ""
 }
@@ -318,7 +318,7 @@ cleanup() {
     echo ""
     log_info "스크립트를 종료합니다..."
     log_warning "주의: 서비스들은 백그라운드에서 계속 실행됩니다."
-    log_info "모든 서비스를 종료하려면: ./stop-chatflow.sh"
+    log_info "모든 서비스를 종료하려면: ./stop-gossiplog.sh"
     exit 0
 }
 

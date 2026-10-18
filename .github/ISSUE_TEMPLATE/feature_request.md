@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for ChatFlow
+about: Suggest an idea for Gossiplog
 title: '[FEATURE] '
 labels: 'enhancement, needs-triage'
 assignees: ''

@@ -1,8 +1,8 @@
 global:
-  namespace: chatflow
+  namespace: gossiplog
   image:
     registry: ghcr.io
-    repository: OWNER/chatflow  # GitHub org/user — CI에서 자동 치환
+    repository: OWNER/gossiplog  # GitHub org/user — CI에서 자동 치환
     pullPolicy: IfNotPresent
     tag: "latest"
   imagePullSecrets:
@@ -11,11 +11,11 @@ global:
   # 외부 인프라 Secret 참조 (클러스터에 미리 생성 필요)
   externalSecrets:
     postgresql:
-      secretName: chatflow-postgresql-secret
+      secretName: gossiplog-postgresql-secret
     valkey:
-      secretName: chatflow-valkey-secret
+      secretName: gossiplog-valkey-secret
     jwt:
-      secretName: chatflow-jwt-secret
+      secretName: gossiplog-jwt-secret
 
   springProfile: prod
 

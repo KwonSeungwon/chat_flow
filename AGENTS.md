@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-ChatFlow is a multi-service application. Backend services are Gradle subprojects in `settings.gradle`: `chat-service`, `gateway-service`, and shared code in `common`. Java source lives under each module's `src/main/java`; backend tests live under `src/test/java`.
+Gossiplog is a multi-service application. Backend services are Gradle subprojects in `settings.gradle`: `chat-service`, `gateway-service`, and shared code in `common`. Java source lives under each module's `src/main/java`; backend tests live under `src/test/java`.
 
 The client is a Flutter app in `frontend/`. App code is organized by `lib/core`, `lib/features`, and `lib/shared`; tests are in `frontend/test`. Infrastructure files live in `docker-compose.*.yml`, `helm/`, `k8s/`, `monitoring/`, and `scripts/`.
 
@@ -20,7 +20,7 @@ The client is a Flutter app in `frontend/`. App code is organized by `lib/core`,
 
 ## Coding Style & Naming Conventions
 
-Backend code uses Java with Spring Boot conventions. Gradle sets Java source and target compatibility to 17; CI uses Temurin 21. Use package names under `com.chatflow.<service>`, PascalCase classes, camelCase methods and fields, and `*Test` test classes. Checkstyle is configured in `config/checkstyle/checkstyle.xml`.
+Backend code uses Java with Spring Boot conventions. Gradle sets Java source and target compatibility to 17; CI uses Temurin 21. Use package names under `com.gossiplog.<service>`, PascalCase classes, camelCase methods and fields, and `*Test` test classes. Checkstyle is configured in `config/checkstyle/checkstyle.xml`.
 
 Flutter code follows `package:flutter_lints/flutter.yaml` from `frontend/analysis_options.yaml`. Use snake_case file names, PascalCase widgets/classes, and Riverpod/provider names that match the feature they serve.
 

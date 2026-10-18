@@ -41,8 +41,8 @@ on:
 env:
   REGISTRY: ghcr.io
   # GHCR requires lowercase repo paths — keep aligned with develop-build.yml
-  IMAGE_PREFIX: ghcr.io/kwonseungwon/chatflow
-  NAMESPACE: chatflow
+  IMAGE_PREFIX: ghcr.io/kwonseungwon/gossiplog
+  NAMESPACE: gossiplog
 
 jobs:
   rollout:
@@ -105,7 +105,7 @@ jobs:
           SERVICE: ${{ github.event.inputs.service }}
           TAG: ${{ github.event.inputs.tag }}
         run: |
-          DEPLOY="chatflow-${SERVICE}"
+          DEPLOY="gossiplog-${SERVICE}"
           IMAGE="${{ env.IMAGE_PREFIX }}/${SERVICE}:${TAG}"
           # container name inside the pod matches the service name (Helm convention)
           CONTAINER="${SERVICE}"

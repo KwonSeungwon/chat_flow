@@ -1,6 +1,6 @@
-# Contributing to ChatFlow
+# Contributing to Gossiplog
 
-Thank you for your interest in contributing to ChatFlow! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Gossiplog! This document provides guidelines and information for contributors.
 
 ## 📋 Table of Contents
 - [Code of Conduct](#code-of-conduct)
@@ -26,8 +26,8 @@ By participating in this project, you agree to abide by our Code of Conduct. Ple
 ### Setup Development Environment
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/chatflow.git
-cd chatflow
+git clone https://github.com/your-username/chat_flow.git
+cd chat_flow
 
 # Start infrastructure services
 docker-compose up -d valkey postgresql
@@ -227,4 +227,4 @@ Contributors will be recognized in:
 - Release notes
 - Annual contributor spotlight
 
-Thank you for contributing to ChatFlow! 🚀
+Thank you for contributing to Gossiplog! 🚀

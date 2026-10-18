@@ -53,7 +53,7 @@ spec:
             - name: GATEWAY_INTERNAL_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-gateway-internal-secret
+                  name: gossiplog-gateway-internal-secret
                   key: GATEWAY_INTERNAL_SECRET
             # K8s 내부 서비스 디스커버리
             - name: CHAT_SERVICE_URL

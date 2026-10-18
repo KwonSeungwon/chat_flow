@@ -53,7 +53,7 @@ spec:
             - name: GATEWAY_INTERNAL_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-gateway-internal-secret
+                  name: gossiplog-gateway-internal-secret
                   key: GATEWAY_INTERNAL_SECRET
             # PostgreSQL (외부 Secret)
             - name: DB_HOST
@@ -137,7 +137,7 @@ spec:
           emptyDir: {}
         - name: firebase-sa
           secret:
-            secretName: chatflow-firebase-secret
+            secretName: gossiplog-firebase-secret
             optional: true
         - name: file-uploads
           persistentVolumeClaim:

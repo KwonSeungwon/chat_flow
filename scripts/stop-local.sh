@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ChatFlow Local Environment Stop Script
+# Gossiplog Local Environment Stop Script
 
 set -e
 
@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${CYAN}🛑 Stopping ChatFlow Local Environment${NC}"
+echo -e "${CYAN}🛑 Stopping Gossiplog Local Environment${NC}"
 echo ""
 
 # 백엔드 서비스들 종료
@@ -51,5 +51,5 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}✅ ChatFlow Local Environment Stopped Successfully!${NC}"
+echo -e "${GREEN}✅ Gossiplog Local Environment Stopped Successfully!${NC}"
 echo ""

@@ -1,8 +1,8 @@
-# CLAUDE.md - ChatFlow Project Guide
+# CLAUDE.md - Gossiplog Project Guide
 
 ## Project Overview
 
-제품명은 Gossiplog(app.gossiplog.com)로, 캐주얼 채팅 앱에 학습 게임 "위키 던전"을 더한 구성이다. 내부 코드명과 패키지는 ChatFlow(`chatflow`)를 유지한다. 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이며, 가입은 사용자명과 비밀번호만 받는다. WebSocket(STOMP) 실시간 채팅을 핵심 기능으로 제공한다. 검색·AI 요약 서비스와 Elasticsearch·Kafka는 제거됐다(Gateway + Chat 2서비스 구성). `/world` 학습 게임(위키 던전)은 chat-service에 포함되며 관리자는 `GAME_ADMIN_USER_IDS`로 지정한다. Android APK는 3.0.0 "Gossiplog"이다.
+제품명은 Gossiplog(app.gossiplog.com)로, 캐주얼 채팅 앱에 학습 게임 "위키 던전"을 더한 구성이다. 마이크로서비스 아키텍처 기반의 실시간 채팅 플랫폼이며, 가입은 사용자명과 비밀번호만 받는다. WebSocket(STOMP) 실시간 채팅을 핵심 기능으로 제공한다. 검색·AI 요약 서비스와 Elasticsearch·Kafka는 제거됐다(Gateway + Chat 2서비스 구성). `/world` 학습 게임(위키 던전)은 chat-service에 포함되며 관리자는 `GAME_ADMIN_USER_IDS`로 지정한다. Android APK는 3.0.0 "Gossiplog"이다.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ chat_flow/
 │   ├── lib/features/        # auth, chat, command_palette, profile, world 피처 레이어
 │   ├── lib/shared/          # ChatMessage, ChatRoom 모델
 │   ├── android/             # Android 네이티브 (minSdk 23)
-│   ├── web/                 # Flutter Web 빌드 출력 + chatflow-app.apk
+│   ├── web/                 # Flutter Web 빌드 출력 + gossiplog-app.apk
 │   ├── nginx.conf           # nginx 리버스 프록시 설정
 │   └── Dockerfile           # nginx:alpine 컨테이너
 ├── monitoring/              # Prometheus 설정
@@ -102,7 +102,7 @@ flutter build apk --release                                  # Android APK 빌�
 
 # Docker 이미지 빌드 (레거시 로컬 크로스 빌드용 — 권장 배포 경로는 GH Actions → GHCR)
 docker buildx build --platform linux/amd64 \
-  -t chatflow-frontend:prod --load .
+  -t gossiplog-frontend:prod --load .
 ```
 
 ## Key Patterns & Conventions
@@ -113,7 +113,7 @@ docker buildx build --platform linux/amd64 \
 - **공통 모듈**: `common`은 `bootJar` 비활성화, 다른 서비스에서 `implementation project(':common')`로 참조
 - **프로필 기반 설정**: `application-local.yml` (개발), `application-prod.yml` (운영)
 - **WebSocket**: STOMP 프로토콜, `/app/chat.sendMessage` (전송), `/topic/chat/{roomId}` (구독)
-- **패키지 구조**: `com.chatflow.{서비스명}` (예: `com.chatflow.chat`, `com.chatflow.gateway`)
+- **패키지 구조**: `com.gossiplog.{서비스명}` (예: `com.gossiplog.chat`, `com.gossiplog.gateway`)
 - **Lombok**: 전체 서비스에서 `@Data`, `@Slf4j` 등 사용
 
 ### Frontend
@@ -187,9 +187,9 @@ GAME_ADMIN_USER_IDS=
 ## K3s 배포 (자체 인스턴스)
 
 **도메인**: https://app.gossiplog.com (Cloudflare → K3s)  
-**네임스페이스**: `chatflow`  
+**네임스페이스**: `gossiplog`  
 **이미지 레지스트리**: 
-- 신규(권장): `ghcr.io/<owner>/chatflow/<service>` — GH Actions가 push, K3s containerd가 pull
+- 신규(권장): `ghcr.io/<owner>/gossiplog/<service>` — GH Actions가 push, K3s containerd가 pull
 
 > 배포 서버 접속 정보, Cloudflare 토큰 등 민감 정보는 `.claude/CLAUDE.md` (로컬 전용) 참고.
 
@@ -225,6 +225,9 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/purge_cache" \
 - Valkey 연결 실패 시 `VALKEY_HOST`/`VALKEY_PORT`와 컨테이너 기동 여부를 확인
 - WebSocket 연결은 `/ws-native` 경로로 Gateway 프록시됨 — SecurityConfig에서 `permitAll()` 필수
 - Flutter Web에서 WS URL은 현재 origin에서 자동 파생 (별도 설정 불필요)
-- Android APK는 `/chatflow-app.apk` 엔드포인트로 웹 UI에서 다운로드 가능 (nginx attachment 헤더)
+- Android APK는 `/gossiplog-app.apk` 엔드포인트로 웹 UI에서 다운로드 가능 (nginx attachment 헤더)
 - Auth hydration 완료 전 chatNotifierProvider가 생성될 경우 token=null → `joinRoom` 가드 처리됨
 - `.env` 파일: `API_BASE_URL`, `WS_URL` (네이티브 Android용, 웹은 origin 자동 파생)
+## Internal identifiers (이름을 바꾸지 않은 `chatflow` 흔적)
+
+Android `applicationId` `ai.chatflow.app`과 Firebase, DB 이름·사용자 `chatflow`, 리포 이름 `chat_flow`, `.claude/` 하네스 파일, `docs/superpowers/**`. 이유는 README 참고.
