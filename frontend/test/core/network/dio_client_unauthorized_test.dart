@@ -4,8 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/constants/storage_keys.dart';
-import 'package:chatflow/core/network/dio_client.dart';
+import 'package:gossiplog/core/constants/storage_keys.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
 
 /// DioClient의 401 처리 계약.
 ///

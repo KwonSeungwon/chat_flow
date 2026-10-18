@@ -1,9 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 방별 입력 draft를 SharedPreferences에 보존한다.
-/// 키 형식: `chatflow.draft.<roomId>`
+/// 키 형식: `gossiplog.draft.<roomId>`
 class DraftStore {
-  static const _prefix = 'chatflow.draft.';
+  static const _prefix = 'gossiplog.draft.';
 
   /// [text]를 해당 방의 draft로 저장한다. 빈 문자열이면 삭제한다.
   Future<void> save(String roomId, String text) async {

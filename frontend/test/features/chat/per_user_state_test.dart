@@ -5,12 +5,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
-import 'package:chatflow/features/chat/bookmark_provider.dart';
-import 'package:chatflow/features/chat/notification_policy_provider.dart';
-import 'package:chatflow/features/chat/room_keywords_provider.dart';
-import 'package:chatflow/features/chat/scheduled_messages_provider.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
+import 'package:gossiplog/features/chat/bookmark_provider.dart';
+import 'package:gossiplog/features/chat/notification_policy_provider.dart';
+import 'package:gossiplog/features/chat/room_keywords_provider.dart';
+import 'package:gossiplog/features/chat/scheduled_messages_provider.dart';
 
 class _Adapter implements HttpClientAdapter {
   int scheduledCalls = 0;
@@ -113,8 +113,8 @@ void main() {
 
   test('logged out (userId null): nothing is loaded or saved', () async {
     FlutterSecureStorage.setMockInitialValues({
-      'chatflow.bookmarks': '[{"messageId":"old"}]',
-      'chatflow.roomKeywords': '{"r":["x"]}',
+      'gossiplog.bookmarks': '[{"messageId":"old"}]',
+      'gossiplog.roomKeywords': '{"r":["x"]}',
     });
     final sub1 = container.listen(bookmarksProvider, (_, __) {});
     final sub2 = container.listen(roomKeywordsProvider, (_, __) {});
@@ -126,8 +126,8 @@ void main() {
 
     await container.read(roomKeywordsProvider.notifier).setKeywords('r', ['y']);
     final all = await const FlutterSecureStorage().readAll();
-    expect(all.keys.where((k) => k.startsWith('chatflow.roomKeywords')),
-        ['chatflow.roomKeywords'], reason: 'legacy key untouched, nothing new written');
-    expect(all['chatflow.roomKeywords'], '{"r":["x"]}');
+    expect(all.keys.where((k) => k.startsWith('gossiplog.roomKeywords')),
+        ['gossiplog.roomKeywords'], reason: 'legacy key untouched, nothing new written');
+    expect(all['gossiplog.roomKeywords'], '{"r":["x"]}');
   });
 }

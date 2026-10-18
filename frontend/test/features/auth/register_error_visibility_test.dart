@@ -10,8 +10,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/login_page.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/login_page.dart';
 
 /// 회원가입이 실패했으면 실패 이유가 화면에 남아 있어야 한다.
 ///

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:chatflow/features/world/game/encounter_counter.dart';
+import 'package:gossiplog/features/world/game/encounter_counter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

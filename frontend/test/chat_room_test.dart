@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/models/chat_room.dart';
+import 'package:gossiplog/shared/models/chat_room.dart';
 
 void main() {
   group('ChatRoom.fromJson', () {

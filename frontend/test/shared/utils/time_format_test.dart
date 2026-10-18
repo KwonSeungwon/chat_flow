@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/utils/time_format.dart';
+import 'package:gossiplog/shared/utils/time_format.dart';
 
 void main() {
   // Fixed reference point for deterministic tests.

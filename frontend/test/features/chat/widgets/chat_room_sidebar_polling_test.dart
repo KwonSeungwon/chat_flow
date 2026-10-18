@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:chatflow/core/routing/app_router.dart';
-import 'package:chatflow/features/chat/chat_rooms_provider.dart';
-import 'package:chatflow/features/chat/widgets/chat_room_sidebar.dart';
-import 'package:chatflow/shared/models/chat_room.dart';
+import 'package:gossiplog/core/routing/app_router.dart';
+import 'package:gossiplog/features/chat/chat_rooms_provider.dart';
+import 'package:gossiplog/features/chat/widgets/chat_room_sidebar.dart';
+import 'package:gossiplog/shared/models/chat_room.dart';
 
 class _FakeRooms extends StateNotifier<AsyncValue<List<ChatRoom>>>
     implements ChatRoomsNotifier {

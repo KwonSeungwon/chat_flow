@@ -1,4 +1,4 @@
-import 'package:chatflow/features/world/admin/admin_game_api.dart';
+import 'package:gossiplog/features/world/admin/admin_game_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 

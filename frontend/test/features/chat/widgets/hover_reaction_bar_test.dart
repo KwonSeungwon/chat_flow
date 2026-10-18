@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/bubbles/hover_reaction_bar.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/hover_reaction_bar.dart';
 
 Widget _wrap(Widget child) =>
     MaterialApp(home: Scaffold(body: Center(child: child)));

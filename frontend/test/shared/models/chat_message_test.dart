@@ -1,4 +1,4 @@
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

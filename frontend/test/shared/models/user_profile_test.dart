@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatflow/shared/models/user_profile.dart';
+import 'package:gossiplog/shared/models/user_profile.dart';
 
 void main() {
   group('UserProfile', () {

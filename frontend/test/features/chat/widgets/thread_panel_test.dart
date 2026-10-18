@@ -8,11 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/core/network/stomp_service.dart';
-import 'package:chatflow/features/chat/chat_provider.dart';
-import 'package:chatflow/features/chat/widgets/thread_panel.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/core/network/stomp_service.dart';
+import 'package:gossiplog/features/chat/chat_provider.dart';
+import 'package:gossiplog/features/chat/widgets/thread_panel.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 /// Answers the replies endpoint with one old reply; everything else 404.
 class _RepliesAdapter implements HttpClientAdapter {

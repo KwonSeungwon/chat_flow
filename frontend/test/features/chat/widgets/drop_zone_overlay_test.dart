@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/drop_zone_overlay.dart';
+import 'package:gossiplog/features/chat/widgets/drop_zone_overlay.dart';
 
 void main() {
   group('DropZoneOverlay', () {

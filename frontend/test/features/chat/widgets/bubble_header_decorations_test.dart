@@ -1,5 +1,5 @@
-import 'package:chatflow/features/chat/widgets/bubbles/bubble_header_decorations.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/bubble_header_decorations.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

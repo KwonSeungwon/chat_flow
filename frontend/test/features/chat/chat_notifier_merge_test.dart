@@ -5,12 +5,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/core/network/stomp_service.dart';
-import 'package:chatflow/core/utils/server_time.dart';
-import 'package:chatflow/features/chat/chat_notifier.dart';
-import 'package:chatflow/features/chat/chat_rooms_provider.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/core/network/stomp_service.dart';
+import 'package:gossiplog/core/utils/server_time.dart';
+import 'package:gossiplog/features/chat/chat_notifier.dart';
+import 'package:gossiplog/features/chat/chat_rooms_provider.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 class _FakeDioClient implements DioClient {
   _FakeDioClient(this.dio);

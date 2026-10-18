@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chatflow/core/theme/app_theme.dart';
-import 'package:chatflow/features/chat/widgets/bubbles/avatar.dart';
-import 'package:chatflow/features/chat/widgets/bubbles/chat_bubble.dart';
-import 'package:chatflow/features/chat/widgets/chat_input.dart';
-import 'package:chatflow/features/chat/widgets/chat_messages_list.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/core/theme/app_theme.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/avatar.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/chat_bubble.dart';
+import 'package:gossiplog/features/chat/widgets/chat_input.dart';
+import 'package:gossiplog/features/chat/widgets/chat_messages_list.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 /// 파스텔 카카오톡형 채팅방의 모양 계약.
 void main() {

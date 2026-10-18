@@ -6,14 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chatflow/core/network/app_stomp_service.dart';
-import 'package:chatflow/core/network/dio_client.dart';
+import 'package:gossiplog/core/network/app_stomp_service.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
 import 'dart:async';
 
-import 'package:chatflow/core/network/stomp_service.dart';
-import 'package:chatflow/core/services/browser_online.dart';
-import 'package:chatflow/features/chat/chat_provider.dart';
-import 'package:chatflow/features/chat/widgets/chat_room_content.dart';
+import 'package:gossiplog/core/network/stomp_service.dart';
+import 'package:gossiplog/core/services/browser_online.dart';
+import 'package:gossiplog/features/chat/chat_provider.dart';
+import 'package:gossiplog/features/chat/widgets/chat_room_content.dart';
 
 class _NotFoundAdapter implements HttpClientAdapter {
   @override

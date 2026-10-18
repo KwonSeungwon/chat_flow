@@ -62,7 +62,7 @@ Future<void> main() async {
     final container = ProviderContainer();
     runApp(UncontrolledProviderScope(
       container: container,
-      child: const ChatFlowApp(),
+      child: const GossiplogApp(),
     ));
 
     _initFirebaseInBackground(container);
@@ -113,8 +113,8 @@ Future<void> _initFirebaseInBackground(ProviderContainer container) async {
   }
 }
 
-class ChatFlowApp extends ConsumerWidget {
-  const ChatFlowApp({super.key});
+class GossiplogApp extends ConsumerWidget {
+  const GossiplogApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

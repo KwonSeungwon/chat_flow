@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/command_palette/command_action.dart';
+import 'package:gossiplog/features/command_palette/command_action.dart';
 
 void main() {
   group('GoToRoomAction', () {

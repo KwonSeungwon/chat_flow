@@ -1,6 +1,6 @@
-import 'package:chatflow/features/world/admin/admin_game_api.dart';
-import 'package:chatflow/features/world/admin/admin_game_provider.dart';
-import 'package:chatflow/features/world/admin/question_review_page.dart';
+import 'package:gossiplog/features/world/admin/admin_game_api.dart';
+import 'package:gossiplog/features/world/admin/admin_game_provider.dart';
+import 'package:gossiplog/features/world/admin/question_review_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

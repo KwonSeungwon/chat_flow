@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/chat_rooms_provider.dart';
+import 'package:gossiplog/features/chat/chat_rooms_provider.dart';
 
 void main() {
   late RoomUnreadCountsNotifier notifier;
