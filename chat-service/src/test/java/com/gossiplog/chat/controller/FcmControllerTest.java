@@ -1,0 +1,89 @@
+package com.gossiplog.chat.controller;
+
+import com.gossiplog.chat.auth.AuthenticatedUserResolver;
+import com.gossiplog.chat.auth.TestAuthFilter;
+import com.gossiplog.chat.exception.GlobalExceptionHandler;
+import com.gossiplog.chat.service.notification.FcmNotificationService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.Map;
+
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@ExtendWith(MockitoExtension.class)
+class FcmControllerTest {
+
+    private MockMvc mockMvc;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Mock
+    private FcmNotificationService service;
+
+    @Mock
+    private RoomMembershipGuard membershipGuard;
+
+    @InjectMocks
+    private FcmController controller;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void subscribe_records_token_against_authenticated_user() throws Exception {
+        String body = objectMapper.writeValueAsString(
+            Map.of("token", "t".repeat(120), "roomId", "room-1"));
+        mockMvc.perform(post("/api/fcm/subscribe")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", "user-1")
+                .content(body))
+            .andExpect(status().isOk());
+        verify(membershipGuard).requireMember("room-1", "user-1");
+        verify(service).subscribeToRoom("t".repeat(120), "room-1", "user-1");
+    }
+
+    @Test
+    void unsubscribeAll_calls_service() throws Exception {
+        String body = objectMapper.writeValueAsString(
+            Map.of("token", "x".repeat(120)));
+        mockMvc.perform(post("/api/fcm/unsubscribe-all")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isOk());
+        verify(service).unsubscribeAll("x".repeat(120));
+    }
+
+    @Test
+    void unsubscribeAll_rejects_blank_token() throws Exception {
+        mockMvc.perform(post("/api/fcm/unsubscribe-all")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void unsubscribeAll_rejects_token_below_min_size() throws Exception {
+        String body = objectMapper.writeValueAsString(
+            Map.of("token", "x".repeat(99)));
+        mockMvc.perform(post("/api/fcm/unsubscribe-all")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isBadRequest());
+    }
+}

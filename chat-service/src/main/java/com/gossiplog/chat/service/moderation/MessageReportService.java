@@ -1,0 +1,173 @@
+package com.gossiplog.chat.service.moderation;
+
+import com.gossiplog.chat.service.RoomPermissionService;
+
+import com.gossiplog.chat.dto.ReportDto;
+import com.gossiplog.chat.entity.*;
+import com.gossiplog.chat.exception.ForbiddenException;
+import com.gossiplog.chat.exception.MessageNotFoundException;
+import com.gossiplog.chat.exception.ReportRateLimitException;
+import com.gossiplog.chat.exception.SelfReportNotAllowedException;
+import com.gossiplog.chat.repository.ChatMessageRepository;
+import com.gossiplog.chat.repository.MessageReportRepository;
+import com.gossiplog.chat.repository.RoomMemberRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class MessageReportService {
+
+    private static final int RATE_LIMIT_PER_MINUTE = 5;
+    private static final Duration RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
+
+    private final MessageReportRepository messageReportRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final RoomMemberRepository roomMemberRepository;
+    private final RoomPermissionService roomPermissionService;
+
+    /**
+     * Submits a report for a message.
+     * <p>
+     * Guards:
+     * <ul>
+     *   <li>Message must exist</li>
+     *   <li>Reporter must be a member of the message's room (403 otherwise)</li>
+     *   <li>Reporter cannot report their own message (userId comparison)</li>
+     *   <li>Idempotent: duplicate (messageId, reporterUserId) returns existing report id</li>
+     *   <li>Rate limit: max 5 reports per user per minute</li>
+     * </ul>
+     *
+     * @return the report id (new or existing if idempotent)
+     */
+    // Deliberately not @Transactional: the insert runs in the repository's own
+    // transaction, so a UNIQUE race loser can re-read the winner instead of
+    // committing a rollback-only (PostgreSQL: aborted) transaction → 500.
+    public Long submitReport(String messageId, String reporterUserId,
+                             ReportReason reason, String comment) {
+        // 1. Look up message
+        ChatMessageEntity message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new MessageNotFoundException(
+                        "메시지를 찾을 수 없습니다. messageId=" + messageId));
+
+        // 2. Reporter must be a member of the message's room — otherwise any
+        //    authenticated user could file reports into rooms they cannot see.
+        if (!roomMemberRepository.existsByRoomIdAndUserId(message.getChatRoomId(), reporterUserId)) {
+            throw new ForbiddenException("방 멤버만 신고할 수 있습니다.");
+        }
+
+        // 2b. Self-report check (compare userId directly)
+        if (reporterUserId.equals(message.getUserId())) {
+            throw new SelfReportNotAllowedException(
+                    "자신의 메시지는 신고할 수 없습니다. messageId=" + messageId);
+        }
+
+        // 3. Idempotency: if already reported by same user, return existing id
+        Optional<MessageReportEntity> existing =
+                messageReportRepository.findByMessageIdAndReportedBy(messageId, reporterUserId);
+        if (existing.isPresent()) {
+            log.info("Duplicate report ignored (idempotent): messageId={}, reporterUserId={}",
+                    messageId, reporterUserId);
+            return existing.get().getId();
+        }
+
+        // 4. Rate limit
+        LocalDateTime windowStart = LocalDateTime.now().minus(RATE_LIMIT_WINDOW);
+        long recentCount = messageReportRepository.countByReportedByAndCreatedAtAfter(
+                reporterUserId, windowStart);
+        if (recentCount >= RATE_LIMIT_PER_MINUTE) {
+            throw new ReportRateLimitException(
+                    "신고 횟수가 제한을 초과했습니다. 잠시 후 다시 시도해 주세요. (분당 최대 "
+                            + RATE_LIMIT_PER_MINUTE + "건)");
+        }
+
+        // 5. Persist (race-safe: UNIQUE constraint on (message_id, reported_by))
+        MessageReportEntity report = MessageReportEntity.builder()
+                .messageId(messageId)
+                .roomId(message.getChatRoomId())
+                .reportedBy(reporterUserId)
+                .reason(reason)
+                .comment(comment)
+                .status(ReportStatus.PENDING)
+                .build();
+
+        try {
+            MessageReportEntity saved = messageReportRepository.save(report);
+            log.info("Report submitted: id={}, messageId={}, roomId={}, reporterUserId={}, reason={}",
+                    saved.getId(), messageId, message.getChatRoomId(), reporterUserId, reason);
+            return saved.getId();
+        } catch (DataIntegrityViolationException e) {
+            // Concurrent duplicate — the UNIQUE constraint fired between our check and insert.
+            // Re-fetch the winner row and return its id (idempotent recovery).
+            log.info("Concurrent duplicate report detected (UNIQUE violation): messageId={}, reporterUserId={}",
+                    messageId, reporterUserId);
+            return messageReportRepository.findByMessageIdAndReportedBy(messageId, reporterUserId)
+                    .orElseThrow(() -> e) // should never happen; re-throw if somehow missing
+                    .getId();
+        }
+    }
+
+    /**
+     * Lists all PENDING reports for a room. Only OWNER or MODERATOR may call this.
+     */
+    @Transactional(readOnly = true)
+    public List<ReportDto> listPendingReports(String roomId, String actorUserId) {
+        roomPermissionService.requireRole(roomId, actorUserId, RoomRole.OWNER, RoomRole.MODERATOR);
+        roomPermissionService.requireNotDmRoom(roomId);
+
+        List<MessageReportEntity> reports =
+                messageReportRepository.findByRoomIdAndStatusOrderByCreatedAtDesc(
+                        roomId, ReportStatus.PENDING);
+
+        return reports.stream()
+                .map(report -> {
+                    ChatMessageEntity message = chatMessageRepository
+                            .findById(report.getMessageId())
+                            .orElse(null);
+
+                    String reporterUsername = roomMemberRepository
+                            .findByRoomIdAndUserId(roomId, report.getReportedBy())
+                            .map(RoomMemberEntity::getUsername)
+                            .orElse("(unknown)");
+
+                    return ReportDto.from(report, message, reporterUsername);
+                })
+                .toList();
+    }
+
+    /**
+     * Updates a report's status to RESOLVED or DISMISSED.
+     * Only OWNER or MODERATOR of the report's room may call this.
+     */
+    @Transactional
+    public void updateStatus(Long reportId, String actorUserId, ReportStatus newStatus) {
+        if (newStatus == ReportStatus.PENDING) {
+            throw new IllegalArgumentException(
+                    "신고 상태를 PENDING으로 변경할 수 없습니다. RESOLVED 또는 DISMISSED만 허용됩니다.");
+        }
+
+        MessageReportEntity report = messageReportRepository.findById(reportId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "신고를 찾을 수 없습니다. reportId=" + reportId));
+
+        roomPermissionService.requireRole(report.getRoomId(), actorUserId,
+                RoomRole.OWNER, RoomRole.MODERATOR);
+
+        report.setStatus(newStatus);
+        report.setResolvedBy(actorUserId);
+        report.setResolvedAt(LocalDateTime.now());
+        messageReportRepository.save(report);
+
+        log.info("Report status updated: reportId={}, newStatus={}, resolvedBy={}",
+                reportId, newStatus, actorUserId);
+    }
+}

@@ -70,9 +70,9 @@ spring:
       timeout: 2000ms
       database: 0
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/chatflow
-    username: chatflow
-    password: chatflow
+    url: r2dbc:postgresql://localhost:5432/gossiplog_local
+    username: gossiplog
+    password: gossiplog123
   sql:
     init:
       mode: always
@@ -108,15 +108,15 @@ resilience4j:
 GATEWAY_INTERNAL_SECRET: local-dev-gateway-internal-secret
 
 jwt:
-  secret: chatflow-local-jwt-secret-key-must-be-at-least-32-bytes-long
+  secret: gossiplog-local-jwt-secret-key-must-be-at-least-32-bytes-long
   expiration-ms: 86400000
 
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG
-    com.chatflow: DEBUG
+    com.gossiplog: DEBUG
 
 # CORS는 CorsConfig(CorsWebFilter) 단일 출처 — 로컬 개발 origin 허용
-chatflow:
+gossiplog:
   cors:
     allowed-origins: "http://localhost:*,http://127.0.0.1:*"

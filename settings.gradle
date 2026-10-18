@@ -1,4 +1,4 @@
-rootProject.name = 'chat-flow'
+rootProject.name = 'gossiplog'
 
 include 'common'
 include 'chat-service'

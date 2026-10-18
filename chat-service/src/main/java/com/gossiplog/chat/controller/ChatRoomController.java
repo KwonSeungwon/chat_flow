@@ -1,0 +1,357 @@
+package com.gossiplog.chat.controller;
+
+import com.gossiplog.chat.auth.AuthenticatedUser;
+import com.gossiplog.chat.auth.RequireAuth;
+import com.gossiplog.chat.auth.RequireMember;
+import com.gossiplog.chat.entity.ChatRoom;
+import com.gossiplog.chat.entity.RoomRole;
+import com.gossiplog.chat.entity.RoomType;
+import com.gossiplog.chat.mapper.ChatRoomMapper;
+import com.gossiplog.chat.service.RoomPermissionService;
+import com.gossiplog.chat.service.room.ChatRoomService;
+import com.gossiplog.chat.service.room.DmRoomService;
+import com.gossiplog.chat.service.room.RoomAccessPolicy;
+import com.gossiplog.chat.service.room.RoomMembershipService;
+import com.gossiplog.chat.service.room.RoomVisibilityService;
+import com.gossiplog.chat.service.room.UserDirectory;
+import com.gossiplog.chat.result.ChatErrorCode;
+import com.gossiplog.chat.result.ErrorResponses;
+import com.gossiplog.chat.result.Result;
+import com.gossiplog.common.dto.ApiResponse;
+import com.gossiplog.common.dto.ChatRoomResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestHeader;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/chat/rooms")
+@RequiredArgsConstructor
+public class ChatRoomController {
+
+    private static final String PASSWORD_ATTEMPT_KEY_PREFIX = "gossiplog:room:pw-attempts:";
+    private static final long PASSWORD_ATTEMPT_WINDOW_SECONDS = 60;
+    static final org.springframework.data.redis.core.script.RedisScript<Long> PASSWORD_ATTEMPT_SCRIPT =
+            org.springframework.data.redis.core.script.RedisScript.of(
+                    "local n = redis.call('INCR', KEYS[1]) "
+                            + "if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end "
+                            + "return n", Long.class);
+    private static final int MAX_PASSWORD_ATTEMPTS = 5;
+
+    private final ChatRoomService chatRoomService;
+    private final RoomMembershipService roomMembershipService;
+    private final RoomPermissionService roomPermissionService;
+    private final DmRoomService dmRoomService;
+    private final StringRedisTemplate redisTemplate;
+    private final RoomVisibilityService roomVisibilityService;
+    private final ChatRoomMapper chatRoomMapper;
+    private final RoomAccessPolicy roomAccessPolicy;
+    private final UserDirectory userDirectory;
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ChatRoomResponse>>> getAllRooms(
+            @AuthenticatedUser(required = false) String userId) {
+        if (userId == null) {
+            // Anonymous: the shared cached list, minus DMs and private rooms.
+            List<ChatRoom> publicRooms = chatRoomService.getAllRooms().stream()
+                    .filter(r -> roomAccessPolicy.isVisible(r, null))
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(publicRooms)));
+        }
+        // DMs of others and private rooms the caller is not in are never listed.
+        List<ChatRoom> rooms = chatRoomService.getVisibleRooms(userId);
+        Map<String, Instant> hiddenMap = roomVisibilityService.getHiddenMap(userId);
+        if (hiddenMap.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(rooms)));
+        }
+        List<ChatRoom> visible = rooms.stream()
+                .filter(r -> roomVisibilityService.isVisible(r, hiddenMap))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponseList(visible)));
+    }
+
+    @RequireMember(pathVar = "id")
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getRoom(
+            @PathVariable String id,
+            @AuthenticatedUser String userId) {
+        return chatRoomService.getRoom(id)
+                .map(room -> ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(room))))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.error("채팅방을 찾을 수 없습니다.")));
+    }
+
+    @RequireAuth
+    @PostMapping
+    public ResponseEntity<ApiResponse<ChatRoomResponse>> createRoom(
+            @Valid @RequestBody CreateRoomRequest request,
+            @AuthenticatedUser String creatorId,
+            @RequestHeader(value = "X-Username", required = false) String creatorUsername) {
+        ChatRoom roomSpec = ChatRoom.builder()
+                .name(request.name())
+                .description(request.description())
+                .color(request.color())
+                // Only GENERAL rooms are created here (DMs use /dm). A roomType in the
+                // request, including the retired HANDOFF from old clients, is ignored.
+                .roomType(RoomType.GENERAL)
+                .isPrivate(request.isPrivate() != null && request.isPrivate())
+                .password(request.password())
+                .allowInvites(request.allowInvites() != null
+                        ? request.allowInvites() : true)
+                .build();
+        ChatRoom saved = chatRoomService.createRoom(roomSpec, creatorId, creatorUsername);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(chatRoomMapper.toResponse(saved), "채팅방이 생성되었습니다."));
+    }
+
+    @RequireAuth
+    @PostMapping("/{roomId}/verify")
+    public ResponseEntity<ApiResponse<Boolean>> verifyPassword(
+            @PathVariable String roomId,
+            @RequestBody VerifyPasswordRequest request,
+            @AuthenticatedUser String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (room.getRoomType() == RoomType.DIRECT) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("DM 방은 비밀번호로 입장할 수 없습니다."));
+        }
+        if (tooManyPasswordAttempts(roomId, userId)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(ApiResponse.error("비밀번호 시도가 너무 많습니다. 1분 뒤 다시 시도해 주세요."));
+        }
+        if (!chatRoomService.verifyRoomPassword(roomId, request.password())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error("비밀번호가 일치하지 않습니다."));
+        }
+        // Seed membership so subsequent member-gated endpoints work — via the
+        // policy, which still refuses banned users and private rooms.
+        RoomAccessPolicy.JoinDecision decision = roomMembershipService.grantMembership(
+                roomId, userId, username, RoomAccessPolicy.GrantPath.PASSWORD);
+        if (!decision.allowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(denialMessage(decision.reason())));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(true, "인증 성공"));
+    }
+
+    /**
+     * Fixed one-minute window per (room, user). INCR and the first-hit EXPIRE run
+     * as one script, so a counter never exists without a TTL. Valkey down → not limited.
+     */
+    private boolean tooManyPasswordAttempts(String roomId, String userId) {
+        String key = PASSWORD_ATTEMPT_KEY_PREFIX + roomId + ":" + userId;
+        try {
+            Long attempts = redisTemplate.execute(PASSWORD_ATTEMPT_SCRIPT, List.of(key),
+                    String.valueOf(PASSWORD_ATTEMPT_WINDOW_SECONDS));
+            return attempts != null && attempts > MAX_PASSWORD_ATTEMPTS;
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Password attempt limiter unavailable: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @RequireMember
+    @GetMapping("/{roomId}/participants")
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> getParticipants(
+            @PathVariable String roomId) {
+        String key = "gossiplog:room:participants:" + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(key);
+        // Deduplicate by userId — same user may have multiple sessions
+        Map<String, String> seen = new LinkedHashMap<>();
+        if (members != null) {
+            for (String entry : members) {
+                // Format: userId:sessionId:username (3 parts, split on first and last colon)
+                int firstIdx = entry.indexOf(':');
+                int lastIdx = entry.lastIndexOf(':');
+                if (firstIdx > 0 && lastIdx > firstIdx) {
+                    String userId = entry.substring(0, firstIdx);
+                    String username = entry.substring(lastIdx + 1);
+                    seen.putIfAbsent(userId, username);
+                }
+            }
+        }
+        List<Map<String, String>> result = new ArrayList<>();
+        seen.forEach((uid, uname) -> {
+            Map<String, String> p = new LinkedHashMap<>();
+            p.put("userId", uid);
+            p.put("username", uname);
+            result.add(p);
+        });
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    @RequireAuth
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteRoom(
+            @PathVariable String id,
+            @AuthenticatedUser String userId) {
+        if (chatRoomService.getRoom(id).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        // 방장만 삭제 가능 — role-based. createRoom이 생성자를 OWNER로 seed하고,
+        // pre-seed 레거시 방은 Flyway V10/V16이 OWNER 행을 backfill한다.
+        roomPermissionService.requireRole(id, userId, RoomRole.OWNER);
+        chatRoomService.deleteRoom(id);
+        return ResponseEntity.ok(ApiResponse.ok(null, "채팅방이 삭제되었습니다."));
+    }
+
+    @RequireAuth
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<ApiResponse<?>> leaveRoom(
+            @PathVariable String roomId,
+            @AuthenticatedUser String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        if (username == null || username.isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+        }
+        Result<Void, ChatErrorCode> result = roomMembershipService.leaveRoom(roomId, userId, username);
+        if (result.isFailure()) return ErrorResponses.from(result);
+        return ResponseEntity.ok(ApiResponse.ok(null, username + "님이 채팅방을 나갔습니다."));
+    }
+
+    /**
+     * DM 방 per-user soft-hide. 본인 화면에서만 숨김 처리.
+     * 상대가 새 메시지 보내면 자동 재출현 (lastMessageAt > hidden_at).
+     * 단체방은 hide 불가 -- 기존 leave 사용.
+     */
+    @RequireAuth
+    @PostMapping("/{roomId}/hide")
+    public ResponseEntity<ApiResponse<Void>> hideRoom(
+            @PathVariable String roomId,
+            @AuthenticatedUser String userId) {
+        ChatRoom room = chatRoomService.getRoom(roomId).orElse(null);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        if (room.getRoomType() != RoomType.DIRECT) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("DM 방만 숨길 수 있습니다. 단체방은 나가기를 사용하세요."));
+        }
+        roomVisibilityService.hide(userId, roomId);
+        return ResponseEntity.ok(ApiResponse.ok(null, "방을 숨겼습니다"));
+    }
+
+    @RequireAuth
+    @PostMapping("/dm")
+    public ResponseEntity<ApiResponse<ChatRoomResponse>> createDm(
+            @Valid @RequestBody CreateDmRequest body,
+            @AuthenticatedUser String userId,
+            @RequestHeader(value = "X-Username", required = false) String username) {
+        // The target's name comes from the users table, never from the client.
+        String targetUsername;
+        try {
+            targetUsername = userDirectory.resolveUsername(body.targetUserId(), body.targetUsername());
+            if (targetUsername != null && (username == null || username.isBlank())) {
+                username = userDirectory.resolveUsername(userId, null);
+                if (username == null) {
+                    return ResponseEntity.badRequest().body(ApiResponse.error("username이 필요합니다."));
+                }
+            }
+        } catch (DataAccessException e) {
+            log.warn("User directory lookup failed for DM {} -> {}: {}", userId, body.targetUserId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ApiResponse.error("사용자 정보를 확인할 수 없습니다. 잠시 후 다시 시도하세요."));
+        }
+        if (targetUsername == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("대상 사용자를 찾을 수 없습니다."));
+        }
+        ChatRoom dm = dmRoomService.createOrFindDmRoom(userId, username, body.targetUserId(), targetUsername);
+        // Seed both DM participants — they may both want to call member-gated
+        // endpoints without sending a STOMP message first. room_members is the
+        // DM participant list RoomAccessPolicy checks.
+        RoomAccessPolicy.JoinDecision self = roomMembershipService.grantMembership(
+                dm.getId(), userId, username, RoomAccessPolicy.GrantPath.DM_CREATE);
+        if (!self.allowed()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(denialMessage(self.reason())));
+        }
+        roomMembershipService.grantMembership(
+                dm.getId(), body.targetUserId(), targetUsername, RoomAccessPolicy.GrantPath.DM_CREATE);
+        return ResponseEntity.ok(ApiResponse.ok(chatRoomMapper.toResponse(dm)));
+    }
+
+    @RequireAuth
+    @PutMapping("/{roomId}/settings")
+    public ResponseEntity<?> updateRoomSettings(
+            @PathVariable String roomId,
+            @RequestBody UpdateSettingsRequest body,
+            @AuthenticatedUser String userId) {
+        if (chatRoomService.getRoom(roomId).isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("채팅방을 찾을 수 없습니다."));
+        }
+        // 방장만 설정 변경 가능 — role-based. createRoom이 생성자를 OWNER로 seed하고,
+        // pre-seed 레거시 방은 Flyway V10/V16이 OWNER 행을 backfill한다.
+        roomPermissionService.requireRole(roomId, userId, RoomRole.OWNER);
+        return ResponseEntity.ok(ApiResponse.ok(
+                chatRoomService.updateRoomSettings(roomId, body.name(), body.description())));
+    }
+
+    static String denialMessage(RoomAccessPolicy.Denial reason) {
+        if (reason == null) return "채팅방에 입장할 수 없습니다.";
+        return switch (reason) {
+            case ROOM_NOT_FOUND -> "채팅방을 찾을 수 없습니다.";
+            case BANNED -> "이 채팅방에서 차단되었습니다.";
+            case DM_NOT_PARTICIPANT -> "DM 참여자만 입장할 수 있습니다.";
+            case PRIVATE_REQUIRES_INVITE -> "비공개 채팅방은 초대 링크로만 입장할 수 있습니다.";
+            case PASSWORD_REQUIRED -> "비밀번호 인증이 필요한 채팅방입니다.";
+            case ROOM_FULL -> "채팅방이 만석입니다 (최대 10명).";
+        };
+    }
+
+    // ── Request records ─────────────────────────────────────────
+
+    public record CreateRoomRequest(
+            @NotBlank(message = "채팅방 이름은 필수입니다")
+            @Size(max = 100, message = "채팅방 이름은 100자를 초과할 수 없습니다")
+            String name,
+
+            @Size(max = 500, message = "설명은 500자를 초과할 수 없습니다")
+            String description,
+
+            String color,
+
+            @JsonProperty("isPrivate")
+            Boolean isPrivate,
+
+            String password,
+
+            Boolean allowInvites
+    ) {}
+
+    public record VerifyPasswordRequest(String password) {}
+
+    public record CreateDmRequest(
+            @NotBlank(message = "targetUserId는 필수입니다")
+            String targetUserId,
+
+            @NotBlank(message = "targetUsername은 필수입니다")
+            String targetUsername
+    ) {}
+
+    public record UpdateSettingsRequest(String name, String description) {}
+}
