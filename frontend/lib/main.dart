@@ -11,6 +11,7 @@ import 'core/keyboard/app_shortcuts.dart';
 import 'core/network/dio_client.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/fcm_service.dart';
+import 'core/storage/legacy_storage_cleanup.dart';
 import 'core/services/web_unload_handler.dart';
 import 'core/utils/tab_title.dart';
 import 'core/theme/app_theme.dart';
@@ -35,6 +36,7 @@ Future<void> main() async {
   runZonedGuarded<Future<void>>(() async {
     WidgetsFlutterBinding.ensureInitialized();
     try { await dotenv.load(fileName: '.env'); } catch (_) {}
+    await removeLegacyStorageKeys();
 
     // 한글 IME tofu(□) 번쩍임 방지 — 테마 폰트(Noto Sans KR)를 첫 프레임 전에
     // 등록해 CanvasKit의 런타임 글리프 폴백 경로를 아예 타지 않게 한다.
