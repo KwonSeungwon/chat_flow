@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/api_response.dart';
+import 'package:gossiplog/core/network/api_response.dart';
 
 void main() {
   group('apiResponseList', () {

@@ -3,8 +3,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/chat/widgets/chat_input.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/chat/widgets/chat_input.dart';
 
 /// roomId를 외부에서 바꿀 수 있는 테스트 하네스.
 /// ValueNotifier로 roomId를 갱신하면 ChatInput에 didUpdateWidget이 호출된다.
@@ -78,7 +78,7 @@ void main() {
 
     testWidgets('방 B에 기존 draft가 있을 때 방 A에서 전환하면 방 B draft가 복원된다', (tester) async {
       SharedPreferences.setMockInitialValues({
-        'chatflow.draft.room-B': 'saved draft B',
+        'gossiplog.draft.room-B': 'saved draft B',
       });
       final roomId = ValueNotifier('room-A');
 

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/command_palette/command_action.dart';
-import 'package:chatflow/features/command_palette/command_palette_provider.dart';
-import 'package:chatflow/features/command_palette/widgets/command_palette_overlay.dart';
+import 'package:gossiplog/features/command_palette/command_action.dart';
+import 'package:gossiplog/features/command_palette/command_palette_provider.dart';
+import 'package:gossiplog/features/command_palette/widgets/command_palette_overlay.dart';
 
 // ---------------------------------------------------------------------------
 // A mock notifier that returns controlled results

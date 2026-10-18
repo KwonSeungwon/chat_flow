@@ -1,6 +1,6 @@
-import 'package:chatflow/features/world/game/village_game.dart';
-import 'package:chatflow/features/world/game/village_map.dart';
-import 'package:chatflow/features/world/game/world_sprite.dart';
+import 'package:gossiplog/features/world/game/village_game.dart';
+import 'package:gossiplog/features/world/game/village_map.dart';
+import 'package:gossiplog/features/world/game/world_sprite.dart';
 import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
 import 'package:flutter/widgets.dart';

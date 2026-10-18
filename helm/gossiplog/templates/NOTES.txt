@@ -1,0 +1,9 @@
+🚀 Gossiplog가 배포되었습니다!
+
+서비스 상태 확인:
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=gossiplog
+  kubectl -n {{ .Release.Namespace }} get svc
+
+필수 Secret이 클러스터에 생성되어 있는지 확인하세요:
+  - {{ .Values.global.externalSecrets.postgresql.secretName }}
+  - {{ .Values.global.externalSecrets.valkey.secretName }}

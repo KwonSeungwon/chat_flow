@@ -11,7 +11,7 @@ import 'pasted_image.dart';
 /// and paste events on the document body for image files.
 ///
 /// IMPORTANT: This implementation listens on `document.body` and `document` (page-wide),
-/// not on a scoped element. ChatFlow currently mounts at most one `ChatInput` at a time
+/// not on a scoped element. Gossiplog currently mounts at most one `ChatInput` at a time
 /// (`/chat/:roomId` only), so a singleton-by-convention assumption is safe.
 ///
 /// If a future feature mounts a second `ChatInput` simultaneously (e.g., reply-in-thread

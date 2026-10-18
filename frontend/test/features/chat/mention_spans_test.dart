@@ -1,4 +1,4 @@
-import 'package:chatflow/features/chat/helpers/mention_spans.dart';
+import 'package:gossiplog/features/chat/helpers/mention_spans.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// `@name` substrings that would be highlighted, in order.

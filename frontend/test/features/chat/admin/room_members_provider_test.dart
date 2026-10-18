@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/admin/room_admin_api.dart';
-import 'package:chatflow/features/chat/admin/room_members_provider.dart';
-import 'package:chatflow/shared/models/room_role.dart';
+import 'package:gossiplog/features/chat/admin/room_admin_api.dart';
+import 'package:gossiplog/features/chat/admin/room_members_provider.dart';
+import 'package:gossiplog/shared/models/room_role.dart';
 
 /// Simple mock interceptor for Dio that returns canned responses.
 class _MockInterceptor extends Interceptor {

@@ -1,7 +1,7 @@
 @TestOn('browser')
 library;
 
-import 'package:chatflow/core/services/web_unload_handler_web.dart';
+import 'package:gossiplog/core/services/web_unload_handler_web.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Web only: `flutter test --platform chrome test/core/services/web_unload_handler_test.dart`

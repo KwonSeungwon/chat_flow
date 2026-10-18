@@ -12,7 +12,7 @@ services:
     volumes:
       - valkey_local_data:/data
     networks:
-      - chatflow-local
+      - gossiplog-local
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
@@ -25,17 +25,17 @@ services:
     hostname: postgresql
     container_name: postgresql-local
     environment:
-      POSTGRES_DB: chatflow_local
-      POSTGRES_USER: chatflow
-      POSTGRES_PASSWORD: chatflow123
+      POSTGRES_DB: gossiplog_local
+      POSTGRES_USER: gossiplog
+      POSTGRES_PASSWORD: gossiplog123
     ports:
       - "5432:5432"
     volumes:
       - postgres_local_data:/var/lib/postgresql/data
     networks:
-      - chatflow-local
+      - gossiplog-local
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatflow -d chatflow_local"]
+      test: ["CMD-SHELL", "pg_isready -U gossiplog -d gossiplog_local"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -57,7 +57,7 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=7d'
     networks:
-      - chatflow-local
+      - gossiplog-local
 
   grafana:
     image: grafana/grafana:10.2.0
@@ -71,7 +71,7 @@ services:
     volumes:
       - grafana_local_data:/var/lib/grafana
     networks:
-      - chatflow-local
+      - gossiplog-local
 
   zipkin:
     image: openzipkin/zipkin:3
@@ -80,7 +80,7 @@ services:
     ports:
       - "9411:9411"
     networks:
-      - chatflow-local
+      - gossiplog-local
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:9411/health || exit 1"]
       interval: 10s
@@ -88,7 +88,7 @@ services:
       retries: 3
 
 networks:
-  chatflow-local:
+  gossiplog-local:
     driver: bridge
 
 volumes:

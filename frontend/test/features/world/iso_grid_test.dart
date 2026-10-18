@@ -1,4 +1,4 @@
-import 'package:chatflow/features/world/game/iso_grid.dart';
+import 'package:gossiplog/features/world/game/iso_grid.dart';
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 

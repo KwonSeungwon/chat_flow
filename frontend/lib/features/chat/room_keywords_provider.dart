@@ -6,7 +6,7 @@ import '../auth/auth_provider.dart';
 /// 방별 키워드 알림 설정. 사용자가 음소거한 방이라도 키워드 매칭 시 알림.
 /// FlutterSecureStorage(JSON)에 영속화. Frontend-only — 백엔드 인지 안 함.
 class RoomKeywordsNotifier extends StateNotifier<Map<String, List<String>>> {
-  static const _storageKeyBase = 'chatflow.roomKeywords';
+  static const _storageKeyBase = 'gossiplog.roomKeywords';
   static const _storage = FlutterSecureStorage();
 
   final String? _userId;

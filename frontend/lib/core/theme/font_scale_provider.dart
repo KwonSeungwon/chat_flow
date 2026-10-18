@@ -23,7 +23,7 @@ final fontScaleProvider =
 });
 
 class FontScaleNotifier extends StateNotifier<FontScale> {
-  static const _key = 'chatflow.fontScale';
+  static const _key = 'gossiplog.fontScale';
   static const _storage = FlutterSecureStorage();
 
   FontScaleNotifier() : super(FontScale.medium) {

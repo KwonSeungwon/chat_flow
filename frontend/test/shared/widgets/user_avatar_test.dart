@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chatflow/shared/widgets/user_avatar.dart';
+import 'package:gossiplog/shared/widgets/user_avatar.dart';
 
 void main() {
   Widget _wrap(Widget w) => MaterialApp(home: Scaffold(body: Center(child: w)));

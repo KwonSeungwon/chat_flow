@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a report to help us improve ChatFlow
+about: Create a report to help us improve Gossiplog
 title: '[BUG] '
 labels: 'bug, needs-triage'
 assignees: ''
@@ -27,7 +27,7 @@ If applicable, add screenshots to help explain your problem.
 ## 🖥️ Environment
 - OS: [e.g. macOS, Windows, Linux]
 - Browser: [e.g. Chrome, Safari, Firefox]
-- ChatFlow Version: [e.g. v1.0.0]
+- Gossiplog Version: [e.g. v1.0.0]
 - Node.js Version: [e.g. 23.5.0]
 - Java Version: [e.g. 21]
 

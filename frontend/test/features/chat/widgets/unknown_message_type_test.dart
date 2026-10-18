@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/bubbles/chat_bubble.dart';
-import 'package:chatflow/features/chat/widgets/chat_messages_list.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/chat_bubble.dart';
+import 'package:gossiplog/features/chat/widgets/chat_messages_list.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 /// 서버가 더 이상 만들지 않는 옛 메시지 타입이나 JSON 본문이 와도
 /// 앱은 일반 말풍선으로 그리고 죽지 않아야 한다.

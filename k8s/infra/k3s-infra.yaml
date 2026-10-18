@@ -1,12 +1,12 @@
-# ChatFlow K3s Infrastructure — Single-node, optimized
-# Apply: kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
+# Gossiplog K3s Infrastructure — Single-node, optimized
+# Apply: kubectl apply -f k8s/infra/k3s-infra.yaml -n gossiplog
 ---
 # ======================== PostgreSQL 16 ========================
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgresql
-  namespace: chatflow
+  namespace: gossiplog
 spec:
   serviceName: postgresql
   replicas: 1
@@ -27,17 +27,17 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-postgresql-secret
+                  name: gossiplog-postgresql-secret
                   key: DB_NAME
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-postgresql-secret
+                  name: gossiplog-postgresql-secret
                   key: DB_USERNAME
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-postgresql-secret
+                  name: gossiplog-postgresql-secret
                   key: DB_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -65,7 +65,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgresql
-  namespace: chatflow
+  namespace: gossiplog
 spec:
   selector:
     app: postgresql
@@ -78,7 +78,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: valkey
-  namespace: chatflow
+  namespace: gossiplog
 spec:
   replicas: 1
   selector:
@@ -99,7 +99,7 @@ spec:
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: chatflow-valkey-secret
+                  name: gossiplog-valkey-secret
                   key: VALKEY_PASSWORD
           resources:
             requests:
@@ -113,7 +113,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: valkey
-  namespace: chatflow
+  namespace: gossiplog
 spec:
   selector:
     app: valkey

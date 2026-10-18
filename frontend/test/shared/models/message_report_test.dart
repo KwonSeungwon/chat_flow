@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/models/message_report.dart';
+import 'package:gossiplog/shared/models/message_report.dart';
 
 void main() {
   group('ReportReason', () {

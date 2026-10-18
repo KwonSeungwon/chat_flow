@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/chat_input.dart';
+import 'package:gossiplog/features/chat/widgets/chat_input.dart';
 
 Widget _wrap(Widget child) =>
     MaterialApp(home: Scaffold(body: child));

@@ -1,4 +1,4 @@
-# Gossiplog Frontend (코드명 ChatFlow)
+# Gossiplog Frontend (코드명 Gossiplog)
 
 Flutter Web + Android 크로스 플랫폼 프론트엔드.
 
@@ -68,10 +68,10 @@ flutter build web --release
 
 # 2. amd64 이미지 빌드 (Mac M1/M2에서 크로스 빌드)
 docker buildx build --platform linux/amd64 \
-  -t chatflow/frontend:prod --load .
+  -t gossiplog/frontend:prod --load .
 
 # 3. 저장 & 전송
-docker save chatflow/frontend:prod | gzip > /tmp/frontend.tar.gz
+docker save gossiplog/frontend:prod | gzip > /tmp/frontend.tar.gz
 scp -i ~/web-app-key.pem /tmp/frontend.tar.gz ubuntu@43.201.22.86:~/
 ```
 

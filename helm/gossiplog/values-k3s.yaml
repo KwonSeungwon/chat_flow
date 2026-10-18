@@ -1,0 +1,102 @@
+# K3s 단일노드 배포: 최소 리소스, GHCR 이미지
+# 이미지는 develop-build.yml이 GHCR로 push (ghcr.io/kwonseungwon/gossiplog/<svc>:sha-<full>).
+# K3s 노드 containerd가 익명 pull 가능(패키지 public).
+# (직전엔 docker.io/gossiplog:latest pullPolicy:Never 레거시 로컬 import 방식이었음.)
+#
+# ⚠️ 태그는 **서비스별로** 핀한다(아래 각 서비스의 image.tag).
+# 실제 운영은 `kubectl set image`로 서비스 단위 배포를 해왔기 때문에 fleet이 한 sha로
+# 정렬돼 있지 않다. global.image.tag 하나로 뭉뚱그리면 다음 `helm upgrade`가
+# 배포한 적 없는 백엔드 빌드까지 한꺼번에 밀어올린다.
+# **서비스를 배포하면 그 서비스의 image.tag를 여기에 반영할 것.**
+global:
+  namespace: gossiplog
+  image:
+    registry: ghcr.io
+    repository: kwonseungwon/gossiplog
+    pullPolicy: IfNotPresent
+    # 아래 3개 서비스가 전부 자기 tag를 지정하므로 이 값은 렌더되지 않는다(.helmignore 전제).
+    # 일부러 pull 불가능한 센티널을 둔다 — 어떤 서비스의 image.tag가 실수로 빠지면
+    # 그 즉시 ImagePullBackOff로 시끄럽게 실패해야 하기 때문이다.
+    # 실제 sha를 폴백으로 두면 태그가 빠진 서비스가 조용히 옛 빌드로 배포되는데,
+    # 그게 바로 이 파일이 막으려는 사고다. 지우는 것도 답이 아니다 —
+    # values.yaml의 global.image.tag가 "latest"라 조용히 그걸 물려받는다.
+    tag: "MUST-PIN-PER-SERVICE"
+  imagePullSecrets: []
+
+  externalSecrets:
+    postgresql:
+      secretName: gossiplog-postgresql-secret
+    valkey:
+      secretName: gossiplog-valkey-secret
+    jwt:
+      secretName: gossiplog-jwt-secret
+
+  springProfile: prod
+
+gateway-service:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: gateway-service
+    # 2026-07-22 FCM 알림 정리 배포
+    tag: "sha-5f6314592053eaf43a83f494a1874ba0bc4f6a2f"
+  service:
+    port: 8000
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  hpa:
+    enabled: false
+
+chat-service:
+  # 위키 던전 문제 검수 관리자 (users.user_id, 쉼표 구분): 땅콩, wiki-quiz-bot(업로드 자동화)
+  gameAdminUserIds: "872af00b-7b62-41ea-be06-dc0b08db5203,a3e60e40-5353-41f0-ae63-d8e85951d626"
+  enabled: true
+  replicaCount: 1
+  image:
+    name: chat-service
+    # 2026-07-28 배포
+    tag: "sha-5f6314592053eaf43a83f494a1874ba0bc4f6a2f"
+  service:
+    port: 8080
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: 100m
+      memory: 320Mi
+    limits:
+      cpu: 500m
+      memory: 640Mi
+  hpa:
+    enabled: false
+  fileStorage:
+    size: 5Gi
+    storageClass: local-path
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: frontend
+    # 2026-07-29 회원가입 아바타 envelope 파싱 핫픽스
+    tag: "sha-f1535bdc3580560d2b77f44650ce8f967894b064"
+  service:
+    port: 80
+    type: ClusterIP
+    # Cloudflare 터널이 app.gossiplog.com을 이 IP로 보낸다. 바꾸면 터널 설정도 바꿔야 한다.
+    clusterIP: 10.43.4.13
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  hpa:
+    enabled: false
+  gatewayServicePort: 8000

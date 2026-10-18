@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/chat_messages_list.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/features/chat/widgets/chat_messages_list.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 ChatMessage _msg(String id, String ts) => ChatMessage(
       messageId: id,

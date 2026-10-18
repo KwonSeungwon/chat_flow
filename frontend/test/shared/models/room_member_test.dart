@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/models/room_member.dart';
-import 'package:chatflow/shared/models/room_role.dart';
+import 'package:gossiplog/shared/models/room_member.dart';
+import 'package:gossiplog/shared/models/room_role.dart';
 
 void main() {
   group('RoomRole', () {

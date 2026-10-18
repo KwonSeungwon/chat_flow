@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ChatFlow K3s 배포 스크립트
+# Gossiplog K3s 배포 스크립트
 # 사용법: ./scripts/deploy-k3s.sh [step]
 # Steps: infra, secrets, all (= infra + secrets)
 #
 # 이미지 배포는 GH Actions "Deploy to K3s (manual)" (deploy-k3s.yml)로 한다.
-# Helm 배포는 helm/chatflow + values-k3s.yaml 기준으로 수동 실행한다.
+# Helm 배포는 helm/gossiplog + values-k3s.yaml 기준으로 수동 실행한다.
 #
 # 필수 환경 변수 (scripts/.env.deploy 또는 환경에서 주입):
 #   DEPLOY_DB_PASSWORD, DEPLOY_JWT_SECRET, DEPLOY_GATEWAY_SECRET
@@ -15,7 +15,7 @@ set -euo pipefail
 
 K3S_HOST="node.gossiplog.com"
 K3S_USER="ksw"
-NAMESPACE="chatflow"
+NAMESPACE="gossiplog"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # .env.deploy 파일이 있으면 소스 (gitignored)
@@ -70,17 +70,17 @@ create_secret_if_absent() {
 
 step_secrets() {
   echo "=== Step 2: Create Secrets (skip existing) ==="
-  create_secret_if_absent chatflow-postgresql-secret \
+  create_secret_if_absent gossiplog-postgresql-secret \
     "--from-literal=DB_HOST=postgresql --from-literal=DB_PORT=5432 \
      --from-literal=DB_NAME=chatflow --from-literal=DB_USERNAME=chatflow \
      --from-literal=DB_PASSWORD='$DEPLOY_DB_PASSWORD'"
   # 비면 무작위 생성 (빈 값이면 valkey --requirepass가 기동 실패한다)
   local valkey_password="${DEPLOY_VALKEY_PASSWORD:-$(openssl rand -hex 24)}"
-  create_secret_if_absent chatflow-valkey-secret \
+  create_secret_if_absent gossiplog-valkey-secret \
     "--from-literal=VALKEY_HOST=valkey --from-literal=VALKEY_PORT=6379 --from-literal=VALKEY_PASSWORD='$valkey_password'"
-  create_secret_if_absent chatflow-jwt-secret \
+  create_secret_if_absent gossiplog-jwt-secret \
     "--from-literal=JWT_SECRET='$DEPLOY_JWT_SECRET'"
-  create_secret_if_absent chatflow-gateway-internal-secret \
+  create_secret_if_absent gossiplog-gateway-internal-secret \
     "--from-literal=GATEWAY_INTERNAL_SECRET='$DEPLOY_GATEWAY_SECRET'"
   kc "get secrets -n $NAMESPACE"
 }

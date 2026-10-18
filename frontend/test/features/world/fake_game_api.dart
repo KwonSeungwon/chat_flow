@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:chatflow/features/world/state/game_api.dart';
-import 'package:chatflow/features/world/state/game_models.dart';
+import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 
 Encounter fakeEncounter(int seq, {bool boss = false}) => Encounter(
       seq: seq,

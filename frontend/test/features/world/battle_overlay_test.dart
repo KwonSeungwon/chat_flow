@@ -1,5 +1,5 @@
-import 'package:chatflow/features/world/battle/battle_overlay.dart';
-import 'package:chatflow/features/world/state/game_models.dart';
+import 'package:gossiplog/features/world/battle/battle_overlay.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -5,9 +5,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
-import 'package:chatflow/features/profile/profile_provider.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
+import 'package:gossiplog/features/profile/profile_provider.dart';
 
 /// 로그인은 userId=요청 username, /api/users/me는 호출 시점의 로그인 사용자 이름을 돌려준다.
 class _Adapter implements HttpClientAdapter {

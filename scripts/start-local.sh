@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ChatFlow Local Environment Startup Script
+# Gossiplog Local Environment Startup Script
 
 set -e
 
@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo -e "${CYAN}🚀 Starting ChatFlow Local Development Environment${NC}"
+echo -e "${CYAN}🚀 Starting Gossiplog Local Development Environment${NC}"
 echo ""
 
 # 환경변수 설정
@@ -42,7 +42,7 @@ sleep 5
 echo -e "${YELLOW}🎨 Frontend: cd frontend && flutter run -d chrome${NC}"
 
 echo ""
-echo -e "${GREEN}✅ ChatFlow Local Environment Started Successfully!${NC}"
+echo -e "${GREEN}✅ Gossiplog Local Environment Started Successfully!${NC}"
 echo ""
 echo -e "${CYAN}🌐 Access URLs:${NC}"
 echo -e "  API:       http://localhost:8000"

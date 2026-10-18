@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/constants/storage_keys.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
+import 'package:gossiplog/core/constants/storage_keys.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
 
 class _Adapter implements HttpClientAdapter {
   @override

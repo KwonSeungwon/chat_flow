@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/models/scheduled_message.dart';
+import 'package:gossiplog/shared/models/scheduled_message.dart';
 
 void main() {
   group('ScheduledMessage.fromJson', () {

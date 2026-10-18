@@ -26,7 +26,7 @@ spring:
 
   # H2 Database for quick local development
   datasource:
-    url: jdbc:h2:mem:chatflow_local
+    url: jdbc:h2:mem:gossiplog_local
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -75,11 +75,11 @@ management:
 
 logging:
   level:
-    com.chatflow: DEBUG
+    com.gossiplog: DEBUG
     org.springframework.web.socket: DEBUG
     org.hibernate: DEBUG
 
-chatflow:
+gossiplog:
   allowed-origins: http://localhost:3000,http://localhost:8000
   frontend:
     base-url: http://localhost:8000
@@ -87,7 +87,7 @@ chatflow:
 # Must equal the gateway's jwt.secret — chat-service validates the STOMP
 # CONNECT "Authorization: Bearer <jwt>" header with it.
 jwt:
-  secret: chatflow-local-jwt-secret-key-must-be-at-least-32-bytes-long
+  secret: gossiplog-local-jwt-secret-key-must-be-at-least-32-bytes-long
 
 # Must equal the gateway's GATEWAY_INTERNAL_SECRET. WS handshakes and
 # X-User-Id REST auth are rejected (fail-closed) without a matching value.

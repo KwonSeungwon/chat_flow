@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:chatflow/features/world/state/game_api.dart';
-import 'package:chatflow/features/world/state/run_notifier.dart';
+import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/run_notifier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_game_api.dart';

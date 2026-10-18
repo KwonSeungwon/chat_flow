@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
-import 'package:chatflow/core/network/app_stomp_service.dart';
+import 'package:gossiplog/core/network/app_stomp_service.dart';
 
 import 'fake_stomp_client.dart';
 

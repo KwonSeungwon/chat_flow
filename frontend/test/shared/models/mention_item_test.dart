@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/shared/models/mention_item.dart';
+import 'package:gossiplog/shared/models/mention_item.dart';
 
 void main() {
   group('MentionItem.fromJson', () {

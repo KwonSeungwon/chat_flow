@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/core/network/stomp_service.dart';
-import 'package:chatflow/features/chat/helpers/offline_message_queue.dart';
-import 'package:chatflow/features/chat/internal/message_send_helper.dart';
-import 'package:chatflow/features/chat/internal/stomp_message_dispatcher.dart';
-import 'package:chatflow/features/chat/state/chat_messages_state.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/core/network/stomp_service.dart';
+import 'package:gossiplog/features/chat/helpers/offline_message_queue.dart';
+import 'package:gossiplog/features/chat/internal/message_send_helper.dart';
+import 'package:gossiplog/features/chat/internal/stomp_message_dispatcher.dart';
+import 'package:gossiplog/features/chat/state/chat_messages_state.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 class _FakeStomp extends StompService {
   bool connected = false;

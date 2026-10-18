@@ -21,7 +21,7 @@ env:
   REGISTRY: ghcr.io
   # GHCR requires lowercase repo paths. `github.repository_owner` keeps
   # the original casing (KwonSeungwon), so the prefix is hardcoded.
-  IMAGE_PREFIX: ghcr.io/kwonseungwon/chatflow
+  IMAGE_PREFIX: ghcr.io/kwonseungwon/gossiplog
 
 permissions:
   contents: read

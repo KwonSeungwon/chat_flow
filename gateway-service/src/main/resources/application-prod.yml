@@ -225,7 +225,7 @@ jwt:
 logging:
   level:
     org.springframework.cloud.gateway: WARN
-    com.chatflow: INFO
+    com.gossiplog: INFO
     org.springframework.cloud.gateway.filter.ratelimit: INFO
   pattern:
     file: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"

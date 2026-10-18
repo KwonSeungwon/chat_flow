@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/constants/storage_keys.dart';
-import 'package:chatflow/core/services/fcm_service.dart';
-import 'package:chatflow/features/chat/room_keywords_provider.dart';
+import 'package:gossiplog/core/constants/storage_keys.dart';
+import 'package:gossiplog/core/services/fcm_service.dart';
+import 'package:gossiplog/features/chat/room_keywords_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +35,7 @@ void main() {
 
   test('keywordMatch_noUser_noFilter', () async {
     FlutterSecureStorage.setMockInitialValues({
-      'chatflow.roomKeywords': jsonEncode({
+      'gossiplog.roomKeywords': jsonEncode({
         'room-1': ['lunch'],
       }),
     });

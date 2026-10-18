@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/utils/server_time.dart';
+import 'package:gossiplog/core/utils/server_time.dart';
 
 void main() {
   group('parseServerDateTime', () {

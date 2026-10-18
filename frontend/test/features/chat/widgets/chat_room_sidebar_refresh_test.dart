@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/chat_rooms_provider.dart';
-import 'package:chatflow/shared/models/chat_room.dart';
+import 'package:gossiplog/features/chat/chat_rooms_provider.dart';
+import 'package:gossiplog/shared/models/chat_room.dart';
 
 // ---------------------------------------------------------------------------
 // A mock notifier that tracks fetchRooms() invocations

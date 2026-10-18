@@ -1,0 +1,204 @@
+package com.gossiplog.chat.controller;
+
+import com.gossiplog.chat.auth.AuthInterceptor;
+import com.gossiplog.chat.auth.AuthenticatedUserResolver;
+import com.gossiplog.chat.auth.TestAuthFilter;
+import com.gossiplog.chat.entity.ChatMessageEntity;
+import com.gossiplog.chat.exception.ForbiddenException;
+import com.gossiplog.chat.exception.GlobalExceptionHandler;
+import com.gossiplog.chat.mapper.ChatMessageResponseMapper;
+import com.gossiplog.chat.mapper.ChatMessageResponseMapperImpl;
+import com.gossiplog.chat.mapper.MessageEditHistoryMapper;
+import com.gossiplog.chat.repository.ChatMessageRepository;
+import com.gossiplog.chat.repository.MessageEditHistoryRepository;
+import com.gossiplog.chat.service.LinkPreviewService;
+import com.gossiplog.chat.service.message.MessageEditService;
+import com.gossiplog.chat.service.message.MessagePinService;
+import com.gossiplog.chat.service.message.MessageReactionService;
+import com.gossiplog.chat.service.message.MessageThreadService;
+import com.gossiplog.common.dto.ChatMessage;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Spy;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@ExtendWith(MockitoExtension.class)
+class MessageInteractionControllerThreadTest {
+
+    private MockMvc mockMvc;
+
+    @Mock private MessageEditService messageEditService;
+    @Mock private MessageReactionService messageReactionService;
+    @Mock private MessagePinService messagePinService;
+    @Mock private LinkPreviewService linkPreviewService;
+    @Mock private MessageThreadService messageThreadService;
+    @Mock private ChatMessageRepository chatMessageRepository;
+    @Mock private MessageEditHistoryRepository editHistoryRepository;
+    @Mock private MessageEditHistoryMapper messageEditHistoryMapper;
+    @Mock private RoomMembershipGuard membershipGuard;
+    @Spy private ChatMessageResponseMapper chatMessageResponseMapper = new ChatMessageResponseMapperImpl();
+
+    @InjectMocks
+    private MessageInteractionController controller;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+            .setCustomArgumentResolvers(new AuthenticatedUserResolver())
+                .addFilters(TestAuthFilter.fromUserIdHeader())
+            .addInterceptors(new AuthInterceptor(membershipGuard))
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+    }
+
+    @Test
+    void getReplies_returns_list_with_entity_only_fields() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        ChatMessageEntity reply = ChatMessageEntity.builder()
+            .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
+            .content("got it").type(ChatMessage.MessageType.CHAT.name())
+            .parentMessageId("p1").timestamp(LocalDateTime.now())
+            .reactions("{\"\\uD83D\\uDC4D\":[\"u9\"]}")
+            .edited(true)
+            .pinned(true)
+            .build();
+        when(messageThreadService.findReplies("room-1", "p1")).thenReturn(List.of(reply));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data[0].messageId").value("r1"))
+            .andExpect(jsonPath("$.data[0].parentMessageId").value("p1"))
+            .andExpect(jsonPath("$.data[0].reactions").exists())
+            .andExpect(jsonPath("$.data[0].edited").value(true))
+            .andExpect(jsonPath("$.data[0].pinned").value(true));
+    }
+
+    @Test
+    void getReplies_serializes_the_message_response_dto_not_the_entity() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        ChatMessageEntity reply = ChatMessageEntity.builder()
+            .messageId("r1").chatRoomId("room-1").userId("u1").username("alice")
+            .content("got it").type(ChatMessage.MessageType.CHAT.name())
+            .parentMessageId("p1").timestamp(LocalDateTime.now())
+            .build();
+        when(messageThreadService.findReplies("room-1", "p1")).thenReturn(List.of(reply));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].messageId").value("r1"))
+            .andExpect(jsonPath("$.data[0].username").value("alice"))
+            .andExpect(jsonPath("$.data[0].content").value("got it"))
+            .andExpect(jsonPath("$.data[0].type").value("CHAT"))
+            .andExpect(jsonPath("$.data[0].timestamp").exists())
+            .andExpect(jsonPath("$.data[0].deleted").value(false))
+            // entity-only persistence flag (Persistable#isNew) must not leak onto the wire
+            .andExpect(jsonPath("$.data[0].new").doesNotExist());
+    }
+
+    @Test
+    void getReplies_empty_returns_empty_list() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        when(messageThreadService.findReplies("room-1", "p1")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data").isArray())
+            .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void getReplies_returns_401_when_user_id_missing() throws Exception {
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies"))
+            .andExpect(status().isUnauthorized());
+        verify(messageThreadService, never()).findReplies(anyString(), anyString());
+    }
+
+    @Test
+    void getReplies_returns_403_when_not_room_member() throws Exception {
+        doThrow(new ForbiddenException("방 멤버가 아닙니다."))
+                .when(membershipGuard).requireMember("room-1", "u-outsider");
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/p1/replies")
+                .header("X-User-Id", "u-outsider"))
+            .andExpect(status().isForbidden());
+        verify(messageThreadService, never()).findReplies(anyString(), anyString());
+    }
+
+    // ── Edit-history cross-room ownership guard ───────────────────
+
+    @Test
+    void getEditHistory_returns_404_when_message_belongs_to_different_room() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+
+        // Message exists but belongs to room-2, not room-1
+        ChatMessageEntity foreignMessage = ChatMessageEntity.builder()
+            .messageId("msg-x").chatRoomId("room-2").userId("u2").username("bob")
+            .content("secret").type(ChatMessage.MessageType.CHAT.name())
+            .timestamp(LocalDateTime.now())
+            .build();
+        when(chatMessageRepository.findById("msg-x")).thenReturn(Optional.of(foreignMessage));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/msg-x/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        // Must NOT query edit history for a message in another room
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
+    }
+
+    @Test
+    void getEditHistory_returns_404_when_message_does_not_exist() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        when(chatMessageRepository.findById("no-such-msg")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/no-such-msg/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
+    }
+
+    @Test
+    void getEditHistory_returns_404_when_message_is_deleted() throws Exception {
+        doNothing().when(membershipGuard).requireMember("room-1", "u1");
+        ChatMessageEntity deleted = ChatMessageEntity.builder()
+            .messageId("msg-d").chatRoomId("room-1").userId("u2").username("bob")
+            .content("삭제된 메시지입니다.").type(ChatMessage.MessageType.CHAT.name())
+            .timestamp(LocalDateTime.now())
+            .build();
+        deleted.setDeleted(true);
+        when(chatMessageRepository.findById("msg-d")).thenReturn(Optional.of(deleted));
+
+        mockMvc.perform(get("/api/chat/rooms/room-1/messages/msg-d/edits")
+                .header("X-User-Id", "u1"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.success").value(false));
+
+        verify(editHistoryRepository, never()).findByMessageIdOrderByEditedAtDesc(anyString());
+    }
+}
