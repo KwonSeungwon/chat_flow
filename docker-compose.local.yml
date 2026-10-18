@@ -25,9 +25,9 @@ services:
     hostname: postgresql
     container_name: postgresql-local
     environment:
-      POSTGRES_DB: chatflow_local
-      POSTGRES_USER: chatflow
-      POSTGRES_PASSWORD: chatflow123
+      POSTGRES_DB: gossiplog_local
+      POSTGRES_USER: gossiplog
+      POSTGRES_PASSWORD: gossiplog123
     ports:
       - "5432:5432"
     volumes:
@@ -35,7 +35,7 @@ services:
     networks:
       - gossiplog-local
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatflow -d chatflow_local"]
+      test: ["CMD-SHELL", "pg_isready -U gossiplog -d gossiplog_local"]
       interval: 10s
       timeout: 5s
       retries: 5

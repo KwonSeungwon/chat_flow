@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ChatFlow 서비스 상태 체크 스크립트
+# Gossiplog 서비스 상태 체크 스크립트
 # 작성자: KwonSeungwon
 
 # 색상 정의
@@ -16,7 +16,7 @@ print_header() {
     echo -e "${CYAN}"
     cat << "EOF"
     ╔═══════════════════════════════════════════╗
-    ║              ChatFlow 📊                  ║
+    ║              Gossiplog 📊                  ║
     ║            서비스 상태 체크                ║
     ╚═══════════════════════════════════════════╝
 EOF

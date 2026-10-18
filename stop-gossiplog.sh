@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# ChatFlow 로컬 개발 환경 종료 스크립트
+# Gossiplog 로컬 개발 환경 종료 스크립트
 # 작성자: KwonSeungwon
-# 설명: 실행 중인 모든 ChatFlow 서비스를 안전하게 종료
+# 설명: 실행 중인 모든 Gossiplog 서비스를 안전하게 종료
 
 set -e
 
@@ -42,7 +42,7 @@ print_header() {
     echo -e "${RED}"
     cat << "EOF"
     ╔═══════════════════════════════════════════╗
-    ║              ChatFlow 🛑                  ║
+    ║              Gossiplog 🛑                  ║
     ║           서비스 종료 스크립트             ║
     ║                                           ║
     ║        모든 서비스를 안전하게 종료         ║
@@ -117,7 +117,7 @@ stop_docker_services() {
         local containers=$(docker ps -q --filter "name=valkey" --filter "name=postgresql" --filter "name=prometheus" --filter "name=grafana" 2>/dev/null || true)
         
         if [ -n "$containers" ]; then
-            log_info "남은 ChatFlow 컨테이너들 정리 중..."
+            log_info "남은 Gossiplog 컨테이너들 정리 중..."
             echo "$containers" | xargs docker stop 2>/dev/null || true
             echo "$containers" | xargs docker rm 2>/dev/null || true
         fi
@@ -160,7 +160,7 @@ cleanup_logs() {
 
 # 종료 확인
 confirm_shutdown() {
-    echo -e "${YELLOW}모든 ChatFlow 서비스를 종료하시겠습니까? (y/N): ${NC}"
+    echo -e "${YELLOW}모든 Gossiplog 서비스를 종료하시겠습니까? (y/N): ${NC}"
     read -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -176,7 +176,7 @@ check_final_status() {
     local remaining_processes=0
     
     # Java 프로세스 체크
-    local java_procs=$(pgrep -f "java.*chatflow" 2>/dev/null || true)
+    local java_procs=$(pgrep -f "java.*gossiplog" 2>/dev/null || true)
     if [ -n "$java_procs" ]; then
         log_warning "남은 Java 프로세스가 있습니다:"
         echo "$java_procs" | while read pid; do
@@ -195,12 +195,12 @@ check_final_status() {
     done
     
     if [ $remaining_processes -eq 0 ]; then
-        log_success "모든 ChatFlow 서비스가 완전히 종료되었습니다! ✅"
+        log_success "모든 Gossiplog 서비스가 완전히 종료되었습니다! ✅"
     else
         echo ""
         log_warning "일부 프로세스가 남아있을 수 있습니다."
         echo -e "${CYAN}수동으로 정리하려면:${NC}"
-        echo -e "${CYAN}  pkill -f chatflow${NC}"
+        echo -e "${CYAN}  pkill -f gossiplog${NC}"
         echo -e "${CYAN}  pkill -f 'gradle.*bootRun'${NC}"
     fi
 }
@@ -208,7 +208,7 @@ check_final_status() {
 # 종료 완료 메시지
 print_completion() {
     echo ""
-    echo -e "${GREEN}🏁 ChatFlow 종료 완료! 🏁${NC}"
+    echo -e "${GREEN}🏁 Gossiplog 종료 완료! 🏁${NC}"
     echo ""
     echo -e "${WHITE}=== 📊 종료된 서비스 ===${NC}"
     echo -e "${CYAN}🚪 Gateway Service${NC}        (Port: 8000)"
@@ -219,7 +219,7 @@ print_completion() {
     echo -e "${GREEN}🟢 PostgreSQL${NC}             (Port: 5432)"
     echo -e "${YELLOW}📊 Prometheus + Grafana${NC}    (Port: 9090, 3001)"
     echo ""
-    echo -e "${WHITE}다시 시작하려면: ${GREEN}./start-chatflow.sh${NC}"
+    echo -e "${WHITE}다시 시작하려면: ${GREEN}./start-gossiplog.sh${NC}"
     echo ""
 }
 
@@ -248,13 +248,13 @@ main() {
 
 # 도움말
 show_help() {
-    echo "ChatFlow 종료 스크립트"
+    echo "Gossiplog 종료 스크립트"
     echo ""
     echo "사용법:"
-    echo "  ./stop-chatflow.sh          일반 종료 (확인 메시지)"
-    echo "  ./stop-chatflow.sh --force  강제 종료 (확인 없이)"
-    echo "  ./stop-chatflow.sh -f       강제 종료 (축약형)"
-    echo "  ./stop-chatflow.sh --help   도움말 표시"
+    echo "  ./stop-gossiplog.sh          일반 종료 (확인 메시지)"
+    echo "  ./stop-gossiplog.sh --force  강제 종료 (확인 없이)"
+    echo "  ./stop-gossiplog.sh -f       강제 종료 (축약형)"
+    echo "  ./stop-gossiplog.sh --help   도움말 표시"
     echo ""
 }
 

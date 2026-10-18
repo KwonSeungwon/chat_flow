@@ -536,7 +536,7 @@ flutter pub get
 | 식별자 | 이유 |
 | --- | --- |
 | Android `applicationId`/`namespace` `ai.chatflow.app`, Firebase(`google-services.json`) | 바꾸면 다른 앱이 되어 재설치와 Firebase 재등록이 필요하다 |
-| PostgreSQL 데이터베이스·사용자 이름 `chatflow` (로컬 compose 포함) | Secret 값이라 유지한다. Secret 이름만 `gossiplog-*`로 바꿨다 |
+| 운영 PostgreSQL 데이터베이스·사용자 이름 `chatflow` | Secret 값이라 유지한다. Secret 이름만 `gossiplog-*`로 바꿨다 |
 | GitHub 리포 이름 `chat_flow`, 로컬 디렉터리 | 리포 이전이 필요해 범위 밖이다 |
 | `.claude/` 하네스 파일 | personal-harness-kit이 렌더하는 파일이다 |
 | `docs/superpowers/**` | 과거 계획 기록이다 |
