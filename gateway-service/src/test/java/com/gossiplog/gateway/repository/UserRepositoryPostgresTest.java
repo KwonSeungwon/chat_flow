@@ -31,7 +31,7 @@ class UserRepositoryPostgresTest {
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("chatflow").withUsername("chatflow").withPassword("chatflow");
+            .withDatabaseName("gossiplog").withUsername("gossiplog").withPassword("gossiplog");
 
     private static DatabaseClient client;
     private static UserRepository repo;
@@ -39,7 +39,7 @@ class UserRepositoryPostgresTest {
     @BeforeAll
     static void setUp() throws Exception {
         ConnectionFactory cf = ConnectionFactories.get(String.format(
-                "r2dbc:postgresql://chatflow:chatflow@%s:%d/chatflow",
+                "r2dbc:postgresql://gossiplog:gossiplog@%s:%d/gossiplog",
                 POSTGRES.getHost(), POSTGRES.getMappedPort(PostgreSQLContainer.POSTGRESQL_PORT)));
         client = DatabaseClient.create(cf);
         String schema = new String(new ClassPathResource("schema.sql").getInputStream().readAllBytes(),

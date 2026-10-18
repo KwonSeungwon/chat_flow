@@ -243,7 +243,7 @@ class FlywayMigrationTest {
      */
     @Test
     void v15_healsLegacyThreeValueConstraintOnDriftedDatabase() throws SQLException {
-        final String driftedDb = "chatflow_drifted";
+        final String driftedDb = "gossiplog_drifted";
 
         try (Connection conn = connect(POSTGRES.getDatabaseName());
              Statement stmt = conn.createStatement()) {
@@ -439,7 +439,7 @@ class FlywayMigrationTest {
      */
     @Test
     void v20_normalizesHandoffRoomsAndDeletesMedicalCards() throws SQLException {
-        final String db = "chatflow_v20";
+        final String db = "gossiplog_v20";
         try (Connection conn = connect(POSTGRES.getDatabaseName());
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE DATABASE " + db);
@@ -542,7 +542,7 @@ class FlywayMigrationTest {
      */
     @Test
     void v21_dropsMedicalColumnsAndRenormalizes() throws SQLException {
-        final String db = "chatflow_v21";
+        final String db = "gossiplog_v21";
         try (Connection conn = connect(POSTGRES.getDatabaseName());
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE DATABASE " + db);
@@ -640,7 +640,7 @@ class FlywayMigrationTest {
 
     @Test
     void v21_succeedsWhenUsersHasNoRoleColumn() throws SQLException {
-        final String db = "chatflow_v21_norole";
+        final String db = "gossiplog_v21_norole";
         try (Connection conn = connect(POSTGRES.getDatabaseName());
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE DATABASE " + db);
