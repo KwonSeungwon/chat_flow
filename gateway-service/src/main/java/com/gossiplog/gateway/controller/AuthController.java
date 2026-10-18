@@ -1,0 +1,119 @@
+package com.gossiplog.gateway.controller;
+
+import com.gossiplog.gateway.security.AuthService;
+import com.gossiplog.gateway.security.AuthService.AuthRequest;
+import com.gossiplog.gateway.security.AuthService.AuthResponse;
+import com.gossiplog.gateway.security.JwtUtil;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.bind.annotation.*;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
+
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthService authService;
+    private final JwtUtil jwtUtil;
+
+    @PostMapping("/register")
+    public Mono<ResponseEntity<Object>> register(@RequestBody AuthRequest request) {
+        return authService.register(request)
+                .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))))
+                .onErrorResume(ResponseStatusException.class,
+                        e -> Mono.just(ResponseEntity.status(e.getStatusCode())
+                                .body(Map.of("error", String.valueOf(e.getReason())))));
+    }
+
+    @PostMapping("/login")
+    public Mono<ResponseEntity<AuthResponse>> login(@RequestBody AuthRequest request) {
+        return authService.login(request)
+                .map(ResponseEntity::ok)
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> Mono.just(ResponseEntity.status(401).build()));
+    }
+
+    @PutMapping("/profile")
+    public Mono<ResponseEntity<Map<String, String>>> updateProfile(
+            @RequestBody Map<String, String> body, ServerHttpRequest request) {
+        // Identity comes from JwtAuthenticationWebFilter-injected headers (blacklist-gated)
+        String username = getAuthenticatedUsername(request);
+        if (username == null) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+        String profileImageUrl = body.get("profileImageUrl");
+        if (profileImageUrl == null) {
+            return Mono.just(ResponseEntity.badRequest().build());
+        }
+        return authService.updateProfileImage(username, profileImageUrl)
+                .then(Mono.just(ResponseEntity.ok(Map.of("profileImageUrl", profileImageUrl))))
+                .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
+    }
+
+    @PutMapping("/password")
+    public Mono<ResponseEntity<Map<String, String>>> changePassword(
+            @RequestBody Map<String, String> body, ServerHttpRequest request) {
+        // Identity comes from JwtAuthenticationWebFilter-injected headers (blacklist-gated)
+        String username = getAuthenticatedUsername(request);
+        if (username == null) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+        String currentPassword = body.get("currentPassword");
+        String newPassword = body.get("newPassword");
+        if (currentPassword == null || newPassword == null) {
+            return Mono.just(ResponseEntity.badRequest().build());
+        }
+        return authService.changePassword(username, currentPassword, newPassword, currentJti(request))
+                // token: 새 세션 토큰. 현재 토큰은 블랙리스트되므로 클라이언트는 이 값으로 교체해야 한다.
+                .map(token -> ResponseEntity.ok(Map.of("message", "비밀번호가 변경되었습니다.", "token", token)))
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> Mono.just(ResponseEntity.badRequest().body(Map.of("error", e.getMessage()))));
+    }
+
+    /**
+     * Read the authenticated username from filter-injected X-Username header.
+     * The header is URL-encoded by JwtAuthenticationWebFilter and only present
+     * for authenticated, non-blacklisted requests (client-supplied copies are sanitized).
+     */
+    private String getAuthenticatedUsername(ServerHttpRequest request) {
+        String encoded = request.getHeaders().getFirst("X-Username");
+        if (encoded == null || encoded.isBlank()) {
+            return null;
+        }
+        return URLDecoder.decode(encoded, StandardCharsets.UTF_8);
+    }
+
+    /** Authorization 헤더의 토큰 jti. 헤더가 없거나 파싱이 안 되면 null (JWT 필터가 이미 검증한 뒤라 정상 경로에선 항상 있다). */
+    private String currentJti(ServerHttpRequest request) {
+        String bearer = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearer == null || !bearer.startsWith("Bearer ")) {
+            return null;
+        }
+        return jwtUtil.tryParse(bearer.substring(7)).map(Claims::getId).orElse(null);
+    }
+
+    @PostMapping("/logout")
+    public Mono<ResponseEntity<Void>> logout(ServerHttpRequest request) {
+        String bearerToken = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (bearerToken == null || !bearerToken.startsWith("Bearer ")) {
+            return Mono.just(ResponseEntity.badRequest().build());
+        }
+        String token = bearerToken.substring(7);
+        return authService.logout(token)
+                .then(Mono.just(ResponseEntity.ok().<Void>build()))
+                .onErrorResume(e -> e instanceof JwtException || e instanceof IllegalArgumentException,
+                        e -> Mono.just(ResponseEntity.ok().<Void>build())) // 만료·위조 토큰: 멱등 no-op
+                .onErrorResume(e -> Mono.just(ResponseEntity.badRequest().build()));
+    }
+}

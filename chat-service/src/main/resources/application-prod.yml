@@ -65,7 +65,7 @@ spring:
           min-idle: 1
           max-wait: 2000ms
 
-chatflow:
+gossiplog:
   allowed-origins: "https://app.gossiplog.com,https://gossiplog.com"
   frontend:
     base-url: https://app.gossiplog.com
@@ -99,7 +99,7 @@ management:
 
 logging:
   level:
-    com.chatflow: INFO
+    com.gossiplog: INFO
     org.springframework.web.socket: WARN
     org.hibernate: WARN
   pattern:
