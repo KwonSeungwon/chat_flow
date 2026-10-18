@@ -1,8 +1,7 @@
 # Gossiplog - 채팅 + 위키 던전 🚀
 
 > **현대적인 마이크로서비스 아키텍처**로 구축된 캐주얼 채팅 앱 + 학습 게임 "위키 던전"  
-> WebSocket/STOMP 실시간 통신, 크로스 플랫폼 지원  
-> 내부 코드명과 패키지는 `chatflow`를 유지한다.
+> WebSocket/STOMP 실시간 통신, 크로스 플랫폼 지원
 
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.java.net/projects/jdk/21/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -32,7 +31,7 @@
 graph TB
     subgraph "Frontend Layer"
         WEB[Flutter Web App<br/>Port: 80 / nginx]
-        APK[Android APK<br/>chatflow-app.apk]
+        APK[Android APK<br/>gossiplog-app.apk]
     end
     
     subgraph "API Layer"
@@ -159,7 +158,7 @@ flutter run -d chrome
 cd frontend
 flutter build apk --release
 # 빌드 결과: build/app/outputs/flutter-apk/app-release.apk
-# 또는 웹에서 /chatflow-app.apk 경로로 다운로드 가능 (현재 3.0.0 "Gossiplog")
+# 또는 웹에서 /gossiplog-app.apk 경로로 다운로드 가능 (현재 3.0.0 "Gossiplog")
 ```
 
 ## 📦 모듈 구조
@@ -199,12 +198,12 @@ chat_flow/
 │   │       ├── apk_downloader_web.dart  # dart:html AnchorElement
 │   │       └── apk_downloader_stub.dart # no-op (non-web)
 │   ├── android/app/build.gradle.kts  # minSdk=23 (flutter_secure_storage 요구)
-│   ├── web/chatflow-app.apk          # 배포용 APK (nginx /chatflow-app.apk)
+│   ├── web/gossiplog-app.apk          # 배포용 APK (nginx /gossiplog-app.apk)
 │   ├── nginx.conf                    # 리버스 프록시 + 캐시 정책
 │   ├── Dockerfile                    # nginx:alpine 컨테이너
 │   └── pubspec.yaml                  # Flutter 의존성
 ├── 🏗️ common/                      # 공통 라이브러리
-│   └── src/main/java/com/chatflow/common/
+│   └── src/main/java/com/gossiplog/common/
 │       ├── dto/
 │       │   ├── BaseMessage.java       # 메시지 기본 클래스
 │       │   ├── ChatMessage.java       # 채팅 메시지 DTO
@@ -213,12 +212,12 @@ chat_flow/
 │       └── exception/
 │           └── BaseExceptionHandler.java  # 공통 예외 핸들러
 ├── 💬 chat-service/                # 실시간 채팅 서비스 (Port: 8080)
-│   └── src/main/java/com/chatflow/chat/
+│   └── src/main/java/com/gossiplog/chat/
 │       ├── ChatController.java    # WebSocket STOMP 핸들러
 │       ├── ChatService.java       # 메시지 처리 + 영속화
 │       └── WebSocketConfig.java   # WebSocket/STOMP 설정
 ├── 🚪 gateway-service/             # API 게이트웨이 (Port: 8000)
-│   └── src/main/java/com/chatflow/gateway/
+│   └── src/main/java/com/gossiplog/gateway/
 │       ├── security/
 │       │   ├── AuthService.java              # 인증 (회원가입/로그인/로그아웃)
 │       │   ├── JwtUtil.java                  # JWT 토큰 생성/검증
@@ -227,7 +226,7 @@ chat_flow/
 │       └── config/
 │           ├── SecurityConfig.java           # Spring Security 설정
 │           └── CorsConfig.java               # CORS 설정
-├── ⎈ helm/chatflow/               # Helm umbrella chart
+├── ⎈ helm/gossiplog/               # Helm umbrella chart
 │   ├── Chart.yaml                 # 차트 메타데이터
 │   ├── values.yaml                # 공통 설정값
 │   └── charts/                    # 서비스별 subchart (3개)
@@ -274,7 +273,7 @@ spring:
     
 logging:
   level:
-    com.chatflow: INFO
+    com.gossiplog: INFO
     root: WARN
 ```
 
@@ -285,7 +284,7 @@ logging:
 |--------|-----|------|
 | **웹 앱 (로컬)** | chrome (`flutter run -d chrome`) | Flutter Web 개발 서버 |
 | **웹 앱 (프로덕션)** | https://app.gossiplog.com | K3s + Cloudflare Tunnel |
-| **Android APK** | https://app.gossiplog.com/chatflow-app.apk | 웹 UI 다운로드 버튼 |
+| **Android APK** | https://app.gossiplog.com/gossiplog-app.apk | 웹 UI 다운로드 버튼 |
 | **API Gateway** | http://localhost:8000 | 통합 API 엔드포인트 |
 | **WebSocket** | ws://localhost:8000/ws-native | STOMP 실시간 통신 |
 
@@ -349,14 +348,14 @@ GET /actuator/prometheus
 ```bash
 # 백엔드 서비스들 (amd64 크로스 빌드)
 docker buildx build --platform linux/amd64 \
-  --build-arg SERVICE_NAME=chat-service -t chatflow/chat-service:prod --load .
+  --build-arg SERVICE_NAME=chat-service -t gossiplog/chat-service:prod --load .
 docker buildx build --platform linux/amd64 \
-  --build-arg SERVICE_NAME=gateway-service -t chatflow/gateway-service:prod --load .
+  --build-arg SERVICE_NAME=gateway-service -t gossiplog/gateway-service:prod --load .
 
 # 프론트엔드 (Flutter 빌드 후 Docker)
 cd frontend
 flutter build web --release
-docker buildx build --platform linux/amd64 -t chatflow/frontend:prod --load .
+docker buildx build --platform linux/amd64 -t gossiplog/frontend:prod --load .
 cd ..
 ```
 
@@ -364,7 +363,7 @@ cd ..
 
 ```bash
 # 1. 인프라 배포 (PostgreSQL, Valkey)
-kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
+kubectl apply -f k8s/infra/k3s-infra.yaml -n gossiplog
 
 # 2. Secrets 생성 (DEPLOY_* env 4종 필요, 이미 있는 Secret은 건너뜀)
 ./scripts/deploy-k3s.sh secrets
@@ -373,11 +372,11 @@ kubectl apply -f k8s/infra/k3s-infra.yaml -n chatflow
 #    GitHub Actions "Deploy to K3s (manual)" (deploy-k3s.yml)로 롤아웃
 
 # 4. Helm 배포 (values-k3s.yaml의 서비스별 태그를 실제 sha로 고정)
-helm upgrade --install chatflow helm/chatflow \
-  -n chatflow -f helm/chatflow/values-k3s.yaml
+helm upgrade --install gossiplog helm/gossiplog \
+  -n gossiplog -f helm/gossiplog/values-k3s.yaml
 
 # 5. 상태 확인
-kubectl get pods -n chatflow
+kubectl get pods -n gossiplog
 ```
 
 > **K3s 특이사항**:
@@ -388,9 +387,9 @@ kubectl get pods -n chatflow
 
 ```bash
 # 차트 검증 & 배포
-helm lint helm/chatflow
-helm template chatflow helm/chatflow -f helm/chatflow/values-k3s.yaml
-helm upgrade chatflow helm/chatflow -n chatflow -f helm/chatflow/values-k3s.yaml
+helm lint helm/gossiplog
+helm template gossiplog helm/gossiplog -f helm/gossiplog/values-k3s.yaml
+helm upgrade gossiplog helm/gossiplog -n gossiplog -f helm/gossiplog/values-k3s.yaml
 ```
 
 > Helm umbrella chart에 3개 subchart(gateway, chat, frontend) 포함.
@@ -528,6 +527,19 @@ flutter pub get
 - **Spring Framework** - 강력한 백엔드 프레임워크
 - **Flutter** - 크로스 플랫폼 UI 프레임워크  
 - **Valkey** - Redis 호환 고성능 인메모리 DB
+
+
+## Internal identifiers
+
+이름을 `gossiplog`로 바꾸지 않고 `chatflow`로 남긴 식별자와 이유.
+
+| 식별자 | 이유 |
+| --- | --- |
+| Android `applicationId`/`namespace` `ai.chatflow.app`, Firebase(`google-services.json`) | 바꾸면 다른 앱이 되어 재설치와 Firebase 재등록이 필요하다 |
+| PostgreSQL 데이터베이스·사용자 이름 `chatflow` (로컬 compose 포함) | Secret 값이라 유지한다. Secret 이름만 `gossiplog-*`로 바꿨다 |
+| GitHub 리포 이름 `chat_flow`, 로컬 디렉터리 | 리포 이전이 필요해 범위 밖이다 |
+| `.claude/` 하네스 파일 | personal-harness-kit이 렌더하는 파일이다 |
+| `docs/superpowers/**` | 과거 계획 기록이다 |
 
 ---
 

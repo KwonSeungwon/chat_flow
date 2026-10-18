@@ -1,7 +1,7 @@
 # K3s 단일노드 배포: 최소 리소스, GHCR 이미지
-# 이미지는 develop-build.yml이 GHCR로 push (ghcr.io/kwonseungwon/chatflow/<svc>:sha-<full>).
+# 이미지는 develop-build.yml이 GHCR로 push (ghcr.io/kwonseungwon/gossiplog/<svc>:sha-<full>).
 # K3s 노드 containerd가 익명 pull 가능(패키지 public).
-# (직전엔 docker.io/chatflow:latest pullPolicy:Never 레거시 로컬 import 방식이었음.)
+# (직전엔 docker.io/gossiplog:latest pullPolicy:Never 레거시 로컬 import 방식이었음.)
 #
 # ⚠️ 태그는 **서비스별로** 핀한다(아래 각 서비스의 image.tag).
 # 실제 운영은 `kubectl set image`로 서비스 단위 배포를 해왔기 때문에 fleet이 한 sha로
@@ -9,10 +9,10 @@
 # 배포한 적 없는 백엔드 빌드까지 한꺼번에 밀어올린다.
 # **서비스를 배포하면 그 서비스의 image.tag를 여기에 반영할 것.**
 global:
-  namespace: chatflow
+  namespace: gossiplog
   image:
     registry: ghcr.io
-    repository: kwonseungwon/chatflow
+    repository: kwonseungwon/gossiplog
     pullPolicy: IfNotPresent
     # 아래 3개 서비스가 전부 자기 tag를 지정하므로 이 값은 렌더되지 않는다(.helmignore 전제).
     # 일부러 pull 불가능한 센티널을 둔다 — 어떤 서비스의 image.tag가 실수로 빠지면
@@ -25,11 +25,11 @@ global:
 
   externalSecrets:
     postgresql:
-      secretName: chatflow-postgresql-secret
+      secretName: gossiplog-postgresql-secret
     valkey:
-      secretName: chatflow-valkey-secret
+      secretName: gossiplog-valkey-secret
     jwt:
-      secretName: chatflow-jwt-secret
+      secretName: gossiplog-jwt-secret
 
   springProfile: prod
 
@@ -88,6 +88,8 @@ frontend:
   service:
     port: 80
     type: ClusterIP
+    # Cloudflare 터널이 app.gossiplog.com을 이 IP로 보낸다. 바꾸면 터널 설정도 바꿔야 한다.
+    clusterIP: 10.43.4.13
   resources:
     requests:
       cpu: 50m
