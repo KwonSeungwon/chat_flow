@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
-import 'package:chatflow/features/auth/login_page.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
+import 'package:gossiplog/features/auth/login_page.dart';
 
 /// register 호출 인자를 기록하는 가짜. 네트워크는 타지 않는다.
 /// `role`은 일부러 nullable·기본값 없음으로 받는다 — 화면이 role을 넘기지 않으면 null이 남는다.

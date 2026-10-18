@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/widgets/bubbles/chat_bubble.dart';
-import 'package:chatflow/shared/models/chat_message.dart';
+import 'package:gossiplog/features/chat/widgets/bubbles/chat_bubble.dart';
+import 'package:gossiplog/shared/models/chat_message.dart';
 
 /// 버블 본문의 @멘션 하이라이트는 "서버가 멘션 행을 만든다"는 약속이다.
 /// 전달(forward)된 글은 남이 쓴 문장을 재조립한 것이라 서버가 행을 만들지 않으므로

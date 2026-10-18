@@ -25,10 +25,10 @@ class FcmService {
   static const _vapidKey =
       'BILKh58G8pGKBiKJR4gG17LhnkSkxACyzcNV4PqvC61SIhiu5mLeRkZa5AgqKFbP2BQAx0x7PpmrwqDGKZe3qyA';
 
-  static const _channelId = 'chatflow_messages';
+  static const _channelId = 'gossiplog_messages';
   static const _channelName = 'Gossiplog 메시지';
 
-  static const _keywordChannelId = 'chatflow_keywords';
+  static const _keywordChannelId = 'gossiplog_keywords';
   static const _keywordChannelName = 'Gossiplog 키워드 알림';
 
   static final _messaging = FirebaseMessaging.instance;

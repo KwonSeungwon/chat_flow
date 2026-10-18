@@ -1,5 +1,5 @@
-import 'package:chatflow/features/world/game/iso_grid.dart';
-import 'package:chatflow/features/world/game/village_map.dart';
+import 'package:gossiplog/features/world/game/iso_grid.dart';
+import 'package:gossiplog/features/world/game/village_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

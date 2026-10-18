@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chatflow/features/chat/helpers/mention_candidates.dart';
+import 'package:gossiplog/features/chat/helpers/mention_candidates.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 

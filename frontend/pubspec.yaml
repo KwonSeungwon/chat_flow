@@ -1,5 +1,5 @@
-name: chatflow
-description: ChatFlow - Real-time Chat Application
+name: gossiplog
+description: Gossiplog - Real-time Chat Application
 publish_to: 'none'
 version: 3.0.5+7
 

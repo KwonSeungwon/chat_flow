@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/chat/admin/room_admin_api.dart'
+import 'package:gossiplog/features/chat/admin/room_admin_api.dart'
     show parseMutedUntil, parseReportId;
 
 void main() {

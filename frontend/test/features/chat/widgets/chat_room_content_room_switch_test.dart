@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/chat/chat_provider.dart';
-import 'package:chatflow/features/chat/widgets/chat_room_content.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/chat/chat_provider.dart';
+import 'package:gossiplog/features/chat/widgets/chat_room_content.dart';
 
 /// Every request answers 404 — the room screen must render without a backend.
 class _NotFoundAdapter implements HttpClientAdapter {

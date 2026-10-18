@@ -1,7 +1,7 @@
-import 'package:chatflow/features/world/dungeon_page.dart';
-import 'package:chatflow/features/world/game/dungeon_game.dart';
-import 'package:chatflow/features/world/state/game_api.dart';
-import 'package:chatflow/features/world/state/game_models.dart';
+import 'package:gossiplog/features/world/dungeon_page.dart';
+import 'package:gossiplog/features/world/game/dungeon_game.dart';
+import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

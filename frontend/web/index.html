@@ -25,7 +25,7 @@
       height: 100vh;
     }
 
-    #chatflow-loader {
+    #gossiplog-loader {
       position: fixed;
       inset: 0;
       background: linear-gradient(180deg, #EEF4FF, #FDF3E7);
@@ -38,7 +38,7 @@
       transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    #chatflow-loader.fade-out {
+    #gossiplog-loader.fade-out {
       opacity: 0;
       pointer-events: none;
     }
@@ -152,7 +152,7 @@
 
     /* 저장된 테마가 다크일 때(아래 head 스크립트가 html.dark를 붙인다) */
     html.dark body { background: #161A26; }
-    html.dark #chatflow-loader { background: #161A26; }
+    html.dark #gossiplog-loader { background: #161A26; }
     html.dark .app-name { color: #F0F2F5; }
     html.dark .app-sub { color: #9AA3B8; }
     html.dark .progress-wrap { background: #2A2F45; }
@@ -161,7 +161,7 @@
     // 첫 페인트 전에 동기 실행. shared_preferences_web은 값을 JSON 인코딩해
     // localStorage['flutter.<key>']에 저장하므로 문자열 "dark"는 "\"dark\""로 들어 있다.
     try {
-      var raw = localStorage.getItem('flutter.chatflow-theme-mode');
+      var raw = localStorage.getItem('flutter.gossiplog-theme-mode');
       if (raw !== null && JSON.parse(raw) === 'dark') {
         document.documentElement.classList.add('dark');
       }
@@ -169,7 +169,7 @@
   </script>
 </head>
 <body>
-  <div id="chatflow-loader">
+  <div id="gossiplog-loader">
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
 
@@ -191,7 +191,7 @@
   <script src="flutter_bootstrap.js" async></script>
   <script>
     window.addEventListener('flutter-first-frame', function () {
-      var loader = document.getElementById('chatflow-loader');
+      var loader = document.getElementById('gossiplog-loader');
       if (loader) {
         loader.classList.add('fade-out');
         setTimeout(function () { loader.remove(); }, 460);

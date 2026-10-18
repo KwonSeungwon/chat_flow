@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
-import 'package:chatflow/features/chat/dialogs/change_password_dialog.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
+import 'package:gossiplog/features/chat/dialogs/change_password_dialog.dart';
 
 class _ReloginAuth extends AuthNotifier {
   _ReloginAuth() : super(DioClient());

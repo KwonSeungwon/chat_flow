@@ -301,7 +301,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 6),
               Center(
                 child: TextButton.icon(
-                  onPressed: () => downloadApk('/chatflow-app.apk'),
+                  onPressed: () => downloadApk('/gossiplog-app.apk'),
                   icon: const Icon(Icons.android, size: 18),
                   style: TextButton.styleFrom(foregroundColor: _P.muted),
                   label: const Text('Android 앱 받기', style: TextStyle(fontSize: 13)),

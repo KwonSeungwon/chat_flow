@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/stomp_support.dart';
+import 'package:gossiplog/core/network/stomp_support.dart';
 
 void main() {
   group('deriveWebStompUrl', () {

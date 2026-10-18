@@ -1,8 +1,8 @@
-import 'package:chatflow/features/world/admin/admin_game_provider.dart';
-import 'package:chatflow/features/world/game/village_game.dart';
-import 'package:chatflow/features/world/state/game_api.dart';
-import 'package:chatflow/features/world/state/game_models.dart';
-import 'package:chatflow/features/world/world_page.dart';
+import 'package:gossiplog/features/world/admin/admin_game_provider.dart';
+import 'package:gossiplog/features/world/game/village_game.dart';
+import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
+import 'package:gossiplog/features/world/world_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';

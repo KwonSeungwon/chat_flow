@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/features/auth/auth_provider.dart';
+import 'package:gossiplog/features/auth/auth_provider.dart';
 
 void main() {
   group('AuthState.isAuthenticated', () {

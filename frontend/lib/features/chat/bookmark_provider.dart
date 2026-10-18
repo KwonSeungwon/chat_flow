@@ -43,7 +43,7 @@ final bookmarksProvider =
 });
 
 class BookmarksNotifier extends StateNotifier<List<BookmarkEntry>> {
-  static const _keyBase = 'chatflow.bookmarks';
+  static const _keyBase = 'gossiplog.bookmarks';
   static const _storage = FlutterSecureStorage();
 
   final String? _userId;

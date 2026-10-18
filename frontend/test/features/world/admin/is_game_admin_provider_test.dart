@@ -1,6 +1,6 @@
-import 'package:chatflow/features/world/admin/admin_game_provider.dart';
-import 'package:chatflow/features/world/state/game_api.dart';
-import 'package:chatflow/features/world/state/game_models.dart';
+import 'package:gossiplog/features/world/admin/admin_game_provider.dart';
+import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

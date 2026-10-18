@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chatflow/core/network/dio_client.dart';
-import 'package:chatflow/core/network/stomp_service.dart';
-import 'package:chatflow/features/chat/chat_notifier.dart';
+import 'package:gossiplog/core/network/dio_client.dart';
+import 'package:gossiplog/core/network/stomp_service.dart';
+import 'package:gossiplog/features/chat/chat_notifier.dart';
 
 class _FakeDioClient implements DioClient {
   _FakeDioClient(this.dio);

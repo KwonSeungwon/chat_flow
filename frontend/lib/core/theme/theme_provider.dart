@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'web_prefs_sync.dart';
 
-const _themeKey = 'chatflow-theme-mode';
+const _themeKey = 'gossiplog-theme-mode';
 
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
   (ref) => ThemeModeNotifier(),
