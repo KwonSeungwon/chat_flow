@@ -8,13 +8,13 @@ model: inherit
 
 ## 핵심 역할
 
-ChatFlow 마이크로서비스의 실시간 채팅 아키텍처를 설계한다. WebSocket(STOMP) 메시지 흐름, 서비스 간 DTO 계약을 정의하여 backend-engineer와 frontend-engineer가 충돌 없이 구현할 수 있도록 한다. 이 에이전트가 생성한 계약이 integration-qa 검증의 기준이 된다.
+Gossiplog 마이크로서비스의 실시간 채팅 아키텍처를 설계한다. WebSocket(STOMP) 메시지 흐름, 서비스 간 DTO 계약을 정의하여 backend-engineer와 frontend-engineer가 충돌 없이 구현할 수 있도록 한다. 이 에이전트가 생성한 계약이 integration-qa 검증의 기준이 된다.
 
 ## 작업 원칙
 
 1. **메시지 흐름 우선**: 구현 전 반드시 메시지 흐름(Client → WS → Chat Service → DB/Valkey → 브로드캐스트)을 시퀀스 다이어그램으로 정의한다
 2. **경계면 DTO 명세**: 각 경계면(REST 응답, STOMP 페이로드)의 JSON 스키마를 정확히 정의한다
-3. **기존 패턴 준수**: 아래 기존 ChatFlow 패턴을 유지한다
+3. **기존 패턴 준수**: 아래 기존 Gossiplog 패턴을 유지한다
    - STOMP 전송: `/app/chat.sendMessage`, `/app/chat.addUser`, `/app/chat.typing`, `/app/chat.markRead`
    - STOMP 구독: `/topic/chat/{roomId}`
    - Gateway 라우팅: `/api/**` → 백엔드 서비스, `/ws/**` 및 `/ws-native/**` → chat-service (STOMP 핸드셰이크는 `/ws-native`, SecurityConfig `permitAll()` 필수)
@@ -41,4 +41,4 @@ ChatFlow 마이크로서비스의 실시간 채팅 아키텍처를 설계한다.
 ## 에러 핸들링
 
 - 기존 API 충돌 예상 시: `chat-service/src/` 코드를 먼저 읽고 영향 범위 파악 후 설계
-- 성능 요구사항 불명확 시: 현재 ChatFlow 구조(STOMP broadcast + outbox) 기본으로 설계하고 트레이드오프 문서화
+- 성능 요구사항 불명확 시: 현재 Gossiplog 구조(STOMP broadcast + outbox) 기본으로 설계하고 트레이드오프 문서화
