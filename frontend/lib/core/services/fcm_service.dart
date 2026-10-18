@@ -31,6 +31,10 @@ class FcmService {
   static const _keywordChannelId = 'gossiplog_keywords';
   static const _keywordChannelName = 'Gossiplog 키워드 알림';
 
+  // legacy channel ids from before the gossiplog rename — deleted on startup
+  static const _legacyChannelId = 'chatflow_messages';
+  static const _legacyKeywordChannelId = 'chatflow_keywords';
+
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifs = FlutterLocalNotificationsPlugin();
 
@@ -73,6 +77,11 @@ class FcmService {
       );
       final androidPlugin = _localNotifs.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
+      for (final id in const [_legacyChannelId, _legacyKeywordChannelId]) {
+        try {
+          await androidPlugin?.deleteNotificationChannel(id);
+        } catch (_) {}
+      }
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _channelId,
