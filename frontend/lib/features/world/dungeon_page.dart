@@ -25,7 +25,10 @@ class DungeonPage extends ConsumerStatefulWidget {
 }
 
 class _DungeonPageState extends ConsumerState<DungeonPage> {
-  late final DungeonGame _game;
+  /// 주인공 그림을 알 때까지(마을 데이터가 올 때까지) 만들지 않는다. 한 번
+  /// 만들면 판이 끝날 때까지 바꾸지 않는다.
+  DungeonGame? _created;
+  DungeonGame get _game => _created!;
   final _focus = FocusNode(debugLabel: 'dungeon');
   bool _leaving = false;
 
@@ -38,21 +41,41 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
   @override
   void initState() {
     super.initState();
-    _game = DungeonGame(widget.dungeonId,
-        look: ref.read(studentLookProvider) ?? StudentLook.boy)
+    final chosen = ref.read(studentLookProvider);
+    if (chosen != null) _createGame(chosen);
+    // 마을 데이터를 이 페이지 동안 붙잡아 둔다(딥링크로 들어와도 판 시작 전
+    // 졸업 여부와 주인공 그림을 알 수 있게). 졸업 여부는 첫 값만 기억한다.
+    // 마을 데이터를 못 읽으면 남학생으로 시작한다.
+    ref.listenManual<AsyncValue<WorldData>>(worldProvider, (_, next) {
+      _graduatedBefore ??= next.valueOrNull?.me.graduated;
+      if (_created == null && (next.hasValue || next.hasError)) {
+        _createGame(ref.read(chosenLookProvider) ??
+            next.valueOrNull?.me.avatar ??
+            StudentLook.boy);
+        if (_inited) setState(() {});
+      }
+    }, fireImmediately: true);
+    _inited = true;
+  }
+
+  bool _inited = false;
+
+  /// 게임을 만들고 판을 시작한다.
+  void _createGame(StudentLook look) {
+    _created = DungeonGame(widget.dungeonId, look: look)
       ..onEncounter = _onEncounter
       // 판이 열릴 때까지 걷지 않는다.
       ..pause();
-    // 마을 데이터를 이 페이지 동안 붙잡아 둔다(딥링크로 들어와도 판 시작 전
-    // 졸업 여부를 알 수 있게). 졸업 여부는 첫 값만 기억한다.
-    ref.listenManual<AsyncValue<WorldData>>(worldProvider, (_, next) {
-      _graduatedBefore ??= next.valueOrNull?.me.graduated;
-    }, fireImmediately: true);
     ref.listenManual<RunState>(
         runNotifierProvider(widget.dungeonId), _onRunChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _run.start();
-    });
+    // initState 안에서는 다른 provider를 바꿀 수 없어 첫 프레임 뒤에 시작한다.
+    if (!_inited) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _run.start();
+      });
+    } else {
+      _run.start();
+    }
   }
 
   @override
@@ -190,8 +213,9 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
 
   @override
   Widget build(BuildContext context) {
-    final starting = ref.watch(runNotifierProvider(widget.dungeonId)
-        .select((s) => s.phase == RunPhase.starting));
+    final starting = _created == null ||
+        ref.watch(runNotifierProvider(widget.dungeonId)
+            .select((s) => s.phase == RunPhase.starting));
     return Scaffold(
       appBar: AppBar(
         title: Text(_name),
@@ -203,14 +227,15 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
       ),
       body: Stack(
         children: [
-          GameWidget<DungeonGame>(
-            game: _game,
-            focusNode: _focus,
-            overlayBuilderMap: {
-              battleOverlayKey: (context, game) => _BattleLayer(
-                  dungeonId: widget.dungeonId, name: _name, look: game.look),
-            },
-          ),
+          if (_created != null)
+            GameWidget<DungeonGame>(
+              game: _game,
+              focusNode: _focus,
+              overlayBuilderMap: {
+                battleOverlayKey: (context, game) => _BattleLayer(
+                    dungeonId: widget.dungeonId, name: _name, look: game.look),
+              },
+            ),
           if (starting) const Center(child: CircularProgressIndicator()),
         ],
       ),

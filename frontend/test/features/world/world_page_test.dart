@@ -257,4 +257,47 @@ void main() {
     expect(identical(_village, first), isTrue);
     expect(first.paused, isFalse);
   });
+
+  testWidgets('/me failure: boy village, no picker; retry with avatar swaps',
+      (tester) async {
+    final api = _api()..meError = GameApiException(GameApiException.offline);
+    await _pump(tester, api);
+    expect(find.text(_pickTitle), findsNothing);
+    expect(find.text('던전 정보를 불러오지 못했다'), findsOneWidget);
+    expect(_village.look, StudentLook.boy);
+    expect(_village.paused, isFalse);
+
+    api
+      ..meError = null
+      ..meResult = const GameMe(
+          clearedCount: 0, total: 8, graduated: false, avatar: StudentLook.girl);
+    await tester.tap(find.text('다시 시도'));
+    await tester.pump();
+    await _waitForGame(tester);
+    expect(_created, 2);
+    expect(_village.look, StudentLook.girl);
+    expect(find.text(_pickTitle), findsNothing);
+  });
+
+  testWidgets('/me failure then retry without avatar shows the picker',
+      (tester) async {
+    final api = _newcomer()..meError = GameApiException(GameApiException.offline);
+    await _pump(tester, api);
+    final fallback = _village;
+    expect(find.text(_pickTitle), findsNothing);
+
+    api.meError = null;
+    await tester.tap(find.text('다시 시도'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(_pickTitle), findsOneWidget);
+    expect(fallback.paused, isTrue);
+
+    await tester.tap(find.text('이 학생으로 입학!'));
+    await tester.pump();
+    expect(api.avatarCalls, [StudentLook.boy]);
+    expect(find.text(_pickTitle), findsNothing);
+    expect(identical(_village, fallback), isTrue);
+    expect(fallback.paused, isFalse);
+  });
 }

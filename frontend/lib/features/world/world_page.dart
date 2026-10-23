@@ -36,12 +36,19 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   @override
   void initState() {
     super.initState();
-    final look = ref.read(studentLookProvider);
+    final look = ref.read(studentLookProvider) ??
+        (ref.read(worldProvider).hasError ? StudentLook.boy : null);
     if (look != null) _village = _newGame(look);
     ref.listenManual<AsyncValue<WorldData>>(worldProvider, (_, next) {
+      // 진행도를 못 읽어도 마을은 보인다(그림을 모르면 남학생). 다시 읽어서
+      // 저장된 그림이 오면 아래 리스너가 바꾸고, 없으면 선택 카드를 띄운다.
+      if (_village == null && next.hasError && !next.isLoading) {
+        setState(() => _village = _newGame(StudentLook.boy));
+      }
       final data = next.valueOrNull;
       final village = _village;
       if (data != null && village != null) _apply(village, data);
+      if (_mustPick) village?.pauseEngine();
     });
     ref.listenManual<StudentLook?>(studentLookProvider, (_, look) {
       if (look == null || look == _village?.look) return;
@@ -51,6 +58,15 @@ class _WorldPageState extends ConsumerState<WorldPage> {
       }
       setState(() => _village = game);
     });
+  }
+
+  /// 진행도를 읽었는데 그림이 아직 없다: 선택 카드를 띄우고 마을을 멈춘다.
+  bool get _mustPick {
+    final world = ref.read(worldProvider);
+    return ref.read(chosenLookProvider) == null &&
+        world.hasValue &&
+        !world.hasError &&
+        world.requireValue.me.avatar == null;
   }
 
   VillageGame _newGame(StudentLook look) {
@@ -70,7 +86,7 @@ class _WorldPageState extends ConsumerState<WorldPage> {
     final village = _village;
     if (village == null) return;
     final current = ModalRoute.of(context)?.isCurrent ?? true;
-    if (current && village.paused && !_covered && !_repicking) {
+    if (current && village.paused && !_covered && !_repicking && !_mustPick) {
       village.resumeEngine();
     } else if (!current && !village.paused) {
       village.pauseEngine();
@@ -128,7 +144,12 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   /// 고른 그림을 그대로 쓴다.
   Future<void> _pick(StudentLook look) async {
     ref.read(chosenLookProvider.notifier).state = look;
-    if (_repicking) _closePicker();
+    if (_repicking) {
+      _closePicker();
+    } else if (!_covered) {
+      // 오류로 먼저 띄운 남학생 마을 위에서 골랐을 수 있다.
+      _village?.resumeEngine();
+    }
     try {
       await ref.read(gameApiProvider).setAvatar(look);
     } on GameApiException {
@@ -152,7 +173,7 @@ class _WorldPageState extends ConsumerState<WorldPage> {
     final look = ref.watch(studentLookProvider);
     final isAdmin = ref.watch(isGameAdminProvider).valueOrNull == true;
     final village = _village;
-    final picking = _repicking || (look == null && world.hasValue);
+    final picking = _repicking || _mustPick;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(

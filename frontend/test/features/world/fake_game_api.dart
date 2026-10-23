@@ -66,8 +66,14 @@ class FakeGameApi implements GameApi {
 
   @override
   Future<List<DungeonInfo>> listDungeons() async => dungeons;
+  /// 있으면 me()가 이 오류를 던진다.
+  GameApiException? meError;
+
   @override
-  Future<GameMe> me() async => meResult;
+  Future<GameMe> me() async {
+    if (meError != null) throw meError!;
+    return meResult;
+  }
   @override
   Future<List<LeaderboardEntry>> leaderboard() async => board;
 

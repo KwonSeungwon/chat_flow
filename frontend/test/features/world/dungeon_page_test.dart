@@ -1,3 +1,4 @@
+import 'package:gossiplog/features/world/battle/battle_overlay.dart';
 import 'package:gossiplog/features/world/dungeon_page.dart';
 import 'package:gossiplog/features/world/game/dungeon_game.dart';
 import 'package:gossiplog/features/world/state/game_api.dart';
@@ -271,5 +272,26 @@ void main() {
     }
     expect(seen, hasLength(3), reason: 'a new game per page');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('deep link waits for the world data and uses the server look',
+      (tester) async {
+    final api = FakeGameApi()
+      ..meResult = const GameMe(
+          clearedCount: 0, total: 8, graduated: false, avatar: StudentLook.girl)
+      ..nexts.add(fakeEncounter(1));
+    await _enter(tester, api);
+    expect(_game.look, StudentLook.girl);
+    await _encounter(tester);
+    expect(
+        tester.widget<BattleOverlay>(find.byType(BattleOverlay)).look,
+        StudentLook.girl);
+  });
+
+  testWidgets('world data failure → dungeon starts as the boy', (tester) async {
+    final api = FakeGameApi()
+      ..meError = GameApiException(GameApiException.offline);
+    await _enter(tester, api);
+    expect(_game.look, StudentLook.boy);
   });
 }
