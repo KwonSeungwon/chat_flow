@@ -1,37 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
-  <!-- 할루시네이션 미믹: 이빨 달린 보물상자, 소용돌이 눈, 떠다니는 물음표 -->
-  <ellipse cx="100" cy="186" rx="70" ry="10" fill="#000000" opacity="0.18"/>
-  <!-- chest base -->
-  <rect x="34" y="112" width="132" height="70" rx="8" fill="#b9783f"/>
-  <rect x="34" y="112" width="132" height="12" fill="#a0652f"/>
-  <rect x="34" y="150" width="132" height="8" fill="#ffd34d"/>
-  <rect x="88" y="140" width="24" height="28" rx="4" fill="#ffd34d"/>
-  <circle cx="100" cy="152" r="4" fill="#8a5a2a"/>
-  <!-- mouth interior -->
-  <path d="M38 112 L162 112 L156 78 L44 78 Z" fill="#7a1f3a"/>
-  <path d="M70 112 C80 96 120 96 130 112 Z" fill="#ff7aa8"/>
-  <!-- teeth -->
-  <polygon points="44,112 52,98 60,112" fill="#ffffff"/>
-  <polygon points="62,112 70,98 78,112" fill="#ffffff"/>
-  <polygon points="122,112 130,98 138,112" fill="#ffffff"/>
-  <polygon points="140,112 148,98 156,112" fill="#ffffff"/>
-  <polygon points="50,80 58,94 66,80" fill="#ffffff"/>
-  <polygon points="134,80 142,94 150,80" fill="#ffffff"/>
-  <polygon points="92,80 100,92 108,80" fill="#ffffff"/>
-  <!-- lid -->
-  <path d="M30 80 L170 80 L162 40 C150 18 50 18 38 40 Z" fill="#c98a4d"/>
-  <path d="M30 80 L170 80 L168 70 L32 70 Z" fill="#ffd34d"/>
-  <path d="M60 26 L60 70 M140 26 L140 70" stroke="#a0652f" stroke-width="6"/>
-  <!-- spiral eyes on lid -->
-  <circle cx="82" cy="46" r="13" fill="#ffffff"/><circle cx="118" cy="46" r="13" fill="#ffffff"/>
-  <path d="M82 46 m-8 0 a8 8 0 1 1 8 8 a5 5 0 1 1 -4 -6 a2 2 0 1 1 2 2" stroke="#e070aa" stroke-width="2.5" fill="none"/>
-  <path d="M118 46 m-8 0 a8 8 0 1 1 8 8 a5 5 0 1 1 -4 -6 a2 2 0 1 1 2 2" stroke="#5bd1e8" stroke-width="2.5" fill="none"/>
-  <!-- floating question marks (paths) -->
-  <path d="M20 30 C20 18 38 18 38 30 C38 38 29 38 29 46" stroke="#ff9ccf" stroke-width="5" fill="none" stroke-linecap="round"/>
-  <circle cx="29" cy="56" r="3.5" fill="#ff9ccf"/>
-  <path d="M164 14 C164 4 180 4 180 14 C180 21 172 21 172 28" stroke="#5bd1e8" stroke-width="4" fill="none" stroke-linecap="round"/>
-  <circle cx="172" cy="36" r="3" fill="#5bd1e8"/>
-  <!-- sparkles -->
-  <path d="M176 70 L179 78 L187 81 L179 84 L176 92 L173 84 L165 81 L173 78 Z" fill="#ffd34d"/>
-  <path d="M14 96 L16 101 L21 103 L16 105 L14 110 L12 105 L7 103 L12 101 Z" fill="#ffd34d"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+<defs><radialGradient id="g0" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffb8e8" stop-opacity="0.45"/><stop offset="0.65" stop-color="#ffb8e8" stop-opacity="0.18"/><stop offset="1" stop-color="#ffb8e8" stop-opacity="0"/></radialGradient><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6c4ff"/><stop offset="1" stop-color="#ffc4e4"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="1" stop-color="#ffd0ec"/></linearGradient><radialGradient id="g3" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#fff0fb"/><stop offset="0.7" stop-color="#ffb8e0"/><stop offset="1" stop-color="#d4a6ff"/></radialGradient></defs>
+<g transform="translate(8 12) scale(1.2)"><ellipse cx="60" cy="112" rx="30" ry="6.5" fill="#2a3a5a" opacity="0.18"/><circle cx="60" cy="58" r="68" fill="url(#g0)"/><path d="M44 76 C30 96 44 110 60 104 C50 100 48 92 58 82 Z M76 76 C90 96 76 110 60 104 C70 100 72 92 62 82 Z" fill="url(#g1)" opacity="0.9"/><path d="M60 2 Q71.88 44.12 114 56 Q71.88 67.88 60 110 Q48.12 67.88 6 56 Q48.12 44.12 60 2 Z" fill="url(#g2)" opacity="0.95"/><circle cx="60" cy="58" r="27" fill="url(#g3)"/><path d="M44 44 Q48 36 58 34" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/><ellipse cx="50" cy="56" rx="5.6" ry="6.6" fill="#fff"/><ellipse cx="50.8" cy="57" rx="3.2" ry="4" fill="#2e3456"/><circle cx="52" cy="54.8" r="1.3" fill="#fff"/><ellipse cx="70" cy="56" rx="5.6" ry="6.6" fill="#fff"/><ellipse cx="70.8" cy="57" rx="3.2" ry="4" fill="#2e3456"/><circle cx="72" cy="54.8" r="1.3" fill="#fff"/><path d="M44 46 L54 49 M76 46 L66 49" fill="none" stroke="#2e3456" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="41" cy="67" rx="4" ry="2.2" fill="#ffaecb" opacity="0.85"/><ellipse cx="79" cy="67" rx="4" ry="2.2" fill="#ffaecb" opacity="0.85"/><path d="M56 67 q4 4.4 8 0 z" fill="#c0506a" stroke="#2e3456" stroke-width="1.8" stroke-linejoin="round"/><path d="M57 67.4 l1.4 2.2 l1.4 -2" fill="#fff"/><path d="M14 25 Q14.9 29.1 19 30 Q14.9 30.9 14 35 Q13.1 30.9 9 30 Q13.1 29.1 14 25 Z" fill="#fff7c4"/><path d="M106 20 Q107.08 24.92 112 26 Q107.08 27.08 106 32 Q104.92 27.08 100 26 Q104.92 24.92 106 20 Z" fill="#fff7c4"/><path d="M100 92 Q100.72 95.28 104 96 Q100.72 96.72 100 100 Q99.28 96.72 96 96 Q99.28 95.28 100 92 Z" fill="#fff7c4"/><path d="M18 84 Q18.72 87.28 22 88 Q18.72 88.72 18 92 Q17.28 88.72 14 88 Q17.28 87.28 18 84 Z" fill="#fff7c4"/><path d="M92 5 Q92.54 7.46 95 8 Q92.54 8.54 92 11 Q91.46 8.54 89 8 Q91.46 7.46 92 5 Z" fill="#fff7c4"/><ellipse cx="60" cy="14" rx="22" ry="6" fill="none" stroke="#ffd34d" stroke-width="3"/><path d="M44 7 Q45.25 10.75 49 12 Q45.25 13.25 44 17 Q42.75 13.25 39 12 Q42.75 10.75 44 7 Z" fill="#ffd34d"/><path d="M60 -1 Q61.75 4.25 67 6 Q61.75 7.75 60 13 Q58.25 7.75 53 6 Q58.25 4.25 60 -1 Z" fill="#ffd34d"/><path d="M76 7 Q77.25 10.75 81 12 Q77.25 13.25 76 17 Q74.75 13.25 71 12 Q74.75 10.75 76 7 Z" fill="#ffd34d"/><circle cx="14" cy="60" r="4" fill="#c9b6ff" opacity="0.8"/><circle cx="106" cy="64" r="5" fill="#ffb8e0" opacity="0.8"/></g>
 </svg>

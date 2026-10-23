@@ -1,23 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 224" width="192" height="224">
-  <!-- 셸 동굴: 바위 언덕, 어두운 동굴 입구, 초록 프롬프트 -->
-  <polygon points="96,136 184,180 96,224 8,180" fill="#d5dbe7"/>
-  <polygon points="96,132 184,176 96,220 8,176" fill="#eef1f6"/>
-  <polygon points="104,150 172,184 104,218 36,184" fill="#3b4a6b" opacity="0.12"/>
-  <path d="M18,182 C14,140 34,100 66,86 C82,60 120,58 136,84 C164,96 180,140 174,182 C150,206 46,212 18,182 Z" fill="#b3a594"/>
-  <path d="M96,64 C116,62 130,72 136,84 C164,96 180,140 174,182 C156,198 120,206 96,207 Z" fill="#968877"/>
-  <path d="M40,124 C52,104 70,96 82,98" stroke="#c9bdae" stroke-width="5" fill="none" stroke-linecap="round"/>
-  <!-- moss -->
-  <ellipse cx="72" cy="88" rx="16" ry="6" fill="#7cc48a"/>
-  <ellipse cx="120" cy="80" rx="12" ry="5" fill="#68b077"/>
-  <ellipse cx="160" cy="132" rx="8" ry="4" fill="#68b077"/>
-  <!-- cave mouth -->
-  <path d="M42,194 C38,160 52,138 72,136 C92,138 100,162 96,204 Z" fill="#2b2f45"/>
-  <path d="M50,194 C48,166 58,148 72,146 C86,148 92,166 90,200 Z" fill="#1d2033"/>
-  <!-- prompt glyph -->
-  <polyline points="58,166 66,172 58,178" stroke="#5bd18a" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="70" y="176" width="12" height="3.5" rx="1.5" fill="#5bd18a"/>
-  <!-- rocks -->
-  <ellipse cx="140" cy="200" rx="12" ry="7" fill="#a39584"/>
-  <ellipse cx="28" cy="196" rx="9" ry="5" fill="#a39584"/>
-  <polygon points="150,194 156,170 162,196" fill="#8a7c6c"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 168" width="144" height="168">
+<defs><linearGradient id="g0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9d0c4"/><stop offset="1" stop-color="#a89b8d"/></linearGradient><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfc4b6"/><stop offset="1" stop-color="#988a7c"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9be08c"/><stop offset="1" stop-color="#6cc27a"/></linearGradient><linearGradient id="g3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f2c48"/><stop offset="1" stop-color="#4a4566"/></linearGradient></defs>
+<ellipse cx="72" cy="162" rx="68" ry="6" fill="#28463c" opacity="0.2"/><path d="M4 162 C0 120 8 70 30 46 C44 20 70 12 88 18 C112 24 134 52 140 92 C144 122 142 148 140 162 Z" fill="#3a3028" opacity="0.18" transform="translate(0 4)"/><path d="M4 162 C0 120 8 70 30 46 C44 20 70 12 88 18 C112 24 134 52 140 92 C144 122 142 148 140 162 Z" fill="url(#g0)"/><path d="M4 162 C2 136 8 110 22 98 C34 110 36 140 34 162 Z" fill="url(#g1)"/><path d="M140 162 C142 134 136 112 122 104 C110 116 108 142 110 162 Z" fill="url(#g1)"/><path d="M40 60 Q52 48 66 50 M96 44 Q110 52 116 66 M22 120 Q28 112 34 116" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/><path d="M30 46 C44 20 70 12 88 18 C112 24 128 42 134 62 C120 52 106 50 96 56 C84 44 66 42 54 52 C46 46 38 44 30 46 Z" fill="url(#g2)"/><ellipse cx="64" cy="24" rx="8" ry="3" fill="#fff" opacity="0.35"/><circle cx="40" cy="52" r="7" fill="#7cc97f"/><circle cx="124" cy="66" r="6" fill="#7cc97f"/><path d="M50 162 V130 A22 22 0 0 1 72 108 H72 A22 22 0 0 1 94 130 V162 Z" fill="#8c5d3e"/><path d="M55 162 V130 A17 17 0 0 1 72 113 H72 A17 17 0 0 1 89 130 V162 Z" fill="url(#g3)"/><circle cx="66" cy="140" r="2" fill="#ffe58a" opacity="0.8"/><circle cx="78" cy="132" r="1.5" fill="#ffe58a" opacity="0.6"/><rect x="52" y="160" width="40" height="5" rx="2.5" fill="#b8a898"/><rect x="50" y="76" width="44" height="28" rx="8" fill="#000" opacity="0.16" transform="translate(0 3)"/><rect x="50" y="76" width="44" height="28" rx="8" fill="#5f6886"/><rect x="54" y="80" width="36" height="20" rx="5" fill="#2d3350"/><path d="M60 85 L66 90 L60 95" fill="none" stroke="#7cf0a8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="69" y="93" width="10" height="2.6" rx="1.3" fill="#7cf0a8"/><rect x="22" y="140" width="4" height="8" rx="2" fill="#fff6e8"/><ellipse cx="24" cy="140" rx="7" ry="4.5" fill="#ff9f8a"/><circle cx="22" cy="139" r="1.2" fill="#fff"/><rect x="116" y="142" width="3.4" height="7" rx="1.7" fill="#fff6e8"/><ellipse cx="118" cy="142" rx="6" ry="4" fill="#ffc98a"/><path d="M104 132 l4 -12 l4 12 z" fill="#a9dcff"/><path d="M110 134 l3 -8 l3 8 z" fill="#c9b6ff"/>
 </svg>
