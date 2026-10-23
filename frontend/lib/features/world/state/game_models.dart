@@ -2,6 +2,16 @@ int _int(Object? v, [int fallback = 0]) => v is num ? v.toInt() : fallback;
 bool _bool(Object? v) => v == true;
 String _str(Object? v) => v?.toString() ?? '';
 
+/// 주인공 그림(남·여 학생).
+enum StudentLook { boy, girl }
+
+/// 서버의 `avatar` 값. 없거나 모르는 값이면 null(아직 안 고름).
+StudentLook? studentLookFromJson(Object? v) => switch (v) {
+      'boy' => StudentLook.boy,
+      'girl' => StudentLook.girl,
+      _ => null,
+    };
+
 class DungeonInfo {
   final String id;
   final String name;
@@ -37,17 +47,22 @@ class GameMe {
   /// 위키 던전 문제 검수 관리자. 옛 서버는 보내지 않는다 → false.
   final bool admin;
 
+  /// 고른 주인공 그림. 아직 안 골랐거나 옛 서버면 null.
+  final StudentLook? avatar;
+
   const GameMe(
       {required this.clearedCount,
       required this.total,
       required this.graduated,
-      this.admin = false});
+      this.admin = false,
+      this.avatar});
 
   factory GameMe.fromJson(Map<String, dynamic> j) => GameMe(
         clearedCount: _int(j['clearedCount']),
         total: _int(j['total'], 8),
         graduated: _bool(j['graduated']),
         admin: _bool(j['admin']),
+        avatar: studentLookFromJson(j['avatar']),
       );
 }
 

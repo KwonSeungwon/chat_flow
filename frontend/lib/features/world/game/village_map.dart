@@ -1,7 +1,8 @@
 /// 마을 24×24 상수 격자.
 ///
 /// `G` 잔디, `P` 길, `W` 물, `T` 나무, `B` 건물 점유, `D` 문, `F` 분수, `S` 시작점.
-/// 각 건물은 3×3을 차지하고 문은 앞(row+1) 가운데 칸이다.
+/// 각 건물은 3×3을 차지하고 문은 앞(row+1) 가운데 칸이다. 분수는 [fountainTile]
+/// 둘레 3×3을 덮으므로 그 9칸이 모두 `F`(걸을 수 없음)다.
 class VillageMap {
   VillageMap._();
 
@@ -19,9 +20,9 @@ class VillageMap {
     'GGPPPPPPPPPPPPPPPPPPPPGT',
     'GGGGGGGGPGGGGGGPGGGGGGGG',
     'GTTGGTGGPPPPPPGPTGGGWWGG',
-    'GGGBBBGGPPPPPPGPGBBBWWWG',
-    'GGGBBBGGPPPFPPGPGBBBGWGG',
-    'TGGBBBGGPPPPPPGPGBBBGGGG',
+    'GGGBBBGGPPFFFPGPGBBBWWWG',
+    'GGGBBBGGPPFFFPGPGBBBGWGG',
+    'TGGBBBGGPPFFFPGPGBBBGGGG',
     'GGGGDGGGPPPPPPGPGGDGGGGG',
     'GGPPPPPPPPPSPPPPPPPPPPGG',
     'GGGGGGGGPGGGGGGPGGGGGGGG',

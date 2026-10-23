@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -184,6 +185,42 @@ void main() {
     adapter.routes['GET /api/game/me'] =
         (200, _ok({'clearedCount': 1, 'total': 8, 'graduated': false}));
     expect((await api.me()).admin, isFalse);
+  });
+
+  test('me.avatar: boy/girl parsed, missing or unknown means null', () async {
+    Future<StudentLook?> avatarOf(Object? v) async {
+      adapter.routes['GET /api/game/me'] = (
+        200,
+        _ok({
+          'clearedCount': 0,
+          'total': 8,
+          'graduated': false,
+          if (v != #missing) 'avatar': v,
+        })
+      );
+      return (await api.me()).avatar;
+    }
+
+    expect(await avatarOf('boy'), StudentLook.boy);
+    expect(await avatarOf('girl'), StudentLook.girl);
+    expect(await avatarOf(null), isNull);
+    expect(await avatarOf(#missing), isNull);
+    expect(await avatarOf('cat'), isNull);
+    expect(await avatarOf(3), isNull);
+  });
+
+  test('setAvatar PUTs {avatar} and accepts 204', () async {
+    adapter.routes['PUT /api/game/me/avatar'] = (204, null);
+    await api.setAvatar(StudentLook.girl);
+    expect(adapter.requests.last.method, 'PUT');
+    expect(adapter.requests.last.path, '/api/game/me/avatar');
+    expect(adapter.bodies['PUT /api/game/me/avatar'], {'avatar': 'girl'});
+  });
+
+  test('setAvatar 400 maps to GameApiException', () async {
+    adapter.routes['PUT /api/game/me/avatar'] =
+        (400, {'status': 400, 'code': 'INVALID_INPUT', 'message': 'bad'});
+    await expectCode(api.setAvatar(StudentLook.boy), 'INVALID_INPUT');
   });
 
   test('connection error maps to OFFLINE', () async {

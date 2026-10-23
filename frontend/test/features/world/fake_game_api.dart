@@ -66,9 +66,28 @@ class FakeGameApi implements GameApi {
 
   @override
   Future<List<DungeonInfo>> listDungeons() async => dungeons;
+  /// 있으면 me()가 이 오류를 던진다.
+  GameApiException? meError;
+
   @override
-  Future<GameMe> me() async => meResult;
+  Future<GameMe> me() async {
+    if (meError != null) throw meError!;
+    return meResult;
+  }
   @override
   Future<List<LeaderboardEntry>> leaderboard() async => board;
-}
 
+  /// setAvatar로 받은 그림. [avatarError]가 있으면 저장하지 않고 던진다.
+  final avatarCalls = <StudentLook>[];
+  GameApiException? avatarError;
+
+  /// 있으면 setAvatar가 이 Future가 끝날 때까지 기다린다.
+  Future<void>? avatarGate;
+
+  @override
+  Future<void> setAvatar(StudentLook look) async {
+    avatarCalls.add(look);
+    await avatarGate;
+    if (avatarError != null) throw avatarError!;
+  }
+}

@@ -1,16 +1,16 @@
-import 'package:gossiplog/features/world/game/iso_grid.dart';
+import 'package:gossiplog/features/world/game/top_down_grid.dart';
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const grid = IsoGrid(tileW: 64, tileH: 32);
+  const grid = TopDownGrid();
 
   group('toScreen / toTile', () {
-    test('origin and unit steps follow the 2:1 diamond layout', () {
-      expect(grid.toScreen(0, 0), Vector2(0, 0));
-      expect(grid.toScreen(1, 0), Vector2(32, 16));
-      expect(grid.toScreen(0, 1), Vector2(-32, 16));
-      expect(grid.toScreen(3, 3), Vector2(0, 96));
+    test('toScreen is the center of a 48px square tile', () {
+      expect(grid.toScreen(0, 0), Vector2(24, 24));
+      expect(grid.toScreen(1, 0), Vector2(72, 24));
+      expect(grid.toScreen(0, 1), Vector2(24, 72));
+      expect(grid.toScreen(3, 5), Vector2(168, 264));
     });
 
     test('round-trips every tile of a 24x24 map', () {
@@ -21,17 +21,25 @@ void main() {
       }
     });
 
-    test('points inside the top rhombus map back to the same tile', () {
+    test('any point inside a tile maps back to that tile', () {
       final center = grid.toScreen(5, 7);
       for (final d in [
-        Vector2(20, 0),
-        Vector2(-20, 0),
-        Vector2(0, 10),
-        Vector2(0, -10),
-        Vector2(10, 4),
+        Vector2(23, 0),
+        Vector2(-24, 0),
+        Vector2(0, 23.9),
+        Vector2(0, -24),
+        Vector2(-20, 20),
       ]) {
         expect(grid.toTile(center + d), (5, 7), reason: 'offset $d');
       }
+      expect(grid.toTile(center + Vector2(24, 0)), (6, 7));
+      expect(grid.toTile(Vector2(-1, -1)), (-1, -1));
+    });
+
+    test('depth follows the screen y so lower things draw in front', () {
+      expect(grid.depthAt(grid.toScreen(2, 3).y),
+          lessThan(grid.depthAt(grid.toScreen(2, 4).y)));
+      expect(grid.stepLength, 48);
     });
   });
 

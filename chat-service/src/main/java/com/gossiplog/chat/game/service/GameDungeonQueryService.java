@@ -3,8 +3,10 @@ package com.gossiplog.chat.game.service;
 import com.gossiplog.chat.game.dto.DungeonSummary;
 import com.gossiplog.chat.game.dto.GameMeResponse;
 import com.gossiplog.chat.game.entity.GameDungeon;
+import com.gossiplog.chat.game.entity.GamePlayer;
 import com.gossiplog.chat.game.entity.GameProgress;
 import com.gossiplog.chat.game.repository.GameDungeonRepository;
+import com.gossiplog.chat.game.repository.GamePlayerRepository;
 import com.gossiplog.chat.game.repository.GameProgressRepository;
 import com.gossiplog.chat.game.repository.GameQuestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class GameDungeonQueryService {
     private final GameDungeonRepository dungeonRepository;
     private final GameQuestionRepository questionRepository;
     private final GameProgressRepository progressRepository;
+    private final GamePlayerRepository playerRepository;
     private final GameAdminGuard adminGuard;
 
     @Transactional(readOnly = true)
@@ -48,7 +51,8 @@ public class GameDungeonQueryService {
     @Transactional(readOnly = true)
     public GameMeResponse me(String userId) {
         int cleared = clearedDungeonIds(userId).size();
-        return new GameMeResponse(cleared, TOTAL_DUNGEONS, cleared >= TOTAL_DUNGEONS, adminGuard.isAdmin(userId));
+        return new GameMeResponse(cleared, TOTAL_DUNGEONS, cleared >= TOTAL_DUNGEONS, adminGuard.isAdmin(userId),
+                playerRepository.findById(userId).map(GamePlayer::getAvatar).orElse(null));
     }
 
     private Set<String> clearedDungeonIds(String userId) {

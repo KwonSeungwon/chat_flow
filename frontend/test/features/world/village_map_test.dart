@@ -1,9 +1,9 @@
-import 'package:gossiplog/features/world/game/iso_grid.dart';
+import 'package:gossiplog/features/world/game/top_down_grid.dart';
 import 'package:gossiplog/features/world/game/village_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const grid = IsoGrid(tileW: 64, tileH: 32);
+  const grid = TopDownGrid();
   const ids = ['k8s', 'jvm', 'db', 'net', 'build', 'ops', 'ai', 'shell'];
 
   test('is a 24x24 grid using only the legend characters', () {
@@ -57,6 +57,27 @@ void main() {
       expect(drow, r0 + VillageMap.footprint, reason: id);
       expect(dcol, inInclusiveRange(c0, c0 + VillageMap.footprint - 1),
           reason: id);
+    }
+  });
+
+  test('the fountain blocks the 3x3 around its tile but not the plaza ring',
+      () {
+    final (fc, fr) = VillageMap.fountainTile;
+    for (var dc = -1; dc <= 1; dc++) {
+      for (var dr = -1; dr <= 1; dr++) {
+        expect(VillageMap.tileAt(fc + dc, fr + dr), 'F');
+        expect(VillageMap.isWalkable(fc + dc, fr + dr), isFalse);
+      }
+    }
+    expect(VillageMap.rows.join().split('').where((t) => t == 'F').length, 9);
+    // 분수를 둘러싼 광장 칸은 그대로 걸을 수 있다.
+    for (final (c, r) in [
+      (fc - 2, fr),
+      (fc + 2, fr),
+      (fc, fr - 2),
+      (fc, fr + 2)
+    ]) {
+      expect(VillageMap.isWalkable(c, r), isTrue, reason: '($c,$r)');
     }
   });
 

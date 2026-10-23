@@ -22,7 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Validates the full Flyway migration chain (V1..V21) against a real PostgreSQL 16 container.
+ * Validates the full Flyway migration chain (V1..V22) against a real PostgreSQL 16 container.
  *
  * <h3>Why this test exists</h3>
  * The regular test profile runs on H2 with {@code spring.flyway.enabled=false} and
@@ -104,8 +104,8 @@ class FlywayMigrationTest {
                 .isTrue();
 
         assertThat(result.migrationsExecuted)
-                .as("All 21 versioned migrations (V1..V21) should have been executed")
-                .isEqualTo(21);
+                .as("All 22 versioned migrations (V1..V22) should have been executed")
+                .isEqualTo(22);
 
         // Double-check: every entry in the schema history should be SUCCESS or BASELINE.
         // The baseline entry (version 0, state BASELINE) is created by baselineOnMigrate;

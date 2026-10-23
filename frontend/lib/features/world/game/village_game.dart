@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flame/components.dart';
@@ -9,15 +10,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/widgets.dart' show KeyEventResult, visibleForTesting;
 
-import 'iso_grid.dart';
+import '../state/game_models.dart';
+import 'soft_terrain.dart';
 import 'student_avatar.dart';
+import 'top_down_grid.dart';
 import 'village_map.dart';
 import 'world_sprite.dart';
 
 /// 건물 하나의 서버 상태.
 typedef DungeonState = ({bool open, bool cleared, int clearCount});
 
-/// 아이소메트릭 마을. 학생이 길을 걸어 건물 문에 닿으면 [onDoorReached]를 부른다.
+/// 위에서 내려다본 마을. 학생이 길을 걸어 건물 문에 닿으면 [onDoorReached]를 부른다.
 ///
 /// 던전 화면을 위에 띄우는 동안에는 호출하는 쪽이 이 게임에 `pauseEngine()`을
 /// 부르고, 마을로 돌아오면 `resumeEngine()`을 부른다. 가려진 라우트에서도 게임
@@ -26,8 +29,14 @@ typedef DungeonState = ({bool open, bool cleared, int clearCount});
 /// 게임 하나는 GameWidget 하나의 수명 동안만 쓴다. 위젯이 dispose되면
 /// [onDispose]가 그림·SVG 캐시를 모두 놓는다.
 class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
-  VillageGame({this.onDoorReached, this.onFountainTapped})
-      : super(world: TapWorld());
+  VillageGame({
+    this.onDoorReached,
+    this.onFountainTapped,
+    this.look = StudentLook.boy,
+  }) : super(world: TapWorld());
+
+  /// 주인공 그림(남·여).
+  final StudentLook look;
 
   /// 열린 건물의 문 칸에 닿았을 때. 공사 중(open=false)인 건물은 부르지 않는다.
   void Function(String dungeonId)? onDoorReached;
@@ -41,7 +50,19 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   Set<LogicalKeyboardKey> Function() pressedKeys =
       () => HardwareKeyboard.instance.logicalKeysPressed;
 
-  static const grid = IsoGrid(tileW: 64, tileH: 32);
+  static const grid = TopDownGrid();
+
+  /// 세로로 적어도 보이는 칸 수.
+  static const minRows = 7;
+
+  /// 맵 전체의 월드 크기(정사각).
+  static double get mapExtent => VillageMap.size * grid.tile;
+
+  /// 가로등을 세우는 잔디 칸(길 옆).
+  static const lamps = [(7, 8), (16, 8), (7, 15), (16, 15)];
+
+  /// 흰 울타리를 두르는 칸(한 줄, 장식).
+  static const fenceTiles = [(2, 8), (3, 8), (4, 8), (5, 8), (6, 8), (7, 8)];
 
   static const names = {
     'k8s': '쿠버네티스 성',
@@ -56,14 +77,20 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
 
   late final StudentAvatar avatar;
   final _bank = SvgBank();
-  final _sky = SkyBackdrop(const Color(0xFFE9F1FF), const Color(0xFFFDF3E7));
   final _buildings = <String, _Building>{};
   late final _TargetMarker _marker;
-  final _tiles = _VillageTiles();
+  final _tiles = VillageTerrain(grid);
 
   Map<String, DungeonState> _state = const {};
   bool _graduated = false;
   (int, int)? _heldDir;
+
+  /// 건물과 그 이름 칩의 그리기 순서.
+  @visibleForTesting
+  ({int building, int label}) depthOf(String id) {
+    final b = _buildings[id]!;
+    return (building: b.priority, label: b.label.priority);
+  }
 
   /// 건물별 상태를 반영한다(깃발, 클리어 인원 표지판, 공사 중).
   void setDungeonState(Map<String, DungeonState> state) {
@@ -95,13 +122,14 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   }
 
   @override
-  Color backgroundColor() => const Color(0xFFE9F1FF);
+  Color backgroundColor() => const Color(0xFF9DDC85);
 
   @override
   Future<void> onLoad() async {
     await _bank.loadAll(this, [
       'tree',
       'fountain',
+      'lamp',
       'flag',
       for (final id in VillageMap.buildings.keys) 'building_$id',
     ]);
@@ -112,28 +140,35 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
     world.add(_tiles);
     world.add(_marker = _TargetMarker(grid));
 
+    // 소품은 장식만 한다. 걷기 판정은 VillageMap을 따른다.
+    // 그리기 순서는 아래 변 y: 위쪽 칸에 선 학생은 소품·건물에 가려진다.
+    final t = grid.tile;
+    WorldSprite prop(String name, double x, double bottom, Vector2 size,
+            {double? depthY}) =>
+        WorldSprite(
+          _bank[name],
+          position: Vector2(x, bottom),
+          size: size,
+          anchor: Anchor.bottomCenter,
+          priority: TopDownGrid.depth(depthY ?? bottom),
+        );
     for (var r = 0; r < VillageMap.size; r++) {
       for (var c = 0; c < VillageMap.size; c++) {
         if (VillageMap.tileAt(c, r) == 'T') {
-          world.add(WorldSprite(
-            _bank['tree'],
-            position: grid.toScreen(c, r) + Vector2(0, 6),
-            size: Vector2(44, 66),
-            anchor: Anchor.bottomCenter,
-            priority: isoDepth((c + r).toDouble()),
-          ));
+          // 나무 칸에는 설 수 없으니 칸 가운데로 정렬해도 앞뒤가 같다. 그래야
+          // 바로 아래 건물의 이름 칩이 나무 위에 온다.
+          world.add(prop('tree', (c + 0.5) * t, (r + 1) * t, Vector2(48, 60),
+              depthY: (r + 0.5) * t));
         }
       }
     }
-
     final (fc, fr) = VillageMap.fountainTile;
-    world.add(WorldSprite(
-      _bank['fountain'],
-      position: grid.toScreen(fc, fr) + Vector2(0, 22),
-      size: Vector2(96, 80),
-      anchor: Anchor.bottomCenter,
-      priority: isoDepth((fc + fr).toDouble()),
-    ));
+    world
+        .add(prop('fountain', (fc + 0.5) * t, (fr + 2) * t, Vector2(144, 120)));
+    for (final (c, r) in lamps) {
+      world.add(prop('lamp', (c + 0.8) * t, (r + 0.9) * t, Vector2(24, 72)));
+    }
+    world.add(_Fence(grid, fenceTiles));
 
     for (final MapEntry(key: id, value: origin)
         in VillageMap.buildings.entries) {
@@ -153,26 +188,47 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
     avatar = StudentAvatar(
       grid: grid,
       tile: VillageMap.startTile,
+      look: look,
       onTileReached: _onTileReached,
     )..graduated = _graduated;
     world.add(avatar);
 
     camera.viewfinder.anchor = Anchor.center;
-    camera.follow(avatar, maxSpeed: 900);
+    _avatarReady = true;
+    _followAvatar();
+  }
+
+  final _cameraTarget = Vector2.zero();
+
+  /// [avatar]가 만들어졌다. 읽는 중에 떠나면 끝까지 false다.
+  bool _avatarReady = false;
+
+  /// 카메라를 주인공에 맞추되 맵 밖이 보이지 않게 가장자리에서 멈춘다.
+  /// 보이는 폭이 맵보다 넓으면 그 축은 맵 가운데에 둔다.
+  void _followAvatar() {
+    if (!_avatarReady) return;
+    final zoom = camera.viewfinder.zoom;
+    final view = camera.viewport.virtualSize;
+    final extent = mapExtent;
+    double clampAxis(double v, double h) =>
+        h * 2 >= extent ? extent / 2 : v.clamp(h, extent - h);
+    // 매 프레임 불리므로 목표 벡터를 새로 만들지 않고 고쳐 쓴다.
+    camera.viewfinder.position = _cameraTarget
+      ..setValues(
+        clampAxis(avatar.position.x, view.x / (2 * zoom)),
+        clampAxis(avatar.position.y, view.y / (2 * zoom)),
+      );
   }
 
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    _sky.resize(size.toSize());
-    // 폰 폭(400px)에서는 9칸 남짓, 넓은 화면에서는 마을 전체가 보이게.
-    camera.viewfinder.zoom = (size.x / 1000).clamp(0.55, 1.0);
-  }
-
-  @override
-  void render(Canvas canvas) {
-    _sky.render(canvas);
-    super.render(canvas);
+    // 가로로 보이는 칸 수: 폰 폭(400px 안팎)은 7칸, 넓은 화면은 12칸.
+    // 가로로 누운 폰처럼 낮은 화면에서도 세로 7칸은 보이게 더 작게 확대한다.
+    final cols = (size.x / 100).clamp(7.0, 12.0);
+    camera.viewfinder.zoom =
+        math.min(size.x / (cols * grid.tile), size.y / (minRows * grid.tile));
+    _followAvatar();
   }
 
   @override
@@ -208,6 +264,7 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
       }
     }
     super.update(dt);
+    _followAvatar();
   }
 
   @override
@@ -278,104 +335,87 @@ final movementKeys = {
   return null;
 }
 
-/// 마을 타일 전체를 한 번 Picture로 구워 매 프레임 재생만 한다.
-class _VillageTiles extends Component {
-  _VillageTiles() : super(priority: -0x7ffffff);
-
-  Picture? _picture;
-
-  static const _grassA = Color(0xFF9FD8A8);
-  static const _grassB = Color(0xFFA7DCB0);
-  static const _grassLeft = Color(0xFF6FB487);
-  static const _grassRight = Color(0xFF5A9D74);
-  static const _path = Color(0xFFF3E6C8);
-  static const _door = Color(0xFFE8D6AE);
-  static const _plaza = Color(0xFFE8EDF5);
-  static const _water = Color(0xFF7CC4F2);
-  static const _waterLeft = Color(0xFF5AA9DC);
-  static const _waterRight = Color(0xFF4B93C4);
-
-  @override
-  Future<void> onLoad() async {
-    final baker = IsoTileBaker(VillageGame.grid);
-    const n = VillageMap.size;
-    for (var r = 0; r < n; r++) {
-      for (var c = 0; c < n; c++) {
-        final t = VillageMap.tileAt(c, r)!;
-        final plaza = c >= 9 && c <= 13 && r >= 9 && r <= 13;
-        final top = switch (t) {
-          'P' || 'S' => plaza ? _plaza : _path,
-          'F' => _plaza,
-          'D' => _door,
-          'W' => _water,
-          _ => (c + r).isEven ? _grassA : _grassB,
-        };
-        baker.addTile(c, r, top);
-        if (r == n - 1) {
-          baker.addLeftSide(c, r, t == 'W' ? _waterLeft : _grassLeft);
-        }
-        if (c == n - 1) {
-          baker.addRightSide(c, r, t == 'W' ? _waterRight : _grassRight);
-        }
-      }
-    }
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-    baker.paintShadow(canvas, n, n, const Color(0xFF3B4A6B));
-    baker.paintFaces(canvas, outline: const Color(0x0F3B4A6B));
-    _picture = recorder.endRecording();
-  }
-
-  @override
-  void render(Canvas canvas) {
-    final p = _picture;
-    if (p != null) canvas.drawPicture(p);
-  }
-
-  void release() {
-    _picture?.dispose();
-    _picture = null;
-  }
-
-  @override
-  void onRemove() {
-    release();
-    super.onRemove();
-  }
-}
-
 /// 탭한 목적지 칸 표시.
 class _TargetMarker extends Component {
   _TargetMarker(this.grid) : super(priority: -0x7fffff0);
 
-  final IsoGrid grid;
+  final TopDownGrid grid;
   (int, int)? _goal;
+  RRect _box = RRect.zero;
   (int, int)? get goal => _goal;
   set goal((int, int)? g) {
     if (g == _goal) return;
     _goal = g;
     if (g == null) return;
     final c = grid.toScreen(g.$1, g.$2);
-    final hw = grid.halfW * 0.8, hh = grid.halfH * 0.8;
-    _path
-      ..reset()
-      ..addPolygon([
-        Offset(c.x, c.y - hh),
-        Offset(c.x + hw, c.y),
-        Offset(c.x, c.y + hh),
-        Offset(c.x - hw, c.y),
-      ], true);
+    _box = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+          center: Offset(c.x, c.y),
+          width: grid.tile * 0.78,
+          height: grid.tile * 0.78),
+      Radius.circular(grid.tile * 0.22),
+    );
   }
 
   final _paint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2.5
     ..color = const Color(0xCC6C8CFF);
-  final _path = Path();
 
   @override
   void render(Canvas canvas) {
-    if (_goal != null) canvas.drawPath(_path, _paint);
+    if (_goal != null) canvas.drawRRect(_box, _paint);
+  }
+}
+
+/// 흰 울타리 한 줄(장식). 아래 변 y로 정렬해 그 칸에 선 학생 다리를 가린다.
+class _Fence extends PositionComponent
+    with HasGameReference<VillageGame>, OffscreenCulling<VillageGame> {
+  _Fence(TopDownGrid grid, List<(int, int)> tiles) {
+    final t = grid.tile;
+    final u = t / 32;
+    final parts = <RRect>[];
+    var left = double.infinity, right = -double.infinity, top = 0.0;
+    for (final (c, r) in tiles) {
+      final x = c * t, y = r * t + 8 * u;
+      top = y;
+      left = left < x ? left : x;
+      right = right > x + t ? right : x + t;
+      for (final rail in [
+        Rect.fromLTWH(x, y + 6 * u, t, 3 * u),
+        Rect.fromLTWH(x, y + 13 * u, t, 3 * u),
+        Rect.fromLTWH(x + 3 * u, y + u, 4 * u, 20 * u),
+      ]) {
+        parts.add(RRect.fromRectAndRadius(rail, Radius.circular(1.5 * u)));
+      }
+    }
+    // 끝 기둥.
+    parts.add(RRect.fromRectAndRadius(
+        Rect.fromLTWH(right - 4 * u, top + u, 4 * u, 20 * u),
+        Radius.circular(1.5 * u)));
+    position = Vector2(left, top);
+    size = Vector2(right - left, 23 * u);
+    // 그림은 생성 때 한 번만 Path 둘(나무·그림자)로 합친다.
+    for (final p in parts) {
+      _wood.addRRect(p.shift(Offset(-left, -top)));
+      _shadow.addRRect(p.shift(Offset(-left, 2 - top)));
+    }
+    priority = TopDownGrid.depth(top + size.y);
+  }
+
+  final _wood = Path();
+  final _shadow = Path();
+
+  @override
+  bool get cullsStatically => true;
+
+  static final _shadowPaint = Paint()..color = const Color(0x1F000000);
+  static final _woodPaint = Paint()..color = const Color(0xFFFFFFFF);
+
+  @override
+  void render(Canvas canvas) {
+    canvas.drawPath(_shadow, _shadowPaint);
+    canvas.drawPath(_wood, _woodPaint);
   }
 }
 
@@ -390,23 +430,28 @@ class _Building extends PositionComponent
     required this.svg,
     required this.flag,
   }) : super(
-          size: Vector2(192, 224),
+          // 그림(144×168) 아래로 문 앞 칸의 표지판 자리를 더 잡는다.
+          size: Vector2(_art.x, _art.y + _signRoom),
           anchor: Anchor.bottomCenter,
         ) {
     final (c0, r0) = origin;
     const f = VillageMap.footprint;
-    const grid = VillageGame.grid;
-    // 점유 영역 앞 모서리(가장 아래 꼭짓점)에 바닥을 맞춘다.
-    position = grid.toScreen(c0 + f - 1, r0 + f - 1) + Vector2(0, grid.halfH);
-    // 가운데 칸보다 살짝 뒤: 문 앞이나 옆에 선 학생이 건물 위에 그려진다.
-    priority = isoDepth((c0 + 1 + r0 + 1) - 0.5);
+    final t = VillageGame.grid.tile;
+    // 그림 바닥 = 3×3 점유칸 아래 변 가운데.
+    final bottom = (r0 + f) * t;
+    position = Vector2((c0 + f / 2) * t, bottom + _signRoom);
+    // 아래 변 y: 문 칸(아래 줄)에 선 학생은 앞에, 건물 위쪽 칸의 학생은 뒤에 그린다.
+    priority = TopDownGrid.depth(bottom);
     label = _BuildingLabel(this);
-    // 문 왼쪽 앞에 꽂힌 작은 표지판(건물 로컬 좌표).
-    final d = grid.toScreen(door.$1, door.$2);
-    final local = d - (position - Vector2(size.x / 2, size.y));
-    _signBase = Offset(local.x - 30, local.y + 4);
-    _signPost = Rect.fromLTWH(_signBase.dx - 1.5, _signBase.dy - 16, 3, 16);
+    // 문 왼쪽 칸에 꽂힌 작은 표지판(건물 로컬 좌표).
+    final doorX = (door.$1 + 0.5) * t - c0 * t;
+    _signBase = Offset(doorX - t * 0.85, _art.y + t * 0.42);
+    _signPost = Rect.fromLTWH(_signBase.dx - 1.5, _signBase.dy - 14, 3, 14);
   }
+
+  /// 건물 그림 크기(에셋 계약).
+  static final _art = Vector2(144, 168);
+  static const _signRoom = 24.0;
 
   final String id;
   final String name;
@@ -440,27 +485,27 @@ class _Building extends PositionComponent
 
   TextPainter? _signText;
 
-  static final _flagSize = Vector2(30, 45);
+  static final _flagSize = Vector2(24, 36);
 
   /// 깃발을 꽂을 지붕 위 자리(건물 SVG 좌표, 깃발 왼쪽 위).
-  static const _flagSpots = {
-    'k8s': (124.0, 44.0),
-    'jvm': (56.0, 58.0),
-    'db': (122.0, 56.0),
-    'net': (128.0, 70.0),
-    'build': (124.0, 64.0),
-    'ops': (120.0, 12.0),
-    'ai': (126.0, 62.0),
-    'shell': (118.0, 46.0),
+  static const flagSpots = {
+    'k8s': (60.0, -4.0),
+    'jvm': (104.0, -14.0),
+    'db': (106.0, -10.0),
+    'net': (60.0, -4.0),
+    'build': (100.0, -4.0),
+    'ops': (32.0, 8.0),
+    'ai': (108.0, 0.0),
+    'shell': (100.0, 4.0),
   };
 
   @override
   void render(Canvas canvas) {
-    svg.render(canvas, size, overridePaint: _paint);
+    svg.render(canvas, _art, overridePaint: _paint);
     final s = _state;
     if (s == null) return;
     if (s.cleared) {
-      final (fx, fy) = _flagSpots[id]!;
+      final (fx, fy) = flagSpots[id]!;
       canvas.save();
       canvas.translate(fx, fy);
       flag.render(canvas, _flagSize);
@@ -497,11 +542,16 @@ class _Building extends PositionComponent
   }
 }
 
-/// 건물 위 이름 칩. 모든 것 위에 그려지도록 따로 둔다.
+/// 건물 위 이름 칩. 바로 위 칸의 나무보다 앞에, 그 칸에 선 학생보다는 뒤에
+/// 그린다(칩이 학생을 가리지 않게).
 class _BuildingLabel extends PositionComponent
     with HasGameReference<VillageGame>, OffscreenCulling<VillageGame> {
   _BuildingLabel(this.building)
-      : super(anchor: Anchor.bottomCenter, priority: 0x7ffffff);
+      : super(
+          anchor: Anchor.bottomCenter,
+          priority:
+              TopDownGrid.depth(building.position.y - building.size.y) + 1,
+        );
 
   final _Building building;
   TextPainter? _name;
@@ -510,16 +560,16 @@ class _BuildingLabel extends PositionComponent
   bool get cullsStatically => true;
   TextPainter? _closed;
 
-  /// 건물 SVG(높이 224)에서 그림이 시작되는 y.
+  /// 건물 SVG(높이 168)에서 그림이 시작되는 y.
   static const _contentTop = {
-    'k8s': 6.0,
-    'jvm': 4.0,
-    'db': 40.0,
-    'net': 36.0,
-    'build': 64.0,
-    'ops': 0.0,
+    'k8s': 0.0,
+    'jvm': 2.0,
+    'db': 8.0,
+    'net': 0.0,
+    'build': 2.0,
+    'ops': 2.0,
     'ai': 30.0,
-    'shell': 60.0,
+    'shell': 22.0,
   };
 
   static final _chip = Paint()..color = const Color(0xFFFFFFFF);
@@ -529,18 +579,24 @@ class _BuildingLabel extends PositionComponent
   @override
   void onMount() {
     super.onMount();
-    // 건물 SVG에서 가장 높은 곳(깃대, 연기, 안테나) 바로 위.
-    final top = _contentTop[building.id] ?? 0;
-    position = building.position - Vector2(0, building.size.y - top + 6);
     refresh();
+    // onMount 중에는 isMounted가 아직 false라 refresh가 영역을 다시 재지 않는다.
+    refreshCullBounds();
   }
 
-  TextStyle _style(double size, Color color) => isMounted
+  // onMount 중에도(isMounted 전) 앱 글꼴을 쓰도록 부모가 있으면 게임에서 고른다.
+  TextStyle _style(double size, Color color) => parent != null
       ? game.labelStyle(size, color)
       : TextStyle(fontSize: size, fontWeight: FontWeight.w600, color: color);
 
   void refresh() {
     final s = building.state;
+    // 건물 그림에서 가장 높은 곳(깃대, 연기, 안테나, 꽂은 깃발) 바로 위.
+    var top = _contentTop[building.id] ?? 0;
+    if (s?.cleared == true) {
+      top = math.min(top, _Building.flagSpots[building.id]!.$2);
+    }
+    position = building.position - Vector2(0, building.size.y - top + 4);
     _name = TextPainter(
       text: TextSpan(
         text: s?.cleared == true ? '${building.name} ✓' : building.name,

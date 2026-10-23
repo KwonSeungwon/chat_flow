@@ -60,6 +60,10 @@ class GameApi {
         return GameMe.fromJson(_map(resp.data));
       });
 
+  Future<void> setAvatar(StudentLook look) => _call(() async {
+        await _dio.put('/api/game/me/avatar', data: {'avatar': look.name});
+      });
+
   Future<List<LeaderboardEntry>> leaderboard() => _call(() async {
         final resp = await _dio.get('/api/game/leaderboard');
         return apiResponseList(resp.data)
