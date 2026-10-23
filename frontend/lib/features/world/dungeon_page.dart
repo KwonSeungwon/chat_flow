@@ -38,7 +38,8 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
   @override
   void initState() {
     super.initState();
-    _game = DungeonGame(widget.dungeonId)
+    _game = DungeonGame(widget.dungeonId,
+        look: ref.read(studentLookProvider) ?? StudentLook.boy)
       ..onEncounter = _onEncounter
       // 판이 열릴 때까지 걷지 않는다.
       ..pause();
@@ -206,8 +207,8 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
             game: _game,
             focusNode: _focus,
             overlayBuilderMap: {
-              battleOverlayKey: (context, game) =>
-                  _BattleLayer(dungeonId: widget.dungeonId, name: _name),
+              battleOverlayKey: (context, game) => _BattleLayer(
+                  dungeonId: widget.dungeonId, name: _name, look: game.look),
             },
           ),
           if (starting) const Center(child: CircularProgressIndicator()),
@@ -218,9 +219,11 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
 }
 
 class _BattleLayer extends ConsumerWidget {
-  const _BattleLayer({required this.dungeonId, required this.name});
+  const _BattleLayer(
+      {required this.dungeonId, required this.name, required this.look});
   final String dungeonId;
   final String name;
+  final StudentLook look;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -239,6 +242,7 @@ class _BattleLayer extends ConsumerWidget {
       result: s.result,
       onChoice: run.answer,
       onContinue: run.finishBattle,
+      look: look,
     );
   }
 }

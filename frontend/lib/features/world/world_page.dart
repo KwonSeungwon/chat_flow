@@ -5,38 +5,61 @@ import 'package:go_router/go_router.dart';
 
 import 'admin/admin_game_provider.dart';
 import 'game/village_game.dart';
+import 'look_picker.dart';
+import 'state/game_api.dart';
 import 'state/game_models.dart';
 import 'state/world_provider.dart';
 
-/// `/world`. 마을 게임 하나를 이 페이지 수명 동안 소유한다. 던전이나 관리자
-/// 페이지를 위에 띄우는 동안에는 엔진을 멈춘다.
+/// `/world`. 마을 게임을 이 페이지 수명 동안 소유한다(주인공 그림을 바꾸면 새로
+/// 만든다). 던전이나 관리자 페이지를 위에 띄우는 동안에는 엔진을 멈춘다.
+///
+/// 주인공 그림을 아직 안 골랐으면 선택 카드를 먼저 띄우고, 고르기 전에는 마을을
+/// 만들지 않는다.
 class WorldPage extends ConsumerStatefulWidget {
-  const WorldPage({super.key, this.game});
+  const WorldPage({super.key, this.createGame});
 
   /// 테스트에서 게임을 갈아끼울 때만 쓴다.
-  final VillageGame? game;
+  final VillageGame Function(StudentLook look)? createGame;
 
   @override
   ConsumerState<WorldPage> createState() => _WorldPageState();
 }
 
 class _WorldPageState extends ConsumerState<WorldPage> {
-  late final VillageGame _village;
+  VillageGame? _village;
   final _focus = FocusNode(debugLabel: 'village');
   bool _covered = false;
+
+  /// 마을 메뉴에서 선택 카드를 다시 연 상태.
+  bool _repicking = false;
 
   @override
   void initState() {
     super.initState();
-    _village = (widget.game ?? VillageGame())
-      ..onDoorReached = _enterDungeon
-      ..onFountainTapped = _showLeaderboard;
-    final current = ref.read(worldProvider).valueOrNull;
-    if (current != null) _apply(current);
+    final look = ref.read(studentLookProvider);
+    if (look != null) _village = _newGame(look);
     ref.listenManual<AsyncValue<WorldData>>(worldProvider, (_, next) {
       final data = next.valueOrNull;
-      if (data != null) _apply(data);
+      final village = _village;
+      if (data != null && village != null) _apply(village, data);
     });
+    ref.listenManual<StudentLook?>(studentLookProvider, (_, look) {
+      if (look == null || look == _village?.look) return;
+      final game = _newGame(look);
+      if (_covered || !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        game.pauseEngine();
+      }
+      setState(() => _village = game);
+    });
+  }
+
+  VillageGame _newGame(StudentLook look) {
+    final game = (widget.createGame?.call(look) ?? VillageGame(look: look))
+      ..onDoorReached = _enterDungeon
+      ..onFountainTapped = _showLeaderboard;
+    final data = ref.read(worldProvider).valueOrNull;
+    if (data != null) _apply(game, data);
+    return game;
   }
 
   /// 이 라우트가 맨 위가 아니면(던전 딥링크, 관리자 페이지, 시트) 엔진을 멈추고
@@ -44,11 +67,13 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final village = _village;
+    if (village == null) return;
     final current = ModalRoute.of(context)?.isCurrent ?? true;
-    if (current && _village.paused && !_covered) {
-      _village.resumeEngine();
-    } else if (!current && !_village.paused) {
-      _village.pauseEngine();
+    if (current && village.paused && !_covered && !_repicking) {
+      village.resumeEngine();
+    } else if (!current && !village.paused) {
+      village.pauseEngine();
     }
   }
 
@@ -58,24 +83,24 @@ class _WorldPageState extends ConsumerState<WorldPage> {
     super.dispose();
   }
 
-  void _apply(WorldData data) {
-    _village.setDungeonState({
+  void _apply(VillageGame village, WorldData data) {
+    village.setDungeonState({
       for (final d in data.dungeons)
         d.id: (open: d.open, cleared: d.clearedByMe, clearCount: d.clearCount),
     });
-    _village.setGraduated(data.me.graduated);
+    village.setGraduated(data.me.graduated);
   }
 
   void _enterDungeon(String id) => _openOver('/world/dungeon/$id');
 
   Future<void> _openOver(String location) async {
-    if (_covered) return;
+    if (_covered || _repicking) return;
     _covered = true;
-    _village.pauseEngine();
+    _village?.pauseEngine();
     await context.push(location);
     if (!mounted) return;
     _covered = false;
-    _village.resumeEngine();
+    _village?.resumeEngine();
     _focus.requestFocus();
     ref.invalidate(worldProvider);
   }
@@ -86,6 +111,31 @@ class _WorldPageState extends ConsumerState<WorldPage> {
       showDragHandle: true,
       builder: (_) => const LeaderboardSheet(),
     );
+  }
+
+  void _openPicker() {
+    _village?.pauseEngine();
+    setState(() => _repicking = true);
+  }
+
+  void _closePicker() {
+    setState(() => _repicking = false);
+    if (!_covered) _village?.resumeEngine();
+    _focus.requestFocus();
+  }
+
+  /// 고른 그림을 바로 쓰고 서버에 저장한다. 저장이 실패해도 이번 접속에서는
+  /// 고른 그림을 그대로 쓴다.
+  Future<void> _pick(StudentLook look) async {
+    ref.read(chosenLookProvider.notifier).state = look;
+    if (_repicking) _closePicker();
+    try {
+      await ref.read(gameApiProvider).setAvatar(look);
+    } on GameApiException {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('캐릭터를 저장하지 못했다. 이번 접속에서만 이 학생으로 다닌다.')));
+    }
   }
 
   void _back() {
@@ -99,7 +149,10 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   @override
   Widget build(BuildContext context) {
     final world = ref.watch(worldProvider);
+    final look = ref.watch(studentLookProvider);
     final isAdmin = ref.watch(isGameAdminProvider).valueOrNull == true;
+    final village = _village;
+    final picking = _repicking || (look == null && world.hasValue);
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -115,11 +168,38 @@ class _WorldPageState extends ConsumerState<WorldPage> {
               tooltip: '문제 검수',
               onPressed: () => _openOver('/world/admin'),
             ),
+          if (village != null)
+            PopupMenuButton<void>(
+              tooltip: '마을 메뉴',
+              itemBuilder: (_) => [
+                PopupMenuItem<void>(
+                  onTap: _openPicker,
+                  child: const ListTile(
+                    leading: Icon(Icons.face_retouching_natural_outlined),
+                    title: Text('캐릭터 바꾸기'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       body: Stack(
         children: [
-          GameWidget<VillageGame>(game: _village, focusNode: _focus),
+          if (village != null)
+            GameWidget<VillageGame>(
+                key: ObjectKey(village), game: village, focusNode: _focus)
+          else
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFE6F5FF), Color(0xFFDDF2D2)],
+                ),
+              ),
+              child: SizedBox.expand(),
+            ),
           if (world.isLoading)
             const Positioned(
                 top: 0, left: 0, right: 0, child: LinearProgressIndicator()),
@@ -139,6 +219,14 @@ class _WorldPageState extends ConsumerState<WorldPage> {
                     child: const Text('다시 시도'),
                   ),
                 ),
+              ),
+            ),
+          if (picking)
+            Positioned.fill(
+              child: LookPicker(
+                initial: look ?? StudentLook.boy,
+                onPick: _pick,
+                onCancel: _repicking ? _closePicker : null,
               ),
             ),
         ],
