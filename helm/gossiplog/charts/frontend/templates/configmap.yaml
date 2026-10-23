@@ -22,6 +22,13 @@ data:
             index index.html;
             client_max_body_size 55m;
 
+            # Visitors who open http:// get a non-secure context: no WebCrypto, so
+            # flutter_secure_storage cannot save the login token. Cloudflare sends the
+            # visitor scheme in CF-Visitor; in-cluster requests carry no such header.
+            if ($http_cf_visitor ~* '"scheme":"http"') {
+                return 301 https://$host$request_uri;
+            }
+
             gzip on;
             gzip_vary on;
             gzip_min_length 1024;
