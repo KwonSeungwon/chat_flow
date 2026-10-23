@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-07-29 회원가입 아바타 envelope 파싱 핫픽스
-    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
+    # 2026-10-23 한글 글꼴 서브셋 번들, JS 재검증 캐시
+    tag: "sha-16c0034a73f8be33133290fea8d743d157ed3d1c"
   service:
     port: 80
     type: ClusterIP
