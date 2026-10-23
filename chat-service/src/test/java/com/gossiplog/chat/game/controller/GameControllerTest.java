@@ -14,6 +14,7 @@ import com.gossiplog.chat.game.dto.NextEncounter;
 import com.gossiplog.chat.game.dto.RunStartResponse;
 import com.gossiplog.chat.game.exception.GameException;
 import com.gossiplog.chat.game.service.GameDungeonQueryService;
+import com.gossiplog.chat.game.service.GamePlayerService;
 import com.gossiplog.chat.game.service.GameRunService;
 import com.gossiplog.chat.game.service.LeaderboardService;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,13 +52,15 @@ class GameControllerTest {
     @Mock
     private LeaderboardService leaderboardService;
     @Mock
+    private GamePlayerService playerService;
+    @Mock
     private RoomMembershipGuard membershipGuard;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        GameController controller = new GameController(runService, dungeonQueryService, leaderboardService);
+        GameController controller = new GameController(runService, dungeonQueryService, leaderboardService, playerService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticatedUserResolver())
                 .addFilters(TestAuthFilter.fromUserIdHeader())
@@ -73,7 +79,10 @@ class GameControllerTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/game/me")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/game/leaderboard")).andExpect(status().isUnauthorized());
-        verifyNoInteractions(runService, dungeonQueryService, leaderboardService);
+        mockMvc.perform(put("/api/game/me/avatar")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"avatar\":\"boy\"}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(runService, dungeonQueryService, leaderboardService, playerService);
     }
 
     @Test
@@ -131,7 +140,7 @@ class GameControllerTest {
     void dungeonsMeAndLeaderboard() throws Exception {
         when(dungeonQueryService.dungeons(USER)).thenReturn(List.of(
                 new DungeonSummary("jvm", "JVM 대장간", "jvm", true, false, 4)));
-        when(dungeonQueryService.me(USER)).thenReturn(new GameMeResponse(1, 8, false, true));
+        when(dungeonQueryService.me(USER)).thenReturn(new GameMeResponse(1, 8, false, true, "girl"));
         when(leaderboardService.top()).thenReturn(List.of(new LeaderboardEntry("앨리스", 2, 30)));
 
         mockMvc.perform(get("/api/game/dungeons").header("X-User-Id", USER))
@@ -142,10 +151,29 @@ class GameControllerTest {
                 .andExpect(jsonPath("$.data.total").value(8))
                 .andExpect(jsonPath("$.data.graduated").value(false))
                 .andExpect(jsonPath("$.data.clearedCount").value(1))
-                .andExpect(jsonPath("$.data.admin").value(true));
+                .andExpect(jsonPath("$.data.admin").value(true))
+                .andExpect(jsonPath("$.data.avatar").value("girl"));
         mockMvc.perform(get("/api/game/leaderboard").header("X-User-Id", USER))
                 .andExpect(jsonPath("$.data[0].username").value("앨리스"))
                 .andExpect(jsonPath("$.data[0].correctCount").value(30))
                 .andExpect(jsonPath("$.data[0].userId").doesNotExist());
+    }
+
+    @Test
+    void putAvatar_returns204_andDelegates() throws Exception {
+        mockMvc.perform(put("/api/game/me/avatar").header("X-User-Id", USER)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"avatar\":\"boy\"}"))
+                .andExpect(status().isNoContent());
+        verify(playerService).setAvatar(USER, "boy");
+    }
+
+    @Test
+    void putAvatar_invalid_returns400() throws Exception {
+        doThrow(GameException.validation("avatar must be boy or girl"))
+                .when(playerService).setAvatar(USER, "cat");
+
+        mockMvc.perform(put("/api/game/me/avatar").header("X-User-Id", USER)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"avatar\":\"cat\"}"))
+                .andExpect(status().isBadRequest());
     }
 }

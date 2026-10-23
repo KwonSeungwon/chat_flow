@@ -8,6 +8,7 @@ import com.gossiplog.chat.game.entity.GameQuestion;
 import com.gossiplog.chat.game.entity.GameQuestionStatus;
 import com.gossiplog.chat.game.entity.GameTopic;
 import com.gossiplog.chat.game.repository.GameDungeonRepository;
+import com.gossiplog.chat.game.repository.GamePlayerRepository;
 import com.gossiplog.chat.game.repository.GameProgressRepository;
 import com.gossiplog.chat.game.repository.GameQuestionRepository;
 import com.gossiplog.chat.game.repository.GameTopicRepository;
@@ -38,13 +39,18 @@ class GameDungeonQueryServiceTest {
     @Autowired
     private GameProgressRepository progressRepository;
 
+    @Autowired
+    private GamePlayerRepository playerRepository;
+
     private GameDungeonQueryService service;
+    private GamePlayerService playerService;
     private int hashSeq;
 
     @BeforeEach
     void setUp() {
         service = new GameDungeonQueryService(dungeonRepository, questionRepository, progressRepository,
-                new GameAdminGuard("admin-1"));
+                playerRepository, new GameAdminGuard("admin-1"));
+        playerService = new GamePlayerService(playerRepository);
         dungeonRepository.save(GameDungeon.builder().id("k8s").name("쿠버네티스 성").sortOrder(1).buildingStyle("k8s").build());
         dungeonRepository.save(GameDungeon.builder().id("jvm").name("JVM 대장간").sortOrder(2).buildingStyle("jvm").build());
     }
@@ -73,14 +79,35 @@ class GameDungeonQueryServiceTest {
         progress("me", "jvm", LocalDateTime.now());
         progress("me", "k8s", null);
 
-        assertThat(service.me("me")).isEqualTo(new GameMeResponse(1, 8, false, false));
-        assertThat(service.me("nobody")).isEqualTo(new GameMeResponse(0, 8, false, false));
+        assertThat(service.me("me")).isEqualTo(new GameMeResponse(1, 8, false, false, null));
+        assertThat(service.me("nobody")).isEqualTo(new GameMeResponse(0, 8, false, false, null));
     }
 
     @Test
     void me_flagsGameAdmins() {
         assertThat(service.me("admin-1").admin()).isTrue();
         assertThat(service.me("me").admin()).isFalse();
+    }
+
+    @Test
+    void avatar_nullUntilSet_thenUpsertedPerUser() {
+        assertThat(service.me("me").avatar()).isNull();
+
+        playerService.setAvatar("me", "boy");
+        assertThat(service.me("me").avatar()).isEqualTo("boy");
+        assertThat(service.me("other").avatar()).isNull();
+
+        playerService.setAvatar("me", "girl");
+        assertThat(service.me("me").avatar()).isEqualTo("girl");
+        assertThat(playerRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void setAvatar_rejectsUnknownValue() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> playerService.setAvatar("me", "cat"))
+                .isInstanceOf(com.gossiplog.chat.game.exception.GameException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> playerService.setAvatar("me", null))
+                .isInstanceOf(com.gossiplog.chat.game.exception.GameException.class);
     }
 
     private void progress(String userId, String dungeonId, LocalDateTime clearedAt) {

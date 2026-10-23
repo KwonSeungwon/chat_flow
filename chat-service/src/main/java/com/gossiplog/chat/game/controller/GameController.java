@@ -5,12 +5,14 @@ import com.gossiplog.chat.auth.AuthenticatedUser;
 import com.gossiplog.chat.auth.RequireAuth;
 import com.gossiplog.chat.game.dto.AnswerRequest;
 import com.gossiplog.chat.game.dto.AnswerResult;
+import com.gossiplog.chat.game.dto.AvatarRequest;
 import com.gossiplog.chat.game.dto.DungeonSummary;
 import com.gossiplog.chat.game.dto.GameMeResponse;
 import com.gossiplog.chat.game.dto.LeaderboardEntry;
 import com.gossiplog.chat.game.dto.NextEncounter;
 import com.gossiplog.chat.game.dto.RunStartResponse;
 import com.gossiplog.chat.game.service.GameDungeonQueryService;
+import com.gossiplog.chat.game.service.GamePlayerService;
 import com.gossiplog.chat.game.service.GameRunService;
 import com.gossiplog.chat.game.service.LeaderboardService;
 import com.gossiplog.common.dto.ApiResponse;
@@ -19,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +38,7 @@ public class GameController {
     private final GameRunService runService;
     private final GameDungeonQueryService dungeonQueryService;
     private final LeaderboardService leaderboardService;
+    private final GamePlayerService playerService;
 
     @RequireAuth
     @GetMapping("/dungeons")
@@ -70,6 +74,13 @@ public class GameController {
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<GameMeResponse>> me(@AuthenticatedUser String userId) {
         return ResponseEntity.ok(ApiResponse.ok(dungeonQueryService.me(userId)));
+    }
+
+    @RequireAuth
+    @PutMapping("/me/avatar")
+    public ResponseEntity<Void> setAvatar(@AuthenticatedUser String userId, @RequestBody AvatarRequest request) {
+        playerService.setAvatar(userId, request.avatar());
+        return ResponseEntity.noContent().build();
     }
 
     @RequireAuth
