@@ -15,6 +15,11 @@ data:
         types { font/ttf ttf; }
         default_type application/octet-stream;
 
+        # Behind the Cloudflare tunnel $remote_addr is always the node; log the visitor IP.
+        log_format visitor '$http_cf_connecting_ip $remote_addr [$time_local] "$request" '
+                           '$status $body_bytes_sent rt=$request_time "$http_referer" "$http_user_agent"';
+        access_log /var/log/nginx/access.log visitor;
+
         server {
             listen 80;
             server_name _;
