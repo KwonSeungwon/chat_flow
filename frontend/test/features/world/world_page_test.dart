@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:gossiplog/features/world/admin/admin_game_provider.dart';
 import 'package:gossiplog/features/world/game/village_game.dart';
@@ -196,6 +198,22 @@ void main() {
     await _waitForGame(tester);
     expect(_village.look, StudentLook.girl);
     expect(_village.avatar.look, StudentLook.girl);
+  });
+
+  testWidgets('double tap on enroll while saving sends one setAvatar',
+      (tester) async {
+    final gate = Completer<void>();
+    final api = _newcomer()..avatarGate = gate.future;
+    await _pump(tester, api, waitForGame: false);
+
+    await tester.tap(find.text('이 학생으로 입학!'));
+    await tester.tap(find.text('이 학생으로 입학!'), warnIfMissed: false);
+    await tester.pump();
+    expect(api.avatarCalls, [StudentLook.boy]);
+
+    gate.complete();
+    await tester.pump();
+    expect(api.avatarCalls, [StudentLook.boy]);
   });
 
   testWidgets('save failure: snackbar, choice still used this session',

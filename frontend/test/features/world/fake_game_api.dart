@@ -81,9 +81,13 @@ class FakeGameApi implements GameApi {
   final avatarCalls = <StudentLook>[];
   GameApiException? avatarError;
 
+  /// 있으면 setAvatar가 이 Future가 끝날 때까지 기다린다.
+  Future<void>? avatarGate;
+
   @override
   Future<void> setAvatar(StudentLook look) async {
     avatarCalls.add(look);
+    await avatarGate;
     if (avatarError != null) throw avatarError!;
   }
 }

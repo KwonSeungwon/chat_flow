@@ -33,6 +33,9 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   /// 마을 메뉴에서 선택 카드를 다시 연 상태.
   bool _repicking = false;
 
+  /// setAvatar 요청이 진행 중이다. 그동안 다시 고르는 탭은 무시한다.
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +146,7 @@ class _WorldPageState extends ConsumerState<WorldPage> {
   /// 고른 그림을 바로 쓰고 서버에 저장한다. 저장이 실패해도 이번 접속에서는
   /// 고른 그림을 그대로 쓴다.
   Future<void> _pick(StudentLook look) async {
+    if (_saving) return;
     ref.read(chosenLookProvider.notifier).state = look;
     if (_repicking) {
       _closePicker();
@@ -150,12 +154,15 @@ class _WorldPageState extends ConsumerState<WorldPage> {
       // 오류로 먼저 띄운 남학생 마을 위에서 골랐을 수 있다.
       _village?.resumeEngine();
     }
+    setState(() => _saving = true);
     try {
       await ref.read(gameApiProvider).setAvatar(look);
     } on GameApiException {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('캐릭터를 저장하지 못했다. 이번 접속에서만 이 학생으로 다닌다.')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -247,6 +254,7 @@ class _WorldPageState extends ConsumerState<WorldPage> {
               child: LookPicker(
                 initial: look ?? StudentLook.boy,
                 onPick: _pick,
+                saving: _saving,
                 onCancel: _repicking ? _closePicker : null,
               ),
             ),

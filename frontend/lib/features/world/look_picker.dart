@@ -10,11 +10,15 @@ class LookPicker extends StatefulWidget {
     super.key,
     required this.initial,
     required this.onPick,
+    this.saving = false,
     this.onCancel,
   });
 
   final StudentLook initial;
   final ValueChanged<StudentLook> onPick;
+
+  /// 저장 중이면 입학 버튼을 막는다.
+  final bool saving;
 
   /// 있으면 닫기 버튼을 보인다(이미 고른 사람이 다시 열었을 때).
   final VoidCallback? onCancel;
@@ -112,7 +116,7 @@ class _LookPickerState extends State<LookPicker> {
                         elevation: 2,
                         shadowColor: const Color(0x55FF8FA3),
                       ),
-                      onPressed: () => widget.onPick(_look),
+                      onPressed: widget.saving ? null : () => widget.onPick(_look),
                       child: const Text('이 학생으로 입학!'),
                     ),
                   ],
