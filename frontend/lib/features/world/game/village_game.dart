@@ -52,6 +52,9 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
 
   static const grid = TopDownGrid();
 
+  /// 세로로 적어도 보이는 칸 수.
+  static const minRows = 7;
+
   /// 맵 전체의 월드 크기(정사각).
   static double get mapExtent => VillageMap.size * grid.tile;
 
@@ -81,6 +84,13 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   Map<String, DungeonState> _state = const {};
   bool _graduated = false;
   (int, int)? _heldDir;
+
+  /// 건물과 그 이름 칩의 그리기 순서.
+  @visibleForTesting
+  ({int building, int label}) depthOf(String id) {
+    final b = _buildings[id]!;
+    return (building: b.priority, label: b.label.priority);
+  }
 
   /// 건물별 상태를 반영한다(깃발, 클리어 인원 표지판, 공사 중).
   void setDungeonState(Map<String, DungeonState> state) {
@@ -188,6 +198,8 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
     _followAvatar();
   }
 
+  final _cameraTarget = Vector2.zero();
+
   /// [avatar]가 만들어졌다. 읽는 중에 떠나면 끝까지 false다.
   bool _avatarReady = false;
 
@@ -196,22 +208,26 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   void _followAvatar() {
     if (!_avatarReady) return;
     final zoom = camera.viewfinder.zoom;
-    final half = camera.viewport.virtualSize / (2 * zoom);
+    final view = camera.viewport.virtualSize;
     final extent = mapExtent;
     double clampAxis(double v, double h) =>
         h * 2 >= extent ? extent / 2 : v.clamp(h, extent - h);
-    camera.viewfinder.position = Vector2(
-      clampAxis(avatar.position.x, half.x),
-      clampAxis(avatar.position.y, half.y),
-    );
+    // 매 프레임 불리므로 목표 벡터를 새로 만들지 않고 고쳐 쓴다.
+    camera.viewfinder.position = _cameraTarget
+      ..setValues(
+        clampAxis(avatar.position.x, view.x / (2 * zoom)),
+        clampAxis(avatar.position.y, view.y / (2 * zoom)),
+      );
   }
 
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
     // 가로로 보이는 칸 수: 폰 폭(400px 안팎)은 7칸, 넓은 화면은 12칸.
-    final tiles = (size.x / 100).clamp(7.0, 12.0);
-    camera.viewfinder.zoom = size.x / (tiles * grid.tile);
+    // 가로로 누운 폰처럼 낮은 화면에서도 세로 7칸은 보이게 더 작게 확대한다.
+    final cols = (size.x / 100).clamp(7.0, 12.0);
+    camera.viewfinder.zoom =
+        math.min(size.x / (cols * grid.tile), size.y / (minRows * grid.tile));
     _followAvatar();
   }
 
@@ -358,6 +374,7 @@ class _Fence extends PositionComponent
   _Fence(TopDownGrid grid, List<(int, int)> tiles) {
     final t = grid.tile;
     final u = t / 32;
+    final parts = <RRect>[];
     var left = double.infinity, right = -double.infinity, top = 0.0;
     for (final (c, r) in tiles) {
       final x = c * t, y = r * t + 8 * u;
@@ -369,37 +386,36 @@ class _Fence extends PositionComponent
         Rect.fromLTWH(x, y + 13 * u, t, 3 * u),
         Rect.fromLTWH(x + 3 * u, y + u, 4 * u, 20 * u),
       ]) {
-        _parts.add(RRect.fromRectAndRadius(rail, Radius.circular(1.5 * u)));
+        parts.add(RRect.fromRectAndRadius(rail, Radius.circular(1.5 * u)));
       }
     }
     // 끝 기둥.
-    _parts.add(RRect.fromRectAndRadius(
+    parts.add(RRect.fromRectAndRadius(
         Rect.fromLTWH(right - 4 * u, top + u, 4 * u, 20 * u),
         Radius.circular(1.5 * u)));
     position = Vector2(left, top);
     size = Vector2(right - left, 23 * u);
-    for (var i = 0; i < _parts.length; i++) {
-      _parts[i] = _parts[i].shift(Offset(-left, -top));
+    // 그림은 생성 때 한 번만 Path 둘(나무·그림자)로 합친다.
+    for (final p in parts) {
+      _wood.addRRect(p.shift(Offset(-left, -top)));
+      _shadow.addRRect(p.shift(Offset(-left, 2 - top)));
     }
     priority = TopDownGrid.depth(top + size.y);
   }
 
-  final _parts = <RRect>[];
+  final _wood = Path();
+  final _shadow = Path();
 
   @override
   bool get cullsStatically => true;
 
-  static final _shadow = Paint()..color = const Color(0x1F000000);
-  static final _wood = Paint()..color = const Color(0xFFFFFFFF);
+  static final _shadowPaint = Paint()..color = const Color(0x1F000000);
+  static final _woodPaint = Paint()..color = const Color(0xFFFFFFFF);
 
   @override
   void render(Canvas canvas) {
-    for (final p in _parts) {
-      canvas.drawRRect(p.shift(const Offset(0, 2)), _shadow);
-    }
-    for (final p in _parts) {
-      canvas.drawRRect(p, _wood);
-    }
+    canvas.drawPath(_shadow, _shadowPaint);
+    canvas.drawPath(_wood, _woodPaint);
   }
 }
 

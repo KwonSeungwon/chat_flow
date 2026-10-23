@@ -4,13 +4,14 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 import 'package:flame/game.dart';
 import 'package:flame_svg/flame_svg.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../state/game_models.dart';
 import 'top_down_grid.dart';
 import 'world_sprite.dart';
 
 /// 바라보는 쪽. 왼쪽은 [side]를 좌우 반전해 그린다.
-enum _Facing { down, up, side }
+enum StudentFacing { down, up, side }
 
 /// 대학생 주인공([look]: 남·여). 타일 경로를 따라 걷고(가는 방향의 그림 +
 /// 살짝 흔들림), 정답에 기뻐하고, 졸업하면 학사모를 쓴다.
@@ -46,17 +47,25 @@ class StudentAvatar extends PositionComponent
   final _targetPos = Vector2.zero();
   final _tmp = Vector2.zero();
 
-  _Facing _facing = _Facing.down;
+  StudentFacing _facing = StudentFacing.down;
   bool _facingLeft = false;
   double _walkClock = 0;
   double _celebrate = -1; // 0..1 진행, 음수면 쉬는 중.
 
-  final _bodies = <_Facing, Svg>{};
+  final _bodies = <StudentFacing, Svg>{};
   Svg? _cap;
 
   static const _celebrateSeconds = 0.9;
   final _shadowPaint = Paint()..color = const Color(0x38283C50);
   final _starPaint = Paint()..color = const Color(0xFFFFD34D);
+
+  /// 지금 그리는 방향 그림.
+  @visibleForTesting
+  StudentFacing get facing => _facing;
+
+  /// 옆 그림을 좌우 반전해 왼쪽을 보고 있다.
+  @visibleForTesting
+  bool get mirrored => _facing == StudentFacing.side && _facingLeft;
 
   /// 지금 서 있거나 향하고 있는 칸.
   (int, int) get tile => _target ?? _tile;
@@ -69,11 +78,11 @@ class StudentAvatar extends PositionComponent
   @override
   Future<void> onLoad() async {
     final loaded = await Future.wait([
-      for (final f in _Facing.values)
+      for (final f in StudentFacing.values)
         game.loadSvg('world/student_${look.name}_${f.name}.svg'),
       game.loadSvg('world/student_cap.svg'),
     ]);
-    for (final f in _Facing.values) {
+    for (final f in StudentFacing.values) {
       _bodies[f] = loaded[f.index];
     }
     _cap = loaded.last;
@@ -142,10 +151,10 @@ class StudentAvatar extends PositionComponent
       final dx = _targetPos.x - position.x;
       final dy = _targetPos.y - position.y;
       if (dx.abs() > dy.abs()) {
-        _facing = _Facing.side;
+        _facing = StudentFacing.side;
         _facingLeft = dx < 0;
       } else if (dy != 0) {
-        _facing = dy > 0 ? _Facing.down : _Facing.up;
+        _facing = dy > 0 ? StudentFacing.down : StudentFacing.up;
       }
     }
     final target = _target;
@@ -209,7 +218,7 @@ class StudentAvatar extends PositionComponent
       canvas.rotate(sway);
       canvas.translate(-feet.dx, -feet.dy);
     }
-    if (_facing == _Facing.side && _facingLeft) {
+    if (_facing == StudentFacing.side && _facingLeft) {
       canvas.translate(w, 0);
       canvas.scale(-1, 1);
     }

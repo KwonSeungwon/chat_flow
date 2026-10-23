@@ -1,3 +1,4 @@
+import 'package:gossiplog/features/world/game/student_avatar.dart';
 import 'package:gossiplog/features/world/game/village_game.dart';
 import 'package:gossiplog/features/world/game/village_map.dart';
 import 'package:gossiplog/features/world/game/world_sprite.dart';
@@ -236,15 +237,84 @@ void main() {
     },
   );
 
-  test('about 12 tiles across on a desktop, 7 on a phone', () {
-    double across(double width) {
-      final game = VillageGame()..onGameResize(Vector2(width, 800));
-      return width / game.camera.viewfinder.zoom / VillageGame.grid.tile;
+  test('about 12 tiles across on a desktop, 7 on a phone, 7 rows at least', () {
+    (double, double) visibleTiles(double w, double h) {
+      final game = VillageGame()..onGameResize(Vector2(w, h));
+      final z = game.camera.viewfinder.zoom * VillageGame.grid.tile;
+      return (w / z, h / z);
     }
 
-    expect(across(1280), closeTo(12, 0.01));
-    expect(across(390), closeTo(7, 0.01));
+    expect(visibleTiles(1280, 800).$1, closeTo(12, 0.01));
+    expect(visibleTiles(390, 844).$1, closeTo(7, 0.01));
+    // 가로로 누운 폰: 세로 7칸을 지키고 가로는 더 넓게 보인다.
+    final (cols, rows) = visibleTiles(844, 390);
+    expect(rows, closeTo(VillageGame.minRows, 0.01));
+    expect(cols, greaterThan(12));
   });
+
+  testWithGame<VillageGame>(
+    'depth: behind a building from the row above, in front on its door',
+    () => VillageGame(),
+    (game) async {
+      await game.ready();
+      final jvm = game.depthOf('jvm');
+      final (c0, r0) = VillageMap.buildings['jvm']!;
+      game.avatar.placeAt((c0 + 1, r0 - 1));
+      expect(game.avatar.priority, lessThan(jvm.building));
+      game.avatar.placeAt(VillageMap.doors['jvm']!);
+      expect(game.avatar.priority, greaterThan(jvm.building));
+    },
+  );
+
+  testWithGame<VillageGame>(
+    'depth: a name chip sits over the tree above it, under a student there',
+    () => VillageGame(),
+    (game) async {
+      await game.ready();
+      // 네트워크 요새(3,10) 바로 위 줄의 (5,9)에 나무가 있고, (4,9)는 잔디다.
+      final net = game.depthOf('net');
+      const t = 48.0;
+      final tree = game.world.children
+          .whereType<WorldSprite>()
+          .singleWhere((s) => s.position == Vector2(5.5 * t, 10 * t));
+      game.avatar.placeAt((4, 9));
+      expect(net.label, greaterThan(tree.priority));
+      expect(net.label, lessThan(game.avatar.priority));
+      expect(net.label, lessThan(net.building));
+    },
+  );
+
+  testWithGame<VillageGame>(
+    'the avatar faces the way it walks; left mirrors the side sprite',
+    () => VillageGame(),
+    (game) async {
+      await game.ready();
+      void step((int, int) d) {
+        final (c, r) = game.avatar.tile;
+        game.avatar.moveAlong([(c + d.$1, r + d.$2)]);
+        game.update(1 / 60);
+      }
+
+      expect(game.avatar.facing, StudentFacing.down);
+      step((0, -1));
+      expect(game.avatar.facing, StudentFacing.up);
+      settle(game);
+      step((1, 0));
+      expect(game.avatar.facing, StudentFacing.side);
+      expect(game.avatar.mirrored, isFalse);
+      settle(game);
+      step((-1, 0));
+      expect(game.avatar.facing, StudentFacing.side);
+      expect(game.avatar.mirrored, isTrue);
+      settle(game);
+      step((0, 1));
+      expect(game.avatar.facing, StudentFacing.down);
+      expect(game.avatar.mirrored, isFalse);
+      // 멈춰도 마지막 방향을 유지한다.
+      settle(game);
+      expect(game.avatar.facing, StudentFacing.down);
+    },
+  );
 
   testWidgets('attaching and disposing games repeatedly releases them',
       (tester) async {
