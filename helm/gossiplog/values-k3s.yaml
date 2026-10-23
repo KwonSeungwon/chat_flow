@@ -60,8 +60,8 @@ chat-service:
   replicaCount: 1
   image:
     name: chat-service
-    # 2026-07-28 배포
-    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
+    # 2026-10-23 캐릭터 선택 저장(V22)
+    tag: "sha-43ff60e5b7a09e97bdc3cbfaffa346484cf21d77"
   service:
     port: 8080
     type: ClusterIP
@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-10-23 한글 글꼴 서브셋 번들, JS 재검증 캐시
-    tag: "sha-16c0034a73f8be33133290fea8d743d157ed3d1c"
+    # 2026-10-23 부드러운 HGSS풍 위키 던전, 남·여 캐릭터
+    tag: "sha-43ff60e5b7a09e97bdc3cbfaffa346484cf21d77"
   service:
     port: 80
     type: ClusterIP
