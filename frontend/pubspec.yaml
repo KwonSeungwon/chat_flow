@@ -62,3 +62,4 @@ flutter:
     - .env
     - assets/app_icon.png
     - assets/world/
+    - assets/google_fonts/

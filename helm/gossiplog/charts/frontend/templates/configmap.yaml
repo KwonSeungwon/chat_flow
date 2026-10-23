@@ -23,7 +23,8 @@ data:
             gzip on;
             gzip_vary on;
             gzip_min_length 1024;
-            gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+            gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json font/ttf;
+            gzip_proxied any;
 
             # SPA routing — index.html no-cache
             location / {
@@ -73,21 +74,16 @@ data:
                 proxy_send_timeout 3600s;
             }
 
-            # Flutter core JS — exact match (highest priority, no cache)
+            # Flutter core JS — exact match (highest priority). Revalidate via ETag on every load
+            # (304 when unchanged) instead of no-store, which re-downloaded 2MB each visit.
             location = /main.dart.js {
-                add_header Cache-Control "no-cache, no-store, must-revalidate";
-                add_header Pragma "no-cache";
-                expires 0;
+                add_header Cache-Control "no-cache, must-revalidate";
             }
             location = /flutter_bootstrap.js {
-                add_header Cache-Control "no-cache, no-store, must-revalidate";
-                add_header Pragma "no-cache";
-                expires 0;
+                add_header Cache-Control "no-cache, must-revalidate";
             }
             location = /flutter_service_worker.js {
-                add_header Cache-Control "no-cache, no-store, must-revalidate";
-                add_header Pragma "no-cache";
-                expires 0;
+                add_header Cache-Control "no-cache, must-revalidate";
             }
             location = /version.json {
                 add_header Cache-Control "no-cache, no-store, must-revalidate";
@@ -108,9 +104,7 @@ data:
                 add_header Cache-Control "no-cache, must-revalidate";
             }
             location ~* \.js$ {
-                add_header Cache-Control "no-cache, no-store, must-revalidate";
-                add_header Pragma "no-cache";
-                expires 0;
+                add_header Cache-Control "no-cache, must-revalidate";
             }
 
             # CanvasKit wasm filenames are not hashed (canvaskit.wasm, skwasm.wasm) —
