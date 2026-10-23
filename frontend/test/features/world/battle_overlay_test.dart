@@ -188,6 +188,57 @@ void main() {
         findsOneWidget);
   });
 
+  Encounter named(String name) => Encounter(
+        seq: 1,
+        monster:
+            MonsterInfo(name: name, spriteKey: 'monster_jvm', isBoss: false),
+        question: _enc.question,
+      );
+  Finder rich(String text) => find.textContaining(text, findRichText: true);
+  AnswerResult answered(
+          {required bool correct, bool cleared = false, bool failed = false}) =>
+      AnswerResult(
+        correct: correct,
+        correctIndex: 1,
+        explanation: 'x',
+        topicTitle: 'JVM 힙 비율',
+        hearts: 2,
+        kills: 3,
+        bossUnlocked: false,
+        cleared: cleared,
+        failed: failed,
+      );
+
+  testWidgets('message picks 가/를 for names without a final consonant',
+      (tester) async {
+    await tester.pumpWidget(_host(encounter: named('해파리')));
+    expect(rich('야생의 해파리가 나타났다!'), findsOneWidget);
+    await tester.pumpWidget(_host(
+        encounter: named('해파리'), selected: 1, result: answered(correct: true)));
+    expect(rich('해파리를 물리쳤다!'), findsOneWidget);
+    expect(rich('정답이다!'), findsOneWidget);
+  });
+
+  testWidgets('message uses 이(가)/을(를) for non-Hangul names', (tester) async {
+    await tester.pumpWidget(_host(encounter: named('OOM')));
+    expect(rich('야생의 OOM이(가) 나타났다!'), findsOneWidget);
+    await tester.pumpWidget(_host(
+        encounter: named('OOM'),
+        selected: 1,
+        result: answered(correct: true, cleared: true)));
+    expect(rich('OOM을(를) 물리쳤다!'), findsOneWidget);
+    expect(rich('던전을 정복했다!'), findsOneWidget);
+  });
+
+  testWidgets('wrong answer shows the counterattack line', (tester) async {
+    await tester.pumpWidget(_host(selected: 0, result: _wrong));
+    expect(rich('OOM 슬라임의 반격! ♥ -1'), findsOneWidget);
+    expect(rich('아래 해설을 읽어 보자.'), findsOneWidget);
+    await tester.pumpWidget(
+        _host(selected: 0, result: answered(correct: false, failed: true)));
+    expect(rich('하트를 모두 잃었다…'), findsOneWidget);
+  });
+
   testWidgets('boss gets its own message and badge', (tester) async {
     await tester.pumpWidget(_host(encounter: _boss));
     expect(find.textContaining('보스 힙 드래곤이 앞을 막아섰다!', findRichText: true),

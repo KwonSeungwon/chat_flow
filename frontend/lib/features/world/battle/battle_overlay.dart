@@ -682,6 +682,9 @@ class _QuestionCard extends StatelessWidget {
                 ),
                 for (var i = 0; i < q.choices.length; i += 2) ...[
                   const SizedBox(height: 10),
+                  // 한 줄 두 버튼 높이 맞춤. main.dart가 runApp 전에 Noto Sans KR
+                  // w400·w600을 미리 받는 것에 기대고 있다. 글꼴이 첫 레이아웃 뒤에
+                  // 늦게 오면 줄 높이가 다시 계산되지 않아 긴 보기가 잘릴 수 있다.
                   IntrinsicHeight(
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -793,7 +796,7 @@ class _ChoiceButton extends StatelessWidget {
     };
     final radius = BorderRadius.circular(18);
     return AnimatedOpacity(
-      opacity: mark == _Mark.dim ? 0.45 : 1,
+      opacity: mark == _Mark.dim ? 0.6 : 1,
       duration: const Duration(milliseconds: 250),
       // 정답·오답·선택 표시는 버튼 위에 겹친 테두리(배경 그러데이션에 가리지 않게).
       child: Container(
