@@ -1,11 +1,15 @@
 import 'dart:collection';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import 'top_down_grid.dart';
+import 'world_sprite.dart';
+
 /// 2:1 아이소메트릭 격자. 타일 (col,row)의 윗면 마름모 중심을 화면 좌표로 바꾸고,
 /// 4방향 A* 경로를 찾는다.
-class IsoGrid {
+class IsoGrid implements AvatarGrid {
   const IsoGrid({this.tileW = 64, this.tileH = 32});
 
   final double tileW;
@@ -14,7 +18,14 @@ class IsoGrid {
   double get halfW => tileW / 2;
   double get halfH => tileH / 2;
 
+  @override
+  double get stepLength => math.sqrt(halfW * halfW + halfH * halfH);
+
+  @override
+  int depthAt(double y) => isoDepth(y / halfH);
+
   /// 타일 윗면 마름모의 중심.
+  @override
   Vector2 toScreen(int col, int row) =>
       Vector2((col - row) * halfW, (col + row) * halfH);
 

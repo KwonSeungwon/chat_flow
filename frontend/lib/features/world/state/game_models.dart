@@ -2,6 +2,9 @@ int _int(Object? v, [int fallback = 0]) => v is num ? v.toInt() : fallback;
 bool _bool(Object? v) => v == true;
 String _str(Object? v) => v?.toString() ?? '';
 
+/// 주인공 그림(남·여 학생).
+enum StudentLook { boy, girl }
+
 class DungeonInfo {
   final String id;
   final String name;

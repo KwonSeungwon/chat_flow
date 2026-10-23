@@ -1,6 +1,7 @@
 import 'package:gossiplog/features/world/game/village_game.dart';
 import 'package:gossiplog/features/world/game/village_map.dart';
 import 'package:gossiplog/features/world/game/world_sprite.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
 import 'package:flutter/widgets.dart';
@@ -199,6 +200,51 @@ void main() {
       expect(taps, 3);
     },
   );
+
+  testWithGame<VillageGame>(
+    'the chosen look reaches the avatar',
+    () => VillageGame(look: StudentLook.girl),
+    (game) async {
+      await game.ready();
+      expect(game.avatar.look, StudentLook.girl);
+      expect(VillageGame().look, StudentLook.boy);
+    },
+  );
+
+  testWithGame<VillageGame>(
+    'camera follows the avatar but stops at the map edge',
+    () => VillageGame(),
+    (game) async {
+      await game.ready();
+      Rect visible() => game.camera.visibleWorldRect;
+      final extent = VillageGame.mapExtent;
+
+      game.update(1 / 30);
+      expect(visible().center.dx, closeTo(game.avatar.position.x, 0.01));
+      expect(visible().center.dy, closeTo(game.avatar.position.y, 0.01));
+
+      // 왼쪽 위 구석: 맵 밖이 보이지 않는다.
+      game.avatar.placeAt((1, 1));
+      game.update(1 / 30);
+      expect(visible().left, closeTo(0, 0.01));
+      expect(visible().top, closeTo(0, 0.01));
+
+      game.avatar.placeAt((22, 22));
+      game.update(1 / 30);
+      expect(visible().right, closeTo(extent, 0.01));
+      expect(visible().bottom, closeTo(extent, 0.01));
+    },
+  );
+
+  test('about 12 tiles across on a desktop, 7 on a phone', () {
+    double across(double width) {
+      final game = VillageGame()..onGameResize(Vector2(width, 800));
+      return width / game.camera.viewfinder.zoom / VillageGame.grid.tile;
+    }
+
+    expect(across(1280), closeTo(12, 0.01));
+    expect(across(390), closeTo(7, 0.01));
+  });
 
   testWidgets('attaching and disposing games repeatedly releases them',
       (tester) async {

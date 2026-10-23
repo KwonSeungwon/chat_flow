@@ -1,9 +1,9 @@
-import 'package:gossiplog/features/world/game/iso_grid.dart';
+import 'package:gossiplog/features/world/game/top_down_grid.dart';
 import 'package:gossiplog/features/world/game/village_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const grid = IsoGrid(tileW: 64, tileH: 32);
+  const grid = TopDownGrid();
   const ids = ['k8s', 'jvm', 'db', 'net', 'build', 'ops', 'ai', 'shell'];
 
   test('is a 24x24 grid using only the legend characters', () {
