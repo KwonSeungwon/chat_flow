@@ -31,9 +31,6 @@ mixin OffscreenCulling<T extends FlameGame>
   }
 }
 
-/// 아이소 정렬 순서. col+row가 클수록(화면 아래) 나중에 그린다.
-int isoDepth(double colPlusRow) => (colPlusRow * 4).round();
-
 /// 여러 컴포넌트가 함께 쓰는 [Svg]를 고정 크기로 그린다. Svg는 게임이 소유하므로
 /// 컴포넌트가 지워질 때 dispose하지 않는다(flame_svg의 SvgComponent와 다른 점).
 class WorldSprite extends PositionComponent
@@ -88,34 +85,6 @@ class SvgBank {
     }
     _svgs.clear();
   }
-}
-
-/// 하늘 배경 그라데이션. 크기가 바뀔 때만 셰이더를 다시 만든다.
-class SkyBackdrop {
-  SkyBackdrop(this.top, this.bottom);
-
-  Color top;
-  Color bottom;
-  final _paint = Paint();
-  Size _size = Size.zero;
-
-  void resize(Size size) {
-    _size = size;
-    _rebuild();
-  }
-
-  void setColors(Color top, Color bottom) {
-    this.top = top;
-    this.bottom = bottom;
-    _rebuild();
-  }
-
-  void _rebuild() {
-    _paint.shader =
-        Gradient.linear(Offset.zero, Offset(0, _size.height), [top, bottom]);
-  }
-
-  void render(Canvas canvas) => canvas.drawRect(Offset.zero & _size, _paint);
 }
 
 /// 탭을 월드 좌표로 넘겨 주는 월드.

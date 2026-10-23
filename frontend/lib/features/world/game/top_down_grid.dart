@@ -2,28 +2,14 @@ import 'dart:collection';
 
 import 'package:flame/components.dart';
 
-/// [StudentAvatar]가 걷는 격자. 위에서 본 마을([TopDownGrid])과 아직 아이소메트릭인
-/// 던전(`IsoGrid`)이 함께 쓴다. 던전이 [TopDownGrid]로 옮겨 가면 없앤다.
-abstract interface class AvatarGrid {
-  /// 타일 (col,row)의 기준점(발이 닿는 자리).
-  Vector2 toScreen(int col, int row);
-
-  /// 이웃한 두 칸 사이의 화면 거리.
-  double get stepLength;
-
-  /// 화면 y가 [y]인 발 위치의 그리기 순서.
-  int depthAt(double y);
-}
-
 /// 위에서 본 정사각 격자. 타일 한 칸이 [tile] 월드 px이고, (0,0) 칸의 왼쪽 위가
 /// 월드 원점이다. 그리기 순서는 아래 변 y(클수록 앞)를 쓴다.
-class TopDownGrid implements AvatarGrid {
+class TopDownGrid {
   const TopDownGrid({this.tile = 48});
 
   final double tile;
 
   /// 타일 중심.
-  @override
   Vector2 toScreen(int col, int row) =>
       Vector2((col + 0.5) * tile, (row + 0.5) * tile);
 
@@ -31,14 +17,13 @@ class TopDownGrid implements AvatarGrid {
   (int, int) toTile(Vector2 screen) =>
       ((screen.x / tile).floor(), (screen.y / tile).floor());
 
-  @override
+  /// 이웃한 두 칸 사이의 화면 거리.
   double get stepLength => tile;
 
   /// 발(아래 변)이 화면 y인 소품의 그리기 순서. 클수록 앞이다.
   static int depth(double y) => (y * 4).round();
 
   /// 주인공은 같은 y의 소품보다 살짝 앞에 그린다.
-  @override
   int depthAt(double y) => depth(y) + 2;
 
   /// [start]에서 [goal]까지의 4방향 최단 경로(양 끝 포함).

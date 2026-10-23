@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:gossiplog/features/world/game/dungeon_game.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
 import 'package:flutter/widgets.dart';
@@ -94,6 +95,50 @@ void main() {
       expect(game.bossPhase, isTrue);
       game.setBossPhase(false);
       expect(game.bossPhase, isFalse);
+    },
+  );
+
+  testWithGame<DungeonGame>(
+    'the chosen look reaches the avatar',
+    () => DungeonGame('k8s', look: StudentLook.girl),
+    (game) async {
+      await game.ready();
+      expect(game.avatar.look, StudentLook.girl);
+    },
+  );
+
+  testWithGame<DungeonGame>(
+    'a pillar hides a student standing behind it and not one in front',
+    () => DungeonGame('db'),
+    (game) async {
+      await game.ready();
+      for (final (c, r) in DungeonGame.pillars) {
+        game.avatar.placeAt((c, r - 1));
+        expect(game.avatar.priority, lessThan(game.pillarDepth((c, r))));
+        game.avatar.placeAt((c, r + 1));
+        expect(game.avatar.priority, greaterThan(game.pillarDepth((c, r))));
+      }
+    },
+  );
+
+  testWithGame<DungeonGame>(
+    'camera shows 12 columns on a desktop and stops at the room edge',
+    () => DungeonGame('shell'),
+    (game) async {
+      await game.ready();
+      game.onGameResize(Vector2(1280, 800));
+      expect(game.camera.viewfinder.zoom,
+          closeTo(1280 / (12 * DungeonGame.grid.tile), 1e-5));
+      final e = DungeonGame.roomExtent;
+      for (final t in [(0, 0), (11, 0), (0, 11), (11, 11)]) {
+        game.avatar.placeAt(t);
+        game.update(0);
+        final view = game.camera.visibleWorldRect;
+        expect(view.left, greaterThanOrEqualTo(e.left - 1e-3));
+        expect(view.right, lessThanOrEqualTo(e.right + 1e-3));
+        expect(view.top, greaterThanOrEqualTo(e.top - 1e-3));
+        expect(view.bottom, lessThanOrEqualTo(e.bottom + 1e-3));
+      }
     },
   );
 

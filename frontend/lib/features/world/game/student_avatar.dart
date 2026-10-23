@@ -31,7 +31,7 @@ class StudentAvatar extends PositionComponent
           anchor: const Anchor(0.5, 0.97),
         );
 
-  final AvatarGrid grid;
+  final TopDownGrid grid;
   final StudentLook look;
   final double tilesPerSecond;
 
