@@ -1,7 +1,7 @@
 name: gossiplog
 description: Gossiplog - Real-time Chat Application
 publish_to: 'none'
-version: 3.0.6+8
+version: 3.0.7+9
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
