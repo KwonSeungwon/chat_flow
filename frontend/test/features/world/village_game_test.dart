@@ -237,20 +237,42 @@ void main() {
     },
   );
 
-  test('about 12 tiles across on a desktop, 7 on a phone, 7 rows at least', () {
+  test('7 tiles on the short side of a phone, 76px tiles on big screens', () {
     (double, double) visibleTiles(double w, double h) {
       final game = VillageGame()..onGameResize(Vector2(w, h));
       final z = game.camera.viewfinder.zoom * VillageGame.grid.tile;
       return (w / z, h / z);
     }
 
-    expect(visibleTiles(1280, 800).$1, closeTo(12, 0.01));
     expect(visibleTiles(390, 844).$1, closeTo(7, 0.01));
-    // 가로로 누운 폰: 세로 7칸을 지키고 가로는 더 넓게 보인다.
+    // 가로로 누운 폰: 세로 7칸, 가로는 더 넓게 보인다.
     final (cols, rows) = visibleTiles(844, 390);
-    expect(rows, closeTo(VillageGame.minRows, 0.01));
-    expect(cols, greaterThan(12));
+    expect(rows, closeTo(7, 0.01));
+    expect(cols, closeTo(844 / (390 / 7), 0.01));
+    // 넓은 화면은 한 칸 76px: 크게 부풀지 않고 더 많이 보인다.
+    expect(visibleTiles(1280, 800).$1, closeTo(1280 / 76, 0.01));
+    expect(visibleTiles(1280, 800).$2, closeTo(800 / 76, 0.01));
+    expect(visibleTiles(1920, 1080).$1,
+        greaterThanOrEqualTo(VillageMap.size.toDouble()));
   });
+
+  testWithGame<VillageGame>(
+    'a viewport wider than the map keeps the map centred',
+    () => VillageGame(),
+    (game) async {
+      await game.ready();
+      game.onGameResize(Vector2(1920, 1080));
+      final extent = VillageGame.mapExtent;
+      for (final t in [(1, 1), (22, 22)]) {
+        game.avatar.placeAt(t);
+        game.update(1 / 30);
+        final view = game.camera.visibleWorldRect;
+        expect(view.center.dx, closeTo(extent / 2, 0.01));
+        expect(view.top, greaterThanOrEqualTo(-0.01));
+        expect(view.bottom, lessThanOrEqualTo(extent + 0.01));
+      }
+    },
+  );
 
   testWithGame<VillageGame>(
     'depth: behind a building from the row above, in front on its door',
