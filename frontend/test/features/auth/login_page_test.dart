@@ -125,7 +125,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final size in const [Size(360, 640), Size(844, 390), Size(1920, 1080)]) {
+  final illustration = find.byWidgetPredicate((w) =>
+      w is CustomPaint && w.painter.runtimeType.toString() == '_VillagePainter');
+
+  testWidgets('세로 폰에서 키보드가 올라와도 히어로 그림이 남는다', (tester) async {
+    await pump(tester, const Size(360, 640));
+    expect(illustration, findsOneWidget);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    expect(illustration, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('844x390에서는 히어로 그림을 뺀다', (tester) async {
+    await pump(tester, const Size(844, 390));
+    expect(illustration, findsNothing);
+  });
+
+  for (final size in const [
+    Size(360, 640),
+    Size(700, 900),
+    Size(768, 1024),
+    Size(844, 390),
+    Size(1920, 1080),
+  ]) {
     for (final register in [false, true]) {
       testWidgets(
           '${size.width.toInt()}x${size.height.toInt()} '

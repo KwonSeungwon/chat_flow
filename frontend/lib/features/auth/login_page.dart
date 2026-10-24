@@ -147,7 +147,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           child: LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth >= 700;
             // 가로로 누운 폰처럼 낮은 화면: 그림을 빼서 입력칸이 첫 화면에 들어오게 한다.
-            final short = c.maxHeight < 560;
+            // 키보드가 올라와 줄어든 높이(c.maxHeight)가 아니라 창 높이로 정해야
+            // 세로 폰에서 입력칸을 눌렀을 때 레이아웃이 튀지 않는다.
+            final short = MediaQuery.sizeOf(context).height < 560;
             final form = _buildForm(auth);
             final card = Container(
               clipBehavior: Clip.antiAlias,
