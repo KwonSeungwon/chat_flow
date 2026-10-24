@@ -52,9 +52,6 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
 
   static const grid = TopDownGrid();
 
-  /// 세로로 적어도 보이는 칸 수.
-  static const minRows = 7;
-
   /// 맵 전체의 월드 크기(정사각).
   static double get mapExtent => VillageMap.size * grid.tile;
 
@@ -223,11 +220,10 @@ class VillageGame extends FlameGame<TapWorld> with KeyboardEvents {
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    // 가로로 보이는 칸 수: 폰 폭(400px 안팎)은 7칸, 넓은 화면은 12칸.
-    // 가로로 누운 폰처럼 낮은 화면에서도 세로 7칸은 보이게 더 작게 확대한다.
-    final cols = (size.x / 100).clamp(7.0, 12.0);
-    camera.viewfinder.zoom =
-        math.min(size.x / (cols * grid.tile), size.y / (minRows * grid.tile));
+    // 짧은 변에 7칸이 보이게 하되 한 칸은 화면에서 48~76px로 둔다.
+    // 폰은 짧은 변 7칸, 태블릿·데스크톱은 76px 칸으로 더 넓게 보인다.
+    final tile = (math.min(size.x, size.y) / 7).clamp(48.0, 76.0);
+    camera.viewfinder.zoom = tile / grid.tile;
     _followAvatar();
   }
 

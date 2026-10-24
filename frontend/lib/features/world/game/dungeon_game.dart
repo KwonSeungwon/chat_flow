@@ -61,9 +61,6 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
       roomSize * grid.tile + _RoomPainter.sideW + 8,
       roomSize * grid.tile + 40);
 
-  /// 세로로 적어도 보이는 칸 수([VillageGame.minRows]와 같다).
-  static const minRows = 7;
-
   static bool isWalkable(int col, int row) =>
       col >= 0 &&
       row >= 0 &&
@@ -165,10 +162,9 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    // 마을과 같은 확대: 폰 폭은 가로 7칸, 넓은 화면은 12칸, 세로는 적어도 7칸.
-    final cols = (size.x / 100).clamp(7.0, 12.0);
-    camera.viewfinder.zoom =
-        min(size.x / (cols * grid.tile), size.y / (minRows * grid.tile));
+    // 마을과 같은 확대: 짧은 변에 7칸, 한 칸은 화면에서 48~76px.
+    final tile = (min(size.x, size.y) / 7).clamp(48.0, 76.0);
+    camera.viewfinder.zoom = tile / grid.tile;
     _followAvatar();
   }
 

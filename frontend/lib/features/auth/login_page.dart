@@ -145,7 +145,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
         child: SafeArea(
           child: LayoutBuilder(builder: (context, c) {
-            final wide = c.maxWidth >= 900;
+            final wide = c.maxWidth >= 700;
+            // 가로로 누운 폰처럼 낮은 화면: 그림을 빼서 입력칸이 첫 화면에 들어오게 한다.
+            // 키보드가 올라와 줄어든 높이(c.maxHeight)가 아니라 창 높이로 정해야
+            // 세로 폰에서 입력칸을 눌렀을 때 레이아웃이 튀지 않는다.
+            final short = MediaQuery.sizeOf(context).height < 560;
             final form = _buildForm(auth);
             final card = Container(
               clipBehavior: Clip.antiAlias,
@@ -161,11 +165,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Expanded(flex: 11, child: _Hero(wide: true)),
+                          Expanded(
+                              flex: 11,
+                              child: _Hero(wide: true, showArt: !short)),
                           Expanded(
                             flex: 10,
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 540),
+                              constraints:
+                                  BoxConstraints(minHeight: short ? 0 : 540),
                               child: Center(child: form),
                             ),
                           ),
@@ -175,12 +182,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [const _Hero(wide: false), form],
+                      children: [_Hero(wide: false, showArt: !short), form],
                     ),
             );
             return Center(
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(wide ? 32 : 16),
+                padding: EdgeInsets.all(wide && !short ? 32 : 16),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: wide ? 1040 : 480),
                   child: card,
@@ -350,7 +357,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 // ─────────────────────────────────────────────────────────────────
 class _Hero extends StatelessWidget {
   final bool wide;
-  const _Hero({required this.wide});
+  final bool showArt;
+  const _Hero({required this.wide, this.showArt = true});
 
   static const _tags = ['💬 실시간 채팅', '🏰 위키 던전', '🎓 졸업까지 8개 건물'];
 
@@ -368,7 +376,8 @@ class _Hero extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(28, wide ? 34 : 26, 28, 0),
+            padding:
+                EdgeInsets.fromLTRB(28, wide ? 34 : 26, 28, showArt ? 0 : 26),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -395,13 +404,15 @@ class _Hero extends StatelessWidget {
               ],
             ),
           ),
-          if (wide) const Spacer() else const SizedBox(height: 8),
-          AspectRatio(
-            aspectRatio: 2,
-            // CustomPainter는 DefaultTextStyle을 물려받지 않으므로 앱 폰트(Noto Sans KR)를 직접 넘긴다.
-            child: CustomPaint(
-                painter: _VillagePainter(DefaultTextStyle.of(context).style)),
-          ),
+          if (showArt) ...[
+            if (wide) const Spacer() else const SizedBox(height: 8),
+            AspectRatio(
+              aspectRatio: 2,
+              // CustomPainter는 DefaultTextStyle을 물려받지 않으므로 앱 폰트(Noto Sans KR)를 직접 넘긴다.
+              child: CustomPaint(
+                  painter: _VillagePainter(DefaultTextStyle.of(context).style)),
+            ),
+          ],
         ],
       ),
     );

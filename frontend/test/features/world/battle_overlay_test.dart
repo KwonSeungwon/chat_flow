@@ -259,7 +259,12 @@ void main() {
     expect(_studentAsset(tester), 'assets/world/student_boy_back.svg');
   });
 
-  for (final size in const [Size(390, 844), Size(360, 640), Size(1280, 800)]) {
+  for (final size in const [
+    Size(390, 844),
+    Size(360, 640),
+    Size(844, 390),
+    Size(1280, 800),
+  ]) {
     testWidgets('no overflow with long text at $size', (tester) async {
       await _setSize(tester, size);
       await tester.pumpWidget(_host(size: size, encounter: _boss));

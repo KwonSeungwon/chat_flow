@@ -122,25 +122,53 @@ void main() {
   );
 
   testWithGame<DungeonGame>(
-    'camera shows 12 columns on a desktop and stops at the room edge',
+    'camera stops at the room edge on a phone and centres a small room',
     () => DungeonGame('shell'),
     (game) async {
       await game.ready();
-      game.onGameResize(Vector2(1280, 800));
-      expect(game.camera.viewfinder.zoom,
-          closeTo(1280 / (12 * DungeonGame.grid.tile), 1e-5));
       final e = DungeonGame.roomExtent;
-      for (final t in [(0, 0), (11, 0), (0, 11), (11, 11)]) {
-        game.avatar.placeAt(t);
-        game.update(0);
-        final view = game.camera.visibleWorldRect;
-        expect(view.left, greaterThanOrEqualTo(e.left - 1e-3));
-        expect(view.right, lessThanOrEqualTo(e.right + 1e-3));
-        expect(view.top, greaterThanOrEqualTo(e.top - 1e-3));
-        expect(view.bottom, lessThanOrEqualTo(e.bottom + 1e-3));
+      for (final (w, h) in [(390.0, 844.0), (844.0, 390.0)]) {
+        game.onGameResize(Vector2(w, h));
+        for (final t in [(0, 0), (11, 0), (0, 11), (11, 11)]) {
+          game.avatar.placeAt(t);
+          game.update(0);
+          final view = game.camera.visibleWorldRect;
+          if (view.width <= e.width) {
+            expect(view.left, greaterThanOrEqualTo(e.left - 1e-3));
+            expect(view.right, lessThanOrEqualTo(e.right + 1e-3));
+          } else {
+            expect(view.center.dx, closeTo(e.center.dx, 1e-3));
+          }
+          if (view.height <= e.height) {
+            expect(view.top, greaterThanOrEqualTo(e.top - 1e-3));
+            expect(view.bottom, lessThanOrEqualTo(e.bottom + 1e-3));
+          } else {
+            expect(view.center.dy, closeTo(e.center.dy, 1e-3));
+          }
+        }
       }
+      // 넓은 화면: 방보다 넓은 축은 가운데에 고정된다.
+      game.onGameResize(Vector2(1920, 1080));
+      game.avatar.placeAt((0, 0));
+      game.update(0);
+      final view = game.camera.visibleWorldRect;
+      expect(view.width, greaterThan(e.width));
+      expect(view.center.dx, closeTo(e.center.dx, 1e-3));
     },
   );
+
+  test('tiles: 7 on the short side of a phone, 76px on big screens', () {
+    (double, double) visibleTiles(double w, double h) {
+      final game = DungeonGame('shell')..onGameResize(Vector2(w, h));
+      final z = game.camera.viewfinder.zoom * DungeonGame.grid.tile;
+      return (w / z, h / z);
+    }
+
+    expect(visibleTiles(390, 844).$1, closeTo(7, 0.01));
+    expect(visibleTiles(844, 390).$2, closeTo(7, 0.01));
+    expect(visibleTiles(1280, 800).$1, closeTo(1280 / 76, 0.01));
+    expect(visibleTiles(1920, 1080).$2, closeTo(1080 / 76, 0.01));
+  });
 
   test('pillars are not walkable and the start tile is', () {
     for (final (c, r) in DungeonGame.pillars) {
