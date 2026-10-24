@@ -113,6 +113,33 @@ void main() {
     });
   }
 
+  testWidgets('가로로 누운 폰(844x390)에서 아이디·비밀번호·버튼이 스크롤 없이 보인다',
+      (tester) async {
+    await pump(tester, const Size(844, 390));
+    final id = tester.getRect(find.widgetWithText(TextFormField, '아이디'));
+    final button = tester.getRect(find.widgetWithText(FilledButton, '들어가기'));
+    expect(id.top, greaterThanOrEqualTo(0));
+    expect(button.bottom, lessThanOrEqualTo(390));
+    // 히어로와 폼이 나란히 놓인다.
+    expect(tester.getRect(find.text('Gossiplog')).right, lessThan(id.left));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final size in const [Size(360, 640), Size(844, 390), Size(1920, 1080)]) {
+    for (final register in [false, true]) {
+      testWidgets(
+          '${size.width.toInt()}x${size.height.toInt()} '
+          '${register ? '회원가입' : '로그인'}에서 넘치지 않는다', (tester) async {
+        await pump(tester, size);
+        if (register) {
+          await tester.tap(find.text('회원가입').first);
+          await tester.pumpAndSettle();
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('회원가입 아이디는 서버 규칙(2~20자, 영문·숫자·한글·_.-)을 따른다',
       (tester) async {
     await pump(tester, const Size(1280, 900));
