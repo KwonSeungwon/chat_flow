@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-10-23 부드러운 HGSS풍 위키 던전, 남·여 캐릭터
-    tag: "sha-43ff60e5b7a09e97bdc3cbfaffa346484cf21d77"
+    # 2026-10-24 반응형 개선(월드 타일 크기, 로비 폭, 가로 로그인)
+    tag: "sha-abfd9fe48a20f47ce231f6fc480d8eb12b0c0930"
   service:
     port: 80
     type: ClusterIP
