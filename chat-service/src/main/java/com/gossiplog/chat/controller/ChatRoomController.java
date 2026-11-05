@@ -22,6 +22,7 @@ import com.gossiplog.common.dto.ChatRoomResponse;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -298,7 +299,7 @@ public class ChatRoomController {
     @PutMapping("/{roomId}/settings")
     public ResponseEntity<?> updateRoomSettings(
             @PathVariable String roomId,
-            @RequestBody UpdateSettingsRequest body,
+            @Valid @RequestBody UpdateSettingsRequest body,
             @AuthenticatedUser String userId) {
         if (chatRoomService.getRoom(roomId).isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -325,23 +326,35 @@ public class ChatRoomController {
 
     // ── Request records ─────────────────────────────────────────
 
+    // 이름은 앞뒤 공백을 뺀 2~50자, 제어문자와 유니코드 줄·문단 구분자 불가. 클라이언트는 길이만 검사한다.
+    static final String ROOM_NAME_PATTERN = "[^\\p{Cntrl}\\p{Zl}\\p{Zp}\\x{0085}]*";
+
     public record CreateRoomRequest(
             @NotBlank(message = "채팅방 이름은 필수입니다")
-            @Size(max = 100, message = "채팅방 이름은 100자를 초과할 수 없습니다")
+            @Size(min = 2, max = 50, message = "채팅방 이름은 2~50자여야 합니다")
+            @Pattern(regexp = ROOM_NAME_PATTERN, message = "채팅방 이름에 줄바꿈이나 제어문자를 쓸 수 없습니다")
             String name,
 
-            @Size(max = 500, message = "설명은 500자를 초과할 수 없습니다")
+            @Size(max = 200, message = "설명은 200자를 초과할 수 없습니다")
             String description,
 
+            @Pattern(regexp = "#[0-9A-Fa-f]{6}", message = "색상은 #RRGGBB 형식이어야 합니다")
             String color,
 
             @JsonProperty("isPrivate")
             Boolean isPrivate,
 
+            @Size(min = 4, max = 20, message = "비밀번호는 4~20자여야 합니다")
             String password,
 
             Boolean allowInvites
-    ) {}
+    ) {
+        public CreateRoomRequest {
+            name = name == null ? null : name.strip();
+            description = description == null ? null : description.strip();
+            if (password != null && password.isBlank()) password = null;
+        }
+    }
 
     public record VerifyPasswordRequest(String password) {}
 
@@ -353,5 +366,18 @@ public class ChatRoomController {
             String targetUsername
     ) {}
 
-    public record UpdateSettingsRequest(String name, String description) {}
+    /** null 필드는 바꾸지 않는다. 보낸 값은 생성과 같은 규칙으로 검사한다. */
+    public record UpdateSettingsRequest(
+            @Size(min = 2, max = 50, message = "채팅방 이름은 2~50자여야 합니다")
+            @Pattern(regexp = ROOM_NAME_PATTERN, message = "채팅방 이름에 줄바꿈이나 제어문자를 쓸 수 없습니다")
+            String name,
+
+            @Size(max = 200, message = "설명은 200자를 초과할 수 없습니다")
+            String description
+    ) {
+        public UpdateSettingsRequest {
+            name = name == null ? null : name.strip();
+            description = description == null ? null : description.strip();
+        }
+    }
 }

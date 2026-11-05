@@ -350,6 +350,107 @@ class ChatRoomControllerTest {
                     room.getRoomType() == RoomType.GENERAL
             ), eq("user-1"), eq("alice"));
         }
+
+        private void expectCreateRejected(Map<String, Object> body, String field) throws Exception {
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(body))
+                            .header("X-User-Id", "user-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors." + field).exists());
+            verify(chatRoomService, never()).createRoom(any(), anyString(), any());
+        }
+
+        @Test
+        void returns_400_when_name_shorter_than_2_after_trim() throws Exception {
+            expectCreateRejected(Map.of("name", "  a  "), "name");
+        }
+
+        @Test
+        void returns_400_when_name_longer_than_50() throws Exception {
+            expectCreateRejected(Map.of("name", "가".repeat(51)), "name");
+        }
+
+        @Test
+        void returns_400_when_name_has_control_characters() throws Exception {
+            expectCreateRejected(Map.of("name", "first\nsecond"), "name");
+        }
+
+        @Test
+        void returns_400_when_name_has_unicode_line_separator() throws Exception {
+            expectCreateRejected(Map.of("name", "first\u2028second"), "name");
+        }
+
+        @Test
+        void accepts_values_at_the_upper_bounds() throws Exception {
+            ChatRoom saved = room("r-new", "x", RoomType.GENERAL, "user-1");
+            when(chatRoomService.createRoom(any(ChatRoom.class), eq("user-1"), eq("alice")))
+                    .thenReturn(saved);
+            when(chatRoomMapper.toResponse(saved))
+                    .thenReturn(roomResponse("r-new", "x", "GENERAL", "user-1"));
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "가".repeat(50), "description", "d".repeat(200),
+                    "color", "#abcdef", "isPrivate", true, "password", "p".repeat(20)));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isCreated());
+        }
+
+        @Test
+        void returns_400_when_description_longer_than_200() throws Exception {
+            expectCreateRejected(Map.of("name", "Room", "description", "d".repeat(201)), "description");
+        }
+
+        @Test
+        void returns_400_when_color_is_not_hex() throws Exception {
+            expectCreateRejected(Map.of("name", "Room", "color", "red"), "color");
+        }
+
+        @Test
+        void returns_400_when_color_is_longer_than_hex6() throws Exception {
+            expectCreateRejected(Map.of("name", "Room", "color", "#1234567"), "color");
+        }
+
+        @Test
+        void returns_400_when_password_shorter_than_4() throws Exception {
+            expectCreateRejected(Map.of("name", "Room", "isPrivate", true, "password", "123"), "password");
+        }
+
+        @Test
+        void returns_400_when_password_longer_than_20() throws Exception {
+            expectCreateRejected(Map.of("name", "Room", "isPrivate", true, "password", "p".repeat(21)), "password");
+        }
+
+        @Test
+        void trims_name_and_description_and_drops_blank_password() throws Exception {
+            ChatRoom saved = room("r-new", "Room", RoomType.GENERAL, "user-1");
+            when(chatRoomService.createRoom(any(ChatRoom.class), eq("user-1"), eq("alice")))
+                    .thenReturn(saved);
+            when(chatRoomMapper.toResponse(saved))
+                    .thenReturn(roomResponse("r-new", "Room", "GENERAL", "user-1"));
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "  Room  ", "description", "  hello  ", "password", "   "));
+
+            mockMvc.perform(post("/api/chat/rooms")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "user-1")
+                            .header("X-Username", "alice"))
+                    .andExpect(status().isCreated());
+
+            verify(chatRoomService).createRoom(argThat(room ->
+                    "Room".equals(room.getName())
+                            && "hello".equals(room.getDescription())
+                            && room.getPassword() == null
+            ), eq("user-1"), eq("alice"));
+        }
     }
 
     // ── DeleteRoom ──────────────────────────────────────────────
@@ -510,13 +611,77 @@ class ChatRoomControllerTest {
         void returns_404_when_room_not_found() throws Exception {
             when(chatRoomService.getRoom("r-gone")).thenReturn(Optional.empty());
 
-            String body = objectMapper.writeValueAsString(Map.of("name", "X"));
+            String body = objectMapper.writeValueAsString(Map.of("name", "Renamed"));
 
             mockMvc.perform(put("/api/chat/rooms/r-gone/settings")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body)
                             .header("X-User-Id", "any-user"))
                     .andExpect(status().isNotFound());
+        }
+
+        private void expectSettingsRejected(Map<String, Object> body, String field) throws Exception {
+            mockMvc.perform(put("/api/chat/rooms/r1/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(body))
+                            .header("X-User-Id", "owner-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.fieldErrors." + field).exists());
+            verify(chatRoomService, never()).updateRoomSettings(any(), any(), any());
+        }
+
+        @Test
+        void returns_400_when_name_blank() throws Exception {
+            expectSettingsRejected(Map.of("name", "   "), "name");
+        }
+
+        @Test
+        void returns_400_when_name_longer_than_50() throws Exception {
+            expectSettingsRejected(Map.of("name", "가".repeat(51)), "name");
+        }
+
+        @Test
+        void returns_400_when_name_has_control_characters() throws Exception {
+            expectSettingsRejected(Map.of("name", "a\tb\nc"), "name");
+        }
+
+        @Test
+        void returns_400_when_description_longer_than_200() throws Exception {
+            expectSettingsRejected(Map.of("description", "d".repeat(201)), "description");
+        }
+
+        @Test
+        void description_only_update_leaves_name_null() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "owner-1")));
+            when(chatRoomService.updateRoomSettings("r1", null, "about")).thenReturn(true);
+
+            mockMvc.perform(put("/api/chat/rooms/r1/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("description", "about")))
+                            .header("X-User-Id", "owner-1"))
+                    .andExpect(status().isOk());
+
+            verify(chatRoomService).updateRoomSettings("r1", null, "about");
+        }
+
+        @Test
+        void passes_trimmed_name_and_description_to_service() throws Exception {
+            when(chatRoomService.getRoom("r1")).thenReturn(
+                    Optional.of(room("r1", "Original", RoomType.GENERAL, "owner-1")));
+            when(chatRoomService.updateRoomSettings("r1", "Renamed", "about")).thenReturn(true);
+
+            String body = objectMapper.writeValueAsString(
+                    Map.of("name", "  Renamed ", "description", " about "));
+
+            mockMvc.perform(put("/api/chat/rooms/r1/settings")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+                            .header("X-User-Id", "owner-1"))
+                    .andExpect(status().isOk());
+
+            verify(chatRoomService).updateRoomSettings("r1", "Renamed", "about");
         }
     }
 
