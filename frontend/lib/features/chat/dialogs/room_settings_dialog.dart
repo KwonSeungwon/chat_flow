@@ -8,12 +8,14 @@ import '../chat_provider.dart';
 void showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, ChatRoom room) {
   final nameCtrl = TextEditingController(text: room.name);
   final descCtrl = TextEditingController(text: room.description ?? '');
+  final formKey = GlobalKey<FormState>();
 
   // 모바일(<600px)은 bottom sheet + 풀 스크롤, 데스크톱은 Dialog로 분기.
   final mq = MediaQuery.of(context);
   final isMobile = mq.size.width < 600;
 
   Future<void> save(BuildContext dialogCtx) async {
+    if (!(formKey.currentState?.validate() ?? false)) return;
     try {
       await ref.read(dioClientProvider).dio.put('/api/chat/rooms/$roomId/settings', data: {
         'name': nameCtrl.text.trim(),
@@ -33,45 +35,65 @@ void showRoomSettingsDialog(BuildContext context, WidgetRef ref, String roomId, 
 
   Widget buildBody(BuildContext dialogCtx) {
     return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(
-              labelText: '채팅방 이름',
-              border: OutlineInputBorder(),
-              isDense: true,
+      child: Form(
+        key: formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: '채팅방 이름',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLength: 50,
+              textInputAction: TextInputAction.next,
+              validator: (v) {
+                if (v == null || v.trim().length < 2) {
+                  return '이름은 2자 이상이어야 합니다';
+                }
+                if (v.trim().length > 50) {
+                  return '이름은 50자 이하여야 합니다';
+                }
+                return null;
+              },
             ),
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: descCtrl,
-            decoration: const InputDecoration(
-              labelText: '설명',
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: descCtrl,
+              decoration: const InputDecoration(
+                labelText: '설명',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+              maxLength: 200,
+              maxLines: 3,
+              minLines: 2,
+              validator: (v) {
+                if (v != null && v.trim().length > 200) {
+                  return '설명은 200자 이하여야 합니다';
+                }
+                return null;
+              },
             ),
-            maxLines: 3,
-            minLines: 2,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text('취소'),
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: FilledButton(
-                onPressed: () => save(dialogCtx),
-                child: const Text('저장'),
-              )),
-            ],
-          ),
-        ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('취소'),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: FilledButton(
+                  onPressed: () => save(dialogCtx),
+                  child: const Text('저장'),
+                )),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

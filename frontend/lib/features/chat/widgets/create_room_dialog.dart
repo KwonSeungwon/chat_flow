@@ -140,9 +140,10 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
                   controller: _passwordCtrl,
                   decoration: const InputDecoration(
                     labelText: '비밀번호',
-                    hintText: '4자 이상',
+                    hintText: '4~20자',
                     prefixIcon: Icon(Icons.password),
                   ),
+                  maxLength: 20,
                   obscureText: true,
                   validator: (v) {
                     if (_isPrivate && (v == null || v.trim().length < 4)) {
