@@ -2,6 +2,7 @@ package com.gossiplog.gateway.controller;
 
 import com.gossiplog.gateway.config.LoginRateLimitFilter;
 import com.gossiplog.gateway.entity.UserEntity;
+import com.gossiplog.gateway.repository.SocialAccountRepository;
 import com.gossiplog.gateway.repository.UserRepository;
 import com.gossiplog.gateway.security.JwtUtil;
 import com.gossiplog.gateway.security.TokenBlacklistService;
@@ -50,6 +51,9 @@ class AuthBlacklistTest {
 
     @MockBean
     private UserRepository userRepository;
+
+    @MockBean
+    private SocialAccountRepository socialAccountRepository;
 
     @MockBean
     private ReactiveStringRedisTemplate reactiveStringRedisTemplate;
