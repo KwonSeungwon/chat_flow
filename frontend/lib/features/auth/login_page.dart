@@ -8,7 +8,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/network/api_response.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/apk_downloader.dart';
+import '../../core/utils/browser_redirect.dart';
 import 'auth_provider.dart';
+import 'social_login_buttons.dart';
 
 /// Gateway sign-up rule for usernames (after trim, 2–20 chars).
 final _usernamePattern = RegExp(r'^[A-Za-z0-9가-힣_.\-]+$');
@@ -201,6 +203,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Widget _buildForm(AuthState auth) {
+    // 제공자 단계에서 실패하면 gateway가 /login?socialError=1로 돌려보낸다.
+    final socialFailed =
+        GoRouterState.of(context).uri.queryParameters['socialError'] == '1';
+    final errorText = auth.error ??
+        (socialFailed && !_isRegister ? '소셜 로그인에 실패했어요. 다시 시도해 주세요.' : null);
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 30, 28, 26),
       child: Form(
@@ -269,7 +276,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 },
               ),
             ],
-            if (auth.error != null) ...[
+            if (errorText != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -284,7 +291,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        auth.error!,
+                        errorText,
                         style: const TextStyle(color: _P.error, fontSize: 13),
                       ),
                     ),
@@ -298,6 +305,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               loading: auth.isLoading,
               onPressed: auth.isLoading ? null : _submit,
             ),
+            if (kIsWeb && !_isRegister) ...[
+              const SizedBox(height: 16),
+              const Row(children: [
+                Expanded(child: Divider()),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('또는', style: TextStyle(color: _P.muted, fontSize: 12)),
+                ),
+                Expanded(child: Divider()),
+              ]),
+              const SizedBox(height: 12),
+              const SocialLoginButtons(onStart: redirectBrowser),
+            ],
             const SizedBox(height: 14),
             const Text(
               '회원가입은 아이디와 비밀번호만 있으면 돼요',

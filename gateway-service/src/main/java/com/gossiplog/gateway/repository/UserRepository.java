@@ -15,6 +15,10 @@ public interface UserRepository extends ReactiveCrudRepository<UserEntity, Long>
     Mono<Boolean> existsByUsernameIgnoreCase(String username);
     Flux<UserEntity> findByUsernameContainingIgnoreCaseOrderByUsernameAsc(String query);
 
+    @Modifying
+    @Query("DELETE FROM users WHERE user_id = :userId")
+    Mono<Integer> deleteByUserId(@Param("userId") String userId);
+
     // 엔티티 전체 save는 읽은 뒤 쓰기 사이의 다른 컬럼 변경을 덮어쓴다(lost update). 바꿀 컬럼만 UPDATE한다.
     @Modifying
     @Query("UPDATE users SET encoded_password = :value WHERE user_id = :userId")

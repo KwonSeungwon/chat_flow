@@ -105,6 +105,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "gateway-service.fullname" . }}
+            # 소셜 로그인 client id/secret(OAUTH_{GOOGLE,NAVER,KAKAO}_CLIENT_{ID,SECRET})
+            - secretRef:
+                name: gossiplog-oauth
           startupProbe:
             httpGet:
               path: /actuator/health/liveness

@@ -50,4 +50,41 @@ class OAuth2ProviderConfigTest {
     void noClientRegistrationYet_soOAuth2ClientAutoConfigStaysOff() {
         assertTrue(props.getRegistration().isEmpty());
     }
+
+    /** 운영 설정(application.yml + application-prod.yml)이 Spring이 실제로 쓰는 ClientRegistration으로 만들어지는지 본다. */
+    @Test
+    void prodRegistrations_mapToClientRegistrationsMatchingProviderDocs() throws Exception {
+        StandardEnvironment env = new StandardEnvironment();
+        java.util.Map<String, Object> secrets = new java.util.HashMap<>();
+        for (String p : new String[] {"GOOGLE", "NAVER", "KAKAO"}) {
+            secrets.put("OAUTH_" + p + "_CLIENT_ID", p.toLowerCase() + "-id");
+            secrets.put("OAUTH_" + p + "_CLIENT_SECRET", p.toLowerCase() + "-secret");
+        }
+        env.getPropertySources().addFirst(new org.springframework.core.env.MapPropertySource("secrets", secrets));
+        YamlPropertySourceLoader loader = new YamlPropertySourceLoader();
+        loader.load("prod", new ClassPathResource("application-prod.yml")).forEach(env.getPropertySources()::addLast);
+        loader.load("common", new ClassPathResource("application.yml")).forEach(env.getPropertySources()::addLast);
+        OAuth2ClientProperties prod = Binder.get(env).bind("spring.security.oauth2.client", OAuth2ClientProperties.class).get();
+
+        java.util.Map<String, org.springframework.security.oauth2.client.registration.ClientRegistration> regs =
+                new org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientPropertiesMapper(prod)
+                        .asClientRegistrations();
+
+        var kakao = regs.get("kakao");
+        assertEquals("kakao-id", kakao.getClientId());
+        assertEquals(org.springframework.security.oauth2.core.ClientAuthenticationMethod.CLIENT_SECRET_POST,
+                kakao.getClientAuthenticationMethod());
+        assertEquals("id", kakao.getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName());
+        assertEquals(java.util.Set.of("profile_nickname"), kakao.getScopes());
+        assertEquals("https://app.gossiplog.com/login/oauth2/code/{registrationId}", kakao.getRedirectUri());
+
+        var naver = regs.get("naver");
+        assertEquals(org.springframework.security.oauth2.core.ClientAuthenticationMethod.CLIENT_SECRET_POST,
+                naver.getClientAuthenticationMethod());
+        assertEquals("https://openapi.naver.com/v1/nid/me", naver.getProviderDetails().getUserInfoEndpoint().getUri());
+
+        var google = regs.get("google");
+        assertEquals(java.util.Set.of("openid", "profile"), google.getScopes());
+        assertEquals("https://accounts.google.com/o/oauth2/v2/auth", google.getProviderDetails().getAuthorizationUri());
+    }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_page.dart';
+import '../../features/auth/social_callback_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/chat/screens/invite_join_screen.dart';
 import '../../features/chat/screens/mentions_screen.dart';
@@ -30,12 +31,15 @@ class _RouterNotifier extends ChangeNotifier {
     if (!auth.isHydrated) return null;
     final loc = state.matchedLocation;
     final isLoginPage = loc == '/login';
-    if (!auth.isAuthenticated && !isLoginPage) {
+    // 소셜 로그인 콜백은 아직 토큰이 없을 때 열린다. 로그인 화면처럼 비로그인 상태로 통과시킨다.
+    final isSocialCallback = loc == '/social-callback';
+    if (!auth.isAuthenticated && !isLoginPage && !isSocialCallback) {
       if (auth.loggedOut) return '/login';
       // Preserve the requested location (path + query) as the post-login target
       // (deep link while logged out, or a session that died with a 401)
       return '/login?redirect=${Uri.encodeComponent(state.uri.toString())}';
     }
+    if (auth.isAuthenticated && isSocialCallback) return '/chat';
     if (auth.isAuthenticated && isLoginPage) {
       final redirect = state.uri.queryParameters['redirect'];
       if (redirect != null &&
@@ -119,6 +123,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: '/social-callback',
+        builder: (context, state) =>
+            SocialCallbackPage(code: state.uri.queryParameters['code']),
       ),
       GoRoute(
         path: '/chat',

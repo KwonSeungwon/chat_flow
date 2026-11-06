@@ -137,6 +137,16 @@ class SocialAccountRepositoryPostgresTest {
     }
 
     @Test
+    void passwordlessSocialUser_canBeSaved_andDeletedByUserId() {
+        users.save(UserEntity.builder().userId("s").username("social-only").encodedPassword(null)
+                .createdAt(LocalDateTime.now()).build()).block();
+        assertEquals(null, users.findByUserId("s").block().getEncodedPassword());
+
+        StepVerifier.create(users.deleteByUserId("s")).expectNext(1).verifyComplete();
+        StepVerifier.create(users.findByUserId("s")).verifyComplete();
+    }
+
+    @Test
     void deletingUser_removesLinkedAccounts() {
         SocialAccountEntity saved = repo.save(link("a", SocialProvider.GOOGLE, "g-1")).block();
         assertNotNull(saved.getId());

@@ -91,6 +91,35 @@ class LoginRateLimitFilterTest {
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
     }
 
+    // ── Social login start: 인가 요청마다 WebSession이 생기므로 IP당 제한한다 ──
+
+    @Test
+    void oauthAuthorizationStart_overLimit_returns429_withSeparateBudget() {
+        stubCount("rl:oauth:10.1.1.1", 11L);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/oauth2/authorization/kakao")
+                        .remoteAddress(new java.net.InetSocketAddress("10.1.1.1", 4000))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        verify(chain, never()).filter(any());
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    void oauthAuthorizationStart_underLimit_passes() {
+        stubCount("rl:oauth:10.1.1.1", 3L);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/oauth2/authorization/google")
+                        .remoteAddress(new java.net.InetSocketAddress("10.1.1.1", 4000))
+                        .build());
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        verify(chain).filter(exchange);
+    }
+
     // ── Non-login paths bypass the filter ────────────────────────
 
     @Test

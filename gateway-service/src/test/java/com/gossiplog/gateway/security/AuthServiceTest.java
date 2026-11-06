@@ -680,4 +680,47 @@ class AuthServiceTest {
         verify(passwordEncoder, never()).encode("newpasswd");
         verify(userRepository, never()).save(any(UserEntity.class));
     }
+
+    // ── 소셜 전용 계정(비밀번호 없음) ────────────────────────────
+
+    @Test
+    void login_passwordlessSocialUser_isRejectedWithoutCallingEncoder() {
+        // DelegatingPasswordEncoder.matches(null, null)은 true다. 인코더에 맡기지 않고 먼저 거절한다.
+        UserEntity social = UserEntity.builder().userId("s1").username("social1")
+                .encodedPassword(null).createdAt(LocalDateTime.now()).build();
+        when(userRepository.findByUsername("social1")).thenReturn(Mono.just(social));
+
+        StepVerifier.create(authService.login(new AuthService.AuthRequest("social1", null)))
+                .expectError(IllegalArgumentException.class)
+                .verify();
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void changePassword_passwordlessSocialUser_isRejected() {
+        allowPasswordAttempt();
+        UserEntity social = UserEntity.builder().userId("s2").username("social2")
+                .encodedPassword(null).createdAt(LocalDateTime.now()).build();
+        when(userRepository.findByUsername("social2")).thenReturn(Mono.just(social));
+
+        StepVerifier.create(authService.changePassword("social2", "anything", "newpasswd", null))
+                .expectErrorSatisfies(err -> assertEquals(
+                        "소셜 로그인 계정은 비밀번호를 바꿀 수 없습니다.", err.getMessage()))
+                .verify();
+        verify(userRepository, never()).updateEncodedPassword(anyString(), anyString());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void issueSession_generatesTokenAndRotatesActiveJti() {
+        UserEntity u = UserEntity.builder().userId("s3").username("social3").profileImageUrl("img").build();
+        when(jwtUtil.generateToken("s3", "social3")).thenReturn("tok");
+        when(jwtUtil.getJti("tok")).thenReturn("jti-s3");
+        when(redisTemplate.execute(any(RedisScript.class), eq(List.of("gossiplog:user:active_jti:s3", "gossiplog:blacklist:")),
+                anyList())).thenReturn(Flux.empty());
+
+        StepVerifier.create(authService.issueSession(u))
+                .expectNext(new AuthService.AuthResponse("tok", "s3", "social3", "img"))
+                .verifyComplete();
+    }
 }

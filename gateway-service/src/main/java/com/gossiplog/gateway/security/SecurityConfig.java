@@ -1,6 +1,10 @@
 package com.gossiplog.gateway.security;
 
+import com.gossiplog.gateway.security.oauth.SocialLoginHandlers;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.server.WebSessionServerOAuth2AuthorizedClientRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,9 +30,19 @@ public class SecurityConfig {
             ServerHttpSecurity http,
             JwtUtil jwtUtil,
             TokenBlacklistService tokenBlacklistService,
+            ObjectProvider<ReactiveClientRegistrationRepository> clientRegistrations,
+            SocialLoginHandlers socialLoginHandlers,
             @Value("${GATEWAY_INTERNAL_SECRET:}") String gatewayInternalSecret) {
         JwtAuthenticationWebFilter jwtAuthenticationWebFilter =
                 new JwtAuthenticationWebFilter(jwtUtil, tokenBlacklistService, gatewayInternalSecret);
+        // 소셜 로그인은 registration(client id)이 설정된 환경에서만 켠다. test·local 기본값은 꺼짐.
+        if (clientRegistrations.getIfAvailable() != null) {
+            http.oauth2Login(oauth -> oauth
+                    // 제공자 토큰은 쓰지 않는다. 세션에 두면 성공 핸들러가 세션을 끝낼 때 같이 사라진다(기본값은 메모리에 계속 쌓인다).
+                    .authorizedClientRepository(new WebSessionServerOAuth2AuthorizedClientRepository())
+                    .authenticationSuccessHandler(socialLoginHandlers)
+                    .authenticationFailureHandler(socialLoginHandlers));
+        }
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
@@ -42,6 +56,8 @@ public class SecurityConfig {
                 .authorizeExchange(exchanges -> exchanges
                         // Auth: only unauthenticated endpoints are permitAll
                         .pathMatchers("/api/auth/register", "/api/auth/login", "/api/auth/logout").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/auth/social/exchange").permitAll()
+                        .pathMatchers("/oauth2/authorization/**", "/login/oauth2/code/**").permitAll()
                         // Mutation auth endpoints require authentication (blacklist-gated by JwtAuthenticationWebFilter)
                         .pathMatchers(HttpMethod.PUT, "/api/auth/profile", "/api/auth/password").authenticated()
                         .pathMatchers("/ws/**").permitAll()

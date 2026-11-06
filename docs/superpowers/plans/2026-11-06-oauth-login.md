@@ -17,7 +17,17 @@
 - [x] 카카오 준비: `SocialProvider.KAKAO`, provider 엔드포인트(문서 값을 `OAuth2ProviderConfigTest`로 고정).
 - [x] `spring-boot-starter-oauth2-client` 추가. 네이버 provider 엔드포인트만 설정하고 registration(client id/secret)은 2단계에서 넣는다. registration이 없으면 OAuth2 클라이언트 자동 설정이 꺼져 지금 동작은 그대로다.
 
-## 2단계: 로그인 흐름 (다음)
+## 2단계: 로그인 흐름 (`feature/oauth-login`, 2026-11-06 착수)
+
+설계:
+- 라우팅: 외부 ingress가 없고 Cloudflare 터널 → frontend nginx가 `/api`·`/ws`만 gateway로 넘긴다. nginx에 `/oauth2/`, `/login/oauth2/`를 gateway로 넘기는 location을 추가한다.
+- gateway `oauth2Login`: registration이 있을 때만 켠다(test·local은 꺼짐). redirect-uri는 `${OAUTH_REDIRECT_BASE_URL}/login/oauth2/code/{registrationId}` 절대 URL(forward 헤더 문제 회피). 인가 요청은 WebSession(메모리)에 저장, gateway replicaCount 1이라 충분하다.
+- 성공 핸들러: 제공자 응답에서 (provider, 고유 ID, 표시 이름) 추출 → 연결된 계정이 있으면 그 사용자, 없으면 새 사용자(비밀번호 NULL)+연결 생성 → JWT 발급(active jti 회전) → 60초 일회용 코드(Redis, GETDEL)로 `/#/social-callback?code=`에 리다이렉트. 실패는 `/#/login?socialError=1`.
+- `POST /api/auth/social/exchange {code}` → AuthResponse. 프론트는 기존 로그인과 같은 방식으로 저장한다.
+- 프론트: 웹에서만 버튼 3개 노출(Android는 Custom Tabs+딥링크가 필요해 다음으로 미룬다).
+- 제공자별 추출: google(OIDC, scope openid profile) `sub`/`name`, naver `response.id`/`response.nickname`, kakao `id`/`kakao_account.profile.nickname`(없으면 `properties.nickname`).
+- username: 표시 이름을 가입 규칙(`[A-Za-z0-9가-힣_.-]{2,20}`)에 맞게 다듬고, 비거나 겹치면 접미사(`_` + 3자리, 기본 16자 + 4 = 20자)를 붙여 최대 5번 시도.
+
 
 - [ ] `users.encoded_password` NULL 허용. **주의:** `DelegatingPasswordEncoder.matches(null, null)`은 true를 돌려준다. 로그인·비밀번호 변경에서 저장된 비밀번호가 없으면 먼저 거절해야 한다. 이 가드와 테스트 없이 NOT NULL을 풀지 않는다.
 - [ ] registration 설정(env `OAUTH_GOOGLE_CLIENT_ID` 등, K8s Secret). gateway에 `server.forward-headers-strategy`가 없어 `{baseUrl}`이 Cloudflare·ingress 뒤에서 http·내부 호스트로 만들어진다(카카오 KOE006, 구글·네이버 redirect 불일치). forward-headers를 켜거나 운영 redirect-uri를 절대 URL로 고정한다.
@@ -61,7 +71,8 @@
 | 네이버 | 애플리케이션 `Gossiplog`(Client ID `KYL2rY5V_WmnvgQuPWlO`), PC 웹 | `https://app.gossiplog.com/login/oauth2/code/naver` | 별명(필수) | 개발 중, 검수 전에는 멤버만 |
 | 카카오 | 앱 `Gossiplog`(ID 1640047), 카카오 로그인 ON, OIDC OFF | `https://app.gossiplog.com/login/oauth2/code/kakao` | 닉네임(필수 동의) | 비즈 앱 아님. 연결 해제 웹훅 미설정 |
 
-- 다음: 2단계. 로컬 개발용 네이버·카카오 redirect URI는 필요해지면 추가한다.
+- 2단계 구현(2026-11-06, `feature/oauth-login`): gateway 161 테스트, 프론트 602 테스트 통과. reviewer 지적 반영(빈 결과 리다이렉트 누락, 핸들러 테스트, `/oauth2/authorization/**` IP 레이트리밋 `rl:oauth:`, SESSION 쿠키 Secure, 제공자 토큰은 세션 저장소에 두어 세션 종료 때 함께 정리).
+- 남은 것: Android(Custom Tabs+딥링크), 소셜 가입 동시 요청의 대소문자 중복(일반 가입의 signup lock 미적용, 확률 낮음), 카카오 연결 해제 웹훅·회원 탈퇴, 3단계 공개.
 
 ## 확인
 

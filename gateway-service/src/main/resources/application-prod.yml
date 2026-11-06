@@ -2,8 +2,39 @@
 server:
   port: 8000
   shutdown: graceful
+  # 소셜 로그인 인가 요청을 담는 SESSION 쿠키. nginx→gateway가 http라 요청 scheme으로는 Secure가 붙지 않는다.
+  reactive:
+    session:
+      cookie:
+        secure: true
 
 spring:
+  # 소셜 로그인 registration. 값은 K8s Secret gossiplog-oauth(OAUTH_*). redirect-uri는 Cloudflare·nginx 뒤라
+  # 요청에서 baseUrl을 만들면 http·내부 호스트가 되므로 절대 URL로 고정한다(제공자 콘솔에 등록한 값과 같아야 한다).
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${OAUTH_GOOGLE_CLIENT_ID}
+            client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET}
+            scope: openid,profile
+            redirect-uri: ${OAUTH_REDIRECT_BASE_URL:https://app.gossiplog.com}/login/oauth2/code/{registrationId}
+          naver:
+            client-id: ${OAUTH_NAVER_CLIENT_ID}
+            client-secret: ${OAUTH_NAVER_CLIENT_SECRET}
+            client-name: Naver
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_post
+            redirect-uri: ${OAUTH_REDIRECT_BASE_URL:https://app.gossiplog.com}/login/oauth2/code/{registrationId}
+          kakao:
+            client-id: ${OAUTH_KAKAO_CLIENT_ID}
+            client-secret: ${OAUTH_KAKAO_CLIENT_SECRET}
+            client-name: Kakao
+            authorization-grant-type: authorization_code
+            client-authentication-method: client_secret_post
+            scope: profile_nickname
+            redirect-uri: ${OAUTH_REDIRECT_BASE_URL:https://app.gossiplog.com}/login/oauth2/code/{registrationId}
   codec:
     max-in-memory-size: 55MB
   lifecycle:
@@ -217,6 +248,11 @@ resilience4j:
         base-config: default
         # 업로드 한도(55MB)에서 느린 회선이 끊기지 않게
         timeout-duration: 120s
+
+gossiplog:
+  oauth:
+    # 소셜 로그인 뒤 돌아갈 프론트 주소(해시 라우팅 앞부분)
+    frontend-base-url: ${OAUTH_FRONTEND_BASE_URL:https://app.gossiplog.com}
 
 jwt:
   secret: ${JWT_SECRET}

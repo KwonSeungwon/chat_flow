@@ -30,6 +30,8 @@ import java.util.List;
 public class LoginRateLimitFilter implements WebFilter {
 
     private static final String KEY_PREFIX = "rl:login:";
+    /** 소셜 로그인 시작은 요청마다 인가 요청 세션을 만든다. 비밀번호 로그인과 따로 센다. */
+    private static final String OAUTH_KEY_PREFIX = "rl:oauth:";
     private static final int WINDOW_SECONDS = 60;
     private static final int MAX_REQUESTS = 10;
 
@@ -49,12 +51,13 @@ public class LoginRateLimitFilter implements WebFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = canonicalPath(exchange);
-        if (!path.equals("/api/auth/login") && !path.equals("/api/auth/register")) {
+        boolean oauthStart = path.startsWith("/oauth2/authorization/");
+        if (!oauthStart && !path.equals("/api/auth/login") && !path.equals("/api/auth/register")) {
             return chain.filter(exchange);
         }
 
         String ip = ClientIpResolver.resolve(exchange.getRequest());
-        String key = KEY_PREFIX + ip;
+        String key = (oauthStart ? OAUTH_KEY_PREFIX : KEY_PREFIX) + ip;
 
         return redis.execute(INCR_EXPIRE_SCRIPT, List.of(key), List.of(String.valueOf(WINDOW_SECONDS)))
                 .next()
