@@ -87,6 +87,16 @@ class SocialAccountRepositoryPostgresTest {
     }
 
     @Test
+    void kakaoAccount_isStoredAndFoundByNumericId() {
+        // 카카오 회원번호는 숫자(Long)로 오지만 provider_user_id는 문자열로 저장한다.
+        repo.save(link("a", SocialProvider.KAKAO, "4012345678")).block();
+
+        StepVerifier.create(repo.findByProviderAndProviderUserId(SocialProvider.KAKAO, "4012345678"))
+                .assertNext(acc -> assertEquals("a", acc.getUserId()))
+                .verifyComplete();
+    }
+
+    @Test
     void sameProviderAccount_cannotLinkToTwoUsers() {
         repo.save(link("a", SocialProvider.NAVER, "n-1")).block();
 
