@@ -95,7 +95,7 @@ void main() {
 
     await tester.tap(find.text('카카오로 시작하기'));
     await tester.tap(find.text('네이버로 시작하기'));
-    await tester.tap(find.text('Google로 시작하기'));
+    await tester.tap(find.text('Google 계정으로 계속하기'));
 
     expect(started, [
       '/oauth2/authorization/kakao',
@@ -103,6 +103,32 @@ void main() {
       '/oauth2/authorization/google',
     ]);
   });
+
+  for (final width in [400.0, 216.0]) {
+    testWidgets('버튼마다 제공자 로고가 글자 앞에 붙고 겹치지 않는다 (버튼 폭 $width)', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(width: width, child: SocialLoginButtons(onStart: (_) {})),
+          ),
+        ),
+      ));
+
+      for (final (id, text) in [
+        ('kakao', '카카오로 시작하기'),
+        ('naver', '네이버로 시작하기'),
+        ('google', 'Google 계정으로 계속하기'),
+      ]) {
+        final logo = find.byKey(ValueKey('social-logo-$id'));
+        final button = find.ancestor(of: logo, matching: find.byType(OutlinedButton));
+        expect(button, findsOneWidget, reason: '$id 로고가 버튼 안에 있다');
+        expect(tester.getRect(logo).right + 10,
+            lessThanOrEqualTo(tester.getRect(find.text(text)).left + 0.5),
+            reason: '$id 로고와 글자 사이 10px');
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   Future<GoRouter> pumpApp(WidgetTester tester, String location) async {
     tester.view.physicalSize = const Size(400, 800);
