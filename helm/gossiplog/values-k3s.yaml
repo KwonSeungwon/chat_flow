@@ -38,8 +38,8 @@ gateway-service:
   replicaCount: 1
   image:
     name: gateway-service
-    # 2026-07-22 FCM 알림 정리 배포
-    tag: "sha-52cd0aa8868e0a8de0899af382b2d38285227b46"
+    # 2026-11-06 소셜 로그인 1단계(user_social_accounts 테이블, OAuth2 클라이언트 의존성)
+    tag: "sha-a128f6927fc473418a0a68dbe92bf5f2ca08bec3"
   service:
     port: 8000
     type: ClusterIP
