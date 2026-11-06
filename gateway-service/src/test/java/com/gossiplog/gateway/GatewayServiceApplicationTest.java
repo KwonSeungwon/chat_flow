@@ -5,6 +5,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import com.gossiplog.gateway.repository.SocialAccountRepository;
 import com.gossiplog.gateway.repository.UserRepository;
 
 @SpringBootTest
@@ -16,6 +17,9 @@ class GatewayServiceApplicationTest {
 
     @MockBean
     private UserRepository userRepository;
+
+    @MockBean
+    private SocialAccountRepository socialAccountRepository;
 
     @Test
     void contextLoads() {
