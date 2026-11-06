@@ -60,8 +60,8 @@ chat-service:
   replicaCount: 1
   image:
     name: chat-service
-    # 2026-10-23 캐릭터 선택 저장(V22)
-    tag: "sha-43ff60e5b7a09e97bdc3cbfaffa346484cf21d77"
+    # 2026-11-06 채팅방 이름·설명·색상·비밀번호 유효성 검사
+    tag: "sha-28c0729e11620730bd36eae0a17b8853251dd168"
   service:
     port: 8080
     type: ClusterIP
@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-10-24 반응형 개선(월드 타일 크기, 로비 폭, 가로 로그인)
-    tag: "sha-abfd9fe48a20f47ce231f6fc480d8eb12b0c0930"
+    # 2026-11-06 채팅방 설정 창 유효성 검사
+    tag: "sha-28c0729e11620730bd36eae0a17b8853251dd168"
   service:
     port: 80
     type: ClusterIP
