@@ -38,8 +38,8 @@ gateway-service:
   replicaCount: 1
   image:
     name: gateway-service
-    # 2026-11-06 소셜 로그인 1단계(user_social_accounts 테이블, OAuth2 클라이언트 의존성)
-    tag: "sha-a128f6927fc473418a0a68dbe92bf5f2ca08bec3"
+    # 2026-11-06 소셜 로그인 1단계 + 카카오 provider 준비
+    tag: "sha-35be308b83cc769e3787cc4a6d790991c7d02036"
   service:
     port: 8000
     type: ClusterIP
