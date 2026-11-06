@@ -52,9 +52,16 @@
 
 ## 진행 상태
 
-- 1단계 완료(2026-11-06): `feature/oauth-setup`(테이블·의존성·네이버 provider), `feature/oauth-kakao-prep`(KAKAO enum·카카오 provider). gateway 테스트 124개 통과.
-- 구글 Client 발급 완료: GCP 프로젝트 `gossiplog`, 웹 클라이언트 `gossiplog-web`, 테스트 사용자 1명. 시크릿 파일은 `~/.config/gossiplog-oauth/`(리포 밖, 600).
-- 다음: 네이버·카카오 콘솔 등록(사용자 로그인 대기) → 2단계.
+- 1단계 완료(2026-11-06): `feature/oauth-setup`(테이블·의존성·네이버 provider), `feature/oauth-kakao-prep`(KAKAO enum·카카오 provider). gateway 테스트 124개 통과. prod gateway 배포(helm rev 9).
+- 콘솔 등록 완료(2026-11-06). 시크릿 원본은 `~/.config/gossiplog-oauth/*.env`(리포 밖, 600), prod는 K8s Secret `gossiplog-oauth`(키 `OAUTH_{GOOGLE,NAVER,KAKAO}_CLIENT_{ID,SECRET}`, 아직 어떤 Deployment도 참조하지 않음).
+
+| 제공자 | 앱 | Redirect URI | 받는 정보 | 공개 전 상태 |
+| --- | --- | --- | --- | --- |
+| 구글 | GCP 프로젝트 `gossiplog`, 웹 클라이언트 `gossiplog-web` | `https://app.gossiplog.com/login/oauth2/code/google`, `http://localhost:8000/login/oauth2/code/google` | openid profile(요청 scope로 제한) | 테스트 중, 테스트 사용자 1명 |
+| 네이버 | 애플리케이션 `Gossiplog`(Client ID `KYL2rY5V_WmnvgQuPWlO`), PC 웹 | `https://app.gossiplog.com/login/oauth2/code/naver` | 별명(필수) | 개발 중, 검수 전에는 멤버만 |
+| 카카오 | 앱 `Gossiplog`(ID 1640047), 카카오 로그인 ON, OIDC OFF | `https://app.gossiplog.com/login/oauth2/code/kakao` | 닉네임(필수 동의) | 비즈 앱 아님. 연결 해제 웹훅 미설정 |
+
+- 다음: 2단계. 로컬 개발용 네이버·카카오 redirect URI는 필요해지면 추가한다.
 
 ## 확인
 
