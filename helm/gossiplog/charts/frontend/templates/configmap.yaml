@@ -61,6 +61,23 @@ data:
             }
 
             # WebSocket proxy (SockJS)
+            # 소셜 로그인: 제공자 인가 요청 시작과 콜백은 gateway의 Spring Security가 처리한다.
+            location /oauth2/ {
+                proxy_pass http://{{ .Release.Name }}-gateway-service:{{ .Values.gatewayServicePort }};
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
+            location /login/oauth2/ {
+                proxy_pass http://{{ .Release.Name }}-gateway-service:{{ .Values.gatewayServicePort }};
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
             location /ws/ {
                 proxy_pass http://{{ .Release.Name }}-gateway-service:{{ .Values.gatewayServicePort }};
                 proxy_http_version 1.1;

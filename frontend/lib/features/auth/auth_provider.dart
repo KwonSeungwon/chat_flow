@@ -189,6 +189,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// 소셜 로그인 콜백의 일회용 코드를 세션으로 바꾼다. 저장은 [login]과 같다.
+  Future<void> loginWithSocialCode(String code) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final resp = await _dioClient.dio.post('/api/auth/social/exchange', data: {'code': code});
+      final token = resp.data['token'] as String;
+      final userId = resp.data['userId']?.toString() ?? '';
+      final username = resp.data['username']?.toString() ?? '';
+      final profileImageUrl = resp.data['profileImageUrl']?.toString();
+      await _saveCredentials(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl);
+      state = AuthState(token: token, userId: userId, username: username, profileImageUrl: profileImageUrl, isHydrated: true);
+      _armBeforeUnloadHandler();
+    } on DioException catch (e) {
+      final msg = e.response?.statusCode == 400
+          ? '소셜 로그인이 만료됐어요. 다시 시도해 주세요.'
+          : '소셜 로그인 실패. 잠시 후 다시 시도해주세요.';
+      state = AuthState(isLoading: false, error: msg, isHydrated: true);
+    } catch (e) {
+      debugPrint('[AuthNotifier] social login error: $e');
+      state = const AuthState(isLoading: false, error: '소셜 로그인 실패. 네트워크를 확인해주세요.', isHydrated: true);
+    }
+  }
+
   void _armBeforeUnloadHandler() {
     WebUnloadHandler.register(
       jwtProvider: () => state.token ?? '',

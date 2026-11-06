@@ -26,3 +26,6 @@ CREATE TABLE IF NOT EXISTS user_social_accounts (
     CONSTRAINT uq_social_provider_account UNIQUE (provider, provider_user_id),
     CONSTRAINT uq_social_user_provider UNIQUE (user_id, provider)
 );
+
+-- 소셜 전용 계정은 비밀번호가 없다(NULL). 로그인·비밀번호 변경은 AuthService가 NULL을 먼저 거절한다.
+ALTER TABLE users ALTER COLUMN encoded_password DROP NOT NULL;

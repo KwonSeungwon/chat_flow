@@ -186,19 +186,28 @@ public class AuthService {
                                         request.password() == null ? "" : request.password(), dummyEncodedPassword))
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .then(Mono.<UserEntity>error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다")))))
-                .flatMap(entity ->
-                    Mono.fromCallable(() -> passwordEncoder.matches(request.password(), entity.getEncodedPassword()))
+                .flatMap(entity -> {
+                    // 소셜 전용 계정은 비밀번호가 없다. 인코더에 null을 넘기지 않고 여기서 거절한다.
+                    if (entity.getEncodedPassword() == null || request.password() == null) {
+                        return Mono.<AuthResponse>error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
+                    }
+                    return Mono.fromCallable(() -> passwordEncoder.matches(request.password(), entity.getEncodedPassword()))
                             .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(matches -> {
                                 if (!matches) {
                                     return Mono.error(new IllegalArgumentException("잘못된 사용자명 또는 비밀번호입니다"));
                                 }
-                                String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername());
-                                String newJti = jwtUtil.getJti(token);
-                                return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
-                                        .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), entity.getProfileImageUrl()));
-                            })
-                );
+                                return issueSession(entity);
+                            });
+                });
+    }
+
+    /** 이미 확인된 사용자에게 새 세션 토큰을 발급한다. active jti를 회전해 다른 기기 세션은 끊는다. */
+    public Mono<AuthResponse> issueSession(UserEntity entity) {
+        String token = jwtUtil.generateToken(entity.getUserId(), entity.getUsername());
+        String newJti = jwtUtil.getJti(token);
+        return rotateActiveJti(entity.getUserId(), newJti, cacheTtl)
+                .thenReturn(new AuthResponse(token, entity.getUserId(), entity.getUsername(), entity.getProfileImageUrl()));
     }
 
     /**
@@ -236,6 +245,9 @@ public class AuthService {
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("사용자를 찾을 수 없습니다.")))
                 .flatMap(entity ->
                     Mono.fromCallable(() -> {
+                                if (entity.getEncodedPassword() == null) {
+                                    throw new IllegalArgumentException("소셜 로그인 계정은 비밀번호를 바꿀 수 없습니다.");
+                                }
                                 if (!passwordEncoder.matches(currentPassword, entity.getEncodedPassword())) {
                                     throw new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다.");
                                 }

@@ -4,6 +4,7 @@ import com.gossiplog.gateway.security.AuthService;
 import com.gossiplog.gateway.security.AuthService.AuthRequest;
 import com.gossiplog.gateway.security.AuthService.AuthResponse;
 import com.gossiplog.gateway.security.JwtUtil;
+import com.gossiplog.gateway.security.oauth.SocialLoginCodeStore;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtUtil jwtUtil;
+    private final SocialLoginCodeStore socialLoginCodeStore;
 
     @PostMapping("/register")
     public Mono<ResponseEntity<Object>> register(@RequestBody AuthRequest request) {
@@ -42,6 +44,14 @@ public class AuthController {
                 .map(ResponseEntity::ok)
                 .onErrorResume(IllegalArgumentException.class,
                         e -> Mono.just(ResponseEntity.status(401).build()));
+    }
+
+    /** 소셜 로그인 콜백이 준 일회용 코드를 세션 토큰으로 바꾼다. 코드는 한 번만 쓸 수 있다. */
+    @PostMapping("/social/exchange")
+    public Mono<ResponseEntity<AuthResponse>> exchangeSocialCode(@RequestBody Map<String, String> body) {
+        return socialLoginCodeStore.redeem(body.get("code"))
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.badRequest().build());
     }
 
     @PutMapping("/profile")
