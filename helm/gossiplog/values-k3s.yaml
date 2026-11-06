@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-11-06 소셜 로그인 버튼·콜백 화면
-    tag: "sha-6fbea3a659fae69179b35f472aa6b700d507d8a2"
+    # 2026-11-06 소셜 로그인 버튼 제공자 로고
+    tag: "sha-45f29dc0d74e2d07d58c8fddf4683872f2f11484"
   service:
     port: 80
     type: ClusterIP
