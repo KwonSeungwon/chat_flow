@@ -145,7 +145,7 @@ class GameRunServiceTest {
 
     @Test
     void start_buildsQueuesWithDueWrongFirst_andDisjointBoss() {
-        List<GameQuestion> qs = approved(10);
+        List<GameQuestion> qs = approved(14);
         GameQuestion dueWrong = qs.get(0);
         GameQuestion wrongThenRight = qs.get(1);
         GameQuestion wrongNotDue = qs.get(2);
@@ -163,7 +163,11 @@ class GameRunServiceTest {
 
         assertThat(res.hearts()).isEqualTo(3);
         assertThat(res.kills()).isZero();
-        assertThat(res.killsToBoss()).isEqualTo(5);
+        assertThat(res.killsToBoss()).isEqualTo(3);
+        assertThat(res.hp()).isEqualTo(100);
+        assertThat(res.maxHp()).isEqualTo(100);
+        assertThat(res.review()).isFalse();
+        assertThat(res.reviewTotal()).isZero();
         RunState state = state(res.runId());
         assertThat(state.getUserId()).isEqualTo(USER);
         assertThat(state.getPhase()).isEqualTo(RunState.Phase.NORMAL);
@@ -172,14 +176,19 @@ class GameRunServiceTest {
         List<Long> normal = new ArrayList<>();
         normal.add(state.getCurrentQuestionId());
         normal.addAll(state.getNormalQueue());
-        assertThat(normal).hasSize(5).doesNotHaveDuplicates().doesNotContain(dbQuestion.getId());
-        assertThat(state.getBossQueue()).hasSize(3).doesNotHaveDuplicates().doesNotContainAnyElementsOf(normal);
+        assertThat(normal).hasSize(6).doesNotHaveDuplicates().doesNotContain(dbQuestion.getId());
+        assertThat(state.getBossQueue()).hasSize(6).doesNotHaveDuplicates().doesNotContainAnyElementsOf(normal);
+        assertThat(state.getHp()).isEqualTo(100);
+        assertThat(state.getMonsterHp()).isEqualTo(30);
+        assertThat(state.getMonsterMaxHp()).isEqualTo(30);
+        assertThat(state.getMonsterTopicId()).isEqualTo(jvmTopic.getId());
+        assertThat(state.getMode()).isEqualTo(RunState.Mode.RUN);
     }
 
     @Test
-    void start_dueWrongCappedAtFive() {
-        List<GameQuestion> qs = approved(8);
-        for (int i = 0; i < 7; i++) {
+    void start_dueWrongCappedAtSix() {
+        List<GameQuestion> qs = approved(9);
+        for (int i = 0; i < 8; i++) {
             answer(USER, qs.get(i), false, NOW.minusDays(2), NOW.minusDays(1).plusMinutes(i));
         }
 
@@ -188,7 +197,7 @@ class GameRunServiceTest {
         List<Long> normal = new ArrayList<>();
         normal.add(state.getCurrentQuestionId());
         normal.addAll(state.getNormalQueue());
-        assertThat(normal).containsExactlyElementsOf(qs.subList(0, 5).stream().map(GameQuestion::getId).toList());
+        assertThat(normal).containsExactlyElementsOf(qs.subList(0, 6).stream().map(GameQuestion::getId).toList());
     }
 
     @Test
@@ -198,7 +207,7 @@ class GameRunServiceTest {
         RunState state = state(service.start(USER, "jvm").runId());
 
         assertThat(state.getNormalQueue()).hasSize(4);
-        assertThat(state.getBossQueue()).hasSize(3).doesNotHaveDuplicates();
+        assertThat(state.getBossQueue()).hasSize(5).doesNotHaveDuplicates();
     }
 
     // ---- next ----
@@ -213,6 +222,8 @@ class GameRunServiceTest {
         assertThat(next.seq()).isEqualTo(1);
         assertThat(next.monster().name()).isEqualTo("OOM 슬라임");
         assertThat(next.monster().isBoss()).isFalse();
+        assertThat(next.monster().hp()).isEqualTo(30);
+        assertThat(next.monster().maxHp()).isEqualTo(30);
         assertThat(next.question().id()).isEqualTo(state(runId).getCurrentQuestionId());
         assertThat(next.question().choices()).containsExactly("a", "b", "c", "d");
         assertThat(next.question().topicTitle()).isEqualTo("GC");
@@ -237,61 +248,192 @@ class GameRunServiceTest {
     // ---- answers ----
 
     @Test
-    void fiveCorrect_unlocksBoss_andBossMonsterAppears() {
-        approved(8);
+    void correct_deals15_thirdInARowIsCritical_andTwoHitsKillAMonster() {
+        approved(10);
         String runId = service.start(USER, "jvm").runId();
 
-        AnswerResult last = null;
-        for (int i = 0; i < 5; i++) {
-            last = answerCorrect(runId);
-            assertThat(last.kills()).isEqualTo(i + 1);
-        }
+        AnswerResult first = answerCorrect(runId);
+        assertThat(first.damage()).isEqualTo(15);
+        assertThat(first.critical()).isFalse();
+        assertThat(first.monsterHp()).isEqualTo(15);
+        assertThat(first.monsterMaxHp()).isEqualTo(30);
+        assertThat(first.monsterDefeated()).isFalse();
+        assertThat(first.kills()).isZero();
+        assertThat(first.hp()).isEqualTo(100);
+        assertThat(first.maxHp()).isEqualTo(100);
+        assertThat(first.review()).isFalse();
 
+        AnswerResult second = answerCorrect(runId);
+        assertThat(second.damage()).isEqualTo(15);
+        assertThat(second.monsterHp()).isZero();
+        assertThat(second.monsterDefeated()).isTrue();
+        assertThat(second.kills()).isEqualTo(1);
+        RunState state = state(runId);
+        assertThat(state.getMonsterHp()).isEqualTo(30);
+        assertThat(state.getMonsterMaxHp()).isEqualTo(30);
+
+        AnswerResult third = answerCorrect(runId);
+        assertThat(third.critical()).isTrue();
+        assertThat(third.damage()).isEqualTo(30);
+        assertThat(third.monsterDefeated()).isTrue();
+        assertThat(third.kills()).isEqualTo(2);
+    }
+
+    @Test
+    void wrong_monsterHits25_resetsStreak_andHeartsFollowHp() {
+        approved(10);
+        String runId = service.start(USER, "jvm").runId();
+        answerCorrect(runId);
+        answerCorrect(runId);
+
+        AnswerResult wrong = answerWrong(runId);
+
+        assertThat(wrong.correct()).isFalse();
+        assertThat(wrong.damage()).isEqualTo(25);
+        assertThat(wrong.critical()).isFalse();
+        assertThat(wrong.hp()).isEqualTo(75);
+        assertThat(wrong.hearts()).isEqualTo(3);
+        assertThat(wrong.monsterHp()).isEqualTo(30);
+        assertThat(wrong.monsterDefeated()).isFalse();
+        assertThat(state(runId).getStreak()).isZero();
+        // streak was reset, so the next hit is a normal one
+        assertThat(answerCorrect(runId).critical()).isFalse();
+        AnswerResult second = answerWrong(runId);
+        assertThat(second.hp()).isEqualTo(50);
+        assertThat(second.hearts()).isEqualTo(2);
+    }
+
+    @Test
+    void threeKills_unlocksBoss_andBossMonsterAppearsWithFullHp() {
+        approved(10);
+        String runId = service.start(USER, "jvm").runId();
+
+        // 15+15 kills #1, then two criticals kill #2 and #3
+        AnswerResult last = null;
+        for (int i = 0; i < 4; i++) last = answerCorrect(runId);
+
+        assertThat(last.kills()).isEqualTo(3);
         assertThat(last.bossUnlocked()).isTrue();
         assertThat(last.cleared()).isFalse();
+        assertThat(last.monsterMaxHp()).isEqualTo(30);
+        assertThat(last.monsterHp()).isZero();
         assertThat(state(runId).getPhase()).isEqualTo(RunState.Phase.BOSS);
         NextEncounter boss = service.next(USER, runId);
         assertThat(boss.monster().isBoss()).isTrue();
         assertThat(boss.monster().name()).isEqualTo("가비지 골렘");
         assertThat(boss.monster().spriteKey()).isEqualTo("boss_jvm");
+        assertThat(boss.monster().hp()).isEqualTo(90);
+        assertThat(boss.monster().maxHp()).isEqualTo(90);
     }
 
     @Test
-    void bossWrong_resetsStreak_losesHeart_andServesANewQuestion() {
-        approved(8);
+    void bossWrong_hits34_keepsBossHp_andServesANewQuestion() {
+        approved(10);
         String runId = service.start(USER, "jvm").runId();
-        for (int i = 0; i < 5; i++) answerCorrect(runId);
-        answerCorrect(runId);
-        assertThat(state(runId).getBossStreak()).isEqualTo(1);
+        for (int i = 0; i < 4; i++) answerCorrect(runId);
+        AnswerResult hit = answerCorrect(runId);
+        assertThat(hit.critical()).isTrue();
+        assertThat(hit.monsterHp()).isEqualTo(60);
+        assertThat(hit.monsterMaxHp()).isEqualTo(90);
 
         Long missed = state(runId).getCurrentQuestionId();
         AnswerResult wrong = answerWrong(runId);
 
-        assertThat(wrong.correct()).isFalse();
+        assertThat(wrong.damage()).isEqualTo(34);
+        assertThat(wrong.hp()).isEqualTo(66);
         assertThat(wrong.hearts()).isEqualTo(2);
+        assertThat(wrong.monsterHp()).isEqualTo(60);
         assertThat(wrong.failed()).isFalse();
         RunState state = state(runId);
-        assertThat(state.getBossStreak()).isZero();
+        assertThat(state.getMonsterHp()).isEqualTo(60);
         assertThat(state.getBossQueue()).doesNotContain(missed);
         assertThat(state.getCurrentQuestionId()).isNotEqualTo(missed);
         assertThat(state.getAnsweredIds()).contains(missed);
+        NextEncounter next = service.next(USER, runId);
+        assertThat(next.monster().isBoss()).isTrue();
+        assertThat(next.monster().hp()).isEqualTo(60);
+        assertThat(next.question().id()).isNotEqualTo(missed);
     }
 
     @Test
-    void thirdBossMiss_nextServesAFreshQuestion() {
-        approved(10);
+    void aliveMonster_nextQuestionPrefersItsTopic() {
+        approved(8);
+        GameTopic heap = topicRepository.save(GameTopic.builder().dungeonId("jvm").title("Heap").build());
+        GameQuestion h1 = question(heap, GameQuestionStatus.APPROVED);
+        GameQuestion h2 = question(heap, GameQuestionStatus.APPROVED);
+        answer(USER, h1, false, NOW.minusDays(2), NOW.minusDays(1));
         String runId = service.start(USER, "jvm").runId();
-        for (int i = 0; i < 5; i++) answerCorrect(runId);
+        assertThat(state(runId).getCurrentQuestionId()).isEqualTo(h1.getId());
+        assertThat(state(runId).getMonsterTopicId()).isEqualTo(heap.getId());
+
         answerCorrect(runId);
+
+        assertThat(state(runId).getCurrentQuestionId()).isEqualTo(h2.getId());
+        AnswerResult kill = answerCorrect(runId);
+        assertThat(kill.monsterDefeated()).isTrue();
+        RunState state = state(runId);
+        // the next encounter is a fresh monster of the new question's topic
+        assertThat(state.getMonsterTopicId()).isEqualTo(jvmTopic.getId());
+        assertThat(state.getMonsterHp()).isEqualTo(30);
+    }
+
+    @Test
+    void aliveMonster_withoutMoreTopicQuestions_staysTheSameMonster() {
+        approved(8);
+        GameTopic heap = topicRepository.save(GameTopic.builder().dungeonId("jvm").title("Heap").build());
+        monsterRepository.save(GameMonster.builder().dungeonId("jvm").topicId(heap.getId())
+                .name("힙 덩어리").spriteKey("monster_heap").boss(false).build());
+        GameQuestion h1 = question(heap, GameQuestionStatus.APPROVED);
+        answer(USER, h1, false, NOW.minusDays(2), NOW.minusDays(1));
+        String runId = service.start(USER, "jvm").runId();
         answerCorrect(runId);
-        Long missed = state(runId).getCurrentQuestionId();
+
+        NextEncounter next = service.next(USER, runId);
+
+        assertThat(next.question().topicTitle()).isEqualTo("GC");
+        assertThat(next.monster().name()).isEqualTo("힙 덩어리");
+        assertThat(next.monster().spriteKey()).isEqualTo("monster_heap");
+        assertThat(next.monster().hp()).isEqualTo(15);
+        assertThat(state(runId).getMonsterTopicId()).isEqualTo(heap.getId());
+    }
+
+    @Test
+    void aliveMonsterWithoutMonsterRow_fallsBackToItsTopicTitle() {
+        approved(8);
+        GameTopic heap = topicRepository.save(GameTopic.builder().dungeonId("jvm").title("Heap").build());
+        GameQuestion h1 = question(heap, GameQuestionStatus.APPROVED);
+        answer(USER, h1, false, NOW.minusDays(2), NOW.minusDays(1));
+        String runId = service.start(USER, "jvm").runId();
         answerWrong(runId);
 
         NextEncounter next = service.next(USER, runId);
 
-        assertThat(next.monster().isBoss()).isTrue();
-        assertThat(next.question().id()).isNotEqualTo(missed);
-        assertThat(state(runId).getAnsweredIds()).hasSize(8).doesNotContain(next.question().id());
+        assertThat(next.question().topicTitle()).isEqualTo("GC");
+        assertThat(next.monster().name()).isEqualTo("Heap");
+        assertThat(next.monster().spriteKey()).isEqualTo("monster_jvm");
+        assertThat(next.monster().hp()).isEqualTo(30);
+    }
+
+    @Test
+    void oldRunJsonWithoutHp_isUpgradedOnLoad() throws Exception {
+        approved(8);
+        String runId = service.start(USER, "jvm").runId();
+        Long current = state(runId).getCurrentQuestionId();
+        String legacy = "{\"runId\":\"" + runId + "\",\"userId\":\"" + USER + "\",\"dungeonId\":\"jvm\","
+                + "\"hearts\":2,\"kills\":1,\"bossStreak\":0,\"phase\":\"NORMAL\",\"seq\":3,"
+                + "\"currentQuestionId\":" + current + ",\"normalQueue\":[],\"bossQueue\":[],"
+                + "\"answered\":{},\"answeredIds\":[],\"streak\":0,\"bestStreak\":1,\"finished\":false}";
+        store.put("gossiplog:game:run:" + runId, legacy);
+
+        NextEncounter next = service.next(USER, runId);
+
+        assertThat(next.seq()).isEqualTo(3);
+        assertThat(next.monster().hp()).isEqualTo(30);
+        assertThat(next.monster().maxHp()).isEqualTo(30);
+        AnswerResult wrong = answerWrong(runId);
+        assertThat(wrong.hp()).isEqualTo(67 - 25);
+        assertThat(wrong.hearts()).isEqualTo(2);
+        assertThat(wrong.kills()).isEqualTo(1);
     }
 
     @Test
@@ -321,7 +463,8 @@ class GameRunServiceTest {
         String runId = service.start(USER, "jvm").runId();
         RunState before = state(runId);
         String claimKey = "gossiplog:game:run:" + runId + ":seq:1";
-        AnswerResult winner = new AnswerResult(true, 1, "exp", "GC", "src", 3, 1, false, false, false);
+        AnswerResult winner = new AnswerResult(true, 1, "exp", "GC", "src", 3, 1, false, false, false,
+                100, 100, 15, false, 15, 30, false, false, 0, 0);
         // the winner finishes between our first read and our claim
         doAnswer(inv -> {
             RunState s = state(runId);
@@ -378,22 +521,25 @@ class GameRunServiceTest {
     }
 
     @Test
-    void bossThreeInARow_clears_upsertsProgress_andEndsRun() {
+    void bossHpToZero_clears_upsertsProgress_andEndsRun() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
-        for (int i = 0; i < 5; i++) answerCorrect(runId);
+        for (int i = 0; i < 4; i++) answerCorrect(runId);
         answerCorrect(runId);
         answerCorrect(runId);
         AnswerResult clear = answerCorrect(runId);
 
         assertThat(clear.cleared()).isTrue();
         assertThat(clear.failed()).isFalse();
+        assertThat(clear.monsterHp()).isZero();
+        assertThat(clear.monsterMaxHp()).isEqualTo(90);
+        assertThat(clear.monsterDefeated()).isTrue();
         assertRunEnded(runId);
         GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
         assertThat(progress.getClearedAt()).isEqualTo(NOW);
-        assertThat(progress.getBestStreak()).isEqualTo(8);
+        assertThat(progress.getBestStreak()).isEqualTo(7);
         assertThat(progress.getUsername()).isEqualTo("앨리스");
-        assertThat(answerRepository.findAll()).hasSize(8).allMatch(GameAnswer::isCorrect);
+        assertThat(answerRepository.findAll()).hasSize(7).allMatch(GameAnswer::isCorrect);
     }
 
     @Test
@@ -403,7 +549,7 @@ class GameRunServiceTest {
         progressRepository.save(GameProgress.builder().userId(USER).dungeonId("jvm")
                 .clearedAt(first).bestStreak(20).username("old").build());
         String runId = service.start(USER, "jvm").runId();
-        for (int i = 0; i < 8; i++) answerCorrect(runId);
+        for (int i = 0; i < 7; i++) answerCorrect(runId);
 
         GameProgress progress = progressRepository.findById(new GameProgressId(USER, "jvm")).orElseThrow();
         assertThat(progress.getClearedAt()).isEqualTo(first);
@@ -415,30 +561,35 @@ class GameRunServiceTest {
     void bossQueueExhausted_refillsFromApprovedAndStillClears() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
-        for (int i = 0; i < 5; i++) answerCorrect(runId);
-        answerCorrect(runId);
+        for (int i = 0; i < 4; i++) answerCorrect(runId);
         answerWrong(runId);
+        answerCorrect(runId);
         answerCorrect(runId);
         answerCorrect(runId);
         RunState state = state(runId);
         assertThat(state.getBossQueue()).isEmpty();
-        assertThat(state.getBossStreak()).isEqualTo(2);
+        assertThat(state.getMonsterHp()).isEqualTo(30);
         assertThat(state.getCurrentQuestionId()).isNotNull();
 
         AnswerResult clear = answerCorrect(runId);
 
         assertThat(clear.cleared()).isTrue();
+        assertThat(clear.hp()).isEqualTo(66);
         assertThat(clear.hearts()).isEqualTo(2);
     }
 
     @Test
-    void zeroHearts_fails_andEndsRun() {
+    void zeroHp_fails_andEndsRun() {
         approved(8);
         String runId = service.start(USER, "jvm").runId();
         answerWrong(runId);
         answerWrong(runId);
+        AnswerResult third = answerWrong(runId);
+        assertThat(third.failed()).isFalse();
+        assertThat(third.hearts()).isEqualTo(1);
         AnswerResult last = answerWrong(runId);
 
+        assertThat(last.hp()).isZero();
         assertThat(last.hearts()).isZero();
         assertThat(last.failed()).isTrue();
         assertThat(last.cleared()).isFalse();
@@ -472,12 +623,13 @@ class GameRunServiceTest {
         String runId = service.start(USER, "jvm").runId();
         answerWrong(runId);
         answerWrong(runId);
+        answerWrong(runId);
         AnswerResult last = answerWrong(runId);
 
-        AnswerResult again = service.answer(USER, "앨리스", runId, new AnswerRequest(3, 0));
+        AnswerResult again = service.answer(USER, "앨리스", runId, new AnswerRequest(4, 0));
 
         assertThat(again).isEqualTo(last);
-        assertThat(answerRepository.findAll()).hasSize(3);
+        assertThat(answerRepository.findAll()).hasSize(4);
     }
 
     @Test
@@ -544,7 +696,7 @@ class GameRunServiceTest {
         AnswerResult again = service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0));
 
         assertThat(again).isEqualTo(first);
-        assertThat(state(runId).getHearts()).isEqualTo(2);
+        assertThat(state(runId).getHp()).isEqualTo(75);
         assertThat(answerRepository.findAll()).hasSize(1);
     }
 
@@ -617,6 +769,197 @@ class GameRunServiceTest {
             topicRepository.deleteAll();
             dungeonRepository.deleteAll();
         }
+    }
+
+    // ---- review (collection) ----
+
+    @Test
+    void review_unknownTopic_returns404() {
+        assertThatThrownBy(() -> service.startReview(USER, 999_999L))
+                .isInstanceOfSatisfying(GameException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(404);
+                    assertThat(e.getCode()).isEqualTo("TOPIC_NOT_FOUND");
+                });
+    }
+
+    @Test
+    void review_topicWithoutApprovedQuestions_returns404() {
+        question(jvmTopic, GameQuestionStatus.DRAFT);
+
+        assertThatThrownBy(() -> service.startReview(USER, jvmTopic.getId()))
+                .isInstanceOfSatisfying(GameException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(404);
+                    assertThat(e.getCode()).isEqualTo("TOPIC_NOT_FOUND");
+                });
+    }
+
+    @Test
+    void review_notCaught_returns409() {
+        List<GameQuestion> qs = approved(3);
+        answer(USER, qs.get(0), false, NOW.minusDays(2), NOW.minusDays(1));
+        GameQuestion draft = question(jvmTopic, GameQuestionStatus.DRAFT);
+        answer(USER, draft, true, NOW.minusDays(2), NOW.minusDays(1));
+        answer("other-user", qs.get(1), true, NOW.minusDays(2), NOW.minusDays(1));
+
+        assertThatThrownBy(() -> service.startReview(USER, jvmTopic.getId()))
+                .isInstanceOfSatisfying(GameException.class, e -> {
+                    assertThat(e.getStatus()).isEqualTo(409);
+                    assertThat(e.getCode()).isEqualTo("NOT_CAUGHT");
+                });
+        assertThat(store).isEmpty();
+    }
+
+    @Test
+    void review_start_queuesDueFirst_upToFive() {
+        List<GameQuestion> qs = approved(8);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        answer(USER, qs.get(3), true, NOW.minusDays(5), NOW.minusDays(1));
+        answer(USER, qs.get(5), false, NOW.minusDays(5), NOW.minusDays(2));
+
+        RunStartResponse res = service.startReview(USER, jvmTopic.getId());
+
+        assertThat(res.review()).isTrue();
+        assertThat(res.reviewTotal()).isEqualTo(5);
+        assertThat(res.hp()).isEqualTo(100);
+        assertThat(res.maxHp()).isEqualTo(100);
+        assertThat(res.hearts()).isEqualTo(3);
+        assertThat(res.kills()).isZero();
+        RunState state = state(res.runId());
+        assertThat(state.getMode()).isEqualTo(RunState.Mode.REVIEW);
+        assertThat(state.getTopicId()).isEqualTo(jvmTopic.getId());
+        assertThat(state.getDungeonId()).isEqualTo("jvm");
+        assertThat(state.getReviewTotal()).isEqualTo(5);
+        assertThat(state.getMonsterHp()).isEqualTo(75);
+        assertThat(state.getMonsterMaxHp()).isEqualTo(75);
+        List<Long> queue = new ArrayList<>();
+        queue.add(state.getCurrentQuestionId());
+        queue.addAll(state.getNormalQueue());
+        assertThat(queue).hasSize(5).doesNotHaveDuplicates();
+        assertThat(queue.subList(0, 2)).containsExactly(qs.get(5).getId(), qs.get(3).getId());
+        NextEncounter next = service.next(USER, res.runId());
+        assertThat(next.monster().name()).isEqualTo("OOM 슬라임");
+        assertThat(next.monster().isBoss()).isFalse();
+        assertThat(next.monster().hp()).isEqualTo(75);
+        assertThat(next.monster().maxHp()).isEqualTo(75);
+    }
+
+    @Test
+    void review_smallTopic_usesAllItsQuestions() {
+        List<GameQuestion> qs = approved(2);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+
+        RunStartResponse res = service.startReview(USER, jvmTopic.getId());
+
+        assertThat(res.reviewTotal()).isEqualTo(2);
+        assertThat(state(res.runId()).getMonsterMaxHp()).isEqualTo(30);
+    }
+
+    @Test
+    void review_wrongDealsNoDamage_neverFails_andFinishesAfterAllQuestions() {
+        List<GameQuestion> qs = approved(3);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        String runId = service.startReview(USER, jvmTopic.getId()).runId();
+
+        AnswerResult w1 = answerWrong(runId);
+        assertThat(w1.damage()).isZero();
+        assertThat(w1.hp()).isEqualTo(100);
+        assertThat(w1.hearts()).isEqualTo(3);
+        assertThat(w1.failed()).isFalse();
+        assertThat(w1.cleared()).isFalse();
+        assertThat(w1.review()).isTrue();
+        assertThat(w1.reviewTotal()).isEqualTo(3);
+        assertThat(w1.reviewCorrect()).isZero();
+        assertThat(w1.monsterHp()).isEqualTo(45);
+        AnswerResult c1 = answerCorrect(runId);
+        assertThat(c1.damage()).isEqualTo(15);
+        assertThat(c1.critical()).isFalse();
+        assertThat(c1.monsterHp()).isEqualTo(30);
+        assertThat(c1.reviewCorrect()).isEqualTo(1);
+        AnswerResult last = answerWrong(runId);
+
+        assertThat(last.cleared()).isTrue();
+        assertThat(last.failed()).isFalse();
+        assertThat(last.monsterDefeated()).isFalse();
+        assertThat(last.kills()).isZero();
+        assertThat(last.bossUnlocked()).isFalse();
+        assertThat(last.reviewCorrect()).isEqualTo(1);
+        assertRunEnded(runId);
+        assertThat(answerRepository.findAll()).hasSize(4);
+        assertThat(progressRepository.count()).isZero();
+    }
+
+    @Test
+    void review_allCorrect_defeatsTheMonster_neverCritical_andLeavesProgressAlone() {
+        List<GameQuestion> qs = approved(5);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        String runId = service.startReview(USER, jvmTopic.getId()).runId();
+
+        AnswerResult last = null;
+        for (int i = 0; i < 5; i++) {
+            last = answerCorrect(runId);
+            assertThat(last.critical()).isFalse();
+            assertThat(last.damage()).isEqualTo(15);
+        }
+
+        assertThat(last.cleared()).isTrue();
+        assertThat(last.monsterDefeated()).isTrue();
+        assertThat(last.monsterHp()).isZero();
+        assertThat(last.monsterMaxHp()).isEqualTo(75);
+        assertThat(last.reviewCorrect()).isEqualTo(5);
+        assertThat(progressRepository.count()).isZero();
+        assertThat(answerRepository.findAll().stream().filter(a -> a.getAnsweredAt().equals(NOW)))
+                .hasSize(5).allMatch(GameAnswer::isCorrect);
+    }
+
+    @Test
+    void review_queuedQuestionRejected_isReplacedByAnotherOfTheTopic() {
+        List<GameQuestion> qs = approved(7);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        // a question of another topic must never appear in a review
+        GameTopic heap = topicRepository.save(GameTopic.builder().dungeonId("jvm").title("Heap").build());
+        GameQuestion other = question(heap, GameQuestionStatus.APPROVED);
+        String runId = service.startReview(USER, jvmTopic.getId()).runId();
+        RunState start = state(runId);
+        Long queued = start.getNormalQueue().get(0);
+        reject(queued);
+
+        List<Long> served = new ArrayList<>();
+        AnswerResult last = null;
+        for (int i = 0; i < 5; i++) {
+            served.add(service.next(USER, runId).question().id());
+            last = answerCorrect(runId);
+        }
+
+        assertThat(last.cleared()).isTrue();
+        assertThat(served).hasSize(5).doesNotHaveDuplicates().doesNotContain(queued, other.getId());
+    }
+
+    @Test
+    void review_topicRunsOutOfQuestions_reusesOne() {
+        List<GameQuestion> qs = approved(2);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        String runId = service.startReview(USER, jvmTopic.getId()).runId();
+        Long first = state(runId).getCurrentQuestionId();
+        Long second = state(runId).getNormalQueue().get(0);
+        reject(second);
+
+        answerCorrect(runId);
+
+        assertThat(state(runId).getCurrentQuestionId()).isEqualTo(first);
+        assertThat(answerCorrect(runId).cleared()).isTrue();
+    }
+
+    @Test
+    void review_sameSeqTwice_returnsStoredResult() {
+        List<GameQuestion> qs = approved(3);
+        answer(USER, qs.get(0), true, NOW.minusDays(5), NOW.plusDays(2));
+        String runId = service.startReview(USER, jvmTopic.getId()).runId();
+        AnswerResult first = answerCorrect(runId);
+
+        AnswerResult again = service.answer(USER, "앨리스", runId, new AnswerRequest(1, 0));
+
+        assertThat(again).isEqualTo(first);
+        assertThat(state(runId).getReviewCorrect()).isEqualTo(1);
     }
 
     // ---- helpers ----

@@ -6,8 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _enc = Encounter(
   seq: 1,
-  monster:
-      MonsterInfo(name: 'OOM 슬라임', spriteKey: 'monster_jvm', isBoss: false),
+  monster: MonsterInfo(
+      name: 'OOM 슬라임',
+      spriteKey: 'monster_jvm',
+      isBoss: false,
+      hp: 15,
+      maxHp: 30),
   question: BattleQuestion(
     id: 1,
     stem: '컨테이너가 OOMKilled로 재시작된다. 먼저 의심할 것은?',
@@ -27,6 +31,11 @@ const _wrong = AnswerResult(
   bossUnlocked: false,
   cleared: false,
   failed: false,
+  hp: 75,
+  damage: 25,
+  monsterHp: 15,
+  monsterMaxHp: 30,
+  monsterDefeated: false,
 );
 
 Widget _host({
@@ -37,6 +46,7 @@ Widget _host({
   Size size = const Size(1280, 900),
   StudentLook? look,
   Encounter encounter = _enc,
+  bool review = false,
 }) {
   return MediaQuery(
     data: MediaQueryData(size: size),
@@ -46,7 +56,11 @@ Widget _host({
               dungeonId: 'jvm',
               dungeonName: 'JVM 대장간',
               encounter: encounter,
-              hearts: result?.hearts ?? 3,
+              hp: result?.hp ?? 100,
+              maxHp: 100,
+              review: review,
+              reviewNumber: 2,
+              reviewTotal: 5,
               kills: 3,
               killsToBoss: 5,
               selectedIndex: selected,
@@ -59,7 +73,11 @@ Widget _host({
               dungeonName: 'JVM 대장간',
               encounter: encounter,
               look: look,
-              hearts: result?.hearts ?? 3,
+              hp: result?.hp ?? 100,
+              maxHp: 100,
+              review: review,
+              reviewNumber: 2,
+              reviewTotal: 5,
               kills: 3,
               killsToBoss: 5,
               selectedIndex: selected,
@@ -142,7 +160,8 @@ void main() {
     expect(find.textContaining('wiki/jvm.md'), findsOneWidget);
     expect(find.textContaining('MaxRAMPercentage ✓'), findsOneWidget);
     expect(find.textContaining('GC 알고리즘 ✗'), findsOneWidget);
-    expect(find.text('♥ ♥ ♡'), findsOneWidget);
+    expect(find.text('HP 75/100'), findsOneWidget);
+    expect(find.text('몬스터의 공격! 25 피해'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const ValueKey('battle_continue')));
     await tester.tap(find.byKey(const ValueKey('battle_continue')));
     expect(continued, 1);
@@ -196,7 +215,13 @@ void main() {
       );
   Finder rich(String text) => find.textContaining(text, findRichText: true);
   AnswerResult answered(
-          {required bool correct, bool cleared = false, bool failed = false}) =>
+          {required bool correct,
+          bool cleared = false,
+          bool failed = false,
+          bool? defeated,
+          int damage = 0,
+          bool critical = false,
+          bool review = false}) =>
       AnswerResult(
         correct: correct,
         correctIndex: 1,
@@ -207,6 +232,12 @@ void main() {
         bossUnlocked: false,
         cleared: cleared,
         failed: failed,
+        monsterDefeated: defeated,
+        monsterHp: defeated == false ? 15 : null,
+        monsterMaxHp: 30,
+        damage: damage,
+        critical: critical,
+        review: review,
       );
 
   testWidgets('message picks 가/를 for names without a final consonant',
@@ -232,11 +263,11 @@ void main() {
 
   testWidgets('wrong answer shows the counterattack line', (tester) async {
     await tester.pumpWidget(_host(selected: 0, result: _wrong));
-    expect(rich('OOM 슬라임의 반격! ♥ -1'), findsOneWidget);
+    expect(rich('OOM 슬라임의 공격! HP -25'), findsOneWidget);
     expect(rich('아래 해설을 읽어 보자.'), findsOneWidget);
     await tester.pumpWidget(
         _host(selected: 0, result: answered(correct: false, failed: true)));
-    expect(rich('하트를 모두 잃었다…'), findsOneWidget);
+    expect(rich('HP를 모두 잃었다…'), findsOneWidget);
   });
 
   testWidgets('boss gets its own message and badge', (tester) async {
@@ -244,7 +275,7 @@ void main() {
     expect(find.textContaining('보스 힙 드래곤이 앞을 막아섰다!', findRichText: true),
         findsOneWidget);
     expect(find.text('보스전'), findsOneWidget);
-    expect(find.text('보스전 · 3연속 정답'), findsOneWidget);
+    expect(find.text('보스전 · HP를 모두 깎자'), findsOneWidget);
   });
 
   testWidgets('student back view defaults to boy', (tester) async {
@@ -277,4 +308,56 @@ void main() {
           findsOneWidget);
     });
   }
+
+  double factor(WidgetTester t, String key) => t
+      .widget<AnimatedFractionallySizedBox>(find.descendant(
+          of: find.byKey(ValueKey(key)),
+          matching: find.byType(AnimatedFractionallySizedBox)))
+      .widthFactor!;
+
+  testWidgets('HP bars show the real ratios before and after answering',
+      (tester) async {
+    await tester.pumpWidget(_host());
+    expect(find.text('HP 100/100'), findsOneWidget);
+    expect(factor(tester, 'player_hp'), 1.0);
+    expect(factor(tester, 'monster_hp'), 0.5);
+    await tester.pumpWidget(_host(selected: 0, result: _wrong));
+    expect(factor(tester, 'player_hp'), 0.75);
+    expect(factor(tester, 'monster_hp'), 0.5);
+    await tester.pumpWidget(
+        _host(selected: 1, result: answered(correct: true, defeated: true)));
+    expect(factor(tester, 'monster_hp'), 0.0);
+  });
+
+  testWidgets('correct answer shows damage, critical doubles the line',
+      (tester) async {
+    await tester.pumpWidget(_host(
+        selected: 1,
+        result: answered(correct: true, defeated: false, damage: 15)));
+    expect(find.text('15 데미지!'), findsOneWidget);
+    expect(rich('OOM 슬라임에게 공격이 먹혔다!'), findsOneWidget);
+    expect(find.text('다음 문제'), findsOneWidget);
+    await tester.pumpWidget(_host(
+        selected: 1,
+        result: answered(
+            correct: true, defeated: true, damage: 30, critical: true)));
+    expect(find.text('치명타! 30 데미지!'), findsOneWidget);
+    expect(rich('OOM 슬라임을 물리쳤다!'), findsOneWidget);
+    expect(find.text('계속 걷기'), findsOneWidget);
+  });
+
+  testWidgets('review shows progress and no damage line on a wrong answer',
+      (tester) async {
+    await tester.pumpWidget(_host(review: true));
+    expect(find.text('복습 2/5'), findsOneWidget);
+    expect(find.textContaining('처치'), findsNothing);
+    await tester.pumpWidget(_host(
+        review: true,
+        selected: 0,
+        result: answered(correct: false, defeated: false, review: true)));
+    expect(find.byKey(const ValueKey('battle_damage')), findsNothing);
+    expect(rich('OOM 슬라임이 버텼다.'), findsOneWidget);
+    expect(find.textContaining('MaxRAMPercentage ✓'), findsOneWidget);
+    expect(find.text('다음 문제'), findsOneWidget);
+  });
 }

@@ -25,20 +25,16 @@ import jakarta.persistence.EntityManager;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Session;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,21 +44,30 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
-/** Dungeon run engine: queues, encounters, hearts, boss phase, clear and spaced repetition. */
+/**
+ * Dungeon run engine: queues, encounters, HP battle, boss phase, clear and spaced repetition.
+ * Also runs collection reviews (one topic, no damage taken, no progress).
+ */
 @Slf4j
 @Service
 public class GameRunService {
 
-    static final int START_HEARTS = 3;
-    static final int KILLS_TO_BOSS = 5;
-    static final int BOSS_STREAK_TO_CLEAR = 3;
+    static final int PLAYER_MAX_HP = 100;
+    static final int NORMAL_MONSTER_HP = 30;
+    static final int NORMAL_MONSTER_ATTACK = 25;
+    static final int BOSS_HP = 90;
+    static final int BOSS_ATTACK = 34;
+    static final int PLAYER_ATTACK = 15;
+    /** Streak (this answer included) from which a hit is critical (double damage). */
+    static final int CRITICAL_STREAK = 3;
+    static final int KILLS_TO_BOSS = 3;
+    static final int NORMAL_QUEUE_SIZE = 6;
+    static final int BOSS_QUEUE_SIZE = 6;
+    static final int REVIEW_SIZE = 5;
     static final int MIN_APPROVED_TO_OPEN = 5;
-    private static final String RUN_KEY_PREFIX = "gossiplog:game:run:";
-    private static final Duration RUN_TTL = Duration.ofMinutes(30);
-    private static final Duration SEQ_CLAIM_TTL = Duration.ofSeconds(10);
     private static final String UNIQUE_VIOLATION = "23505";
 
-    private final StringRedisTemplate redis;
+    private final GameRunStore store;
     private final ObjectMapper objectMapper;
     private final GameDungeonRepository dungeonRepository;
     private final GameTopicRepository topicRepository;
@@ -89,7 +94,7 @@ public class GameRunService {
                    GameMonsterRepository monsterRepository, GameQuestionRepository questionRepository,
                    GameAnswerRepository answerRepository, GameProgressRepository progressRepository,
                    EntityManager entityManager, Clock clock, Random random) {
-        this.redis = redis;
+        this.store = new GameRunStore(redis, objectMapper);
         this.objectMapper = objectMapper;
         this.dungeonRepository = dungeonRepository;
         this.topicRepository = topicRepository;
@@ -113,46 +118,92 @@ public class GameRunService {
         }
 
         List<Long> due = answerRepository.findDueWrongQuestionIds(
-                userId, dungeonId, now(), PageRequest.of(0, KILLS_TO_BOSS));
+                userId, dungeonId, now(), PageRequest.of(0, NORMAL_QUEUE_SIZE));
         List<Long> normal = new ArrayList<>(due);
-        fill(normal, approved, KILLS_TO_BOSS, Set.of());
+        fill(normal, approved, NORMAL_QUEUE_SIZE, Set.of());
         List<Long> boss = new ArrayList<>();
-        fill(boss, approved, BOSS_STREAK_TO_CLEAR, Set.copyOf(normal));
-        fill(boss, approved, BOSS_STREAK_TO_CLEAR, Set.of());
+        fill(boss, approved, BOSS_QUEUE_SIZE, Set.copyOf(normal));
+        fill(boss, approved, BOSS_QUEUE_SIZE, Set.of());
 
+        RunState state = newState(userId, dungeonId, normal);
+        state.setBossQueue(boss);
+        spawnNormal(state);
+        store.save(state);
+        return startResponse(state);
+    }
+
+    /** Starts a review of a caught topic: up to 5 of its approved questions, due ones first. */
+    @Transactional(readOnly = true)
+    public RunStartResponse startReview(String userId, Long topicId) {
+        GameTopic topic = topicRepository.findById(topicId).orElse(null);
+        List<Long> approved = topic == null ? List.of() : questionRepository.findApprovedIdsByTopic(topicId);
+        if (approved.isEmpty()) {
+            throw new GameException(404, "TOPIC_NOT_FOUND", "몬스터를 찾을 수 없습니다.");
+        }
+        if (!answerRepository.existsCorrectOnApprovedTopic(userId, topicId)) {
+            throw new GameException(409, "NOT_CAUGHT", "아직 잡지 못한 몬스터입니다.");
+        }
+
+        List<Long> queue = new ArrayList<>(answerRepository.findDueQuestionIdsByTopic(userId, topicId, now()));
+        if (queue.size() > REVIEW_SIZE) queue = new ArrayList<>(queue.subList(0, REVIEW_SIZE));
+        fill(queue, approved, REVIEW_SIZE, Set.of());
+
+        RunState state = newState(userId, topic.getDungeonId(), queue);
+        state.setMode(RunState.Mode.REVIEW);
+        state.setTopicId(topicId);
+        state.setReviewTotal(queue.size() + 1);
+        state.setMonsterTopicId(topicId);
+        state.setMonsterHp(PLAYER_ATTACK * state.getReviewTotal());
+        state.setMonsterMaxHp(state.getMonsterHp());
+        store.save(state);
+        return startResponse(state);
+    }
+
+    /** A fresh run whose first question is taken off {@code queue}; the rest becomes the normal queue. */
+    private static RunState newState(String userId, String dungeonId, List<Long> queue) {
         RunState state = new RunState();
         state.setRunId(UUID.randomUUID().toString());
         state.setUserId(userId);
         state.setDungeonId(dungeonId);
-        state.setHearts(START_HEARTS);
+        state.setHp(PLAYER_MAX_HP);
+        state.setHearts(hearts(PLAYER_MAX_HP));
         state.setSeq(1);
-        state.setCurrentQuestionId(normal.remove(0));
-        state.setNormalQueue(normal);
-        state.setBossQueue(boss);
-        save(state);
-        return new RunStartResponse(state.getRunId(), START_HEARTS, 0, KILLS_TO_BOSS);
+        state.setCurrentQuestionId(queue.remove(0));
+        state.setNormalQueue(queue);
+        return state;
+    }
+
+    private static RunStartResponse startResponse(RunState state) {
+        return new RunStartResponse(state.getRunId(), state.getHearts(), 0, KILLS_TO_BOSS, state.getHp(),
+                PLAYER_MAX_HP, isReview(state), state.getReviewTotal());
     }
 
     @Transactional(readOnly = true)
     public NextEncounter next(String userId, String runId) {
         RunState state = load(userId, runId);
-        if (state.isFinished()) throw runExpired();
-        touch(runId);
+        if (state.isFinished()) throw GameRunStore.runExpired();
+        store.touch(runId);
         GameQuestion question = question(state.getCurrentQuestionId());
         if (question.getStatus() != GameQuestionStatus.APPROVED) {
             // rejected after it was queued: serve an approved one instead
             state.setCurrentQuestionId(takeNext(state));
-            save(state);
+            store.save(state);
             question = question(state.getCurrentQuestionId());
         }
         GameTopic topic = topicRepository.findById(question.getTopicId()).orElseThrow();
-        GameMonster monster = state.getPhase() == RunState.Phase.BOSS
+        boolean boss = state.getPhase() == RunState.Phase.BOSS;
+        // the engaged monster, which may belong to another topic than this question
+        GameTopic monsterTopic = boss || state.getMonsterTopicId() == null
+                || state.getMonsterTopicId().equals(topic.getId())
+                ? topic : topicRepository.findById(state.getMonsterTopicId()).orElse(topic);
+        GameMonster monster = boss
                 ? monsterRepository.findByDungeonIdAndBossTrue(state.getDungeonId()).orElse(null)
-                : monsterRepository.findByTopicId(topic.getId()).orElse(null);
+                : monsterRepository.findByTopicId(monsterTopic.getId()).orElse(null);
         NextEncounter.Monster monsterView = monster != null
-                ? new NextEncounter.Monster(monster.getName(), monster.getSpriteKey(), monster.isBoss())
-                : new NextEncounter.Monster(topic.getTitle(), "monster_" + state.getDungeonId(),
-                        state.getPhase() == RunState.Phase.BOSS);
+                ? new NextEncounter.Monster(monster.getName(), monster.getSpriteKey(), monster.isBoss(),
+                        state.getMonsterHp(), state.getMonsterMaxHp())
+                : new NextEncounter.Monster(monsterTopic.getTitle(), "monster_" + state.getDungeonId(), boss,
+                        state.getMonsterHp(), state.getMonsterMaxHp());
         return new NextEncounter(state.getSeq(), monsterView,
                 new NextEncounter.Question(question.getId(), question.getStem(),
                         readChoices(question.getChoices()), topic.getTitle()));
@@ -168,7 +219,7 @@ public class GameRunService {
         if (previous != null) {
             return previous;
         }
-        if (state.isFinished()) throw runExpired();
+        if (state.isFinished()) throw GameRunStore.runExpired();
         if (request.seq() != state.getSeq()) {
             throw new GameException(409, "SEQ_MISMATCH", "현재 차례의 문제가 아닙니다.");
         }
@@ -177,18 +228,18 @@ public class GameRunService {
             throw GameException.validation("choiceIndex는 0~3이어야 합니다.");
         }
 
-        if (!claimSeq(runId, request.seq())) {
+        if (!store.claimSeq(runId, request.seq())) {
             AnswerResult won = load(userId, runId).getAnswered().get(request.seq());
             if (won != null) {
                 return won;
             }
             throw new GameException(409, "ANSWER_IN_PROGRESS", "답안을 처리하는 중입니다.");
         }
-        restoreOnRollback(runId, request.seq(), json(state));
+        store.restoreOnRollback(runId, request.seq(), store.json(state));
         try {
             return applyAnswer(userId, username, runId, state, request.seq(), choice);
         } catch (RuntimeException e) {
-            releaseSeq(runId, request.seq());
+            store.releaseSeq(runId, request.seq());
             throw e;
         }
     }
@@ -202,34 +253,49 @@ public class GameRunService {
         recordAnswer(userId, question.getId(), correct, now);
         state.getAnsweredIds().add(question.getId());
 
+        boolean review = isReview(state);
+        boolean boss = state.getPhase() == RunState.Phase.BOSS;
+        int foughtMaxHp = state.getMonsterMaxHp();
+        boolean critical = false;
+        boolean defeated = false;
         boolean cleared = false;
+        int damage;
         if (correct) {
             state.setStreak(state.getStreak() + 1);
             state.setBestStreak(Math.max(state.getBestStreak(), state.getStreak()));
-            if (state.getPhase() == RunState.Phase.NORMAL) {
-                state.setKills(state.getKills() + 1);
-                if (state.getKills() >= KILLS_TO_BOSS) {
-                    state.setPhase(RunState.Phase.BOSS);
-                }
-            } else {
-                state.setBossStreak(state.getBossStreak() + 1);
-                cleared = state.getBossStreak() >= BOSS_STREAK_TO_CLEAR;
-            }
+            critical = !review && state.getStreak() >= CRITICAL_STREAK;
+            damage = critical ? PLAYER_ATTACK * 2 : PLAYER_ATTACK;
+            state.setMonsterHp(Math.max(0, state.getMonsterHp() - damage));
+            defeated = state.getMonsterHp() == 0;
+            if (review) state.setReviewCorrect(state.getReviewCorrect() + 1);
         } else {
             state.setStreak(0);
-            state.setHearts(state.getHearts() - 1);
-            if (state.getPhase() == RunState.Phase.BOSS) {
-                // the next boss question is a new one (takeNext never re-serves an answered id)
-                state.setBossStreak(0);
+            damage = review ? 0 : boss ? BOSS_ATTACK : NORMAL_MONSTER_ATTACK;
+            state.setHp(Math.max(0, state.getHp() - damage));
+            state.setHearts(hearts(state.getHp()));
+        }
+        int foughtHp = state.getMonsterHp();
+        if (review) {
+            cleared = state.getSeq() >= state.getReviewTotal();
+        } else if (defeated && boss) {
+            cleared = true;
+        } else if (defeated) {
+            state.setKills(state.getKills() + 1);
+            state.setMonsterTopicId(null);
+            if (state.getKills() >= KILLS_TO_BOSS) {
+                state.setPhase(RunState.Phase.BOSS);
+                spawnBoss(state);
             }
         }
-        boolean failed = !cleared && state.getHearts() <= 0;
+        boolean failed = !review && !cleared && state.getHp() <= 0;
 
-        upsertProgress(userId, username, state, cleared, now);
+        if (!review) upsertProgress(userId, username, state, cleared, now);
 
         AnswerResult result = new AnswerResult(correct, question.getAnswerIndex(), question.getExplanation(),
                 topic.getTitle(), topic.getSourceRef(), state.getHearts(), state.getKills(),
-                state.getPhase() == RunState.Phase.BOSS, cleared, failed);
+                state.getPhase() == RunState.Phase.BOSS, cleared, failed,
+                state.getHp(), PLAYER_MAX_HP, damage, critical, foughtHp, foughtMaxHp, defeated,
+                review, state.getReviewCorrect(), state.getReviewTotal());
 
         state.getAnswered().put(seq, result);
         if (cleared || failed) {
@@ -237,8 +303,9 @@ public class GameRunService {
         } else {
             state.setSeq(state.getSeq() + 1);
             state.setCurrentQuestionId(takeNext(state));
+            spawnNormal(state);
         }
-        save(state);
+        store.save(state);
         return result;
     }
 
@@ -305,18 +372,75 @@ public class GameRunService {
     }
 
     /**
-     * Next unanswered, still-approved id from the phase queue, or a fresh draw when the queue has
-     * none left. Questions rejected since the run started are skipped.
+     * Next unanswered, still-approved id. While a normal monster is alive, an unanswered question of
+     * its topic comes first (in queue order when queued). Otherwise the phase queue, then a fresh draw.
+     * Questions rejected since the run started are skipped. A review draws only from its topic.
      */
     private Long takeNext(RunState state) {
-        List<Long> pool = questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
+        List<Long> pool = isReview(state)
+                ? questionRepository.findApprovedIdsByTopic(state.getTopicId())
+                : questionRepository.findApprovedIdsByDungeon(state.getDungeonId());
         Set<Long> approved = Set.copyOf(pool);
         List<Long> queue = state.getPhase() == RunState.Phase.BOSS ? state.getBossQueue() : state.getNormalQueue();
+        if (!isReview(state) && state.getPhase() == RunState.Phase.NORMAL && state.getMonsterTopicId() != null) {
+            List<Long> sameTopic = questionRepository.findApprovedIdsByTopic(state.getMonsterTopicId()).stream()
+                    .filter(id -> approved.contains(id) && !state.getAnsweredIds().contains(id))
+                    .toList();
+            if (!sameTopic.isEmpty()) {
+                Long pick = queue.stream().filter(sameTopic::contains).findFirst()
+                        .orElseGet(() -> sameTopic.get(random.nextInt(sameTopic.size())));
+                queue.remove(pick);
+                return pick;
+            }
+        }
         while (!queue.isEmpty()) {
             Long id = queue.remove(0);
             if (!state.getAnsweredIds().contains(id) && approved.contains(id)) return id;
         }
         return draw(state, pool);
+    }
+
+    /** In NORMAL phase with no monster engaged, a full-HP monster of the current question's topic appears. */
+    private void spawnNormal(RunState state) {
+        if (isReview(state) || state.getPhase() != RunState.Phase.NORMAL || state.getMonsterTopicId() != null) {
+            return;
+        }
+        state.setMonsterTopicId(question(state.getCurrentQuestionId()).getTopicId());
+        state.setMonsterHp(NORMAL_MONSTER_HP);
+        state.setMonsterMaxHp(NORMAL_MONSTER_HP);
+    }
+
+    private static void spawnBoss(RunState state) {
+        state.setMonsterTopicId(null);
+        state.setMonsterHp(BOSS_HP);
+        state.setMonsterMaxHp(BOSS_HP);
+    }
+
+    private static boolean isReview(RunState state) {
+        return state.getMode() == RunState.Mode.REVIEW;
+    }
+
+    /** Hearts shown to old clients: ceil(hp * 3 / 100). */
+    private static int hearts(int hp) {
+        return (hp * 3 + PLAYER_MAX_HP - 1) / PLAYER_MAX_HP;
+    }
+
+    /**
+     * Runs written before the HP battle have hearts but no hp and no monster: derive hp from hearts
+     * (rounded up) and spawn the monster being fought.
+     */
+    private void upgradeLegacy(RunState state) {
+        if (state.isFinished() || isReview(state)) return;
+        if (state.getHp() == 0 && state.getHearts() > 0) {
+            state.setHp((state.getHearts() * PLAYER_MAX_HP + 2) / 3);
+        }
+        if (state.getMonsterHp() == 0) {
+            if (state.getPhase() == RunState.Phase.BOSS) {
+                spawnBoss(state);
+            } else if (state.getMonsterTopicId() == null) {
+                spawnNormal(state);
+            }
+        }
     }
 
     /**
@@ -366,103 +490,9 @@ public class GameRunService {
         return LocalDateTime.now(clock);
     }
 
-    // ---- Valkey ----
-
     private RunState load(String userId, String runId) {
-        String json;
-        try {
-            json = redis.opsForValue().get(RUN_KEY_PREFIX + runId);
-        } catch (DataAccessException e) {
-            throw unavailable(e);
-        }
-        RunState state = null;
-        if (json != null) {
-            try {
-                state = objectMapper.readValue(json, RunState.class);
-            } catch (JsonProcessingException e) {
-                log.warn("Unreadable run state {}", runId, e);
-            }
-        }
-        if (state == null || !userId.equals(state.getUserId())) {
-            throw runExpired();
-        }
+        RunState state = store.load(userId, runId);
+        upgradeLegacy(state);
         return state;
-    }
-
-    private static GameException runExpired() {
-        return new GameException(404, "RUN_EXPIRED", "던전이 무너졌습니다.");
-    }
-
-    private String json(RunState state) {
-        try {
-            return objectMapper.writeValueAsString(state);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot serialize run state", e);
-        }
-    }
-
-    private void save(RunState state) {
-        String json = json(state);
-        try {
-            redis.opsForValue().set(RUN_KEY_PREFIX + state.getRunId(), json, RUN_TTL);
-        } catch (DataAccessException e) {
-            throw unavailable(e);
-        }
-    }
-
-    /**
-     * The run state is written inside the answer transaction (a Valkey outage then rolls the
-     * answer back). If the transaction itself rolls back afterwards, put the state and the seq
-     * claim back so Valkey never runs ahead of the database.
-     */
-    private void restoreOnRollback(String runId, int seq, String previousJson) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_ROLLED_BACK) return;
-                try {
-                    redis.opsForValue().set(RUN_KEY_PREFIX + runId, previousJson, RUN_TTL);
-                } catch (DataAccessException e) {
-                    log.warn("Could not restore run state {} after rollback: {}", runId, e.getMessage());
-                }
-                releaseSeq(runId, seq);
-            }
-        });
-    }
-
-    private void touch(String runId) {
-        try {
-            redis.expire(RUN_KEY_PREFIX + runId, RUN_TTL);
-        } catch (DataAccessException e) {
-            throw unavailable(e);
-        }
-    }
-
-    /** {@code SET ...:seq:{seq} NX EX 10}; false if another request already holds this seq. */
-    private boolean claimSeq(String runId, int seq) {
-        try {
-            return Boolean.TRUE.equals(redis.opsForValue()
-                    .setIfAbsent(seqClaimKey(runId, seq), "1", SEQ_CLAIM_TTL));
-        } catch (DataAccessException e) {
-            throw unavailable(e);
-        }
-    }
-
-    private void releaseSeq(String runId, int seq) {
-        try {
-            redis.delete(seqClaimKey(runId, seq));
-        } catch (DataAccessException e) {
-            log.warn("Could not release seq claim {}:{} (expires in {}s)", runId, seq, SEQ_CLAIM_TTL.toSeconds());
-        }
-    }
-
-    private static String seqClaimKey(String runId, int seq) {
-        return RUN_KEY_PREFIX + runId + ":seq:" + seq;
-    }
-
-    private static GameException unavailable(DataAccessException e) {
-        log.warn("Valkey unavailable for game run: {}", e.getMessage());
-        return new GameException(503, "GAME_UNAVAILABLE", "게임 서버를 잠시 사용할 수 없습니다.");
     }
 }

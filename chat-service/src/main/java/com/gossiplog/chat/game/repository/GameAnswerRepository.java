@@ -28,6 +28,49 @@ public interface GameAnswerRepository extends JpaRepository<GameAnswer, Long> {
                                        @Param("now") LocalDateTime now,
                                        Pageable pageable);
 
+    /**
+     * Approved questions of a topic whose latest answer by this user (right or wrong) is due,
+     * oldest due first.
+     */
+    @Query("SELECT a.questionId FROM GameAnswer a "
+            + "WHERE a.userId = :userId AND a.nextDueAt <= :now "
+            + "AND a.id = (SELECT MAX(a2.id) FROM GameAnswer a2 "
+            + "            WHERE a2.userId = a.userId AND a2.questionId = a.questionId) "
+            + "AND a.questionId IN (SELECT q.id FROM GameQuestion q WHERE q.topicId = :topicId "
+            + "    AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED) "
+            + "ORDER BY a.nextDueAt ASC, a.id ASC")
+    List<Long> findDueQuestionIdsByTopic(@Param("userId") String userId,
+                                         @Param("topicId") Long topicId,
+                                         @Param("now") LocalDateTime now);
+
+    /** True once the user answered any approved question of the topic correctly ("caught"). */
+    @Query("SELECT COUNT(a) > 0 FROM GameAnswer a, GameQuestion q "
+            + "WHERE a.questionId = q.id AND a.userId = :userId AND a.correct = true AND q.topicId = :topicId "
+            + "AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED")
+    boolean existsCorrectOnApprovedTopic(@Param("userId") String userId, @Param("topicId") Long topicId);
+
+    /** Projection row for the per-topic counts below. */
+    interface TopicCount {
+        Long getTopicId();
+
+        long getQuestionCount();
+    }
+
+    /** topicId → distinct approved questions this user answered correctly at least once. */
+    @Query("SELECT q.topicId AS topicId, COUNT(DISTINCT a.questionId) AS questionCount FROM GameAnswer a, GameQuestion q "
+            + "WHERE a.questionId = q.id AND a.userId = :userId AND a.correct = true "
+            + "AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED GROUP BY q.topicId")
+    List<TopicCount> countCorrectApprovedGroupedByTopic(@Param("userId") String userId);
+
+    /** topicId → approved questions whose latest answer by this user is due (one latest row per question). */
+    @Query("SELECT q.topicId AS topicId, COUNT(a) AS questionCount FROM GameAnswer a, GameQuestion q "
+            + "WHERE a.questionId = q.id AND a.userId = :userId AND a.nextDueAt <= :now "
+            + "AND a.id = (SELECT MAX(a2.id) FROM GameAnswer a2 "
+            + "            WHERE a2.userId = a.userId AND a2.questionId = a.questionId) "
+            + "AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED GROUP BY q.topicId")
+    List<TopicCount> countDueApprovedGroupedByTopic(@Param("userId") String userId,
+                                                    @Param("now") LocalDateTime now);
+
     /** The two most recent answers — enough to know a previous correct streak of 0, 1 or ≥2. */
     List<GameAnswer> findTop2ByUserIdAndQuestionIdOrderByIdDesc(String userId, Long questionId);
 

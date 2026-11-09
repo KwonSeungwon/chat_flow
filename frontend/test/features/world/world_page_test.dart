@@ -46,6 +46,14 @@ Widget _app(FakeGameApi api,
           GoRoute(
               path: 'admin',
               builder: (_, __) => const Scaffold(body: Text('ADMIN'))),
+          GoRoute(
+            path: 'collection',
+            builder: (context, __) => Scaffold(
+              body: TextButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('COLLECTION')),
+            ),
+          ),
         ],
       ),
     ],
@@ -117,6 +125,20 @@ void main() {
   testWidgets('admin icon only for game admins', (tester) async {
     await _pump(tester, _api());
     expect(find.byTooltip('문제 검수'), findsNothing);
+  });
+
+  testWidgets('도감 button opens /world/collection and pauses the village',
+      (tester) async {
+    await _pump(tester, _api());
+    await tester.tap(find.byTooltip('도감'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('COLLECTION'), findsOneWidget);
+    expect(_village.paused, isTrue);
+    await tester.tap(find.text('COLLECTION'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_village.paused, isFalse);
   });
 
   testWidgets('admin icon opens /world/admin', (tester) async {

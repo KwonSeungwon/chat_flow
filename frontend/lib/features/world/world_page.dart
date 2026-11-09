@@ -190,6 +190,11 @@ class _WorldPageState extends ConsumerState<WorldPage> {
         ),
         title: const Text('위키 던전 마을'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.menu_book_outlined),
+            tooltip: '도감',
+            onPressed: () => _openOver('/world/collection'),
+          ),
           if (isAdmin)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings_outlined),
