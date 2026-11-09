@@ -83,8 +83,8 @@ frontend:
   replicaCount: 1
   image:
     name: frontend
-    # 2026-11-09 위키 던전 HP 배틀 + 도감 복습
-    tag: "sha-d7555d8fd9e7e5d894b6121624eec8772e186445"
+    # 2026-11-09 던전 중간 나가기 + 복습 종료 처리
+    tag: "sha-92ccc679ad07655f13873a93556a82cfa84fe712"
   service:
     port: 80
     type: ClusterIP
