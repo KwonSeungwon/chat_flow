@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:gossiplog/features/world/battle/battle_overlay.dart';
 import 'package:gossiplog/features/world/dungeon_page.dart';
 import 'package:gossiplog/features/world/game/dungeon_game.dart';
@@ -267,6 +269,8 @@ void main() {
       expect(_game.isPaused, isFalse);
       await tester.tap(find.byTooltip('마을로'));
       await _settle(tester);
+      await tester.tap(find.byKey(const ValueKey('exit_confirm')));
+      await _settle(tester);
       expect(find.byType(DungeonPage), findsNothing);
       expect(find.text('VILLAGE'), findsOneWidget);
     }
@@ -293,5 +297,124 @@ void main() {
       ..meError = GameApiException(GameApiException.offline);
     await _enter(tester, api);
     expect(_game.look, StudentLook.boy);
+  });
+
+  testWidgets('나가기 → 확인 창 → 계속하기면 남고, 나가기면 마을로', (tester) async {
+    final api = FakeGameApi();
+    await _enter(tester, api);
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsOneWidget);
+    expect(_game.isPaused, isTrue, reason: '묻는 동안 멈춘다');
+
+    await tester.tap(find.text('계속하기'));
+    await _settle(tester);
+    expect(find.byType(DungeonPage), findsOneWidget);
+    expect(_game.isPaused, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('exit_confirm')));
+    await _settle(tester);
+    expect(find.byType(DungeonPage), findsNothing);
+    expect(find.text('VILLAGE'), findsOneWidget);
+  });
+
+  testWidgets('배틀 중에도 나갈 수 있고, 취소하면 배틀이 그대로다', (tester) async {
+    final api = FakeGameApi()..nexts.add(fakeEncounter(1));
+    await _enter(tester, api);
+    await _encounter(tester);
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    await tester.tap(find.text('계속하기'));
+    await _settle(tester);
+    expect(_game.overlays.isActive(battleOverlayKey), isTrue);
+    expect(_game.isPaused, isTrue, reason: '배틀 중이면 계속 멈춰 있다');
+
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    await tester.tap(find.byKey(const ValueKey('exit_confirm')));
+    await _settle(tester);
+    expect(find.byType(DungeonPage), findsNothing);
+  });
+
+  testWidgets('입구 깔개로 걸어 나가면 같은 확인 창이 뜬다', (tester) async {
+    final api = FakeGameApi();
+    await _enter(tester, api);
+    _game.onExitRequest!();
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsOneWidget);
+  });
+
+  testWidgets('시스템 뒤로가기도 확인 창을 띄운다', (tester) async {
+    final api = FakeGameApi();
+    await _enter(tester, api);
+    await tester.binding.handlePopRoute();
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsOneWidget);
+    expect(find.byType(DungeonPage), findsOneWidget);
+  });
+
+  testWidgets('판 도중 DUNGEON_CLOSED → 공사 중 스낵바와 함께 마을로', (tester) async {
+    final api = FakeGameApi()
+      ..nexts.add(GameApiException(GameApiException.dungeonClosed));
+    await _enter(tester, api);
+    await _encounter(tester);
+    await _settle(tester);
+    expect(find.byType(DungeonPage), findsNothing);
+    expect(find.textContaining('공사 중'), findsOneWidget);
+  });
+
+  testWidgets('확인 창이 떠 있는 동안 판이 닫혀도 페이지에 갇히지 않는다', (tester) async {
+    final api = FakeGameApi()
+      ..nextGate = Completer<void>()
+      ..nexts.add(GameApiException(GameApiException.dungeonClosed));
+    await _enter(tester, api);
+    await _encounter(tester); // /next 응답 대기 중
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsOneWidget);
+    api.nextGate!.complete();
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsNothing);
+    expect(find.byType(DungeonPage), findsNothing);
+    expect(find.text('VILLAGE'), findsOneWidget);
+  });
+
+  testWidgets('확인 창이 떠 있는 동안 답 결과가 판 종료(RUN_EXPIRED)여도 안내 후 나간다',
+      (tester) async {
+    final api = FakeGameApi()
+      ..nexts.add(fakeEncounter(1))
+      ..answerGate = Completer<void>()
+      ..answers.add(GameApiException(GameApiException.runExpired));
+    await _enter(tester, api);
+    await _encounter(tester);
+    await tester.tap(find.byKey(const ValueKey('choice_0')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    api.answerGate!.complete();
+    await _settle(tester);
+    expect(find.text('던전에서 나갈까?'), findsNothing);
+    await _confirm(tester, '판이 끝났다');
+    expect(find.byType(DungeonPage), findsNothing);
+  });
+
+  testWidgets('확인 창 뒤에서 네트워크 오류로 걷기로 돌아가도 창이 닫힐 때까지 멈춰 있다',
+      (tester) async {
+    final api = FakeGameApi()
+      ..nextGate = Completer<void>()
+      ..nexts.add(GameApiException(GameApiException.offline));
+    await _enter(tester, api);
+    await _encounter(tester);
+    await tester.tap(find.byKey(const ValueKey('dungeon_exit')));
+    await _settle(tester);
+    api.nextGate!.complete();
+    await _settle(tester);
+    expect(_game.isPaused, isTrue);
+    await tester.tap(find.text('계속하기'));
+    await _settle(tester);
+    expect(_game.isPaused, isFalse);
+    expect(find.byType(DungeonPage), findsOneWidget);
   });
 }

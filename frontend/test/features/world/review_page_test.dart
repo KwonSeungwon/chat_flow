@@ -186,4 +186,15 @@ void main() {
     await _settle(tester);
     expect(find.byType(BattleOverlay), findsOneWidget);
   });
+
+  testWidgets('questions all rejected mid-review (DUNGEON_CLOSED) → end message, no retry',
+      (tester) async {
+    final api = _api()
+      ..nexts.add(
+          GameApiException(GameApiException.dungeonClosed, statusCode: 409));
+    await _open(tester, api);
+    expect(find.textContaining('복습할 문제가 없다'), findsOneWidget);
+    expect(find.text('다시 시도'), findsNothing);
+    expect(find.text('도감으로'), findsOneWidget);
+  });
 }

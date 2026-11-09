@@ -32,9 +32,15 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   final StudentLook look;
   void Function()? onEncounter;
 
+  /// 입구(아래 문턱 가운데 깔개)로 나가려 한다. 나갈지는 화면이 묻는다.
+  void Function()? onExitRequest;
+
   static const grid = TopDownGrid();
   static const roomSize = 12;
   static const startTile = (6, 11);
+
+  /// 입구 깔개가 깔린 맨 아랫줄 칸(열). 여기서 아래로 가면 나가기를 요청한다.
+  static const exitCols = {5, 6};
 
   /// 방 안의 기둥(걸을 수 없음).
   static const pillars = {(3, 3), (8, 3), (3, 8), (8, 8)};
@@ -77,6 +83,12 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   bool _boss = false;
   (int, int)? _heldDir;
 
+  /// 깔개를 눌러 입구로 걷는 중. 입구 칸에 닿으면 나가기를 요청한다.
+  bool _exitAfterWalk = false;
+
+  bool _onExitTile((int, int) t) =>
+      t.$2 == roomSize - 1 && exitCols.contains(t.$1);
+
   /// 지금 눌려 있는 키. 테스트에서만 바꾼다([VillageGame.pressedKeys]와 같다).
   @visibleForTesting
   Set<LogicalKeyboardKey> Function() pressedKeys =
@@ -93,6 +105,7 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   void pause() {
     _paused = true;
     _heldDir = null;
+    _exitAfterWalk = false;
     if (isLoaded) {
       avatar
         ..stop()
@@ -195,7 +208,15 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
     if (!_paused && dir != null && !avatar.isMoving) {
       final (c, r) = avatar.tile;
       final next = (c + dir.$1, r + dir.$2);
-      if (isWalkable(next.$1, next.$2)) avatar.moveAlong([next]);
+      if (isWalkable(next.$1, next.$2)) {
+        // 키로 방향을 틀면 깔개로 가던 길은 취소한다.
+        _exitAfterWalk = false;
+        avatar.moveAlong([next]);
+      } else if (dir == (0, 1) && _onExitTile(avatar.tile)) {
+        // 한 번 누를 때 한 번만 묻는다.
+        _heldDir = null;
+        onExitRequest?.call();
+      }
     }
     super.update(dt);
     _followAvatar();
@@ -213,11 +234,32 @@ class DungeonGame extends FlameGame<TapWorld> with KeyboardEvents {
   void _onTapWorld(Vector2 worldPos) {
     if (_paused) return;
     final goal = grid.toTile(worldPos);
+    _exitAfterWalk = false;
+    if (goal.$2 >= roomSize && exitCols.contains(goal.$1)) {
+      // 입구 깔개: 가까운 입구 칸까지 걸어간 뒤 나가기를 요청한다.
+      final door = (goal.$1, roomSize - 1);
+      if (avatar.tile == door || _onExitTile(avatar.tile)) {
+        onExitRequest?.call();
+        return;
+      }
+      final path = grid.findPath(avatar.tile, door, isWalkable);
+      if (path.isNotEmpty) {
+        _exitAfterWalk = true;
+        avatar.moveAlong(path);
+      }
+      return;
+    }
     final path = grid.findPath(avatar.tile, goal, isWalkable);
     if (path.isNotEmpty) avatar.moveAlong(path);
   }
 
   void _onTileReached(int col, int row) {
+    if (_exitAfterWalk && !_paused && _onExitTile((col, row))) {
+      _exitAfterWalk = false;
+      avatar.stop();
+      onExitRequest?.call();
+      return;
+    }
     if (_paused || !_counter.step()) return;
     pause();
     onEncounter?.call();

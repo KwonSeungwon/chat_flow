@@ -187,6 +187,9 @@ class RunNotifier extends StateNotifier<RunState> {
       if (!mounted) return false;
       if (e.code == GameApiException.runExpired) {
         state = state.copyWith(phase: RunPhase.expired);
+      } else if (e.code == GameApiException.dungeonClosed) {
+        // 판 도중 출제할 승인 문제가 하나도 남지 않았다(관리자 반려). 다시 받아도 같다.
+        state = state.copyWith(phase: RunPhase.closed, encounter: () => null);
       } else {
         state = state.copyWith(
           phase: RunPhase.exploring,
