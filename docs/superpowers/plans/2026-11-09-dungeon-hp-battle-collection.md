@@ -26,4 +26,8 @@
 ## 단계
 - [x] 백엔드: RunState·GameRunService HP 규칙, DTO 필드 추가, 도감 API(`GET /api/game/collection`), 복습 런(`POST /api/game/collection/{topicId}/runs`), 테스트
 - [x] 프론트: 모델·API, RunNotifier(HP, 같은 몬스터 이어 싸우기, 복습 시작), 배틀 오버레이 HP 바·데미지 표시, 도감 페이지·복습 페이지·라우트·마을 진입 버튼, 테스트
-- [ ] reviewer 검토 → 커밋 → develop 머지 → CI → helm 태그 고정 → 배포 → 운영 확인
+- [x] reviewer 검토 → 커밋 → develop 머지 → CI → helm 태그 고정 → 배포 → 운영 확인
+
+## 진행 메모 (2026-11-09)
+- 배포: helm rev 12, chat-service·frontend `sha-d7555d8`. 운영 확인: 오답 시 HP 100→75·같은 몬스터 유지, 못 잡은 주제 복습 409, 복습 3문제 후 종료, 도감·복습 화면 표시.
+- 남은 후속(검토 경미 지적): 복습 중 주제 문제가 전부 반려되면 리뷰 화면이 "다시 시도"만 반복(DUNGEON_CLOSED 종료 처리), 복습 정답도 리더보드 정답 수에 들어감(의도대로 둠).
