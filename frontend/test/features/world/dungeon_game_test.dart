@@ -4,6 +4,7 @@ import 'package:gossiplog/features/world/game/dungeon_game.dart';
 import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:flame/game.dart';
 import 'package:flame_test/flame_test.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -200,4 +201,57 @@ void main() {
       expect(avatar.assetsReleased, isTrue);
     }
   });
+
+  testWithGame<DungeonGame>(
+    '입구 칸에서 아래로 누르면 나가기를 요청한다',
+    () => DungeonGame('net', rng: Random(3)),
+    (game) async {
+      var exits = 0;
+      game.onExitRequest = () => exits++;
+      await game.ready();
+      game.pressedKeys = () => {LogicalKeyboardKey.arrowDown};
+      game.avatar.placeAt(DungeonGame.startTile);
+      game.onKeyEvent(const KeyDownEvent(
+          physicalKey: PhysicalKeyboardKey.arrowDown,
+          logicalKey: LogicalKeyboardKey.arrowDown,
+          timeStamp: Duration.zero), {LogicalKeyboardKey.arrowDown});
+      game.update(1 / 30);
+      expect(exits, 1);
+
+      // 입구가 아닌 맨 아랫줄에서는 요청하지 않는다.
+      game.avatar.placeAt((1, DungeonGame.roomSize - 1));
+      game.onKeyEvent(const KeyDownEvent(
+          physicalKey: PhysicalKeyboardKey.arrowDown,
+          logicalKey: LogicalKeyboardKey.arrowDown,
+          timeStamp: Duration.zero), {LogicalKeyboardKey.arrowDown});
+      game.update(1 / 30);
+      expect(exits, 1);
+    },
+  );
+
+  testWithGame<DungeonGame>(
+    '입구 깔개를 누르면 입구까지 걸어가 나가기를 요청하고, 멈춘 동안은 무시한다',
+    () => DungeonGame('net', rng: Random(3)),
+    (game) async {
+      var exits = 0;
+      game.onExitRequest = () => exits++;
+      await game.ready();
+      final mat = Vector2(5.5 * DungeonGame.grid.tile,
+          DungeonGame.roomSize * DungeonGame.grid.tile + 10);
+
+      game.pause();
+      game.world.onTap!(mat);
+      expect(exits, 0);
+      game.resume();
+
+      game.avatar.placeAt((2, 10));
+      game.world.onTap!(mat);
+      for (var i = 0; i < 600 && exits == 0; i++) {
+        game.update(1 / 30);
+      }
+      expect(exits, 1);
+      expect(DungeonGame.exitCols, contains(game.avatar.tile.$1));
+      expect(game.avatar.tile.$2, DungeonGame.roomSize - 1);
+    },
+  );
 }

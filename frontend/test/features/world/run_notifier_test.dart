@@ -147,6 +147,15 @@ void main() {
     expect(n.state.result, isNotNull);
   });
 
+  test('DUNGEON_CLOSED mid-run (questions all rejected) → closed, not a retry loop',
+      () async {
+    api.nexts.add(GameApiException(GameApiException.dungeonClosed));
+    await n.start();
+    await n.encounter();
+    expect(n.state.phase, RunPhase.closed);
+    expect(n.state.encounter, isNull);
+  });
+
   test('DUNGEON_CLOSED on start → closed', () async {
     api.startResult = GameApiException(GameApiException.dungeonClosed);
     await n.start();

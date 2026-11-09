@@ -101,6 +101,8 @@ class _ReviewPageState extends ConsumerState<ReviewPage> {
         .clamp(1, s.reviewTotal < 1 ? 1 : s.reviewTotal);
 
     final Widget body = switch (s.phase) {
+      RunPhase.closed when s.runId != null =>
+        _Message(text: '복습할 문제가 없다. 이 몬스터의 문제가 모두 내려갔다.', onBack: _leave),
       RunPhase.error ||
       RunPhase.closed =>
         _Message(text: s.notice ?? '복습을 시작하지 못했다.', onBack: _leave),

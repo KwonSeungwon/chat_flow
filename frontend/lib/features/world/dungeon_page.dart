@@ -64,6 +64,7 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
   void _createGame(StudentLook look) {
     _created = DungeonGame(widget.dungeonId, look: look)
       ..onEncounter = _onEncounter
+      ..onExitRequest = _requestExit
       // 판이 열릴 때까지 걷지 않는다.
       ..pause();
     ref.listenManual<RunState>(
@@ -106,11 +107,19 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
       _game.avatar.celebrate();
     }
     if (prev?.phase == next.phase) return;
+    if (_asking && _endPhases.contains(next.phase)) {
+      // 나가기 확인 창이 떠 있는데 판이 끝났다. 창부터 닫아야 뒤의 안내·pop이 페이지에 닿는다.
+      Navigator.of(context, rootNavigator: true)
+          .popUntil((r) => r is! PopupRoute);
+    }
     switch (next.phase) {
       case RunPhase.exploring:
         _game.overlays.remove(battleOverlayKey);
-        _game.resume();
-        _focus.requestFocus();
+        // 확인 창이 떠 있으면 닫힌 뒤(계속하기)에 다시 걷는다.
+        if (!_asking) {
+          _game.resume();
+          _focus.requestFocus();
+        }
       case RunPhase.battle:
         _game.overlays.add(battleOverlayKey);
       case RunPhase.cleared:
@@ -197,6 +206,66 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
     );
   }
 
+  bool _asking = false;
+
+  static const _endPhases = {
+    RunPhase.cleared,
+    RunPhase.failed,
+    RunPhase.expired,
+    RunPhase.ended,
+    RunPhase.closed,
+    RunPhase.error,
+  };
+
+  /// 판이 아직 진행 중이면 나갈지 묻고, 아니면 바로 마을로 간다.
+  /// 판(처치 수·HP)은 서버에서 시간이 지나면 사라지고, 푼 문제 기록은 남는다.
+  Future<void> _requestExit() async {
+    if (_leaving || _asking || !mounted) return;
+    final s = ref.read(runNotifierProvider(widget.dungeonId));
+    final active = s.runId != null &&
+        const {
+          RunPhase.exploring,
+          RunPhase.loadingEncounter,
+          RunPhase.battle,
+          RunPhase.answering,
+        }.contains(s.phase);
+    if (!active) {
+      _leave();
+      return;
+    }
+    _asking = true;
+    _created?.pause();
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('던전에서 나갈까?'),
+        content:
+            Text('이번 판의 처치 ${s.kills}/${s.killsToBoss}와 HP ${s.hp}/${s.maxHp}는 '
+                '사라진다. 지금까지 푼 문제 기록은 남는다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('계속하기'),
+          ),
+          FilledButton(
+            key: const ValueKey('exit_confirm'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('나가기'),
+          ),
+        ],
+      ),
+    );
+    _asking = false;
+    if (!mounted) return;
+    if (leave == true) {
+      _leave();
+    } else if (ref.read(runNotifierProvider(widget.dungeonId)).phase ==
+        RunPhase.exploring) {
+      _game.resume();
+      _focus.requestFocus();
+    }
+  }
+
   void _leave({String? snack}) {
     if (_leaving || !mounted) return;
     _leaving = true;
@@ -216,28 +285,46 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
     final starting = _created == null ||
         ref.watch(runNotifierProvider(widget.dungeonId)
             .select((s) => s.phase == RunPhase.starting));
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_name),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: '마을로',
-          onPressed: _leave,
-        ),
-      ),
-      body: Stack(
-        children: [
-          if (_created != null)
-            GameWidget<DungeonGame>(
-              game: _game,
-              focusNode: _focus,
-              overlayBuilderMap: {
-                battleOverlayKey: (context, game) => _BattleLayer(
-                    dungeonId: widget.dungeonId, name: _name, look: game.look),
-              },
+    return PopScope(
+      // 시스템 뒤로가기(Android)도 나갈지 묻는다.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _requestExit();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_name),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: '마을로',
+            onPressed: _requestExit,
+          ),
+          actions: [
+            TextButton.icon(
+              key: const ValueKey('dungeon_exit'),
+              onPressed: _requestExit,
+              icon: const Icon(Icons.logout),
+              label: const Text('나가기'),
             ),
-          if (starting) const Center(child: CircularProgressIndicator()),
-        ],
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: Stack(
+          children: [
+            if (_created != null)
+              GameWidget<DungeonGame>(
+                game: _game,
+                focusNode: _focus,
+                overlayBuilderMap: {
+                  battleOverlayKey: (context, game) => _BattleLayer(
+                      dungeonId: widget.dungeonId,
+                      name: _name,
+                      look: game.look),
+                },
+              ),
+            if (starting) const Center(child: CircularProgressIndicator()),
+          ],
+        ),
       ),
     );
   }

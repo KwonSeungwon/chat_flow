@@ -99,7 +99,13 @@ class FakeGameApi implements GameApi {
   }
 
   @override
-  Future<Encounter> next(String runId) async => _take(nexts.removeFirst());
+  Future<Encounter> next(String runId) async {
+    await nextGate?.future;
+    return _take(nexts.removeFirst());
+  }
+
+  /// 채우면 next가 이 Completer가 끝날 때까지 기다린다.
+  Completer<void>? nextGate;
 
   @override
   Future<AnswerResult> answer(String runId, int seq, int choiceIndex) async {
