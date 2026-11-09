@@ -4,12 +4,16 @@ import 'dart:collection';
 import 'package:gossiplog/features/world/state/game_api.dart';
 import 'package:gossiplog/features/world/state/game_models.dart';
 
-Encounter fakeEncounter(int seq, {bool boss = false}) => Encounter(
+Encounter fakeEncounter(int seq,
+        {bool boss = false, int hp = 30, int maxHp = 30}) =>
+    Encounter(
       seq: seq,
       monster: MonsterInfo(
           name: boss ? '보스' : '슬라임',
           spriteKey: boss ? 'boss_k8s' : 'monster_k8s',
-          isBoss: boss),
+          isBoss: boss,
+          hp: hp,
+          maxHp: maxHp),
       question: BattleQuestion(
           id: seq, stem: 'Q$seq', choices: const ['a', 'b', 'c', 'd'], topicTitle: 't'),
     );
@@ -21,6 +25,15 @@ AnswerResult fakeResult({
   bool boss = false,
   bool cleared = false,
   bool failed = false,
+  int hp = 100,
+  int damage = 0,
+  bool critical = false,
+  int monsterHp = 0,
+  int monsterMaxHp = 30,
+  bool? monsterDefeated,
+  bool review = false,
+  int reviewCorrect = 0,
+  int reviewTotal = 0,
 }) =>
     AnswerResult(
       correct: correct,
@@ -32,6 +45,15 @@ AnswerResult fakeResult({
       bossUnlocked: boss,
       cleared: cleared,
       failed: failed,
+      hp: hp,
+      damage: damage,
+      critical: critical,
+      monsterHp: monsterHp,
+      monsterMaxHp: monsterMaxHp,
+      monsterDefeated: monsterDefeated,
+      review: review,
+      reviewCorrect: reviewCorrect,
+      reviewTotal: reviewTotal,
     );
 
 /// 테스트용 가짜 API. 호출마다 큐에서 응답(값 또는 GameApiException)을 꺼낸다.
@@ -49,6 +71,32 @@ class FakeGameApi implements GameApi {
 
   @override
   Future<RunStart> startRun(String dungeonId) async => _take(startResult);
+
+  /// startReview가 돌려줄 값(또는 GameApiException). 받은 topicId는 [reviewCalls].
+  Object reviewStartResult = const RunStart(
+      runId: 'rv',
+      hearts: 3,
+      kills: 0,
+      killsToBoss: 3,
+      review: true,
+      reviewTotal: 2);
+  final reviewCalls = <int>[];
+
+  @override
+  Future<RunStart> startReview(int topicId) async {
+    reviewCalls.add(topicId);
+    return _take(reviewStartResult);
+  }
+
+  /// collection()이 돌려줄 값(또는 GameApiException). [collectionCalls]로 횟수를 센다.
+  Object collectionResult = const <CollectionEntry>[];
+  int collectionCalls = 0;
+
+  @override
+  Future<List<CollectionEntry>> collection() async {
+    collectionCalls++;
+    return _take(collectionResult);
+  }
 
   @override
   Future<Encounter> next(String runId) async => _take(nexts.removeFirst());

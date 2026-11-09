@@ -6,7 +6,8 @@ import '../../../core/network/dio_client.dart';
 import 'game_models.dart';
 
 /// 게임 API 오류. [code]는 서버 오류 코드(`RUN_EXPIRED`, `DUNGEON_CLOSED`,
-/// `SEQ_MISMATCH`, `ANSWER_IN_PROGRESS`, `GAME_UNAVAILABLE` 등)이거나
+/// `SEQ_MISMATCH`, `ANSWER_IN_PROGRESS`, `GAME_UNAVAILABLE`, `NOT_CAUGHT`,
+/// `TOPIC_NOT_FOUND` 등)이거나
 /// 클라이언트가 붙인 `OFFLINE`(연결 실패), `PARSE_ERROR`, `UNKNOWN`이다.
 class GameApiException implements Exception {
   static const runExpired = 'RUN_EXPIRED';
@@ -15,6 +16,8 @@ class GameApiException implements Exception {
   static const answerInProgress = 'ANSWER_IN_PROGRESS';
   static const unavailable = 'GAME_UNAVAILABLE';
   static const offline = 'OFFLINE';
+  static const notCaught = 'NOT_CAUGHT';
+  static const topicNotFound = 'TOPIC_NOT_FOUND';
 
   final String code;
   final int? statusCode;
@@ -41,6 +44,20 @@ class GameApi {
   Future<RunStart> startRun(String dungeonId) => _call(() async {
         final resp = await _dio.post('/api/game/dungeons/$dungeonId/runs');
         return RunStart.fromJson(_map(resp.data));
+      });
+
+  /// 도감에서 잡은 몬스터(주제)로 복습 판을 연다.
+  Future<RunStart> startReview(int topicId) => _call(() async {
+        final resp = await _dio.post('/api/game/collection/$topicId/runs');
+        return RunStart.fromJson(_map(resp.data));
+      });
+
+  Future<List<CollectionEntry>> collection() => _call(() async {
+        final resp = await _dio.get('/api/game/collection');
+        return apiResponseList(resp.data)
+            .map((e) =>
+                CollectionEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
       });
 
   Future<Encounter> next(String runId) => _call(() async {

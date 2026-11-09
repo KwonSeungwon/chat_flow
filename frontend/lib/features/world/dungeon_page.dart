@@ -118,7 +118,7 @@ class _DungeonPageState extends ConsumerState<DungeonPage> {
         _onCleared();
       case RunPhase.failed:
         _game.overlays.remove(battleOverlayKey);
-        _endWith('기절했다…', '하트를 모두 잃었다. 마을로 돌아간다.');
+        _endWith('기절했다…', 'HP를 모두 잃었다. 마을로 돌아간다.');
       case RunPhase.ended:
         _game.overlays.remove(battleOverlayKey);
         _onEnded();
@@ -260,7 +260,8 @@ class _BattleLayer extends ConsumerWidget {
       dungeonId: dungeonId,
       dungeonName: name,
       encounter: enc,
-      hearts: s.hearts,
+      hp: s.hp,
+      maxHp: s.maxHp,
       kills: s.kills,
       killsToBoss: s.killsToBoss,
       selectedIndex: s.selectedIndex,

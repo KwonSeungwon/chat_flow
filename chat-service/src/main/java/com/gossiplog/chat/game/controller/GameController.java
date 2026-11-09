@@ -6,11 +6,13 @@ import com.gossiplog.chat.auth.RequireAuth;
 import com.gossiplog.chat.game.dto.AnswerRequest;
 import com.gossiplog.chat.game.dto.AnswerResult;
 import com.gossiplog.chat.game.dto.AvatarRequest;
+import com.gossiplog.chat.game.dto.CollectionEntry;
 import com.gossiplog.chat.game.dto.DungeonSummary;
 import com.gossiplog.chat.game.dto.GameMeResponse;
 import com.gossiplog.chat.game.dto.LeaderboardEntry;
 import com.gossiplog.chat.game.dto.NextEncounter;
 import com.gossiplog.chat.game.dto.RunStartResponse;
+import com.gossiplog.chat.game.service.GameCollectionService;
 import com.gossiplog.chat.game.service.GameDungeonQueryService;
 import com.gossiplog.chat.game.service.GamePlayerService;
 import com.gossiplog.chat.game.service.GameRunService;
@@ -39,6 +41,7 @@ public class GameController {
     private final GameDungeonQueryService dungeonQueryService;
     private final LeaderboardService leaderboardService;
     private final GamePlayerService playerService;
+    private final GameCollectionService collectionService;
 
     @RequireAuth
     @GetMapping("/dungeons")
@@ -81,6 +84,19 @@ public class GameController {
     public ResponseEntity<Void> setAvatar(@AuthenticatedUser String userId, @RequestBody AvatarRequest request) {
         playerService.setAvatar(userId, request.avatar());
         return ResponseEntity.noContent().build();
+    }
+
+    @RequireAuth
+    @GetMapping("/collection")
+    public ResponseEntity<ApiResponse<List<CollectionEntry>>> collection(@AuthenticatedUser String userId) {
+        return ResponseEntity.ok(ApiResponse.ok(collectionService.collection(userId)));
+    }
+
+    @RequireAuth
+    @PostMapping("/collection/{topicId}/runs")
+    public ResponseEntity<ApiResponse<RunStartResponse>> startReview(@AuthenticatedUser String userId,
+                                                                     @PathVariable Long topicId) {
+        return ResponseEntity.ok(ApiResponse.ok(runService.startReview(userId, topicId)));
     }
 
     @RequireAuth

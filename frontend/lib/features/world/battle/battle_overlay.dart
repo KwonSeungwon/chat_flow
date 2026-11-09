@@ -49,12 +49,15 @@ class BattleOverlay extends StatelessWidget {
     required this.dungeonId,
     required this.dungeonName,
     required this.encounter,
-    required this.hearts,
+    required this.hp,
+    required this.maxHp,
     required this.kills,
     required this.killsToBoss,
     required this.onChoice,
     required this.onContinue,
-    this.maxHearts = 3,
+    this.review = false,
+    this.reviewNumber = 0,
+    this.reviewTotal = 0,
     this.selectedIndex,
     this.result,
     this.look = StudentLook.boy,
@@ -63,10 +66,15 @@ class BattleOverlay extends StatelessWidget {
   final String dungeonId;
   final String dungeonName;
   final Encounter encounter;
-  final int hearts;
-  final int maxHearts;
+  final int hp;
+  final int maxHp;
   final int kills;
   final int killsToBoss;
+
+  /// 도감 복습. 처치 수 대신 "복습 [reviewNumber]/[reviewTotal]"을 보인다.
+  final bool review;
+  final int reviewNumber;
+  final int reviewTotal;
   final int? selectedIndex;
   final AnswerResult? result;
   final ValueChanged<int> onChoice;
@@ -90,10 +98,13 @@ class BattleOverlay extends StatelessWidget {
                   _ScenePanel(
                     dungeonId: dungeonId,
                     encounter: encounter,
-                    hearts: hearts,
-                    maxHearts: maxHearts,
-                    kills: kills,
-                    killsToBoss: killsToBoss,
+                    hp: hp,
+                    maxHp: maxHp,
+                    progress: review
+                        ? '복습 $reviewNumber/$reviewTotal'
+                        : encounter.monster.isBoss
+                            ? '보스전'
+                            : '처치 $kills/$killsToBoss',
                     result: result,
                     look: look,
                   ),
@@ -103,6 +114,7 @@ class BattleOverlay extends StatelessWidget {
                     encounter: encounter,
                     kills: kills,
                     killsToBoss: killsToBoss,
+                    review: review,
                     selectedIndex: selectedIndex,
                     result: result,
                     onChoice: onChoice,
@@ -137,24 +149,27 @@ class _ScenePanel extends StatelessWidget {
   const _ScenePanel({
     required this.dungeonId,
     required this.encounter,
-    required this.hearts,
-    required this.maxHearts,
-    required this.kills,
-    required this.killsToBoss,
+    required this.hp,
+    required this.maxHp,
+    required this.progress,
     required this.result,
     required this.look,
   });
 
   final String dungeonId;
   final Encounter encounter;
-  final int hearts, maxHearts, kills, killsToBoss;
+  final int hp, maxHp;
+  final String progress;
   final AnswerResult? result;
   final StudentLook look;
 
   @override
   Widget build(BuildContext context) {
     final m = encounter.monster;
-    final defeated = result?.correct == true;
+    final r = result;
+    final defeated = r?.monsterDefeated == true;
+    final monsterRatio =
+        r == null ? _ratio(m.hp, m.maxHp) : _ratio(r.monsterHp, r.monsterMaxHp);
     // 보스는 160 viewBox 안에 여백이 거의 없어 상자를 그대로 쓴다(잘리지 않게).
     final mSize = m.isBoss ? 122.0 : 104.0;
     return Container(
@@ -213,22 +228,27 @@ class _ScenePanel extends StatelessWidget {
                     title: m.name,
                     badge: m.isBoss ? '보스' : null,
                     subtitle: '주제 · ${encounter.question.topicTitle}',
-                    trailing: _HpBar(alive: !defeated),
+                    trailing: _HpBar(
+                        key: const ValueKey('monster_hp'), ratio: monsterRatio),
                   ),
                 ),
                 Positioned(
                   left: 222,
-                  top: 144,
+                  top: 136,
                   width: 164,
                   child: _HpBox(
                     title: '나',
-                    subtitle:
-                        List.generate(maxHearts, (i) => i < hearts ? '♥' : '♡')
-                            .join(' '),
+                    subtitle: 'HP $hp/$maxHp',
                     subtitleColor: _heart,
                     trailing: Text(
-                      m.isBoss ? '보스전' : '처치 $kills/$killsToBoss',
+                      progress,
                       style: const TextStyle(fontSize: 10, color: _muted),
+                    ),
+                    bar: _HpBar(
+                      key: const ValueKey('player_hp'),
+                      ratio: _ratio(hp, maxHp),
+                      width: double.infinity,
+                      colors: const [Color(0xFFFF9A8B), _heart],
                     ),
                   ),
                 ),
@@ -255,12 +275,16 @@ class _HpBox extends StatelessWidget {
     required this.trailing,
     this.badge,
     this.subtitleColor = _muted,
+    this.bar,
   });
 
   final String title, subtitle;
   final String? badge;
   final Color subtitleColor;
   final Widget trailing;
+
+  /// 아래에 꽉 차게 그리는 HP 바(주인공).
+  final Widget? bar;
 
   @override
   Widget build(BuildContext context) {
@@ -321,31 +345,47 @@ class _HpBox extends StatelessWidget {
               trailing,
             ],
           ),
+          if (bar != null) ...[const SizedBox(height: 4), bar!],
         ],
       ),
     );
   }
 }
 
+double _ratio(int hp, int maxHp) =>
+    maxHp <= 0 ? 0 : (hp / maxHp).clamp(0.0, 1.0);
+
 class _HpBar extends StatelessWidget {
-  const _HpBar({required this.alive});
-  final bool alive;
+  const _HpBar({
+    super.key,
+    required this.ratio,
+    this.width = 56,
+    this.colors = const [Color(0xFF7FD9A4), Color(0xFF45C08A)],
+  });
+
+  /// 0..1.
+  final double ratio;
+  final double width;
+  final List<Color> colors;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 56,
+      width: width,
       height: 7,
       alignment: Alignment.centerLeft,
       decoration:
           BoxDecoration(color: _line, borderRadius: BorderRadius.circular(4)),
-      child: AnimatedContainer(
+      child: AnimatedFractionallySizedBox(
         duration: const Duration(milliseconds: 500),
-        width: alive ? 56 : 0,
-        decoration: BoxDecoration(
-            gradient: const LinearGradient(
-                colors: [Color(0xFF7FD9A4), Color(0xFF45C08A)]),
-            borderRadius: BorderRadius.circular(4)),
+        widthFactor: ratio,
+        heightFactor: 1,
+        alignment: Alignment.centerLeft,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+              gradient: LinearGradient(colors: colors),
+              borderRadius: BorderRadius.circular(4)),
+        ),
       ),
     );
   }
@@ -366,7 +406,7 @@ class _MessageBox extends StatelessWidget {
       null when boss => (
           '보스 ',
           '${_josa(name, '이', '가')} 앞을 막아섰다!',
-          '3연속으로 맞히면 이긴다!',
+          'HP를 0으로 만들면 이긴다!',
           const Color(0xFFD9466A),
         ),
       null => (
@@ -375,16 +415,28 @@ class _MessageBox extends StatelessWidget {
           '어떻게 대답할까?',
           const Color(0xFFE0565B),
         ),
-      AnswerResult(correct: true, :final cleared) => (
+      AnswerResult(correct: true, monsterDefeated: false) => (
           '',
-          '${_josa(name, '을', '를')} 물리쳤다!',
-          cleared ? '던전을 정복했다!' : '정답이다!',
+          '에게 공격이 먹혔다!',
+          '정답이다!',
           _okText,
         ),
-      AnswerResult(:final failed) => (
+      AnswerResult(correct: true, :final cleared, :final review) => (
           '',
-          '의 반격! ♥ -1',
-          failed ? '하트를 모두 잃었다…' : '아래 해설을 읽어 보자.',
+          '${_josa(name, '을', '를')} 물리쳤다!',
+          cleared && !review ? '던전을 정복했다!' : '정답이다!',
+          _okText,
+        ),
+      AnswerResult(review: true) => (
+          '',
+          '${_josa(name, '이', '가')} 버텼다.',
+          '아래 해설을 읽어 보자.',
+          _ngText,
+        ),
+      AnswerResult(:final failed, :final damage) => (
+          '',
+          damage > 0 ? '의 공격! HP -$damage' : '의 반격!',
+          failed ? 'HP를 모두 잃었다…' : '아래 해설을 읽어 보자.',
           _ngText,
         ),
     };
@@ -587,6 +639,7 @@ class _QuestionCard extends StatelessWidget {
     required this.encounter,
     required this.kills,
     required this.killsToBoss,
+    required this.review,
     required this.selectedIndex,
     required this.result,
     required this.onChoice,
@@ -596,6 +649,7 @@ class _QuestionCard extends StatelessWidget {
   final String dungeonName;
   final Encounter encounter;
   final int kills, killsToBoss;
+  final bool review;
   final int? selectedIndex;
   final AnswerResult? result;
   final ValueChanged<int> onChoice;
@@ -635,10 +689,14 @@ class _QuestionCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 13, color: _ink)),
                 ),
                 Text(
-                  isBoss ? '보스전 · 3연속 정답' : '보스까지 $left마리',
+                  review
+                      ? '도감 복습'
+                      : isBoss
+                          ? '보스전 · HP를 모두 깎자'
+                          : '보스까지 $left마리',
                   style: TextStyle(
                       fontSize: 13,
-                      color: isBoss ? _ngText : _ink,
+                      color: isBoss && !review ? _ngText : _ink,
                       fontWeight: FontWeight.w600),
                 ),
               ],
@@ -709,7 +767,7 @@ class _QuestionCard extends StatelessWidget {
                       key: const ValueKey('battle_continue'),
                       autofocus: true,
                       onPressed: onContinue,
-                      child: Text(_continueLabel(r, isBoss)),
+                      child: Text(_continueLabel(r, isBoss || review)),
                     ),
                   ),
                 ],
@@ -731,10 +789,10 @@ class _QuestionCard extends StatelessWidget {
     return _Mark.dim;
   }
 
-  static String _continueLabel(AnswerResult r, bool isBoss) {
-    if (r.cleared) return '깃발 꽂기';
+  static String _continueLabel(AnswerResult r, bool chained) {
+    if (r.cleared) return r.review ? '복습 끝' : '깃발 꽂기';
     if (r.failed) return '마을로';
-    if (isBoss) return '다음 문제';
+    if (chained || !r.monsterDefeated) return '다음 문제';
     return '계속 걷기';
   }
 }
@@ -887,7 +945,17 @@ class _Feedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ok = result.correct;
-    final head = ok ? '정답! $monsterName 처치.' : '오답… ♥ -1.';
+    final head = !ok
+        ? '오답…'
+        : result.monsterDefeated
+            ? '정답! $monsterName 처치.'
+            : '정답!';
+    final damage = result.damage;
+    final damageLine = damage <= 0
+        ? null
+        : ok
+            ? (result.critical ? '치명타! $damage 데미지!' : '$damage 데미지!')
+            : '몬스터의 공격! $damage 피해';
     final source = result.sourceRef;
     return Container(
       key: const ValueKey('battle_feedback'),
@@ -900,6 +968,15 @@ class _Feedback extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (damageLine != null) ...[
+            Text(damageLine,
+                key: const ValueKey('battle_damage'),
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: ok ? _okText : _ngText)),
+            const SizedBox(height: 4),
+          ],
           Text('$head ${result.explanation}',
               style: TextStyle(
                   fontSize: 13, height: 1.5, color: ok ? _okText : _ngText)),

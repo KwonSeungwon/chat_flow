@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:gossiplog/features/world/state/game_api.dart';
+import 'package:gossiplog/features/world/state/game_models.dart';
 import 'package:gossiplog/features/world/state/run_notifier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -150,5 +151,116 @@ void main() {
     api.startResult = GameApiException(GameApiException.dungeonClosed);
     await n.start();
     expect(n.state.phase, RunPhase.closed);
+  });
+
+  test('start and answers track hp/maxHp', () async {
+    api.startResult = const RunStart(
+        runId: 'r', hearts: 3, kills: 0, killsToBoss: 3, hp: 100, maxHp: 100);
+    await n.start();
+    expect(n.state.hp, 100);
+    expect(n.state.maxHp, 100);
+    expect(n.state.killsToBoss, 3);
+    api.nexts.add(fakeEncounter(1));
+    api.answers.add(fakeResult(
+        correct: false, hp: 75, damage: 25, monsterHp: 30, hearts: 3));
+    await n.encounter();
+    await n.answer(1);
+    expect(n.state.hp, 75);
+  });
+
+  test('monster not defeated → next question with the same monster', () async {
+    api.nexts.addAll([
+      fakeEncounter(1),
+      fakeEncounter(2, hp: 15),
+    ]);
+    api.answers.addAll([
+      fakeResult(damage: 15, monsterHp: 15, monsterDefeated: false),
+      fakeResult(kills: 1, damage: 15, monsterHp: 0, monsterDefeated: true),
+    ]);
+    await n.encounter();
+    await n.answer(0);
+    await n.finishBattle();
+    expect(n.state.phase, RunPhase.battle);
+    expect(n.state.encounter!.seq, 2);
+    expect(n.state.encounter!.monster.hp, 15);
+    expect(n.state.result, isNull);
+    await n.answer(0);
+    await n.finishBattle();
+    expect(n.state.phase, RunPhase.exploring);
+    expect(n.state.kills, 1);
+  });
+
+  test('wrong answer on an old server (no monsterDefeated) chains too',
+      () async {
+    api.nexts.addAll([fakeEncounter(1), fakeEncounter(2)]);
+    api.answers.add(fakeResult(correct: false, hearts: 2));
+    await n.encounter();
+    await n.answer(1);
+    await n.finishBattle();
+    expect(n.state.phase, RunPhase.battle);
+    expect(n.state.encounter!.seq, 2);
+  });
+
+  group('review run', () {
+    late RunNotifier rv;
+    setUp(() {
+      rv = RunNotifier(api, '',
+          retryDelay: Duration.zero, startRun: () => api.startReview(7));
+    });
+
+    test('uses the injected start and chains all questions until cleared',
+        () async {
+      api.nexts.addAll([fakeEncounter(1), fakeEncounter(2)]);
+      api.answers.addAll([
+        fakeResult(
+            review: true,
+            reviewCorrect: 1,
+            reviewTotal: 2,
+            monsterDefeated: false,
+            monsterHp: 15),
+        fakeResult(
+            correct: false,
+            review: true,
+            reviewCorrect: 1,
+            reviewTotal: 2,
+            cleared: true,
+            monsterDefeated: false,
+            monsterHp: 15),
+      ]);
+      await rv.start();
+      expect(api.reviewCalls, [7]);
+      expect(rv.state.review, isTrue);
+      expect(rv.state.reviewTotal, 2);
+      expect(rv.state.reviewAnswered, 0);
+      expect(await rv.encounter(), isTrue);
+      await rv.answer(0);
+      expect(rv.state.reviewAnswered, 1);
+      await rv.finishBattle();
+      expect(rv.state.phase, RunPhase.battle);
+      expect(rv.state.encounter!.seq, 2);
+      await rv.answer(1);
+      expect(rv.state.reviewAnswered, 2);
+      await rv.finishBattle();
+      expect(rv.state.phase, RunPhase.cleared);
+      expect(rv.state.result!.reviewCorrect, 1);
+    });
+
+    test('correct but defeated mid-review still chains', () async {
+      api.nexts.addAll([fakeEncounter(1), fakeEncounter(2)]);
+      api.answers.add(fakeResult(review: true, monsterDefeated: true));
+      await rv.start();
+      await rv.encounter();
+      await rv.answer(0);
+      await rv.finishBattle();
+      expect(rv.state.phase, RunPhase.battle);
+    });
+
+    test('NOT_CAUGHT on start → error with a message', () async {
+      api.reviewStartResult =
+          GameApiException(GameApiException.notCaught, statusCode: 409);
+      await rv.start();
+      expect(rv.state.phase, RunPhase.error);
+      expect(rv.state.notice, contains('잡지 못한'));
+    });
   });
 }

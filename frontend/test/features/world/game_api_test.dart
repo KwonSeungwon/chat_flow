@@ -126,6 +126,179 @@ void main() {
     expect(r.hearts, 2);
   });
 
+  test('old server: hp/maxHp/monster hp fall back from hearts and correct',
+      () async {
+    adapter.routes['POST /api/game/dungeons/jvm/runs'] =
+        (200, _ok({'runId': 'r1', 'hearts': 2, 'kills': 0, 'killsToBoss': 5}));
+    adapter.routes['GET /api/game/runs/r1/next'] = (
+      200,
+      _ok({
+        'seq': 1,
+        'monster': {'name': 'm', 'spriteKey': 'monster_jvm', 'isBoss': false},
+        'question': {
+          'id': 1,
+          'stem': 'Q',
+          'choices': ['a'],
+          'topicTitle': 't'
+        }
+      })
+    );
+    adapter.routes['POST /api/game/runs/r1/answers'] = (
+      200,
+      _ok({'correct': true, 'correctIndex': 0, 'hearts': 2, 'kills': 1})
+    );
+    final run = await api.startRun('jvm');
+    expect(run.maxHp, 100);
+    expect(run.hp, 67);
+    expect(run.review, isFalse);
+    final enc = await api.next('r1');
+    expect(enc.monster.hp, 1);
+    expect(enc.monster.maxHp, 1);
+    final r = await api.answer('r1', 1, 0);
+    expect(r.monsterDefeated, isTrue);
+    expect(r.monsterHp, 0);
+    expect(r.maxHp, 100);
+    expect(r.hp, 67);
+    expect(r.damage, 0);
+    expect(r.critical, isFalse);
+    expect(r.review, isFalse);
+  });
+
+  test('new server: HP fields are parsed', () async {
+    adapter.routes['POST /api/game/dungeons/jvm/runs'] = (
+      200,
+      _ok({
+        'runId': 'r1',
+        'hearts': 3,
+        'kills': 0,
+        'killsToBoss': 3,
+        'hp': 100,
+        'maxHp': 100,
+        'review': false,
+        'reviewTotal': 0
+      })
+    );
+    adapter.routes['GET /api/game/runs/r1/next'] = (
+      200,
+      _ok({
+        'seq': 1,
+        'monster': {
+          'name': 'm',
+          'spriteKey': 'monster_jvm',
+          'isBoss': false,
+          'hp': 15,
+          'maxHp': 30
+        },
+        'question': {
+          'id': 1,
+          'stem': 'Q',
+          'choices': ['a'],
+          'topicTitle': 't'
+        }
+      })
+    );
+    adapter.routes['POST /api/game/runs/r1/answers'] = (
+      200,
+      _ok({
+        'correct': false,
+        'correctIndex': 0,
+        'hearts': 3,
+        'kills': 0,
+        'hp': 75,
+        'maxHp': 100,
+        'damage': 25,
+        'critical': false,
+        'monsterHp': 15,
+        'monsterMaxHp': 30,
+        'monsterDefeated': false,
+      })
+    );
+    final run = await api.startRun('jvm');
+    expect(run.killsToBoss, 3);
+    final enc = await api.next('r1');
+    expect(enc.monster.hp, 15);
+    expect(enc.monster.maxHp, 30);
+    final r = await api.answer('r1', 1, 0);
+    expect(r.hp, 75);
+    expect(r.damage, 25);
+    expect(r.monsterHp, 15);
+    expect(r.monsterMaxHp, 30);
+    expect(r.monsterDefeated, isFalse);
+  });
+
+  test('old server wrong answer: monster keeps full HP', () async {
+    final r = AnswerResult.fromJson(
+        const {'correct': false, 'hearts': 1, 'monsterMaxHp': 30});
+    expect(r.monsterDefeated, isFalse);
+    expect(r.monsterHp, 30);
+    expect(r.hp, 33);
+  });
+
+  test('collection and startReview', () async {
+    adapter.routes['GET /api/game/collection'] = (
+      200,
+      _ok([
+        {
+          'topicId': 7,
+          'dungeonId': 'jvm',
+          'dungeonName': 'JVM 대장간',
+          'topicTitle': 'JVM 힙',
+          'monsterName': 'OOM 슬라임',
+          'spriteKey': 'monster_jvm',
+          'caught': true,
+          'correctCount': 2,
+          'questionCount': 5,
+          'dueCount': 1
+        },
+        {
+          'topicId': 8,
+          'dungeonId': 'jvm',
+          'dungeonName': 'JVM 대장간',
+          'topicTitle': 'GC',
+          'monsterName': null,
+          'spriteKey': 'monster_jvm',
+          'caught': false,
+          'correctCount': 0,
+          'questionCount': 3,
+          'dueCount': 0
+        }
+      ])
+    );
+    adapter.routes['POST /api/game/collection/7/runs'] = (
+      200,
+      _ok({
+        'runId': 'rv',
+        'hearts': 3,
+        'kills': 0,
+        'killsToBoss': 3,
+        'hp': 100,
+        'maxHp': 100,
+        'review': true,
+        'reviewTotal': 4
+      })
+    );
+    adapter.routes['POST /api/game/collection/8/runs'] =
+        (409, {'status': 409, 'code': 'NOT_CAUGHT', 'message': 'x'});
+    final list = await api.collection();
+    expect(list, hasLength(2));
+    expect(list[0].topicId, 7);
+    expect(list[0].monsterName, 'OOM 슬라임');
+    expect(list[0].caught, isTrue);
+    expect(list[0].dueCount, 1);
+    expect(list[1].monsterName, isNull);
+    expect(list[1].caught, isFalse);
+
+    final run = await api.startReview(7);
+    expect(run.runId, 'rv');
+    expect(run.review, isTrue);
+    expect(run.reviewTotal, 4);
+
+    await expectLater(
+        api.startReview(8),
+        throwsA(isA<GameApiException>()
+            .having((e) => e.code, 'code', GameApiException.notCaught)));
+  });
+
   test('me and leaderboard', () async {
     adapter.routes['GET /api/game/me'] =
         (200, _ok({'clearedCount': 8, 'total': 8, 'graduated': true}));

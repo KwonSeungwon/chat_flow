@@ -39,9 +39,16 @@ class RunState {
   final RunPhase phase;
   final String? runId;
   final int hearts;
+  final int hp;
+  final int maxHp;
   final int kills;
   final int killsToBoss;
   final bool bossUnlocked;
+
+  /// 도감 복습 판. [reviewAnswered]는 지금까지 답한 문제 수.
+  final bool review;
+  final int reviewTotal;
+  final int reviewAnswered;
   final Encounter? encounter;
   final int? selectedIndex;
   final AnswerResult? result;
@@ -53,9 +60,14 @@ class RunState {
     this.phase = RunPhase.starting,
     this.runId,
     this.hearts = 3,
+    this.hp = defaultMaxHp,
+    this.maxHp = defaultMaxHp,
     this.kills = 0,
     this.killsToBoss = 5,
     this.bossUnlocked = false,
+    this.review = false,
+    this.reviewTotal = 0,
+    this.reviewAnswered = 0,
     this.encounter,
     this.selectedIndex,
     this.result,
@@ -69,9 +81,13 @@ class RunState {
     RunPhase? phase,
     String? runId,
     int? hearts,
+    int? hp,
+    int? maxHp,
     int? kills,
     int? killsToBoss,
     bool? bossUnlocked,
+    int? reviewTotal,
+    int? reviewAnswered,
     Encounter? Function()? encounter,
     int? Function()? selectedIndex,
     AnswerResult? Function()? result,
@@ -81,9 +97,14 @@ class RunState {
         phase: phase ?? this.phase,
         runId: runId ?? this.runId,
         hearts: hearts ?? this.hearts,
+        hp: hp ?? this.hp,
+        maxHp: maxHp ?? this.maxHp,
         kills: kills ?? this.kills,
         killsToBoss: killsToBoss ?? this.killsToBoss,
         bossUnlocked: bossUnlocked ?? this.bossUnlocked,
+        review: review,
+        reviewTotal: reviewTotal ?? this.reviewTotal,
+        reviewAnswered: reviewAnswered ?? this.reviewAnswered,
         encounter: encounter != null ? encounter() : this.encounter,
         selectedIndex:
             selectedIndex != null ? selectedIndex() : this.selectedIndex,
@@ -99,29 +120,39 @@ const _genericNotice = '알 수 없는 오류가 났다. 다시 시도해 줘.';
 String _noticeFor(GameApiException e) => switch (e.code) {
       GameApiException.offline => _offlineNotice,
       GameApiException.unavailable => _unavailableNotice,
+      GameApiException.notCaught => '아직 잡지 못한 몬스터다. 던전에서 정답을 맞혀 잡아 봐.',
+      GameApiException.topicNotFound => '도감에 없는 몬스터다.',
       _ => _genericNotice,
     };
 
 class RunNotifier extends StateNotifier<RunState> {
+  /// [startRun]을 주면 판을 그것으로 연다(도감 복습). 없으면 [dungeonId] 던전 판.
   RunNotifier(this._api, this.dungeonId,
-      {this.retryDelay = const Duration(milliseconds: 400)})
-      : super(const RunState());
+      {this.retryDelay = const Duration(milliseconds: 400),
+      Future<RunStart> Function()? startRun})
+      : _startRun = startRun,
+        super(const RunState());
 
   final GameApi _api;
   final String dungeonId;
   final Duration retryDelay;
+  final Future<RunStart> Function()? _startRun;
 
   Future<void> start() async {
     state = const RunState(phase: RunPhase.starting);
     try {
-      final run = await _api.startRun(dungeonId);
+      final run = await (_startRun?.call() ?? _api.startRun(dungeonId));
       if (!mounted) return;
       state = RunState(
         phase: RunPhase.exploring,
         runId: run.runId,
         hearts: run.hearts,
+        hp: run.hp,
+        maxHp: run.maxHp,
         kills: run.kills,
         killsToBoss: run.killsToBoss,
+        review: run.review,
+        reviewTotal: run.reviewTotal,
       );
     } on GameApiException catch (e) {
       if (!mounted) return;
@@ -188,8 +219,12 @@ class RunNotifier extends StateNotifier<RunState> {
         phase: RunPhase.battle,
         result: () => r,
         hearts: r.hearts,
+        hp: r.hp,
+        maxHp: r.maxHp,
         kills: r.kills,
         bossUnlocked: r.bossUnlocked,
+        reviewTotal: r.reviewTotal > 0 ? r.reviewTotal : null,
+        reviewAnswered: state.review ? state.reviewAnswered + 1 : null,
       );
     } on GameApiException catch (e) {
       if (!mounted) return;
@@ -214,8 +249,8 @@ class RunNotifier extends StateNotifier<RunState> {
     }
   }
 
-  /// 결과를 본 뒤 "계속". 클리어/실패로 끝내거나, 보스 단계면 다음 보스 문제를
-  /// 바로 받고, 아니면 다시 걷는다.
+  /// 결과를 본 뒤 "계속". 클리어/실패로 끝내거나, 몬스터가 아직 살아 있거나
+  /// 보스전·복습이면 다음 문제를 바로 받고, 아니면 다시 걷는다.
   Future<void> finishBattle() async {
     final r = state.result;
     if (state.phase != RunPhase.battle || r == null) return;
@@ -223,7 +258,9 @@ class RunNotifier extends StateNotifier<RunState> {
       state = state.copyWith(phase: RunPhase.cleared);
     } else if (r.failed) {
       state = state.copyWith(phase: RunPhase.failed);
-    } else if (state.encounter?.monster.isBoss == true) {
+    } else if (!r.monsterDefeated ||
+        state.review ||
+        state.encounter?.monster.isBoss == true) {
       await _loadNext();
     } else {
       state = state.copyWith(
@@ -243,4 +280,11 @@ class RunNotifier extends StateNotifier<RunState> {
 final runNotifierProvider = StateNotifierProvider.autoDispose
     .family<RunNotifier, RunState, String>((ref, dungeonId) {
   return RunNotifier(ref.watch(gameApiProvider), dungeonId);
+});
+
+/// 도감 복습 판(주제 [topicId]).
+final reviewRunProvider = StateNotifierProvider.autoDispose
+    .family<RunNotifier, RunState, int>((ref, topicId) {
+  final api = ref.watch(gameApiProvider);
+  return RunNotifier(api, '', startRun: () => api.startReview(topicId));
 });

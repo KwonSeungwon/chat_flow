@@ -43,4 +43,20 @@ public interface GameQuestionRepository extends JpaRepository<GameQuestion, Long
             + "WHERE q.topicId = t.id AND t.dungeonId = :dungeonId "
             + "AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED")
     List<Long> findApprovedIdsByDungeon(@Param("dungeonId") String dungeonId);
+
+    @Query("SELECT q.id FROM GameQuestion q WHERE q.topicId = :topicId "
+            + "AND q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED ORDER BY q.id")
+    List<Long> findApprovedIdsByTopic(@Param("topicId") Long topicId);
+
+    /** Projection row for {@link #countApprovedGroupedByTopic()}. */
+    interface TopicCount {
+        Long getTopicId();
+
+        long getQuestionCount();
+    }
+
+    /** Topics with at least one APPROVED question and how many they have. */
+    @Query("SELECT q.topicId AS topicId, COUNT(q) AS questionCount FROM GameQuestion q "
+            + "WHERE q.status = com.gossiplog.chat.game.entity.GameQuestionStatus.APPROVED GROUP BY q.topicId")
+    List<TopicCount> countApprovedGroupedByTopic();
 }

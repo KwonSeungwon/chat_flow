@@ -34,3 +34,10 @@ final chosenLookProvider = StateProvider<StudentLook?>((ref) {
 final studentLookProvider = Provider.autoDispose<StudentLook?>((ref) =>
     ref.watch(chosenLookProvider) ??
     ref.watch(worldProvider).valueOrNull?.me.avatar);
+
+/// 도감(주제별 몬스터). 복습을 마치면 다시 읽는다. 계정이 바뀌면 다시 읽는다.
+final collectionProvider =
+    FutureProvider.autoDispose<List<CollectionEntry>>((ref) {
+  ref.watch(authProvider.select((s) => s.userId));
+  return ref.watch(gameApiProvider).collection();
+});
